@@ -1,0 +1,516 @@
+/*
+ * Google Fonts used to be pulled in with a CSS `@import` here. A stylesheet `@import`
+ * is render-blocking, so on a slow or unreachable network the very first paint waited
+ * on fonts.googleapis.com — which contradicts this app's "works fully offline" promise.
+ * The font request now lives in index.html behind a media="print" swap, so text paints
+ * immediately in the system Arabic fallback and upgrades when the webfonts arrive.
+ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-uidir: rtl;
+  --primary-50: 240 249 244;
+  --primary-100: 220 240 228;
+  --primary-200: 187 225 202;
+  --primary-300: 140 203 171;
+  --primary-400: 84 173 132;
+  --primary-500: 47 143 100;
+  --primary-600: 31 115 78;
+  --primary-700: 26 91 64;
+  --primary-800: 23 72 51;
+  --primary-900: 20 59 43;
+  --primary-950: 10 33 24;
+  --surface-light: 248 250 249;
+  --surface-dark: 15 26 20;
+}
+
+:root[data-palette='ocean'] {
+  --primary-50: 240 247 250;
+  --primary-100: 220 238 244;
+  --primary-200: 184 220 232;
+  --primary-300: 131 195 215;
+  --primary-400: 71 161 191;
+  --primary-500: 40 127 157;
+  --primary-600: 29 103 130;
+  --primary-700: 25 83 107;
+  --primary-800: 23 67 85;
+  --primary-900: 20 55 70;
+  --primary-950: 10 32 43;
+  --surface-light: 246 250 252;
+  --surface-dark: 12 21 27;
+}
+
+:root[data-palette='plum'] {
+  --primary-50: 248 243 250;
+  --primary-100: 239 227 243;
+  --primary-200: 220 199 230;
+  --primary-300: 195 161 210;
+  --primary-400: 165 117 184;
+  --primary-500: 133 82 150;
+  --primary-600: 109 64 123;
+  --primary-700: 88 52 99;
+  --primary-800: 71 43 80;
+  --primary-900: 57 36 63;
+  --primary-950: 34 20 37;
+  --surface-light: 251 248 252;
+  --surface-dark: 24 17 27;
+}
+
+:root[data-palette='sand'] {
+  --primary-50: 247 246 239;
+  --primary-100: 239 236 221;
+  --primary-200: 223 216 185;
+  --primary-300: 207 194 141;
+  --primary-400: 184 164 94;
+  --primary-500: 157 135 64;
+  --primary-600: 127 109 50;
+  --primary-700: 101 87 42;
+  --primary-800: 80 70 35;
+  --primary-900: 64 57 31;
+  --primary-950: 37 33 17;
+  --surface-light: 251 250 245;
+  --surface-dark: 25 23 17;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  font-family: 'Cairo', 'Tajawal', sans-serif;
+}
+
+body {
+  font-family: 'Cairo', 'Tajawal', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100%;
+}
+
+.safe-bottom {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.375rem);
+}
+
+/* RTL support */
+[dir='rtl'] {
+  direction: rtl;
+  text-align: right;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--primary-500) / 0.3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--primary-500) / 0.5);
+}
+
+/* Quran text styling */
+.quran-text {
+  font-family: 'Amiri', serif;
+  line-height: 2.2;
+  word-spacing: 0.15em;
+}
+
+/* ============================================================
+   Mushaf page
+   Drawn from the bundled Uthmani text inside a printed-page frame rather than from
+   scanned images: 604 scanned pages would cost hundreds of megabytes, while the text
+   is already in the bundle. `--fs` is the base Quran size; the reader's zoom sets it.
+   ============================================================ */
+.mushaf-page {
+  --paper: #fdfaf1;
+  --ink: #1e1a11;
+  --frame: #947338;
+  --frame-soft: rgba(148, 115, 56, 0.38);
+  --wash: rgba(148, 115, 56, 0.075);
+  --fs: 26px;
+
+  position: relative;
+  width: 100%;
+  /* Deliberately no tall minimum. A printed mushaf page is always full because it is
+     set to 15 lines, but this page map is reconstructed from surah start pages, so real
+     page density here ranges from 285 to 2,483 characters (measured, ~8x). A fixed
+     height left the sparsest pages 80-90% empty parchment, which reads as a broken page
+     rather than a calm one, so the page now hugs its text and only has a small floor. */
+  min-height: 20rem;
+  /* Right padding is smaller than left: the left gutter is reserved for the juz margin. */
+  padding: 2.1rem 2.3rem 3.7rem 3.5rem;
+  color: var(--ink);
+  background-color: var(--paper);
+  /* Paper grain from two faint washes. No image request, so it costs nothing offline
+     and there is no asset that can fail to load and leave a blank page. */
+  background-image:
+    radial-gradient(130% 70% at 50% 0%, var(--wash), transparent 62%),
+    radial-gradient(110% 60% at 50% 100%, var(--wash), transparent 62%);
+  box-shadow:
+    0 24px 50px -24px rgba(30, 24, 10, 0.48),
+    0 4px 12px rgba(30, 24, 10, 0.09),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.48);
+}
+
+.mushaf-page--night {
+  --paper: #15120c;
+  --ink: #e7dcc0;
+  --frame: #b79a5b;
+  --frame-soft: rgba(183, 154, 91, 0.48);
+  --wash: rgba(183, 154, 91, 0.11);
+  box-shadow: 0 20px 45px -20px rgba(0, 0, 0, 0.85), 0 2px 5px rgba(0, 0, 0, 0.5);
+}
+
+/* A restrained triple rule gives the page a printed, illuminated-manuscript edge. */
+.mushaf-frame {
+  position: absolute;
+  inset: 0.62rem;
+  border: 1px solid var(--frame);
+  box-shadow:
+    inset 0 0 0 3px var(--paper),
+    inset 0 0 0 4px var(--frame-soft);
+  pointer-events: none;
+}
+.mushaf-frame::after {
+  content: '';
+  position: absolute;
+  inset: 0.34rem;
+  border: 1px solid var(--frame-soft);
+}
+
+/* Corner rosettes sit over the rules like small illuminated seals. */
+.mushaf-corner {
+  position: absolute;
+  z-index: 1;
+  width: 1.28rem;
+  height: 1.28rem;
+  margin: 0;
+  padding: 0.08rem;
+  color: var(--frame);
+  background: var(--paper);
+  filter: drop-shadow(0 1px 1px rgba(48, 35, 12, 0.14));
+}
+.mushaf-corner--tr { top: -0.64rem; right: -0.64rem; }
+.mushaf-corner--tl { top: -0.64rem; left: -0.64rem; }
+.mushaf-corner--br { bottom: -0.64rem; right: -0.64rem; }
+.mushaf-corner--bl { bottom: -0.64rem; left: -0.64rem; }
+
+/* Juz/hizb markers run down the outer margin, as they do in a printed mushaf. The
+   container stays in horizontal writing mode so `flex-direction: column` still means
+   "top to bottom"; only the labels themselves are turned on their side. */
+.mushaf-margin {
+  position: absolute;
+  top: 2.7rem;
+  bottom: 4.4rem;
+  left: 1.1rem;
+  width: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  font-family: 'Cairo', sans-serif;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--frame);
+  opacity: 0.9;
+  user-select: none;
+}
+.mushaf-margin > span {
+  padding: 0.42rem 0.12rem;
+  border: 1px solid var(--frame-soft);
+  background: linear-gradient(90deg, transparent, var(--wash), transparent);
+  writing-mode: vertical-rl;
+}
+
+/*
+ * Justification is what separates a mushaf page from a wall of ragged text: the browser
+ * pushes the slack of every full line into the inter-word gaps, so the block is flush on
+ * both edges. Only the last line stays ragged, which is what a printed page does too.
+ */
+.mushaf-body {
+  font-family: 'Amiri', 'Amiri Quran', serif;
+  font-size: var(--fs);
+  line-height: 2.05;
+  text-align: justify;
+  text-justify: inter-word;
+  /* .quran-text opens the word spacing up for the tap-to-read list; that fights
+     justification here, so this block opts out. */
+  word-spacing: normal;
+  color: var(--ink);
+}
+
+.quran-surah-page {
+  padding-top: 2rem;
+  padding-bottom: 3rem;
+}
+
+@media (max-width: 480px) {
+  .quran-surah-page {
+    padding: 1.8rem 1.35rem 3rem 2.2rem;
+  }
+
+  .quran-surah-page .mushaf-margin {
+    left: 0.65rem;
+    width: 0.9rem;
+  }
+}
+
+.quran-surah-page .mushaf-banner {
+  margin-bottom: 1rem;
+}
+
+.quran-surah-text {
+  line-height: 2.45;
+  word-spacing: 0.12em;
+  text-align: justify;
+  text-justify: inter-word;
+}
+
+.quran-surah-ayah {
+  white-space: normal;
+}
+
+.quran-surah-ayah__text {
+  display: inline;
+  padding: 0 0.04em;
+  border: 0;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  text-align: inherit;
+  cursor: pointer;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.quran-surah-ayah__text:focus-visible {
+  outline: 2px solid var(--frame);
+  outline-offset: 2px;
+}
+
+.quran-surah-ayah__text--selected {
+  background: rgba(212, 160, 23, 0.2);
+}
+
+.quran-surah-ayah__text--bookmarked {
+  background: rgba(212, 160, 23, 0.12);
+}
+
+.quran-surah-ayah__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.12rem;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.quran-surah-ayah__play {
+  display: inline-flex;
+  width: 1.5rem;
+  height: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--frame-soft);
+  border-radius: 9999px;
+  background: var(--wash);
+  color: var(--frame);
+  vertical-align: middle;
+}
+
+.quran-surah-ayah__play:focus-visible {
+  outline: 2px solid var(--frame);
+  outline-offset: 2px;
+}
+
+.mushaf-ayah-mark--active {
+  color: #fff;
+  background: var(--frame);
+}
+
+.mushaf-page--night .quran-surah-ayah__text--selected {
+  background: rgba(212, 160, 23, 0.3);
+}
+
+.mushaf-ayah {
+  cursor: pointer;
+  border-radius: 0.2rem;
+}
+.mushaf-ayah:hover {
+  background: var(--wash);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* The end-of-ayah medallion. `em` here would resolve against this element's own reduced
+   font-size, so every dimension is expressed in terms of the page's --fs instead. */
+.mushaf-ayah-mark {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--fs) * 1.15);
+  height: calc(var(--fs) * 1.15);
+  margin: 0 0.16em;
+  border: 1px solid var(--frame);
+  border-radius: 9999px;
+  color: var(--frame);
+  background:
+    radial-gradient(circle at center, var(--paper) 0 52%, transparent 54%),
+    linear-gradient(135deg, var(--wash), transparent 48%, var(--wash));
+  box-shadow:
+    inset 0 0 0 2px var(--paper),
+    inset 0 0 0 3px var(--frame-soft),
+    0 1px 2px rgba(48, 35, 12, 0.1);
+  font-size: calc(var(--fs) * 0.37);
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: middle;
+  user-select: none;
+}
+.mushaf-ayah-mark::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 21%;
+  border: 1px solid var(--frame-soft);
+  border-radius: 0.12rem;
+  transform: rotate(45deg);
+}
+
+/*
+ * A printed surah heading is a thin ornamental band, roughly one text line tall — not a
+ * title card. The last pages of the mushaf legitimately carry three surahs each (page 604
+ * holds Al-Ikhlas, Al-Falaq and An-Nas), so a tall banner stacks three of them plus three
+ * basmalas and stretched the page to 1009px around 4 lines of text.
+ */
+.mushaf-banner {
+  position: relative;
+  margin: 0.16rem auto 0.78rem;
+  padding: 0.28rem 1.6rem 0.34rem;
+  border: 1px solid var(--frame);
+  text-align: center;
+  background:
+    linear-gradient(90deg, transparent, var(--frame-soft), transparent) top / 42% 1px no-repeat,
+    linear-gradient(180deg, var(--wash), transparent 82%);
+  box-shadow: 0 1px 3px rgba(48, 35, 12, 0.06);
+}
+.mushaf-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0.22rem;
+  border: 1px solid var(--frame-soft);
+  pointer-events: none;
+}
+.mushaf-banner::after {
+  content: '۞';
+  position: absolute;
+  top: 50%;
+  left: 0.42rem;
+  padding: 0 0.12rem;
+  color: var(--frame);
+  background: var(--paper);
+  font-family: 'Amiri', serif;
+  font-size: calc(var(--fs) * 0.52);
+  line-height: 1;
+  transform: translateY(-50%);
+}
+.mushaf-banner__name {
+  font-family: 'Amiri', serif;
+  font-size: calc(var(--fs) * 0.8);
+  font-weight: 700;
+  line-height: 1.4;
+}
+.mushaf-banner__meta {
+  font-family: 'Cairo', sans-serif;
+  font-size: 0.55rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+  color: var(--frame);
+}
+
+/* The band and the basmala sit close together so a stack of them stays compact. */
+.mushaf-basmala {
+  margin: 0 0 0.6rem;
+  font-family: 'Amiri', serif;
+  font-size: calc(var(--fs) * 0.8);
+  line-height: 1.6;
+  text-align: center;
+}
+.mushaf-basmala__rule {
+  display: inline-block;
+  width: 2rem;
+  height: 1px;
+  margin: 0 0.65rem;
+  vertical-align: middle;
+  background: var(--frame-soft);
+}
+
+.mushaf-sajdah {
+  margin: 0 0 0.7rem;
+  font-family: 'Cairo', sans-serif;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-align: center;
+  color: var(--frame);
+}
+
+/* Folio: the page number in a medallion at the foot of the page. */
+.mushaf-folio {
+  position: absolute;
+  bottom: 1.2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  border: 1.5px solid var(--frame);
+  border-radius: 9999px;
+  background: var(--paper);
+  font-family: 'Cairo', sans-serif;
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--frame);
+}
+
+/* No-select for test mode */
+.no-select {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+}
+
+/* Hide the scrollbar on horizontal chip strips (e.g. the tasbih presets) */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Smooth transitions */
+.transition-smooth {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}

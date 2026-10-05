@@ -1,0 +1,364 @@
+import { useState, useEffect, useCallback } from 'react';
+import { useSettings, useTheme, useNavigation } from '@/hooks/useApp';
+import { BottomNav } from '@/components/BottomNav';
+import { Onboarding } from '@/components/Onboarding';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { HomeScreen } from '@/screens/HomeScreen';
+import { QuranScreen } from '@/screens/QuranScreen';
+import { PlannerScreen } from '@/screens/PlannerScreen';
+import { PrayerScreen } from '@/screens/PrayerScreen';
+import { HadithScreen } from '@/screens/HadithScreen';
+import { ProgressScreen } from '@/screens/ProgressScreen';
+import { SettingsScreen } from '@/screens/SettingsScreen';
+import { MoreScreen } from '@/screens/MoreScreen';
+import { ContentLibrary } from '@/screens/ContentLibrary';
+import { AdhkarScreen } from '@/screens/AdhkarScreen';
+import { TasbihScreen } from '@/screens/TasbihScreen';
+import { AuthScreen } from '@/components/AuthScreen';
+import { generateDailyTasks, markMissedTasks } from '@/utils/taskManager';
+import { rescheduleAllNotifications } from '@/utils/notificationScheduler';
+import { clearLocalUserData, startCloudSync, synchronizeNow, type CloudSyncState } from '@/utils/cloudSync';
+import { isSupabaseConfigured, supabase } from '@/utils/supabaseClient';
+import { checkForAppUpdate, type AppUpdateCheck } from '@/utils/appUpdates';
+import { Browser } from '@capacitor/browser';
+import { App as CapApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
+import type { Session } from '@supabase/supabase-js';
+import type { Settings } from '@/db/database';
+
+const ONBOARDED_KEY = 'hifzi-onboarded';
+
+function App() {
+  return (
+    <>
+      <AppUpdateNotice />
+      <Application />
+    </>
+  );
+}
+
+function AppUpdateNotice() {
+  const [update, setUpdate] = useState<AppUpdateCheck | null>(null);
+  const [error, setError] = useState('');
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    void checkForAppUpdate()
+      .then(setUpdate)
+      .catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : 'تعذّر التحقق من تحديث التطبيق.');
+      });
+  }, []);
+
+  if (dismissed || (!error && update?.status !== 'available')) return null;
+  return (
+    <aside className="fixed inset-x-3 top-[calc(env(safe-area-inset-top,0px)+0.75rem)] z-[100] mx-auto max-w-lg rounded-2xl border border-gold-300 bg-white p-4 shadow-xl dark:border-gold-600 dark:bg-primary-900" dir="rtl">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-semibold text-primary-900 dark:text-primary-50">
+            {update?.status === 'available' ? `يتوفر تحديث جديد — الإصدار ${update.version}` : 'تعذّر التحقق من تحديث التطبيق'}
+          </p>
+          {error && <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">{error}</p>}
+          {update?.status === 'available' && (
+            <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
+              نزّل APK ثم افتحه من التنزيلات لتثبيته. سيطلب Android تأكيد التحديث.
+            </p>
+          )}
+        </div>
+        <button type="button" onClick={() => setDismissed(true)} aria-label="إخفاء" className="text-gray-500">×</button>
+      </div>
+      {update?.status === 'available' && (
+        <button
+          type="button"
+          onClick={() => {
+            void Browser.open({ url: update.downloadUrl }).catch((cause: unknown) => {
+              setError(cause instanceof Error ? cause.message : 'تعذّر فتح رابط التحديث.');
+            });
+          }}
+          className="mt-3 w-full rounded-xl bg-primary-700 px-4 py-2.5 text-sm font-semibold text-white"
+        >
+          تنزيل التحديث
+        </button>
+      )}
+    </aside>
+  );
+}
+
+function Application() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [authLoading, setAuthLoading] = useState(isSupabaseConfigured);
+
+  useEffect(() => {
+    if (!supabase) return;
+    let alive = true;
+    void supabase.auth.getSession().then(({ data, error }) => {
+      if (error) console.error('Could not restore Supabase session:', error.message);
+      if (alive) {
+        setSession(data.session);
+        setAuthLoading(false);
+      }
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setAuthLoading(false);
+    });
+    return () => {
+      alive = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  if (isSupabaseConfigured && authLoading) {
+    return <StartupMessage message="جارٍ التحقق من الحساب..." />;
+  }
+  if (isSupabaseConfigured && !session) {
+    return <AuthScreen onAuthenticated={() => {}} />;
+  }
+  if (isSupabaseConfigured && session) {
+    return <AuthenticatedApp key={session.user.id} session={session} />;
+  }
+  return <AppContent accountEmail={undefined} onSignOut={undefined} syncState={null} onSyncNow={undefined} />;
+}
+
+function AuthenticatedApp({ session }: { session: Session }) {
+  const [ready, setReady] = useState(false);
+  const [startupError, setStartupError] = useState('');
+  const [retryNonce, setRetryNonce] = useState(0);
+  const [syncState, setSyncState] = useState<CloudSyncState>({
+    status: 'syncing',
+    lastSyncedAt: null,
+    error: null,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    let stopSync: (() => void) | undefined;
+    setReady(false);
+    setStartupError('');
+    void startCloudSync(session.user.id, setSyncState)
+      .then((stop) => {
+        if (cancelled) stop();
+        else {
+          stopSync = stop;
+          setReady(true);
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setStartupError(error instanceof Error ? error.message : 'تعذّرت مزامنة بيانات الحساب.');
+        }
+      });
+    return () => {
+      cancelled = true;
+      stopSync?.();
+    };
+  }, [session.user.id, retryNonce]);
+
+  const retrySync = useCallback(() => setRetryNonce((nonce) => nonce + 1), []);
+
+  const handleSignOut = useCallback(async () => {
+    if (!supabase) return;
+    await synchronizeNow();
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+    await clearLocalUserData();
+  }, []);
+
+  if (startupError) {
+    return (
+      <StartupMessage
+        message={`تعذّرت مزامنة الحساب: ${startupError}`}
+        action={retrySync}
+        actionLabel="إعادة المحاولة"
+      />
+    );
+  }
+  if (!ready) return <StartupMessage message="جارٍ تحميل بياناتك ومزامنتها..." />;
+  return (
+    <AppContent
+      accountEmail={session.user.email}
+      onSignOut={handleSignOut}
+      syncState={syncState}
+      onSyncNow={() => synchronizeNow()}
+    />
+  );
+}
+
+function StartupMessage({
+  message,
+  action,
+  actionLabel,
+}: {
+  message: string;
+  action?: () => void;
+  actionLabel?: string;
+}) {
+  return (
+    <div className="min-h-screen bg-surface-light dark:bg-surface-dark flex items-center justify-center px-4" dir="rtl">
+      <div className="w-full max-w-md rounded-2xl border border-primary-100 bg-white p-6 text-center shadow-sm dark:border-primary-800 dark:bg-primary-900">
+        <p role={action ? 'alert' : 'status'} className="text-sm text-primary-700 dark:text-primary-200">{message}</p>
+        {action && (
+          <button type="button" onClick={action} className="mt-4 rounded-xl bg-primary-700 px-5 py-2.5 text-sm font-semibold text-white">
+            {actionLabel ?? 'إعادة المحاولة'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AppContent({
+  accountEmail,
+  onSignOut,
+  syncState,
+  onSyncNow,
+}: {
+  accountEmail: string | undefined;
+  onSignOut: (() => Promise<void>) | undefined;
+  syncState: CloudSyncState | null;
+  onSyncNow: (() => Promise<void>) | undefined;
+}) {
+  const { settings, loading, error: settingsError, save, reload: reloadSettings } = useSettings();
+  const { themeMode, changeTheme, colorPalette, changeColorPalette } = useTheme();
+  const { screen, params, navigate, resetNonce } = useNavigation();
+  const [onboarded, setOnboarded] = useState<boolean | null>(null);
+  const [syncRevision, setSyncRevision] = useState(0);
+
+  useEffect(() => {
+    const onSyncComplete = () => {
+      setSyncRevision((revision) => revision + 1);
+      void reloadSettings();
+    };
+    window.addEventListener('zad:cloud-sync-complete', onSyncComplete);
+    return () => window.removeEventListener('zad:cloud-sync-complete', onSyncComplete);
+  }, [reloadSettings]);
+
+  useEffect(() => {
+    const flag = localStorage.getItem(ONBOARDED_KEY);
+    setOnboarded(flag === 'true');
+  }, []);
+
+  // Generate daily tasks, mark missed ones, and reschedule notifications on app open
+  useEffect(() => {
+    if (settings) {
+      generateDailyTasks();
+      markMissedTasks();
+      rescheduleAllNotifications();
+    }
+  }, [settings]);
+
+  // Android drops pending alarms when the app is killed or the device reboots, and the
+  // notification window covers only today + tomorrow. Re-arming on every foreground
+  // keeps the schedule honest instead of assuming it survived.
+  useEffect(() => {
+    let remove: (() => void) | undefined;
+
+    if (Capacitor.isNativePlatform()) {
+      CapApp.addListener('resume', () => {
+        generateDailyTasks();
+        markMissedTasks();
+        rescheduleAllNotifications();
+      }).then((handle) => {
+        remove = () => { void handle.remove(); };
+      }).catch(() => {
+        // No plugin available (e.g. running the web build in a native shell) — the
+        // open-time reschedule above still covers the common case.
+      });
+    }
+
+    return () => remove?.();
+  }, []);
+
+  const handleOnboardComplete = useCallback(async (patch: Partial<Settings>) => {
+    if (patch && Object.keys(patch).length > 0) {
+      await save(patch);
+    }
+    localStorage.setItem(ONBOARDED_KEY, 'true');
+    setOnboarded(true);
+  }, [save]);
+
+  if (loading || onboarded === null) {
+    return (
+      <div className="min-h-screen bg-surface-light dark:bg-surface-dark flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 mx-auto mb-4 overflow-hidden rounded-2xl shadow-lg animate-pulse-soft">
+            <img src="/icon.svg" alt="زاد" className="h-full w-full" />
+          </div>
+          <p className="text-primary-600 dark:text-primary-300 text-sm">جارٍ التحميل...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (settingsError) {
+    return (
+      <div className="min-h-screen bg-surface-light dark:bg-surface-dark flex items-center justify-center px-4" dir="rtl">
+        <div role="alert" className="w-full max-w-md rounded-2xl border border-error-200 bg-white p-6 text-center shadow-sm dark:border-error-800 dark:bg-primary-900">
+          <h1 className="text-lg font-bold text-error-700 dark:text-error-300">تعذّر تحميل إعدادات التطبيق</h1>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+            تحقق من مساحة التخزين ثم أعد المحاولة. {settingsError}
+          </p>
+          <button
+            type="button"
+            onClick={() => { void reloadSettings(); }}
+            className="mt-4 rounded-xl bg-primary-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+          >
+            إعادة المحاولة
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!onboarded && settings) {
+    return (
+      <ErrorBoundary>
+        <Onboarding settings={settings} onComplete={handleOnboardComplete} />
+      </ErrorBoundary>
+    );
+  }
+
+  if (!settings) return null;
+
+  return (
+    <ErrorBoundary>
+      <div className="min-h-screen bg-surface-light dark:bg-surface-dark text-primary-900 dark:text-primary-50" dir="rtl">
+        <main className="min-h-screen min-h-dvh px-4 pt-4 pb-24 md:pr-24 md:pl-8 md:pt-8 md:pb-8">
+          <div className="w-full max-w-md mx-auto md:max-w-3xl xl:max-w-5xl 2xl:max-w-6xl">
+            {/* `key` combines the screen name with the repeat-tap nonce, so re-selecting
+                the active tab remounts the screen and resets it instead of no-op'ing. */}
+            {screen === 'home' && <HomeScreen key={`home-${resetNonce}`} settings={settings} navigate={navigate} />}
+            {screen === 'quran' && <QuranScreen key={`quran-${resetNonce}`} settings={settings} />}
+            {screen === 'planner' && <PlannerScreen key={`planner-${resetNonce}`} />}
+            {screen === 'prayer' && <PrayerScreen key={`prayer-${resetNonce}`} settings={settings} onSaveSettings={save} />}
+            {screen === 'hadith' && <HadithScreen key={`hadith-${resetNonce}`} params={params} />}
+            {screen === 'progress' && <ProgressScreen key={`progress-${resetNonce}`} />}
+            {screen === 'settings' && (
+              <SettingsScreen
+                key={`settings-${resetNonce}-${syncRevision}`}
+                settings={settings}
+                onSaveSettings={save}
+                themeMode={themeMode}
+                onChangeTheme={changeTheme}
+                colorPalette={colorPalette}
+                onChangeColorPalette={changeColorPalette}
+                accountEmail={accountEmail}
+                syncState={syncState}
+                onSyncNow={onSyncNow}
+                onSignOut={onSignOut}
+              />
+            )}
+            {screen === 'more' && <MoreScreen key={`more-${resetNonce}`} navigate={navigate} />}
+            {screen === 'library' && <ContentLibrary key={`library-${resetNonce}`} />}
+            {screen === 'adhkar' && <AdhkarScreen key={`adhkar-${resetNonce}`} />}
+            {screen === 'tasbih' && <TasbihScreen key={`tasbih-${resetNonce}`} />}
+          </div>
+        </main>
+        <BottomNav current={screen} onNavigate={navigate} />
+      </div>
+    </ErrorBoundary>
+  );
+}
+
+export default App;

@@ -1,0 +1,122 @@
+name: Android APK release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version (for example 1.2.0)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set release version
+        id: release
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            version="$INPUT_VERSION"
+            tag="v${version#v}"
+          else
+            tag="${GITHUB_REF_NAME}"
+            version="${tag#v}"
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release version must use MAJOR.MINOR.PATCH, received: $version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version_code=$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - name: Validate release configuration
+        env:
+          KEYSTORE: ${{ secrets.ZAD_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ZAD_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ZAD_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ZAD_KEY_PASSWORD }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          for value in KEYSTORE STORE_PASSWORD KEY_ALIAS KEY_PASSWORD SUPABASE_URL SUPABASE_ANON_KEY; do
+            if [[ -z "${!value}" ]]; then
+              echo "Missing required GitHub secret/variable: $value" >&2
+              exit 1
+            fi
+          done
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify app
+        run: |
+          npm run typecheck
+          npm run lint
+          npm run check:data
+          npm run check:text
+          npm run check:content
+          npm run check:pages
+
+      - name: Build web assets
+        env:
+          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: npm run build
+
+      - name: Sync Capacitor Android
+        run: npx cap sync android
+
+      - name: Prepare release signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ZAD_KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/zad-release.jks"
+
+      - name: Build signed APK
+        env:
+          ZAD_KEYSTORE_PATH: ${{ runner.temp }}/zad-release.jks
+          ZAD_KEYSTORE_PASSWORD: ${{ secrets.ZAD_KEYSTORE_PASSWORD }}
+          ZAD_KEY_ALIAS: ${{ secrets.ZAD_KEY_ALIAS }}
+          ZAD_KEY_PASSWORD: ${{ secrets.ZAD_KEY_PASSWORD }}
+        run: |
+          cd android
+          ./gradlew assembleRelease \
+            -PVERSION_CODE="${{ steps.release.outputs.version_code }}" \
+            -PVERSION_NAME="${{ steps.release.outputs.version }}"
+
+      - name: Publish APK release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          apk="android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$apk"
+          cp "$apk" "ZAD-${{ steps.release.outputs.tag }}.apk"
+          gh release create "${{ steps.release.outputs.tag }}" \
+            "ZAD-${{ steps.release.outputs.tag }}.apk" \
+            --title "ZAD ${{ steps.release.outputs.version }}" \
+            --generate-notes

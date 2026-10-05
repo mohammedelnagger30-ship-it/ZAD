@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <!--
+      No `maximum-scale` / `user-scalable=no`: blocking pinch-zoom fails WCAG 2.1 SC 1.4.4
+      (Resize Text) and is ignored by iOS Safari regardless. `viewport-fit=cover` is kept
+      so the notch is handled via env(safe-area-inset-*).
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#1f734e" />
+    <meta name="description" content="زاد — رفيق القرآن والعبادة اليومية" />
+
+    <!-- Icons: real PNGs, because Android/iOS install prompts reject SVG-only manifests. -->
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="زاد | ZAD" />
+    <meta property="og:description" content="زاد — رفيق القرآن والعبادة اليومية" />
+    <!-- Previously pointed at bolt.new's placeholder; must be a real asset of this app. -->
+    <meta property="og:image" content="/icons/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="/icons/og-image.png" />
+
+    <title>زاد | ZAD</title>
+
+    <!--
+      Webfonts are loaded non-render-blocking on purpose: `media="print"` keeps the
+      stylesheet out of the critical path, then onload promotes it to `all`. Without
+      this, first paint waits on fonts.googleapis.com and the app cannot start offline.
+      font-display=swap inside the URL handles the per-glyph swap.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Cairo:wght@300;400;500;600;700&family=Tajawal:wght@300;400;500;700&display=swap"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Cairo:wght@300;400;500;600;700&family=Tajawal:wght@300;400;500;700&display=swap"
+      />
+    </noscript>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
