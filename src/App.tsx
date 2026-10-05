@@ -222,9 +222,32 @@ function AppContent({
 }) {
   const { settings, loading, error: settingsError, save, reload: reloadSettings } = useSettings();
   const { themeMode, changeTheme, colorPalette, changeColorPalette } = useTheme();
-  const { screen, params, navigate, resetNonce } = useNavigation();
+  const { screen, params, navigate, resetNonce, goBack } = useNavigation();
   const [onboarded, setOnboarded] = useState<boolean | null>(null);
   const [syncRevision, setSyncRevision] = useState(0);
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform() || onboarded === null || !onboarded) return;
+
+    let removeListener: (() => void) | undefined;
+    const register = async () => {
+      try {
+        const handle = await CapApp.addListener('backButton', () => {
+          if (screen === 'home') {
+            void CapApp.exitApp();
+            return;
+          }
+          goBack();
+        });
+        removeListener = () => { void handle.remove(); };
+      } catch {
+        // Native back-button support is optional on some devices/builds.
+      }
+    };
+
+    void register();
+    return () => removeListener?.();
+  }, [goBack, onboarded, screen]);
 
   useEffect(() => {
     const onSyncComplete = () => {
@@ -284,7 +307,7 @@ function AppContent({
       <div className="min-h-screen bg-surface-light dark:bg-surface-dark flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 mx-auto mb-4 overflow-hidden rounded-2xl shadow-lg animate-pulse-soft">
-            <img src="/icon.svg" alt="زاد" className="h-full w-full" />
+            <img src="/icon.svg" alt="نور زاد" className="h-full w-full" />
           </div>
           <p className="text-primary-600 dark:text-primary-300 text-sm">جارٍ التحميل...</p>
         </div>

@@ -116,21 +116,91 @@ export type ScreenName =
 
 export type NavParams = Record<string, unknown>;
 
+const NAVIGATION_STORAGE_KEY = 'zad:navigation-state';
+
+function getStoredNavigationState() {
+  try {
+    const raw = localStorage.getItem(NAVIGATION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as {
+      screen?: ScreenName;
+      params?: NavParams;
+      history?: ScreenName[];
+      paramsByScreen?: Record<string, NavParams>;
+    };
+
+    const screen = parsed.screen && ['home', 'quran', 'planner', 'prayer', 'hadith', 'library', 'progress', 'settings', 'more', 'adhkar', 'tasbih'].includes(parsed.screen)
+      ? parsed.screen
+      : 'home';
+
+    const history = Array.isArray(parsed.history) && parsed.history.length > 0
+      ? parsed.history.filter((item): item is ScreenName => ['home', 'quran', 'planner', 'prayer', 'hadith', 'library', 'progress', 'settings', 'more', 'adhkar', 'tasbih'].includes(item))
+      : [screen];
+
+    return {
+      screen,
+      params: parsed.params ?? {},
+      history,
+      paramsByScreen: parsed.paramsByScreen ?? { [screen]: parsed.params ?? {} },
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function useNavigation() {
-  const [screen, setScreen] = useState<ScreenName>('home');
-  const [params, setParams] = useState<NavParams>({});
+  const restored = getStoredNavigationState();
+  const [screen, setScreen] = useState<ScreenName>(restored?.screen ?? 'home');
+  const [params, setParams] = useState<NavParams>(restored?.params ?? {});
+  const [history, setHistory] = useState<ScreenName[]>(restored?.history ?? ['home']);
+  const [paramsByScreen, setParamsByScreen] = useState<Record<string, NavParams>>(restored?.paramsByScreen ?? { home: {} });
   // Bumped only when the user re-taps the tab they are already on. Without it,
   // setScreen(currentScreen) is a React no-op, so tapping "القرآن" while reading a
   // surah did nothing at all and the reader stayed open. Pairing this nonce with the
   // screen `key` in App turns a repeat tap into a reset-to-initial-state.
   const [resetNonce, setResetNonce] = useState(0);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        NAVIGATION_STORAGE_KEY,
+        JSON.stringify({ screen, params, history, paramsByScreen }),
+      );
+    } catch {
+      // Best-effort persistence only.
+    }
+  }, [history, params, paramsByScreen, screen]);
+
   const navigate = (target: ScreenName, p: NavParams = {}) => {
+    if (target === screen) {
+      setParams(p);
+      setParamsByScreen((current) => ({ ...current, [target]: p }));
+      setResetNonce((n) => n + 1);
+      window.scrollTo(0, 0);
+      return;
+    }
+
     setParams(p);
-    if (target === screen) setResetNonce((n) => n + 1);
+    setParamsByScreen((current) => ({ ...current, [target]: p }));
+    setHistory((current) => {
+      if (current[current.length - 1] === target) return current;
+      return [...current, target];
+    });
     setScreen(target);
     window.scrollTo(0, 0);
   };
 
-  return { screen, params, navigate, resetNonce };
+  const goBack = () => {
+    setHistory((current) => {
+      if (current.length <= 1) return current;
+
+      const previous = current[current.length - 2];
+      const previousParams = paramsByScreen[previous] ?? {};
+      setScreen(previous);
+      setParams(previousParams);
+      return current.slice(0, -1);
+    });
+  };
+
+  return { screen, params, navigate, resetNonce, goBack, history };
 }

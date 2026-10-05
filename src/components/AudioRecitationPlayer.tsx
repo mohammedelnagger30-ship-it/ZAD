@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { AlertTriangle, Pause, Play, Square, Volume2 } from 'lucide-react';
+import { AlertTriangle, Pause, Play, RotateCcw, Square, Volume2 } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { AUDIO_RECITERS } from '@/data/audioReciters';
 import type { SurahMeta } from '@/data/surahs';
@@ -40,6 +40,7 @@ export function AudioRecitationPlayer({
   const [activeAyah, setActiveAyah] = useState<number | null>(null);
   const [selectedAyah, setSelectedAyah] = useState<number | null>(1);
   const [repeatCount, setRepeatCount] = useState(3);
+  const [playbackRate, setPlaybackRate] = useState(1);
   const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [source, setSource] = useState<SurahAudioSource | null>(null);
@@ -93,6 +94,22 @@ export function AudioRecitationPlayer({
       repeatRemainingRef.current = count;
     }
   };
+
+  const replayAyah = useCallback(() => {
+    const ayah = activeAyahRef.current ?? selectedAyah;
+    if (ayah === null) return;
+    repeatRemainingRef.current = repeatCount;
+    playAyah(ayah, false);
+  }, [playAyah, repeatCount, selectedAyah]);
+
+  const updatePlaybackRate = (rate: number) => {
+    setPlaybackRate(rate);
+    if (audioRef.current) audioRef.current.playbackRate = rate;
+  };
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.playbackRate = playbackRate;
+  }, [playbackRate]);
 
   const stop = useCallback(() => {
     requestRef.current += 1;
@@ -268,6 +285,19 @@ export function AudioRecitationPlayer({
               ))}
             </select>
           </label>
+          <label className="block space-y-1">
+            <span className="text-xs text-gray-600 dark:text-gray-300">سرعة التلاوة</span>
+            <select
+              value={playbackRate}
+              onChange={(event) => updatePlaybackRate(Number(event.target.value))}
+              className="w-full rounded-xl border border-primary-200 bg-white px-3 py-2.5 text-sm text-primary-800 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
+            >
+              <option value={0.75}>بطيئة — ٠٫٧٥×</option>
+              <option value={1}>عادية — ١×</option>
+              <option value={1.25}>أسرع قليلًا — ١٫٢٥×</option>
+              <option value={1.5}>سريعة — ١٫٥×</option>
+            </select>
+          </label>
           <div className="flex items-center gap-2">
             <button
               onClick={toggleSurah}
@@ -295,9 +325,18 @@ export function AudioRecitationPlayer({
             )}
           </div>
           {activeAyah !== null && (
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              {isPlaying ? 'تُتلى الآن' : 'متوقف مؤقتاً'} — الآية {toArabicNumber(activeAyah)}
-            </p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {isPlaying ? 'تُتلى الآن' : 'متوقف مؤقتاً'} — الآية {toArabicNumber(activeAyah)}
+              </p>
+              <button
+                onClick={replayAyah}
+                disabled={sourceLoading}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-primary-700 hover:bg-primary-100 disabled:opacity-50 dark:text-gold-300 dark:hover:bg-primary-800"
+              >
+                <RotateCcw size={14} /> إعادة الآية
+              </button>
+            </div>
           )}
           <div className="space-y-2 rounded-xl border border-primary-100 bg-white/80 p-3 dark:border-primary-800 dark:bg-primary-950/40">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -355,7 +394,12 @@ export function AudioRecitationPlayer({
           )}
         </div>
       </Card>
-      <audio ref={audioRef} preload="metadata" onEnded={finishAyah} onTimeUpdate={handleTimeUpdate} />
+      <audio
+        ref={audioRef}
+        preload="metadata"
+        onEnded={finishAyah}
+        onTimeUpdate={handleTimeUpdate}
+      />
       {children({ activeAyah, isPlaying, selectedAyah, selectAyah, playSelectedAyah: startSelectedAyah })}
     </>
   );

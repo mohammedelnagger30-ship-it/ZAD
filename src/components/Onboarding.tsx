@@ -1,5 +1,7 @@
-﻿import { useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { Bell, MapPin, BookOpen, Check, ChevronLeft, Heart } from 'lucide-react';
+import { App as CapApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import { Button } from '@/components/ui';
 import { requestNotificationPermission } from '@/utils/notifications';
 import { CITY_PRESETS } from '@/utils/prayerTimes';
@@ -17,11 +19,32 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   const [requesting, setRequesting] = useState(false);
   const [notificationError, setNotificationError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let removeListener: (() => void) | undefined;
+    const register = async () => {
+      try {
+        const handle = await CapApp.addListener('backButton', () => {
+          setStep((current) => current > 0 ? current - 1 : 0);
+        });
+        removeListener = () => {
+          void handle.remove();
+        };
+      } catch {
+        // Ignore native-back behavior when the platform API is unavailable.
+      }
+    };
+
+    void register();
+    return () => removeListener?.();
+  }, []);
+
   const steps = [
     // Welcome
     {
       icon: <Heart size={64} className="text-gold-500" />,
-      title: 'مرحباً بك في زاد',
+      title: 'مرحباً بك في نور زاد',
       description: 'تطبيقك الشامل لحفظ القرآن الكريم وتتبع العبادات اليومية. يعمل بالكامل بدون إنترنت.',
       action: () => setStep(1),
       actionLabel: 'ابدأ',

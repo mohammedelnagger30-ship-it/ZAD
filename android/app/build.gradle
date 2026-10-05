@@ -1,11 +1,14 @@
+import java.io.StringReader
+
 apply plugin: 'com.android.application'
 
 def appVersionCode = (rootProject.findProperty('VERSION_CODE') ?: '1').toString().toInteger()
-def appVersionName = (rootProject.findProperty('VERSION_NAME') ?: '1.0').toString()
+def appVersionName = (rootProject.findProperty('VERSION_NAME') ?: '1.0.6').toString()
 
 android {
     namespace = "com.hifzi.app"
     compileSdk = rootProject.ext.compileSdkVersion
+    testBuildType "release"
     defaultConfig {
         applicationId "com.hifzi.app"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -22,7 +25,11 @@ android {
     def signingProperties = new Properties()
     def signingPropertiesFile = file('keystore.properties')
     if (signingPropertiesFile.exists()) {
-        signingPropertiesFile.withInputStream { signingProperties.load(it) }
+        def signingPropertiesText = signingPropertiesFile.getText('UTF-8')
+        if (signingPropertiesText.startsWith('\uFEFF')) {
+            signingPropertiesText = signingPropertiesText.substring(1)
+        }
+        signingProperties.load(new StringReader(signingPropertiesText))
     }
     def releaseKeystorePath = System.getenv('ZAD_KEYSTORE_PATH') ?: signingProperties.getProperty('storeFile')
     def releaseStorePassword = System.getenv('ZAD_KEYSTORE_PASSWORD') ?: signingProperties.getProperty('storePassword')

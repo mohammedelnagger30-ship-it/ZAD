@@ -114,6 +114,7 @@ export interface Settings {
   adhanSound: boolean;
   adhanVoiceId: string;
   randomDhikrEnabled: boolean;
+  randomDhikrCategory: 'varied' | 'morning' | 'evening' | 'istighfar';
   randomDhikrIntervalMinutes: number;
   randomDhikrStartTime: string;
   randomDhikrEndTime: string;
@@ -255,6 +256,7 @@ export const DEFAULT_SETTINGS: Settings = {
   adhanSound: true,
   adhanVoiceId: 'asim_javed',
   randomDhikrEnabled: false,
+  randomDhikrCategory: 'varied',
   randomDhikrIntervalMinutes: 60,
   randomDhikrStartTime: '09:00',
   randomDhikrEndTime: '21:00',

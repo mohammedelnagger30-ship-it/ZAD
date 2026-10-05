@@ -2,7 +2,7 @@
 // Maps each page to its surah, juz, hizb, and special markers
 // Source: Standard Madani Mushaf page mapping (604 pages, 15 lines per page)
 
-import { SURAHS, getAyahPage, getJuzForPage } from './surahs';
+import { SURAHS, getAyahPage, getJuzForPage, toArabicNumber } from './surahs';
 
 export interface PageMeta {
   page: number;
@@ -47,6 +47,12 @@ export const HIZB_START_PAGES: Record<number, number> = {
   51: 502, 52: 512, 53: 522, 54: 532, 55: 542, 56: 552, 57: 562,
   58: 572, 59: 582, 60: 592,
 };
+
+export const HIZB_INFO = Object.entries(HIZB_START_PAGES).map(([hizb, startPage]) => ({
+  id: Number(hizb),
+  startPage,
+  name: `الحزب ${toArabicNumber(Number(hizb))}`,
+}));
 
 function buildPageMeta(): Map<number, PageMeta> {
   const pages = new Map<number, PageMeta>();

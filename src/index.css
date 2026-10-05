@@ -135,34 +135,46 @@ body {
    is already in the bundle. `--fs` is the base Quran size; the reader's zoom sets it.
    ============================================================ */
 .mushaf-page {
-  --paper: #fdfaf1;
-  --ink: #1e1a11;
-  --frame: #947338;
-  --frame-soft: rgba(148, 115, 56, 0.38);
-  --wash: rgba(148, 115, 56, 0.075);
+  --paper: #f9f3e3;
+  --ink: #1d170f;
+  --frame: #8a6934;
+  --frame-soft: rgba(138, 105, 52, 0.34);
+  --wash: rgba(138, 105, 52, 0.08);
   --fs: 26px;
+  --lh: 2.05;
 
   position: relative;
   width: 100%;
-  /* Deliberately no tall minimum. A printed mushaf page is always full because it is
-     set to 15 lines, but this page map is reconstructed from surah start pages, so real
-     page density here ranges from 285 to 2,483 characters (measured, ~8x). A fixed
-     height left the sparsest pages 80-90% empty parchment, which reads as a broken page
-     rather than a calm one, so the page now hugs its text and only has a small floor. */
   min-height: 20rem;
-  /* Right padding is smaller than left: the left gutter is reserved for the juz margin. */
-  padding: 2.1rem 2.3rem 3.7rem 3.5rem;
+  padding: 2.4rem 2.8rem 4rem 3.15rem;
+  border-radius: 1rem;
   color: var(--ink);
   background-color: var(--paper);
-  /* Paper grain from two faint washes. No image request, so it costs nothing offline
-     and there is no asset that can fail to load and leave a blank page. */
   background-image:
-    radial-gradient(130% 70% at 50% 0%, var(--wash), transparent 62%),
-    radial-gradient(110% 60% at 50% 100%, var(--wash), transparent 62%);
+    radial-gradient(130% 78% at 50% 0%, rgba(255, 255, 255, 0.45), transparent 62%),
+    radial-gradient(110% 68% at 50% 100%, rgba(140, 109, 58, 0.06), transparent 64%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 32%),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent calc(var(--fs) * 1.7),
+      rgba(138, 105, 52, 0.04) calc(var(--fs) * 1.7),
+      rgba(138, 105, 52, 0.04) calc(var(--fs) * 1.74)
+    );
   box-shadow:
-    0 24px 50px -24px rgba(30, 24, 10, 0.48),
-    0 4px 12px rgba(30, 24, 10, 0.09),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.48);
+    0 32px 60px -32px rgba(47, 30, 10, 0.58),
+    0 10px 22px rgba(47, 30, 10, 0.11),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.55),
+    inset 0 0 0 2px rgba(138, 105, 52, 0.08);
+}
+
+.mushaf-page::before {
+  content: '';
+  position: absolute;
+  inset: 0.8rem 0.9rem 1rem 0.9rem;
+  border: 1px solid rgba(138, 105, 52, 0.2);
+  border-radius: 0.7rem;
+  pointer-events: none;
 }
 
 .mushaf-page--night {
@@ -172,6 +184,27 @@ body {
   --frame-soft: rgba(183, 154, 91, 0.48);
   --wash: rgba(183, 154, 91, 0.11);
   box-shadow: 0 20px 45px -20px rgba(0, 0, 0, 0.85), 0 2px 5px rgba(0, 0, 0, 0.5);
+}
+
+.mushaf-page--paper {
+  --paper: #f5ebd1;
+  --ink: #22180d;
+  --frame: #8f7136;
+  --frame-soft: rgba(143, 113, 54, 0.4);
+  --wash: rgba(143, 113, 54, 0.09);
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.28), transparent 18%),
+    radial-gradient(circle at 80% 0%, rgba(130, 98, 49, 0.08), transparent 22%),
+    repeating-linear-gradient(
+      to bottom,
+      rgba(130, 98, 49, 0.04) 0,
+      rgba(130, 98, 49, 0.04) 1px,
+      transparent 1px,
+      transparent calc(var(--fs) * 1.7)
+    );
+  box-shadow:
+    0 18px 40px -22px rgba(62, 46, 17, 0.58),
+    inset 0 0 0 1px rgba(108, 83, 38, 0.1);
 }
 
 /* A restrained triple rule gives the page a printed, illuminated-manuscript edge. */
@@ -213,27 +246,29 @@ body {
    "top to bottom"; only the labels themselves are turned on their side. */
 .mushaf-margin {
   position: absolute;
-  top: 2.7rem;
-  bottom: 4.4rem;
-  left: 1.1rem;
-  width: 1.2rem;
+  top: 2.9rem;
+  bottom: 4.6rem;
+  left: 1rem;
+  width: 1.1rem;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
   font-family: 'Cairo', sans-serif;
-  font-size: 0.58rem;
+  font-size: 0.52rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--frame);
-  opacity: 0.9;
+  opacity: 0.95;
   user-select: none;
 }
 .mushaf-margin > span {
-  padding: 0.42rem 0.12rem;
+  padding: 0.38rem 0.08rem;
   border: 1px solid var(--frame-soft);
-  background: linear-gradient(90deg, transparent, var(--wash), transparent);
+  border-radius: 0.35rem;
+  background: linear-gradient(90deg, rgba(255,255,255,0.2), var(--wash), rgba(255,255,255,0.12));
   writing-mode: vertical-rl;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.14);
 }
 
 /*
@@ -242,15 +277,18 @@ body {
  * both edges. Only the last line stays ragged, which is what a printed page does too.
  */
 .mushaf-body {
+  position: relative;
+  z-index: 1;
   font-family: 'Amiri', 'Amiri Quran', serif;
   font-size: var(--fs);
-  line-height: 2.05;
+  line-height: var(--lh, 2.05);
   text-align: justify;
+  text-align-last: center;
   text-justify: inter-word;
-  /* .quran-text opens the word spacing up for the tap-to-read list; that fights
-     justification here, so this block opts out. */
-  word-spacing: normal;
+  letter-spacing: var(--letter-gap, 0.01em);
+  word-spacing: var(--word-gap, normal);
   color: var(--ink);
+  text-shadow: 0 0 0 rgba(0, 0, 0, 0.02);
 }
 
 .quran-surah-page {
@@ -402,14 +440,16 @@ body {
  */
 .mushaf-banner {
   position: relative;
-  margin: 0.16rem auto 0.78rem;
-  padding: 0.28rem 1.6rem 0.34rem;
+  z-index: 1;
+  margin: 0.25rem auto 0.8rem;
+  padding: 0.28rem 2rem 0.4rem;
   border: 1px solid var(--frame);
+  border-radius: 0.45rem;
   text-align: center;
   background:
     linear-gradient(90deg, transparent, var(--frame-soft), transparent) top / 42% 1px no-repeat,
     linear-gradient(180deg, var(--wash), transparent 82%);
-  box-shadow: 0 1px 3px rgba(48, 35, 12, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18), 0 1px 3px rgba(48, 35, 12, 0.04);
 }
 .mushaf-banner::before {
   content: '';
@@ -448,11 +488,15 @@ body {
 
 /* The band and the basmala sit close together so a stack of them stays compact. */
 .mushaf-basmala {
-  margin: 0 0 0.6rem;
+  position: relative;
+  z-index: 1;
+  margin: 0 0 0.8rem;
   font-family: 'Amiri', serif;
-  font-size: calc(var(--fs) * 0.8);
-  line-height: 1.6;
+  font-size: calc(var(--fs) * 0.82);
+  line-height: 1.65;
   text-align: center;
+  letter-spacing: 0.03em;
+  color: var(--frame);
 }
 .mushaf-basmala__rule {
   display: inline-block;
@@ -476,19 +520,20 @@ body {
 /* Folio: the page number in a medallion at the foot of the page. */
 .mushaf-folio {
   position: absolute;
-  bottom: 1.2rem;
+  bottom: 1.1rem;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1.8rem;
-  height: 1.8rem;
-  border: 1.5px solid var(--frame);
+  width: 2.15rem;
+  height: 2.15rem;
+  border: 1.2px solid var(--frame);
   border-radius: 9999px;
-  background: var(--paper);
+  background: linear-gradient(180deg, var(--paper), rgba(138, 105, 52, 0.04));
+  box-shadow: inset 0 0 0 1px rgba(138, 105, 52, 0.2), 0 2px 7px rgba(47, 30, 10, 0.08);
   font-family: 'Cairo', sans-serif;
-  font-size: 0.66rem;
+  font-size: 0.68rem;
   font-weight: 700;
   color: var(--frame);
 }

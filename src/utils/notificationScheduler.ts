@@ -7,16 +7,52 @@ import { calculatePrayerTimes, getDateInTimeZone, getPrayerTimeZone } from '@/ut
 import { generateDailyTasks, getTodayTasks } from '@/utils/taskManager';
 import { genNotificationId, cancelAllNotifications, hasNotificationPermission } from '@/utils/notifications';
 
-const RANDOM_DHIKR: { text: string; source: string }[] = [
-  { text: 'سُبْحَانَ اللَّهِ', source: 'من أذكار ما بعد الصلاة — صحيح مسلم' },
-  { text: 'الْحَمْدُ لِلَّهِ', source: 'من أذكار ما بعد الصلاة — صحيح مسلم' },
-  { text: 'اللَّهُ أَكْبَرُ', source: 'من أذكار ما بعد الصلاة — صحيح مسلم' },
-  {
-    text: 'لَا إِلَهَ إِلَّا اللَّهُ وَحْدَهُ لَا شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ وَهُوَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ',
-    source: 'من أذكار ما بعد الصلاة — صحيح مسلم',
+type DhikrReminderCategory = 'morning' | 'evening' | 'istighfar';
+
+const DHIKR_REMINDER_MESSAGES: Record<DhikrReminderCategory, { title: string; messages: string[] }> = {
+  morning: {
+    title: 'أذكار الصباح',
+    messages: [
+      'أذكار الصباح في انتظارك — ابدأ يومك بذكر الله.',
+      'ابدأ صباحك بلحظة هادئة مع أذكار الصباح.',
+      'خصص دقائق لأذكار الصباح واجعلها بداية يومك.',
+      'صباحك أجمل بذكر الله — أذكار الصباح جاهزة.',
+      'خذ لحظة للذكر قبل الانشغال بمهام اليوم.',
+    ],
   },
-  { text: 'اللَّهُمَّ صَلِّ وَسَلِّمْ عَلَى نَبِيِّنَا مُحَمَّدٍ', source: 'صيغة دعاء بالصلاة على النبي ﷺ' },
-];
+  evening: {
+    title: 'أذكار المساء',
+    messages: [
+      'أذكار المساء في انتظارك — اختم يومك بذكر الله.',
+      'خصص لحظة هادئة لأذكار المساء.',
+      'قبل أن تنهي يومك، لا تنس أذكار المساء.',
+      'اجعل ختام يومك ذكرًا وطمأنينة.',
+      'حان وقت أذكار المساء — افتح وردك اليومي.',
+    ],
+  },
+  istighfar: {
+    title: 'تذكير بالاستغفار',
+    messages: [
+      'استغفر الله — لحظة ذكر في يومك.',
+      'تذكير لطيف: أكثر من الاستغفار.',
+      'خذ لحظة وقل: أستغفر الله.',
+      'استغفر الله العظيم، وواصل يومك بقلب حاضر.',
+      'لا تنسَ وردك من الاستغفار.',
+    ],
+  },
+};
+
+function getDhikrReminderCategory(
+  preference: Settings['randomDhikrCategory'] | undefined,
+  at: Date,
+  slot: number,
+): DhikrReminderCategory {
+  if (preference && preference !== 'varied') return preference;
+  const hour = at.getHours();
+  if (hour < 12) return 'morning';
+  if (hour >= 17) return 'evening';
+  return slot % 2 === 0 ? 'istighfar' : 'morning';
+}
 
 function timeToMinutes(value: string): number | null {
   const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(value);
@@ -179,7 +215,7 @@ export async function rescheduleAllNotifications(): Promise<void> {
       const duration = (endMinute - startMinute + 1440) % 1440;
       const now = new Date();
       const notifications: LocalNotificationSchema[] = [];
-      let previousDhikrIndex = -1;
+      const previousMessageByCategory = new Map<DhikrReminderCategory, number>();
 
       if (duration > 0) {
         for (let dayOffset = 0; dayOffset < 2; dayOffset += 1) {
@@ -195,15 +231,17 @@ export async function rescheduleAllNotifications(): Promise<void> {
             at = new Date(at.getTime() + interval * 60000), slot += 1
           ) {
             if (at <= now) continue;
-            const available = RANDOM_DHIKR.map((_, index) => index)
-              .filter((index) => index !== previousDhikrIndex);
-            const dhikrIndex = available[Math.floor(Math.random() * available.length)];
-            previousDhikrIndex = dhikrIndex;
-            const dhikr = RANDOM_DHIKR[dhikrIndex];
+            const category = getDhikrReminderCategory(settings.randomDhikrCategory, at, slot);
+            const reminder = DHIKR_REMINDER_MESSAGES[category];
+            const previousIndex = previousMessageByCategory.get(category) ?? -1;
+            const available = reminder.messages.map((_, index) => index)
+              .filter((index) => index !== previousIndex);
+            const messageIndex = available[Math.floor(Math.random() * available.length)];
+            previousMessageByCategory.set(category, messageIndex);
             notifications.push({
               id: genNotificationId(40, at, dayOffset * 100 + slot),
-              title: 'تذكير بالذكر',
-              body: `${dhikr.text} — ${dhikr.source}`,
+              title: reminder.title,
+              body: reminder.messages[messageIndex],
               schedule: { at, allowWhileIdle: true },
               channelId: 'azkar',
               smallIcon: 'ic_notification',

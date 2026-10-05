@@ -9,18 +9,23 @@ import {
   Moon,
   Sun,
   List,
+  BookOpen,
+  Volume2,
 } from 'lucide-react';
 import { MushafPage } from '@/components/mushaf/MushafPage';
 import { TafsirBottomSheet } from '@/components/TafsirBottomSheet';
+import { AudioRecitationPlayer } from '@/components/AudioRecitationPlayer';
 import {
   SURAHS,
   JUZ_INFO,
   getSurah,
   getAyahPage,
+  getJuzForPage,
   getSurahsForPage,
   toArabicNumber,
 } from '@/data/surahs';
-import { getTotalPages } from '@/data/mushafPages';
+import { getTotalPages, HIZB_INFO, getHizbForPage } from '@/data/mushafPages';
+import { loadPreferredReciter, savePreferredReciter } from '@/data/audioReciters';
 import { db, type Settings } from '@/db/database';
 
 interface MushafReaderProps {
@@ -38,11 +43,18 @@ const PAGE_KEYBOARD_STEP = 10;
 export function MushafReader({ settings, initialPage = 1, onClose }: MushafReaderProps) {
   const [currentPage, setCurrentPage] = useState(initialPage);
   const [zoom, setZoom] = useState(1);
+  const [readingScale, setReadingScale] = useState(1);
+  const [lineSpacing, setLineSpacing] = useState(1);
+  const [wordSpacing, setWordSpacing] = useState(0);
+  const [readingMode, setReadingMode] = useState(false);
   const [nightMode, setNightMode] = useState(false);
+  const [paperMode, setPaperMode] = useState(false);
   const [showJumpTo, setShowJumpTo] = useState(false);
-  const [jumpTarget, setJumpTarget] = useState<'page' | 'surah' | 'juz'>('page');
+  const [jumpTarget, setJumpTarget] = useState<'page' | 'surah' | 'juz' | 'hizb'>('page');
   const [bookmarkedPages, setBookmarkedPages] = useState<Set<number>>(new Set());
+  const [selectedReadingAyah, setSelectedReadingAyah] = useState<{ surahId: number; ayahNumber: number } | null>(null);
   const [tafsirAyah, setTafsirAyah] = useState<{ surahId: number; ayahNumber: number } | null>(null);
+  const [reciterId, setReciterId] = useState(loadPreferredReciter);
 
   const totalPages = getTotalPages();
 
@@ -133,9 +145,16 @@ export function MushafReader({ settings, initialPage = 1, onClose }: MushafReade
   // the old header (ayahs/15 pages per surah) disagreed with it, so the header could name
   // a surah that was not printed on the page being read.
   const surahsOnPage = useMemo(() => getSurahsForPage(currentPage), [currentPage]);
+  const currentJuz = useMemo(() => getJuzForPage(currentPage), [currentPage]);
+  const currentHizb = useMemo(() => getHizbForPage(currentPage), [currentPage]);
+  const primarySurah = useMemo(() => {
+    if (selectedReadingAyah) return getSurah(selectedReadingAyah.surahId);
+    return surahsOnPage[0] ?? getSurah(1) ?? null;
+  }, [selectedReadingAyah, surahsOnPage]);
 
   const isBookmarked = bookmarkedPages.has(currentPage);
   const zoomPercent = Math.round(zoom * 100);
+  const effectiveFontSize = Math.round(settings.fontSize * zoom * readingScale);
 
   return (
     <div className={`fixed inset-0 z-[60] flex flex-col ${nightMode ? 'bg-[#0b0906]' : 'bg-surface-light dark:bg-surface-dark'}`}>
@@ -162,6 +181,20 @@ export function MushafReader({ settings, initialPage = 1, onClose }: MushafReade
 
         <div className="flex items-center gap-1.5">
           <button
+            onClick={() => setReadingMode(!readingMode)}
+            aria-label={readingMode ? 'إغلاق القراءة الهادئة' : 'فتح القراءة الهادئة'}
+            className={`w-9 h-9 rounded-lg flex items-center justify-center ${readingMode ? 'bg-[#d8c79d] text-[#4f3a18]' : nightMode ? 'bg-[#241d12] text-primary-300' : 'bg-primary-100 dark:bg-primary-800 text-primary-600 dark:text-primary-300'}`}
+          >
+            <BookOpen size={16} />
+          </button>
+          <button
+            onClick={() => setPaperMode(!paperMode)}
+            aria-label={paperMode ? 'إيقاف الوضع الورقي' : 'تفعيل الوضع الورقي'}
+            className={`w-9 h-9 rounded-lg flex items-center justify-center ${paperMode ? 'bg-[#d8c79d] text-[#4f3a18]' : nightMode ? 'bg-[#241d12] text-primary-300' : 'bg-primary-100 dark:bg-primary-800 text-primary-600 dark:text-primary-300'}`}
+          >
+            <Volume2 size={16} />
+          </button>
+          <button
             onClick={() => toggleBookmark(currentPage)}
             aria-label={isBookmarked ? 'إزالة العلامة من هذه الصفحة' : 'حفظ هذه الصفحة'}
             aria-pressed={isBookmarked}
@@ -179,14 +212,38 @@ export function MushafReader({ settings, initialPage = 1, onClose }: MushafReade
         </div>
       </div>
 
+      <div className="border-b px-3 py-2.5">
+        <div className="mx-auto flex max-w-xl items-center justify-between gap-2 text-[11px] sm:text-xs">
+          <div className={`rounded-xl px-2.5 py-1.5 ${nightMode ? 'bg-[#17120d] text-[#d8c69d]' : 'bg-primary-50 text-primary-700 dark:bg-primary-800 dark:text-primary-100'}`}>
+            <span className="opacity-70">الجزء</span>
+            <span className="mr-1 font-semibold">{toArabicNumber(currentJuz)}</span>
+          </div>
+          <div className={`rounded-xl px-2.5 py-1.5 ${nightMode ? 'bg-[#17120d] text-[#d8c69d]' : 'bg-primary-50 text-primary-700 dark:bg-primary-800 dark:text-primary-100'}`}>
+            <span className="opacity-70">الحزب</span>
+            <span className="mr-1 font-semibold">{toArabicNumber(currentHizb)}</span>
+          </div>
+          <div className={`rounded-xl px-2.5 py-1.5 ${nightMode ? 'bg-[#17120d] text-[#d8c69d]' : 'bg-primary-50 text-primary-700 dark:bg-primary-800 dark:text-primary-100'}`}>
+            <span className="opacity-70">الصفحة</span>
+            <span className="mr-1 font-semibold">{toArabicNumber(currentPage)}</span>
+          </div>
+        </div>
+      </div>
+
       {/* Page */}
       <div className="flex-1 overflow-auto px-3 py-4">
         <div className="mx-auto max-w-2xl">
           <MushafPage
             page={currentPage}
-            fontSize={Math.round(settings.fontSize * zoom)}
+            fontSize={effectiveFontSize}
             night={nightMode}
-            onAyahPress={(surahId, ayahNumber) => setTafsirAyah({ surahId, ayahNumber })}
+            paper={paperMode}
+            lineHeight={1.9 + (lineSpacing - 1) * 0.55}
+            letterSpacing={0.01 + Math.max(0, lineSpacing - 1) * 0.01}
+            wordSpacing={wordSpacing}
+            onAyahPress={(surahId, ayahNumber) => {
+              setSelectedReadingAyah({ surahId, ayahNumber });
+              setTafsirAyah({ surahId, ayahNumber });
+            }}
             activeAyah={tafsirAyah}
           />
         </div>
@@ -268,6 +325,110 @@ export function MushafReader({ settings, initialPage = 1, onClose }: MushafReade
         </div>
       </div>
 
+      {readingMode && primarySurah && (
+        <div className={`absolute inset-x-3 bottom-24 z-40 rounded-3xl border p-4 shadow-2xl backdrop-blur-sm ${nightMode ? 'border-[#2a2317] bg-[#161208]/95 text-primary-100' : 'border-primary-100 bg-white/95 text-primary-900 dark:border-primary-800 dark:bg-primary-950/90 dark:text-primary-100'}`}>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.22em] text-primary-400">قراءة هادئة</p>
+              <h3 className="text-sm font-bold">{primarySurah.name}</h3>
+            </div>
+            <button
+              onClick={() => setReadingMode(false)}
+              className="rounded-lg bg-primary-50 px-2 py-1 text-xs font-medium text-primary-700 dark:bg-primary-800 dark:text-primary-200"
+            >
+              إغلاق
+            </button>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="space-y-1 text-[11px] font-medium text-gray-600 dark:text-gray-300">
+              <span>حجم الخط</span>
+              <input
+                type="range"
+                min={0.85}
+                max={1.35}
+                step={0.05}
+                value={readingScale}
+                onChange={(e) => setReadingScale(Number(e.target.value))}
+                className="w-full accent-primary-600"
+              />
+            </label>
+            <label className="space-y-1 text-[11px] font-medium text-gray-600 dark:text-gray-300">
+              <span>تباعد السطور</span>
+              <input
+                type="range"
+                min={0.9}
+                max={1.35}
+                step={0.05}
+                value={lineSpacing}
+                onChange={(e) => setLineSpacing(Number(e.target.value))}
+                className="w-full accent-primary-600"
+              />
+            </label>
+            <label className="space-y-1 text-[11px] font-medium text-gray-600 dark:text-gray-300">
+              <span>مسافة الكلمات</span>
+              <input
+                type="range"
+                min={0}
+                max={0.3}
+                step={0.02}
+                value={wordSpacing}
+                onChange={(e) => setWordSpacing(Number(e.target.value))}
+                className="w-full accent-primary-600"
+              />
+            </label>
+          </div>
+
+          <div className="mt-3 rounded-2xl border border-primary-100 bg-primary-50/60 p-3 dark:border-primary-800 dark:bg-primary-900/40">
+            <AudioRecitationPlayer
+              surah={primarySurah}
+              reciterId={reciterId}
+              onReciterChange={(nextReciterId) => {
+                setReciterId(nextReciterId);
+                savePreferredReciter(nextReciterId);
+              }}
+              onShowTafsir={(ayahNumber) => setTafsirAyah({ surahId: primarySurah.id, ayahNumber })}
+            >
+              {({ selectedAyah, isPlaying, selectAyah, playSelectedAyah }) => (
+                <div className="flex flex-col gap-2 text-xs sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        if (selectedAyah !== null) {
+                          const target = Math.max(1, selectedAyah - 1);
+                          selectAyah(target);
+                        }
+                      }}
+                      className="rounded-lg border border-primary-200 bg-white px-2 py-1.5 text-primary-700 dark:border-primary-700 dark:bg-primary-800 dark:text-primary-200"
+                    >
+                      الآية السابقة
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (selectedAyah !== null) {
+                          const target = Math.min(primarySurah.ayahCount, selectedAyah + 1);
+                          selectAyah(target);
+                        }
+                      }}
+                      className="rounded-lg border border-primary-200 bg-white px-2 py-1.5 text-primary-700 dark:border-primary-700 dark:bg-primary-800 dark:text-primary-200"
+                    >
+                      الآية التالية
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={playSelectedAyah}
+                    className="rounded-xl bg-primary-600 px-3 py-2 font-semibold text-white"
+                  >
+                    {isPlaying ? 'إيقاف/متابعة' : `استمع: ${selectedAyah ? toArabicNumber(selectedAyah) : 'الآية الحالية'}`}
+                  </button>
+                </div>
+              )}
+            </AudioRecitationPlayer>
+          </div>
+        </div>
+      )}
+
       {/* Jump-to panel */}
       {showJumpTo && (
         <div
@@ -282,7 +443,7 @@ export function MushafReader({ settings, initialPage = 1, onClose }: MushafReade
           </div>
 
           <div className="flex gap-2 mb-4">
-            {(['page', 'surah', 'juz'] as const).map((t) => (
+            {(['page', 'surah', 'juz', 'hizb'] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setJumpTarget(t)}
@@ -292,7 +453,7 @@ export function MushafReader({ settings, initialPage = 1, onClose }: MushafReade
                     : 'bg-primary-50 dark:bg-primary-800 text-primary-600 dark:text-primary-300'
                 }`}
               >
-                {t === 'page' ? 'صفحة' : t === 'surah' ? 'سورة' : 'جزء'}
+                {t === 'page' ? 'صفحة' : t === 'surah' ? 'سورة' : t === 'juz' ? 'جزء' : 'حزب'}
               </button>
             ))}
           </div>
@@ -344,6 +505,21 @@ export function MushafReader({ settings, initialPage = 1, onClose }: MushafReade
                 >
                   <p className="text-sm font-medium text-primary-800 dark:text-primary-100">{j.name}</p>
                   <p className="text-xs text-gray-400">صفحة {toArabicNumber(j.startPage)}</p>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {jumpTarget === 'hizb' && (
+            <div className="grid grid-cols-3 gap-2">
+              {HIZB_INFO.map((h) => (
+                <button
+                  key={h.id}
+                  onClick={() => goToPage(h.startPage)}
+                  className={`p-2 rounded-lg text-center ${nightMode ? 'bg-[#241d12] hover:bg-[#2f2617]' : 'bg-primary-50 dark:bg-primary-800 hover:bg-primary-100 dark:hover:bg-primary-700'}`}
+                >
+                  <p className="text-sm font-medium text-primary-800 dark:text-primary-100">{h.name}</p>
+                  <p className="text-xs text-gray-400">صفحة {toArabicNumber(h.startPage)}</p>
                 </button>
               ))}
             </div>

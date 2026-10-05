@@ -12,7 +12,8 @@ $BgBottom = [System.Drawing.Color]::FromArgb(255, 11, 36, 26)   # #0b241a
 $Gold     = [System.Drawing.Color]::FromArgb(255, 212, 175, 55) # #d4af37
 $GoldSoft = [System.Drawing.Color]::FromArgb(255, 240, 214, 130)
 
-# Draws a standalone ZAD monogram on a refined emerald tile.
+# Draws a refined Quranic app mark: open pages + crescent + light, suitable for
+# a professional Islamic learning and worship app.
 function New-Mark {
     param([int]$Size, [double]$Scale = 1.0)
 
@@ -23,7 +24,6 @@ function New-Mark {
     $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
     $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
 
-    # --- background: vertical gradient, full bleed (maskable-safe) ---
     $rect = New-Object System.Drawing.RectangleF(0, 0, $Size, $Size)
     $grad = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
         $rect, $BgTop, $BgBottom, [System.Drawing.Drawing2D.LinearGradientMode]::Vertical)
@@ -34,49 +34,69 @@ function New-Mark {
     $g.TranslateTransform([float]$off, [float]$off)
     $g.ScaleTransform([float]($w / 100), [float]($w / 100))
 
-    # --- quiet inset frame ---
+    $glowPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(140, 245, 214, 120), [float]1.2)
+    $g.DrawArc($glowPen, 65, 12, 38, 38, 0, 360)
+
+    $crescent = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $crescent.AddEllipse(60, 14, 30, 30)
+    $crescent.AddEllipse(70, 19, 22, 22)
+    $crescent.FillMode = [System.Drawing.Drawing2D.FillMode]::Alternate
+    $g.FillPath((New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 247, 231, 178))), $crescent)
+
+    $leftPage = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $leftPage.AddPolygon([System.Drawing.PointF[]]@(
+        (New-Object System.Drawing.PointF(15, 68)),
+        (New-Object System.Drawing.PointF(47, 38)),
+        (New-Object System.Drawing.PointF(47, 79)),
+        (New-Object System.Drawing.PointF(15, 87))))
+    $g.FillPath((New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 246, 241, 229))), $leftPage)
+
+    $rightPage = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $rightPage.AddPolygon([System.Drawing.PointF[]]@(
+        (New-Object System.Drawing.PointF(85, 68)),
+        (New-Object System.Drawing.PointF(53, 38)),
+        (New-Object System.Drawing.PointF(53, 79)),
+        (New-Object System.Drawing.PointF(85, 87))))
+    $g.FillPath((New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 253, 247, 238))), $rightPage)
+
+    $g.DrawLine((New-Object System.Drawing.Pen($Gold, [float]3.4)), 50, 36, 50, 84)
+
+    $goldBook = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $goldBook.AddPolygon([System.Drawing.PointF[]]@(
+        (New-Object System.Drawing.PointF(28, 46)),
+        (New-Object System.Drawing.PointF(41, 38)),
+        (New-Object System.Drawing.PointF(41, 74)),
+        (New-Object System.Drawing.PointF(28, 68))))
+    $g.FillPath((New-Object System.Drawing.SolidBrush($GoldSoft)), $goldBook)
+
+    $goldBook2 = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $goldBook2.AddPolygon([System.Drawing.PointF[]]@(
+        (New-Object System.Drawing.PointF(72, 46)),
+        (New-Object System.Drawing.PointF(59, 38)),
+        (New-Object System.Drawing.PointF(59, 74)),
+        (New-Object System.Drawing.PointF(72, 68))))
+    $g.FillPath((New-Object System.Drawing.SolidBrush($GoldSoft)), $goldBook2)
+
+    $highlight = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $highlight.AddPolygon([System.Drawing.PointF[]]@(
+        (New-Object System.Drawing.PointF(20, 27)),
+        (New-Object System.Drawing.PointF(24, 33)),
+        (New-Object System.Drawing.PointF(30, 35)),
+        (New-Object System.Drawing.PointF(24, 38)),
+        (New-Object System.Drawing.PointF(20, 44)),
+        (New-Object System.Drawing.PointF(16, 38)),
+        (New-Object System.Drawing.PointF(10, 35)),
+        (New-Object System.Drawing.PointF(16, 33))))
+    $g.FillPath((New-Object System.Drawing.SolidBrush($GoldSoft)), $highlight)
+
     $frame = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $frame.AddArc(10, 10, 12, 12, 180, 90)
-    $frame.AddArc(78, 10, 12, 12, 270, 90)
-    $frame.AddArc(78, 78, 12, 12, 0, 90)
-    $frame.AddArc(10, 78, 12, 12, 90, 90)
+    $frame.AddArc(12, 10, 14, 14, 180, 90)
+    $frame.AddArc(74, 10, 14, 14, 270, 90)
+    $frame.AddArc(74, 76, 14, 14, 0, 90)
+    $frame.AddArc(12, 76, 14, 14, 90, 90)
     $frame.CloseFigure()
-    $framePen = New-Object System.Drawing.Pen(
-        [System.Drawing.Color]::FromArgb(115, 212, 175, 87), [float]0.8)
+    $framePen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(120, 212, 175, 87), [float]1.0)
     $g.DrawPath($framePen, $frame)
-
-    # --- bold, custom Z monogram ---
-    $monogram = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $monogram.AddPolygon([System.Drawing.PointF[]]@(
-        (New-Object System.Drawing.PointF(29, 30)),
-        (New-Object System.Drawing.PointF(71, 30)),
-        (New-Object System.Drawing.PointF(71, 38)),
-        (New-Object System.Drawing.PointF(43, 62)),
-        (New-Object System.Drawing.PointF(71, 62)),
-        (New-Object System.Drawing.PointF(71, 70)),
-        (New-Object System.Drawing.PointF(29, 70)),
-        (New-Object System.Drawing.PointF(29, 62)),
-        (New-Object System.Drawing.PointF(57, 38)),
-        (New-Object System.Drawing.PointF(29, 38))))
-    $g.FillPath((New-Object System.Drawing.SolidBrush(
-        [System.Drawing.Color]::FromArgb(255, 255, 249, 234))), $monogram)
-    $accentPen = New-Object System.Drawing.Pen($Gold, [float]4.8)
-    $accentPen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $accentPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $g.DrawLine($accentPen, 57, 38, 43, 62)
-
-    # --- small gold glint ---
-    $glint = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $glint.AddPolygon([System.Drawing.PointF[]]@(
-        (New-Object System.Drawing.PointF(75, 22)),
-        (New-Object System.Drawing.PointF(77, 27)),
-        (New-Object System.Drawing.PointF(82, 29)),
-        (New-Object System.Drawing.PointF(77, 31)),
-        (New-Object System.Drawing.PointF(75, 36)),
-        (New-Object System.Drawing.PointF(73, 31)),
-        (New-Object System.Drawing.PointF(68, 29)),
-        (New-Object System.Drawing.PointF(73, 27))))
-    $g.FillPath((New-Object System.Drawing.SolidBrush($GoldSoft)), $glint)
 
     $g.Dispose()
     return $bmp
@@ -115,7 +135,7 @@ function Save-OgImage {
     $latinFont = New-Object System.Drawing.Font('Segoe UI', 28, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
 
     [System.Windows.Forms.TextRenderer]::DrawText(
-        $g, [string][char]0x0632 + [string][char]0x0627 + [string][char]0x062F,
+        $g, 'نور زاد',
         $titleFont, (New-Object System.Drawing.Point(490, 214)), $white,
         [System.Windows.Forms.TextFormatFlags]::NoPadding)
 
@@ -125,7 +145,7 @@ function Save-OgImage {
         [System.Windows.Forms.TextFormatFlags]::NoPadding)
 
     [System.Windows.Forms.TextRenderer]::DrawText(
-        $g, 'ZAD - Quran & daily worship', $latinFont,
+        $g, 'Nour ZAD', $latinFont,
         (New-Object System.Drawing.Point(492, 402)),
         [System.Drawing.Color]::FromArgb(180, 248, 250, 248),
         [System.Windows.Forms.TextFormatFlags]::NoPadding)

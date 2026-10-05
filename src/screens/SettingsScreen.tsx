@@ -92,7 +92,7 @@ function isValidBackupRow(table: BackupTable, value: unknown): value is Record<s
     case 'settings':
       return Object.keys(value).some((key) => [
         'theme', 'colorPalette', 'fontSize', 'notificationSound', 'adhanSound', 'adhanVoiceId',
-        'randomDhikrEnabled', 'randomDhikrIntervalMinutes', 'randomDhikrStartTime', 'randomDhikrEndTime',
+        'randomDhikrEnabled', 'randomDhikrCategory', 'randomDhikrIntervalMinutes', 'randomDhikrStartTime', 'randomDhikrEndTime',
         'snoozeMinutes', 'prePrayerReminder', 'calcMethod', 'asrMadhab', 'locationMethod', 'timeZone',
       ].includes(key))
         && (value.theme === undefined || ['light', 'dark', 'system'].includes(value.theme as string))
@@ -102,6 +102,7 @@ function isValidBackupRow(table: BackupTable, value: unknown): value is Record<s
         && (value.adhanSound === undefined || typeof value.adhanSound === 'boolean')
         && (value.adhanVoiceId === undefined || typeof value.adhanVoiceId === 'string')
         && (value.randomDhikrEnabled === undefined || typeof value.randomDhikrEnabled === 'boolean')
+        && (value.randomDhikrCategory === undefined || ['varied', 'morning', 'evening', 'istighfar'].includes(value.randomDhikrCategory as string))
         && (value.randomDhikrIntervalMinutes === undefined || isFiniteNumber(value.randomDhikrIntervalMinutes))
         && (value.randomDhikrStartTime === undefined || isValidTime(value.randomDhikrStartTime))
         && (value.randomDhikrEndTime === undefined || isValidTime(value.randomDhikrEndTime))
@@ -567,6 +568,22 @@ export function SettingsScreen({
             />
             {settings.randomDhikrEnabled && (
               <div className="space-y-2">
+                <label htmlFor="dhikr-reminder-category" className="block text-xs text-gray-500 dark:text-gray-400">
+                  نوع رسائل التذكير
+                  <select
+                    id="dhikr-reminder-category"
+                    value={settings.randomDhikrCategory ?? 'varied'}
+                    onChange={(e) => onSaveSettings({
+                      randomDhikrCategory: e.target.value as Settings['randomDhikrCategory'],
+                    })}
+                    className="mt-1 w-full rounded-xl border border-primary-100 bg-gray-50 px-3 py-2 text-sm text-primary-800 dark:border-primary-800 dark:bg-primary-800/30 dark:text-primary-100"
+                  >
+                    <option value="varied">متنوع حسب الوقت</option>
+                    <option value="morning">أذكار الصباح</option>
+                    <option value="evening">أذكار المساء</option>
+                    <option value="istighfar">الاستغفار</option>
+                  </select>
+                </label>
                 <TimeOptionButton
                   label="الفاصل (دقيقة)"
                   value={settings.randomDhikrIntervalMinutes}
@@ -711,7 +728,7 @@ export function SettingsScreen({
           <Info size={18} /> عن التطبيق
         </p>
         <div className="space-y-1 text-xs text-gray-500 dark:text-gray-400">
-          <p>زاد — رفيق القرآن والعبادة اليومية</p>
+          <p>نور زاد — رفيق القرآن والعبادة اليومية</p>
           <p>يعمل بالكامل بدون إنترنت بعد التثبيت</p>
           <p className="mt-2">جميع البيانات مخزنة محلياً على جهازك</p>
         </div>

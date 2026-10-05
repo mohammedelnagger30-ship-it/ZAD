@@ -13,7 +13,7 @@ export interface TranslationStrings {
 }
 
 export const ar = {
-  app_name: 'زاد',
+  app_name: 'نور زاد',
   home: 'الرئيسية',
   quran: 'القرآن',
   tasks: 'المهام',
@@ -57,7 +57,7 @@ export const ar = {
 } satisfies TranslationStrings;
 
 export const en = {
-  app_name: 'ZAD',
+  app_name: 'Nour ZAD',
   home: 'Home',
   quran: 'Quran',
   tasks: 'Tasks',

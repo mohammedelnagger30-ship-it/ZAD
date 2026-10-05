@@ -20,21 +20,64 @@ type BrowseMode = 'surah' | 'juz' | 'page';
 type ViewMode = 'list' | 'reader' | 'hifz' | 'mushaf';
 type RevelationFilter = 'all' | 'meccan' | 'medinan';
 
+const QURAN_READER_STORAGE_KEY = 'zad:quran-reader-state';
+
+function loadSavedReaderState() {
+  try {
+    const raw = localStorage.getItem(QURAN_READER_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as {
+      viewMode?: ViewMode;
+      surahId?: number;
+      fromAyah?: number;
+      toAyah?: number | null;
+      mushafPage?: number;
+    };
+
+    const surah = parsed.surahId ? getSurah(parsed.surahId) : null;
+    return {
+      viewMode: parsed.viewMode ?? 'list',
+      surah,
+      fromAyah: parsed.fromAyah ?? 1,
+      toAyah: parsed.toAyah ?? null,
+      mushafPage: parsed.mushafPage ?? 1,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function QuranScreen({ settings }: QuranScreenProps) {
+  const savedState = useMemo(loadSavedReaderState, []);
   const [browseMode, setBrowseMode] = useState<BrowseMode>('surah');
   const [revelationFilter, setRevelationFilter] = useState<RevelationFilter>('all');
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [viewMode, setViewMode] = useState<ViewMode>(savedState?.viewMode ?? 'list');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSurah, setSelectedSurah] = useState<SurahMeta | null>(null);
-  const [fromAyah, setFromAyah] = useState(1);
-  const [toAyah, setToAyah] = useState<number | null>(null);
+  const [selectedSurah, setSelectedSurah] = useState<SurahMeta | null>(savedState?.surah ?? null);
+  const [fromAyah, setFromAyah] = useState(savedState?.fromAyah ?? 1);
+  const [toAyah, setToAyah] = useState<number | null>(savedState?.toAyah ?? null);
   const [hideText, setHideText] = useState(false);
   const [hideWordByWord, setHideWordByWord] = useState(false);
   const [bookmarks, setBookmarks] = useState<BookmarkType[]>([]);
   const [fontSize, setFontSize] = useState(settings.fontSize);
   const [tafsirAyah, setTafsirAyah] = useState<{ surahId: number; ayah: number } | null>(null);
-  const [mushafPage, setMushafPage] = useState(1);
+  const [mushafPage, setMushafPage] = useState(savedState?.mushafPage ?? 1);
   const [reciterId, setReciterId] = useState(loadPreferredReciter);
+
+  useEffect(() => {
+    try {
+      const payload = {
+        viewMode,
+        surahId: selectedSurah?.id ?? null,
+        fromAyah,
+        toAyah,
+        mushafPage,
+      };
+      localStorage.setItem(QURAN_READER_STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // LocalStorage is best-effort and must never break the reader.
+    }
+  }, [fromAyah, mushafPage, selectedSurah, toAyah, viewMode]);
 
   const loadBookmarks = useCallback(async () => {
     const bms = await db.bookmarks.toArray();
@@ -307,7 +350,7 @@ export function QuranScreen({ settings }: QuranScreenProps) {
             <span className="text-sm">رجوع</span>
           </button>
           <div className="text-center">
-            <h2 className="text-lg font-bold text-primary-800 dark:text-primary-100">مصحف زاد</h2>
+            <h2 className="text-lg font-bold text-primary-800 dark:text-primary-100">مصحف نور زاد</h2>
             {isHifz && <p className="text-xs text-gold-600 dark:text-gold-400">وضع الحفظ</p>}
           </div>
           <div className="flex items-center gap-1">

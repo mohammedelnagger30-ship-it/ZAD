@@ -26,6 +26,10 @@ export interface MushafPageProps {
   /** Resolved Quran font size in px; the reader's zoom is folded in before this point. */
   fontSize: number;
   night: boolean;
+  paper?: boolean;
+  lineHeight?: number;
+  letterSpacing?: number;
+  wordSpacing?: number;
   onAyahPress?: (surahId: number, ayahNumber: number) => void;
   /** The ayah whose tafsir is open, so the page can show which one it is. */
   activeAyah?: { surahId: number; ayahNumber: number } | null;
@@ -58,7 +62,17 @@ export function MushafFrameDecoration() {
   );
 }
 
-export function MushafPage({ page, fontSize, night, onAyahPress, activeAyah }: MushafPageProps) {
+export function MushafPage({
+  page,
+  fontSize,
+  night,
+  paper = false,
+  lineHeight = 2.05,
+  letterSpacing = 0.01,
+  wordSpacing = 0,
+  onAyahPress,
+  activeAyah,
+}: MushafPageProps) {
   const pageMeta = getPageMeta(page);
   const juz = getJuzForPage(page);
   const hizb = getHizbForPage(page);
@@ -110,10 +124,15 @@ export function MushafPage({ page, fontSize, night, onAyahPress, activeAyah }: M
     return out;
   }, [page]);
 
-  const pageStyle = { '--fs': `${fontSize}px` } as CSSProperties;
+  const pageStyle = {
+    '--fs': `${fontSize}px`,
+    '--lh': `${lineHeight}`,
+    '--letter-gap': `${letterSpacing}em`,
+    '--word-gap': wordSpacing === 0 ? 'normal' : `${wordSpacing}em`,
+  } as CSSProperties;
 
   return (
-    <div className={`mushaf-page ${night ? 'mushaf-page--night' : ''}`} style={pageStyle}>
+    <div className={`mushaf-page ${night ? 'mushaf-page--night' : ''} ${paper ? 'mushaf-page--paper' : ''}`} style={pageStyle}>
       {/* Ornamental frame. Decorative only, so it is hidden from assistive tech. */}
       <MushafFrameDecoration />
 
