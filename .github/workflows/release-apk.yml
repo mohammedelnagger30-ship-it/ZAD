@@ -110,7 +110,7 @@ jobs:
           ZAD_KEY_PASSWORD: ${{ secrets.ZAD_KEY_PASSWORD }}
         run: |
           cd android
-          ./gradlew assembleRelease \
+          bash ./gradlew assembleRelease \
             -PVERSION_CODE="${{ steps.release.outputs.version_code }}" \
             -PVERSION_NAME="${{ steps.release.outputs.version }}"
 
