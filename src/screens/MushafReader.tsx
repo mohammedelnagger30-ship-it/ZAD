@@ -10,7 +10,7 @@ import {
   Sun,
   List,
   BookOpen,
-  Volume2,
+  ScrollText,
 } from 'lucide-react';
 import { MushafPage } from '@/components/mushaf/MushafPage';
 import { TafsirBottomSheet } from '@/components/TafsirBottomSheet';
@@ -192,7 +192,7 @@ export function MushafReader({ settings, initialPage = 1, onClose }: MushafReade
             aria-label={paperMode ? 'إيقاف الوضع الورقي' : 'تفعيل الوضع الورقي'}
             className={`w-9 h-9 rounded-lg flex items-center justify-center ${paperMode ? 'bg-[#d8c79d] text-[#4f3a18]' : nightMode ? 'bg-[#241d12] text-primary-300' : 'bg-primary-100 dark:bg-primary-800 text-primary-600 dark:text-primary-300'}`}
           >
-            <Volume2 size={16} />
+            <ScrollText size={16} />
           </button>
           <button
             onClick={() => toggleBookmark(currentPage)}
