@@ -5,7 +5,13 @@ import { PrayerStatusSheet } from '@/components/PrayerStatusSheet';
 import { type DailyTask, type Settings, type TaskStatus } from '@/db/database';
 import { getTodayTasks, confirmTask, snoozeTask, unsnoozeTask, describePortion, getStreakCount } from '@/utils/taskManager';
 import { rescheduleAllNotifications } from '@/utils/notificationScheduler';
-import { calculatePrayerTimes, formatTime12h, getTimeUntil, getNextPrayer } from '@/utils/prayerTimes';
+import {
+  calculatePrayerTimes,
+  formatTime12h,
+  getTimeUntil,
+  getNextPrayer,
+  getPrayerTimeZone,
+} from '@/utils/prayerTimes';
 import {
   getDayPrayerRecords,
   confirmPrayer,
@@ -71,12 +77,13 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
   }, [now]);
 
   // Calculate prayer times
+  const prayerTimeZone = getPrayerTimeZone(settings.timeZone, settings.cityName);
   const prayerResult = settings.latitude != null && settings.longitude != null
-    ? calculatePrayerTimes(settings.latitude, settings.longitude, today, settings.calcMethod, settings.asrMadhab)
+    ? calculatePrayerTimes(settings.latitude, settings.longitude, today, settings.calcMethod, settings.asrMadhab, prayerTimeZone)
     : null;
 
   const nextPrayer = settings.latitude != null && settings.longitude != null
-    ? getNextPrayer(settings.latitude, settings.longitude, settings.calcMethod, settings.asrMadhab)
+    ? getNextPrayer(settings.latitude, settings.longitude, settings.calcMethod, settings.asrMadhab, prayerTimeZone)
     : null;
 
   const [hadith, setHadith] = useState(() => hadithOfDay());
@@ -183,7 +190,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
                   </div>
                 </div>
                 <div className="text-left">
-                  <p className="font-bold text-lg">{formatTime12h(nextPrayer.time)}</p>
+                  <p className="font-bold text-lg">{formatTime12h(nextPrayer.time, prayerTimeZone)}</p>
                   <p className="text-xs text-primary-200">{getTimeUntil(nextPrayer.time, now)}</p>
                 </div>
               </div>
@@ -296,7 +303,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
                       {prayer.arabicName}
                     </p>
                     <p className="text-sm font-bold text-primary-800 dark:text-primary-100 mt-0.5">
-                      {formatTime12h(prayer.time)}
+                      {formatTime12h(prayer.time, prayerTimeZone)}
                     </p>
                     <div className="mt-1.5 min-h-[1.25rem] flex items-center justify-center">
                       {isSunrise ? (
@@ -362,6 +369,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
           prayer={sheetPrayer}
           timeLabel={formatTime12h(
             prayerResult.prayers.find((p) => p.name === sheetPrayer)!.time,
+            prayerTimeZone,
           )}
           status={prayerRecords[sheetPrayer] ?? null}
           confirmedAt={prayerConfirmedAt[sheetPrayer]}

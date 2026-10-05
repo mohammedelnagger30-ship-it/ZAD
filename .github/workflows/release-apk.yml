@@ -86,11 +86,13 @@ jobs:
           npm run check:text
           npm run check:content
           npm run check:pages
+          npm run check:prayer-times
 
       - name: Build web assets
         env:
           VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          VITE_APP_VERSION: ${{ steps.release.outputs.version }}
         run: npm run build
 
       - name: Sync Capacitor Android

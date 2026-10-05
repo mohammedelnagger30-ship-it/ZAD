@@ -15,6 +15,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   const [selectedCity, setSelectedCity] = useState<string>('القاهرة');
   const [notifGranted, setNotifGranted] = useState(false);
   const [requesting, setRequesting] = useState(false);
+  const [notificationError, setNotificationError] = useState<string | null>(null);
 
   const steps = [
     // Welcome
@@ -31,11 +32,18 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       title: 'تفعيل التنبيهات',
       description: 'تنبيهات لمواعيد الحفظ والمراجعة وأوقات الصلاة. نحتاج إذنك لإرسالها في الوقت المحدد حتى لو كان التطبيق مغلقاً.',
       action: async () => {
+        setNotificationError(null);
         setRequesting(true);
-        const granted = await requestNotificationPermission();
-        setNotifGranted(granted);
-        setRequesting(false);
-        setStep(2);
+        try {
+          const granted = await requestNotificationPermission();
+          setNotifGranted(granted);
+          setStep(2);
+        } catch (error) {
+          setNotificationError(error instanceof Error ? error.message : 'تعذّر طلب إذن الإشعارات.');
+          setStep(2);
+        } finally {
+          setRequesting(false);
+        }
       },
       actionLabel: requesting ? 'جارٍ الطلب...' : notifGranted ? 'تم التفعيل - متابعة' : 'السماح بالتنبيهات',
     },
@@ -83,6 +91,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
                 latitude: city.latitude,
                 longitude: city.longitude,
                 cityName: city.name,
+                timeZone: city.timeZone,
                 locationMethod: 'manual',
               }
             : {},
@@ -104,6 +113,11 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed mb-6">{current.description}</p>
           </div>
           {current.extra}
+          {notificationError && step === 2 && (
+            <p className="mb-4 text-sm text-red-600 dark:text-red-300" role="alert">
+              {notificationError} يمكنك المتابعة وتفعيلها لاحقاً من الإعدادات.
+            </p>
+          )}
           <Button
             fullWidth
             size="lg"

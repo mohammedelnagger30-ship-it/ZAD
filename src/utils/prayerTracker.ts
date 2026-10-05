@@ -194,6 +194,7 @@ export interface PrayerGridLocation {
   longitude: number;
   calcMethod: string;
   asrMadhab: 'standard' | 'hanafi';
+  timeZone?: string;
 }
 
 const allDue = (): Record<PrayerKey, boolean> =>
@@ -237,6 +238,7 @@ export async function getPrayerGrid(location?: PrayerGridLocation): Promise<DayP
       now,
       location.calcMethod,
       location.asrMadhab,
+      location.timeZone,
     );
     todayDue = noDue();
     for (const p of times.prayers) {

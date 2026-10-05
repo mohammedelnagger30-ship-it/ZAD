@@ -13,6 +13,7 @@ const SYNC_TABLES = [
   'sunnahRecords',
   'hifzProgress',
   'hadithFavorites',
+  'adhkar',
 ] as const;
 
 type SyncTableName = (typeof SYNC_TABLES)[number];
@@ -34,6 +35,7 @@ export interface CloudSyncState {
 }
 
 const DELETE_QUEUE_PREFIX = 'zad-delete-queue:';
+const ADHKAR_STORAGE_KEY = 'hifzi-adhkar-state';
 let activeUserId: string | null = null;
 let applyingCloudChanges = false;
 let syncTimer: ReturnType<typeof setTimeout> | undefined;
@@ -50,6 +52,7 @@ function publish(status: SyncStatus, error: string | null = null): void {
 function syncIdFor(table: SyncTableName, row: SyncRow): string {
   if (typeof row.syncId === 'string' && row.syncId.length > 0) return row.syncId;
   switch (table) {
+    case 'adhkar': return 'adhkar';
     case 'settings': return 'settings';
     case 'pageBookmarks': return `page:${row.page}`;
     case 'prayerRecords': return `${row.date}:${row.prayer}`;
@@ -86,6 +89,7 @@ function queueDelete(table: SyncTableName, recordId: string): void {
 function installMutationHooks(): void {
   if (hooksInstalled) return;
   for (const name of SYNC_TABLES) {
+    if (name === 'adhkar') continue;
     const table = db.table(name) as Table<SyncRow, number | string>;
     table.hook('creating').subscribe((_key, row) => {
       if (!applyingCloudChanges) {
@@ -104,6 +108,7 @@ function installMutationHooks(): void {
       if (!applyingCloudChanges) queueDelete(name, syncIdFor(name, row));
     });
   }
+  window.addEventListener('zad:adhkar-updated', scheduleSync);
   hooksInstalled = true;
 }
 
@@ -176,10 +181,46 @@ async function getLocalRecords(): Promise<Map<string, { table: SyncTableName; ro
       plansById.set(plan.id, id);
     }
   }
+  const storedTasks = await db.tasks.toArray();
+  const tasksByMissingPlan = new Map<number, typeof storedTasks>();
+  for (const task of storedTasks) {
+    if (!Number.isInteger(task.planId) || plansById.has(task.planId)) continue;
+    const relatedTasks = tasksByMissingPlan.get(task.planId) ?? [];
+    relatedTasks.push(task);
+    tasksByMissingPlan.set(task.planId, relatedTasks);
+  }
+  for (const [missingPlanId, relatedTasks] of tasksByMissingPlan) {
+    const linkedPlanIds = new Set(
+      relatedTasks.flatMap((task) =>
+        typeof task.planSyncId === 'string' && task.planSyncId.length > 0 ? [task.planSyncId] : [],
+      ),
+    );
+    if (linkedPlanIds.size > 1) {
+      throw new Error('تتعارض روابط مهام الحفظ مع خطط مختلفة؛ لم تُرفع البيانات لحمايتها.');
+    }
+    const syncId = linkedPlanIds.values().next().value ?? crypto.randomUUID();
+    const task = relatedTasks[0];
+    const recoveredPlan: HifzPlan = {
+      name: 'خطة مستعادة',
+      type: task.type,
+      portion: task.portion,
+      daysOfWeek: [],
+      time: task.scheduledTime,
+      createdAt: task.createdAt,
+      active: false,
+      syncPlaceholder: true,
+      syncId,
+      syncModifiedAt: Date.now(),
+    };
+    const key = await db.plans.add(recoveredPlan);
+    plansById.set(missingPlanId, syncId);
+    if (typeof key !== 'number') throw new Error('تعذّر استعادة الخطة المرتبطة بمهمة الحفظ.');
+  }
   for (const name of SYNC_TABLES) {
+    if (name === 'adhkar') continue;
     const rows = await db.table(name).toArray() as SyncRow[];
     for (const row of rows) {
-      if (name === 'tasks' && typeof row.planId === 'number' && typeof row.planSyncId !== 'string') {
+      if (name === 'tasks' && typeof row.planId === 'number' && plansById.has(row.planId)) {
         row.planSyncId = plansById.get(row.planId);
       }
       const recordId = syncIdFor(name, row);
@@ -192,7 +233,54 @@ async function getLocalRecords(): Promise<Map<string, { table: SyncTableName; ro
       local.set(key, { table: name, row });
     }
   }
+  const rawAdhkar = localStorage.getItem(ADHKAR_STORAGE_KEY);
+  if (rawAdhkar) {
+    let adhkar: unknown;
+    try {
+      adhkar = JSON.parse(rawAdhkar);
+    } catch {
+      console.error('Skipping cloud sync for malformed local adhkar data.');
+    }
+    if (isAdhkarState(adhkar)) {
+      const row: SyncRow = { ...adhkar, id: 1, syncId: 'adhkar' };
+      if (typeof row.syncModifiedAt !== 'number') {
+        row.syncModifiedAt = Date.now();
+        localStorage.setItem(ADHKAR_STORAGE_KEY, JSON.stringify(row));
+      }
+      local.set('adhkar:adhkar', { table: 'adhkar', row });
+    } else if (adhkar !== undefined) {
+      console.error('Skipping cloud sync for local adhkar data with an invalid shape.');
+    }
+  }
   return local;
+}
+
+function isAdhkarState(value: unknown): value is Record<string, unknown> & {
+  day: string;
+  counts: Record<string, number>;
+  favorites: string[];
+  fontSize: number;
+  haptics: boolean;
+} {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const state = value as Record<string, unknown>;
+  return typeof state.day === 'string'
+    && /^\d{4}-\d{2}-\d{2}$/.test(state.day)
+    && !!state.counts
+    && typeof state.counts === 'object'
+    && !Array.isArray(state.counts)
+    && Object.values(state.counts).every((count) =>
+      typeof count === 'number' && Number.isFinite(count) && count >= 0,
+    )
+    && Array.isArray(state.favorites)
+    && state.favorites.every((favorite) => typeof favorite === 'string')
+    && typeof state.fontSize === 'number'
+    && Number.isFinite(state.fontSize)
+    && state.fontSize >= 18
+    && state.fontSize <= 32
+    && typeof state.haptics === 'boolean'
+    && (state.syncModifiedAt === undefined
+      || (typeof state.syncModifiedAt === 'number' && Number.isFinite(state.syncModifiedAt)));
 }
 
 function isHifzPlan(value: Record<string, unknown>): value is Record<string, unknown> & HifzPlan {
@@ -266,6 +354,10 @@ async function makeCloudChanges(
 }
 
 async function deleteLocalRecord(tableName: SyncTableName, recordId: string): Promise<boolean> {
+  if (tableName === 'adhkar') {
+    localStorage.removeItem(ADHKAR_STORAGE_KEY);
+    return true;
+  }
   const table = db.table(tableName);
   const row = await table.toCollection().filter((item: SyncRow) => item.syncId === recordId).first() as SyncRow | undefined;
   if (!row) return false;
@@ -302,7 +394,7 @@ async function applyCloudRecords(records: Map<string, CloudRecord>): Promise<voi
   let changed = false;
   applyingCloudChanges = true;
   try {
-    await db.transaction('rw', SYNC_TABLES.map((name) => db.table(name)), async () => {
+    await db.transaction('rw', SYNC_TABLES.filter((name) => name !== 'adhkar').map((name) => db.table(name)), async () => {
       const applyPlan = async (remote: CloudRecord, placeholder: boolean) => {
         if (!remote.record_data || typeof remote.record_data !== 'object') {
           if (remote.is_deleted) return;
@@ -386,11 +478,39 @@ async function applyCloudRecords(records: Map<string, CloudRecord>): Promise<voi
       for (const remote of otherRows) {
         const tableName = remote.table_name;
         if (remote.is_deleted) {
-          await deleteLocalRecord(tableName, remote.record_id);
+          changed = (await deleteLocalRecord(tableName, remote.record_id)) || changed;
           continue;
         }
         if (!remote.record_data || typeof remote.record_data !== 'object') {
           throw new Error('وصل سجل سحابي ببنية غير صالحة.');
+        }
+        if (tableName === 'adhkar') {
+          if (!isAdhkarState(remote.record_data)) throw new Error('وصلت بيانات أذكار سحابية ببنية غير صالحة.');
+          const remoteModifiedAt = Date.parse(remote.modified_at);
+          const rawLocal = localStorage.getItem(ADHKAR_STORAGE_KEY);
+          let localModifiedAt = 0;
+          if (rawLocal) {
+            let localData: unknown;
+            try {
+              localData = JSON.parse(rawLocal);
+            } catch {
+              console.error('Replacing malformed local adhkar data with the valid cloud copy.');
+            }
+            if (isAdhkarState(localData)) {
+              localModifiedAt = typeof localData.syncModifiedAt === 'number' ? localData.syncModifiedAt : 0;
+            } else if (localData !== undefined) {
+              console.error('Replacing invalid local adhkar data with the valid cloud copy.');
+            }
+          }
+          if (localModifiedAt >= remoteModifiedAt) continue;
+          localStorage.setItem(ADHKAR_STORAGE_KEY, JSON.stringify({
+            ...remote.record_data,
+            syncId: 'adhkar',
+            syncModifiedAt: remoteModifiedAt,
+          }));
+          window.dispatchEvent(new Event('zad:adhkar-updated'));
+          changed = true;
+          continue;
         }
         const table = db.table(tableName);
         const existing = await table.toCollection()
@@ -508,10 +628,13 @@ export async function startCloudSync(
 export async function clearLocalUserData(): Promise<void> {
   applyingCloudChanges = true;
   try {
-    await db.transaction('rw', SYNC_TABLES.map((name) => db.table(name)), async () => {
-      for (const name of SYNC_TABLES) await db.table(name).clear();
+    await db.transaction('rw', SYNC_TABLES.filter((name) => name !== 'adhkar').map((name) => db.table(name)), async () => {
+      for (const name of SYNC_TABLES) {
+        if (name !== 'adhkar') await db.table(name).clear();
+      }
       await db.settings.put({ ...DEFAULT_SETTINGS, id: 1, syncId: 'settings', syncModifiedAt: 0 });
     });
+    localStorage.removeItem(ADHKAR_STORAGE_KEY);
   } finally {
     applyingCloudChanges = false;
   }

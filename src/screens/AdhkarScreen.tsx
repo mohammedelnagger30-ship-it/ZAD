@@ -23,6 +23,7 @@ import { todayKey } from '@/utils/dateUtils';
 import { normalizeArabic } from '@/utils/arabic';
 
 const STORAGE_KEY = 'hifzi-adhkar-state';
+const SYNC_COMPLETE_EVENT = 'zad:cloud-sync-complete';
 
 const ICONS: Record<string, typeof Sunrise> = {
   sunrise: Sunrise,
@@ -111,7 +112,11 @@ export function AdhkarScreen() {
   useEffect(() => {
     const persist = () => {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          ...state,
+          syncModifiedAt: Date.now(),
+        }));
+        window.dispatchEvent(new Event('zad:adhkar-updated'));
         setStorageError(null);
       } catch {
         setStorageError('تعذّر حفظ التقدم. تحقق من مساحة التخزين المتاحة في المتصفح.');
@@ -119,6 +124,16 @@ export function AdhkarScreen() {
     };
     persist();
   }, [state]);
+
+  useEffect(() => {
+    const reloadSyncedState = () => {
+      const next = loadState();
+      setState(next.state);
+      setStorageError(next.error);
+    };
+    window.addEventListener(SYNC_COMPLETE_EVENT, reloadSyncedState);
+    return () => window.removeEventListener(SYNC_COMPLETE_EVENT, reloadSyncedState);
+  }, []);
 
   useEffect(() => {
     const checkDay = () => {

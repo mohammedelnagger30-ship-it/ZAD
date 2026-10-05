@@ -63,7 +63,9 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
             <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
               تطبيق حفظ القرآن الكريم وتتبع العبادات اليومية. تعمل الميزات الأساسية بدون إنترنت، ويمكن تنزيل التفاسير وكتب الحديث لاستخدامها لاحقاً.
             </p>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">الإصدار ١.٠</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+              الإصدار {import.meta.env.VITE_APP_VERSION || '1.0'}
+            </p>
           </div>
         </div>
       </Card>

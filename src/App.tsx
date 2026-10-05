@@ -1,19 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { lazy, Suspense, useState, useEffect, useCallback } from 'react';
 import { useSettings, useTheme, useNavigation } from '@/hooks/useApp';
 import { BottomNav } from '@/components/BottomNav';
-import { Onboarding } from '@/components/Onboarding';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { HomeScreen } from '@/screens/HomeScreen';
-import { QuranScreen } from '@/screens/QuranScreen';
-import { PlannerScreen } from '@/screens/PlannerScreen';
-import { PrayerScreen } from '@/screens/PrayerScreen';
-import { HadithScreen } from '@/screens/HadithScreen';
-import { ProgressScreen } from '@/screens/ProgressScreen';
-import { SettingsScreen } from '@/screens/SettingsScreen';
-import { MoreScreen } from '@/screens/MoreScreen';
-import { ContentLibrary } from '@/screens/ContentLibrary';
-import { AdhkarScreen } from '@/screens/AdhkarScreen';
-import { TasbihScreen } from '@/screens/TasbihScreen';
 import { AuthScreen } from '@/components/AuthScreen';
 import { generateDailyTasks, markMissedTasks } from '@/utils/taskManager';
 import { rescheduleAllNotifications } from '@/utils/notificationScheduler';
@@ -27,6 +15,19 @@ import type { Session } from '@supabase/supabase-js';
 import type { Settings } from '@/db/database';
 
 const ONBOARDED_KEY = 'hifzi-onboarded';
+
+const HomeScreen = lazy(() => import('@/screens/HomeScreen').then((module) => ({ default: module.HomeScreen })));
+const Onboarding = lazy(() => import('@/components/Onboarding').then((module) => ({ default: module.Onboarding })));
+const QuranScreen = lazy(() => import('@/screens/QuranScreen').then((module) => ({ default: module.QuranScreen })));
+const PlannerScreen = lazy(() => import('@/screens/PlannerScreen').then((module) => ({ default: module.PlannerScreen })));
+const PrayerScreen = lazy(() => import('@/screens/PrayerScreen').then((module) => ({ default: module.PrayerScreen })));
+const HadithScreen = lazy(() => import('@/screens/HadithScreen').then((module) => ({ default: module.HadithScreen })));
+const ProgressScreen = lazy(() => import('@/screens/ProgressScreen').then((module) => ({ default: module.ProgressScreen })));
+const SettingsScreen = lazy(() => import('@/screens/SettingsScreen').then((module) => ({ default: module.SettingsScreen })));
+const MoreScreen = lazy(() => import('@/screens/MoreScreen').then((module) => ({ default: module.MoreScreen })));
+const ContentLibrary = lazy(() => import('@/screens/ContentLibrary').then((module) => ({ default: module.ContentLibrary })));
+const AdhkarScreen = lazy(() => import('@/screens/AdhkarScreen').then((module) => ({ default: module.AdhkarScreen })));
+const TasbihScreen = lazy(() => import('@/screens/TasbihScreen').then((module) => ({ default: module.TasbihScreen })));
 
 function App() {
   return (
@@ -314,7 +315,9 @@ function AppContent({
   if (!onboarded && settings) {
     return (
       <ErrorBoundary>
-        <Onboarding settings={settings} onComplete={handleOnboardComplete} />
+        <Suspense fallback={<ScreenLoading />}>
+          <Onboarding settings={settings} onComplete={handleOnboardComplete} />
+        </Suspense>
       </ErrorBoundary>
     );
   }
@@ -326,38 +329,47 @@ function AppContent({
       <div className="min-h-screen bg-surface-light dark:bg-surface-dark text-primary-900 dark:text-primary-50" dir="rtl">
         <main className="min-h-screen min-h-dvh px-4 pt-4 pb-24 md:pr-24 md:pl-8 md:pt-8 md:pb-8">
           <div className="w-full max-w-md mx-auto md:max-w-3xl xl:max-w-5xl 2xl:max-w-6xl">
-            {/* `key` combines the screen name with the repeat-tap nonce, so re-selecting
-                the active tab remounts the screen and resets it instead of no-op'ing. */}
-            {screen === 'home' && <HomeScreen key={`home-${resetNonce}`} settings={settings} navigate={navigate} />}
-            {screen === 'quran' && <QuranScreen key={`quran-${resetNonce}`} settings={settings} />}
-            {screen === 'planner' && <PlannerScreen key={`planner-${resetNonce}`} />}
-            {screen === 'prayer' && <PrayerScreen key={`prayer-${resetNonce}`} settings={settings} onSaveSettings={save} />}
-            {screen === 'hadith' && <HadithScreen key={`hadith-${resetNonce}`} params={params} />}
-            {screen === 'progress' && <ProgressScreen key={`progress-${resetNonce}`} />}
-            {screen === 'settings' && (
-              <SettingsScreen
-                key={`settings-${resetNonce}-${syncRevision}`}
-                settings={settings}
-                onSaveSettings={save}
-                themeMode={themeMode}
-                onChangeTheme={changeTheme}
-                colorPalette={colorPalette}
-                onChangeColorPalette={changeColorPalette}
-                accountEmail={accountEmail}
-                syncState={syncState}
-                onSyncNow={onSyncNow}
-                onSignOut={onSignOut}
-              />
-            )}
-            {screen === 'more' && <MoreScreen key={`more-${resetNonce}`} navigate={navigate} />}
-            {screen === 'library' && <ContentLibrary key={`library-${resetNonce}`} />}
-            {screen === 'adhkar' && <AdhkarScreen key={`adhkar-${resetNonce}`} />}
-            {screen === 'tasbih' && <TasbihScreen key={`tasbih-${resetNonce}`} />}
+            <Suspense fallback={<ScreenLoading />}>
+              {/* Selecting the active tab again remounts its screen. */}
+              {screen === 'home' && <HomeScreen key={`home-${resetNonce}`} settings={settings} navigate={navigate} />}
+              {screen === 'quran' && <QuranScreen key={`quran-${resetNonce}`} settings={settings} />}
+              {screen === 'planner' && <PlannerScreen key={`planner-${resetNonce}`} />}
+              {screen === 'prayer' && <PrayerScreen key={`prayer-${resetNonce}`} settings={settings} onSaveSettings={save} />}
+              {screen === 'hadith' && <HadithScreen key={`hadith-${resetNonce}`} params={params} />}
+              {screen === 'progress' && <ProgressScreen key={`progress-${resetNonce}`} />}
+              {screen === 'settings' && (
+                <SettingsScreen
+                  key={`settings-${resetNonce}-${syncRevision}`}
+                  settings={settings}
+                  onSaveSettings={save}
+                  themeMode={themeMode}
+                  onChangeTheme={changeTheme}
+                  colorPalette={colorPalette}
+                  onChangeColorPalette={changeColorPalette}
+                  accountEmail={accountEmail}
+                  syncState={syncState}
+                  onSyncNow={onSyncNow}
+                  onSignOut={onSignOut}
+                />
+              )}
+              {screen === 'more' && <MoreScreen key={`more-${resetNonce}`} navigate={navigate} />}
+              {screen === 'library' && <ContentLibrary key={`library-${resetNonce}`} />}
+              {screen === 'adhkar' && <AdhkarScreen key={`adhkar-${resetNonce}`} />}
+              {screen === 'tasbih' && <TasbihScreen key={`tasbih-${resetNonce}`} />}
+            </Suspense>
           </div>
         </main>
         <BottomNav current={screen} onNavigate={navigate} />
       </div>
     </ErrorBoundary>
+  );
+}
+
+function ScreenLoading() {
+  return (
+    <div className="flex min-h-48 items-center justify-center" role="status">
+      <p className="text-sm text-primary-600 dark:text-primary-300">جارٍ تحميل الصفحة...</p>
+    </div>
   );
 }
 

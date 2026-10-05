@@ -124,6 +124,7 @@ export interface Settings {
   latitude?: number;
   longitude?: number;
   cityName?: string;
+  timeZone?: string;
   locationMethod: 'manual' | 'auto';
 }
 

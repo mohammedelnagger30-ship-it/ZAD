@@ -15,6 +15,7 @@ import { db, type Settings } from '@/db/database';
 import { COLOR_PALETTES, type ColorPalette } from '@/utils/colorThemes';
 import type { CloudSyncState } from '@/utils/cloudSync';
 import { checkForAppUpdate, type AppUpdateCheck } from '@/utils/appUpdates';
+import { ADHKAR_CATEGORIES } from '@/data/adhkar';
 
 interface SettingsScreenProps {
   settings: Settings;
@@ -46,6 +47,34 @@ const BACKUP_TABLES = [
 const IGNORED_BACKUP_KEYS = ['_exportDate', 'streaks'];
 
 type BackupTable = (typeof BACKUP_TABLES)[number];
+const ADHKAR_STATE_KEY = 'hifzi-adhkar-state';
+
+function isValidAdhkarBackup(value: unknown): value is {
+  day: string;
+  counts: Record<string, number>;
+  favorites: string[];
+  fontSize: number;
+  haptics: boolean;
+} {
+  if (!isRecord(value) || typeof value.day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value.day)) return false;
+  if (!isRecord(value.counts) || !Array.isArray(value.favorites)) return false;
+  const adhkar = ADHKAR_CATEGORIES.flatMap((category) => category.items);
+  const countsValid = Object.entries(value.counts).every(([id, count]) => {
+    const item = adhkar.find((dhikr) => dhikr.id === id);
+    return !!item
+      && typeof count === 'number'
+      && Number.isInteger(count)
+      && count >= 0
+      && count <= item.count;
+  });
+  return countsValid
+    && value.favorites.every((id) => typeof id === 'string' && adhkar.some((item) => item.id === id))
+    && typeof value.fontSize === 'number'
+    && Number.isFinite(value.fontSize)
+    && value.fontSize >= 18
+    && value.fontSize <= 32
+    && typeof value.haptics === 'boolean';
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -64,7 +93,7 @@ function isValidBackupRow(table: BackupTable, value: unknown): value is Record<s
       return Object.keys(value).some((key) => [
         'theme', 'colorPalette', 'fontSize', 'notificationSound', 'adhanSound', 'adhanVoiceId',
         'randomDhikrEnabled', 'randomDhikrIntervalMinutes', 'randomDhikrStartTime', 'randomDhikrEndTime',
-        'snoozeMinutes', 'prePrayerReminder', 'calcMethod', 'asrMadhab', 'locationMethod',
+        'snoozeMinutes', 'prePrayerReminder', 'calcMethod', 'asrMadhab', 'locationMethod', 'timeZone',
       ].includes(key))
         && (value.theme === undefined || ['light', 'dark', 'system'].includes(value.theme as string))
         && (value.colorPalette === undefined || ['emerald', 'ocean', 'plum', 'sand'].includes(value.colorPalette as string))
@@ -83,7 +112,8 @@ function isValidBackupRow(table: BackupTable, value: unknown): value is Record<s
         && (value.locationMethod === undefined || ['manual', 'auto'].includes(value.locationMethod as string))
         && (value.latitude === undefined || isFiniteNumber(value.latitude))
         && (value.longitude === undefined || isFiniteNumber(value.longitude))
-        && (value.cityName === undefined || typeof value.cityName === 'string');
+        && (value.cityName === undefined || typeof value.cityName === 'string')
+        && (value.timeZone === undefined || typeof value.timeZone === 'string');
     case 'plans':
       return typeof value.name === 'string'
         && ['hifz', 'muraja'].includes(value.type as string)
@@ -244,6 +274,8 @@ export function SettingsScreen({
       data.sunnahRecords = await db.sunnahRecords.toArray();
       data.hifzProgress = await db.hifzProgress.toArray();
       data.hadithFavorites = await db.hadithFavorites.toArray();
+      const adhkarState = localStorage.getItem(ADHKAR_STATE_KEY);
+      if (adhkarState) data.adhkar = JSON.parse(adhkarState) as unknown;
 
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -273,6 +305,13 @@ export function SettingsScreen({
         }
         for (const key of Object.keys(data)) {
           if (IGNORED_BACKUP_KEYS.includes(key)) continue;
+          if (key === 'adhkar') {
+            if (!isValidAdhkarBackup(data.adhkar)) {
+              setExportStatus('فشل الاستيراد - بيانات الأذكار في النسخة غير صالحة');
+              return;
+            }
+            continue;
+          }
           if (!BACKUP_TABLES.includes(key as BackupTable)) {
             setExportStatus('فشل الاستيراد - بنية الملف غير صحيحة');
             return;
@@ -294,6 +333,9 @@ export function SettingsScreen({
           }
           },
         );
+        if (data.adhkar !== undefined) {
+          localStorage.setItem(ADHKAR_STATE_KEY, JSON.stringify(data.adhkar));
+        }
         setExportStatus('تم الاستيراد بنجاح. جارٍ إعادة التشغيل...');
         setTimeout(() => window.location.reload(), 1500);
       } catch {

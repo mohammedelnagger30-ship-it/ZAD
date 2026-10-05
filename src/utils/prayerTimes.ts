@@ -43,13 +43,15 @@ export function calculatePrayerTimes(
   longitude: number,
   date: Date,
   calcMethod: string,
-  asrMadhab: 'standard' | 'hanafi'
+  asrMadhab: 'standard' | 'hanafi',
+  timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone,
 ): PrayerTimesResult {
   const coords = new Coordinates(latitude, longitude);
   const params = getCalcMethod(calcMethod);
   params.madhab = asrMadhab === 'hanafi' ? Madhab.Hanafi : Madhab.Shafi;
 
-  const pt = new PrayerTimes(coords, date, params);
+  const prayerDate = getDateInTimeZone(date, timeZone);
+  const pt = new PrayerTimes(coords, prayerDate, params);
   const qiblaDirection = Qibla(coords);
 
   const now = new Date();
@@ -62,39 +64,109 @@ export function calculatePrayerTimes(
     { name: 'isha', arabicName: 'العشاء', time: pt.isha },
   ];
 
-  const prayers: PrayerTimeInfo[] = prayerTimes.map((p) => ({
-    ...p,
-    passed: p.time < now,
-  }));
+  const prayers: PrayerTimeInfo[] = prayerTimes.map((prayer) => {
+    const time = convertWallClockToInstant(prayer.time, timeZone);
+    return { ...prayer, time, passed: time < now };
+  });
 
-  return { prayers, qiblaDirection, date };
+  return { prayers, qiblaDirection, date: prayerDate };
 }
 
 export function getNextPrayer(
   latitude: number,
   longitude: number,
   calcMethod: string,
-  asrMadhab: 'standard' | 'hanafi'
+  asrMadhab: 'standard' | 'hanafi',
+  timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone,
 ): PrayerTimeInfo | null {
   const now = new Date();
-  const today = calculatePrayerTimes(latitude, longitude, now, calcMethod, asrMadhab);
+  const today = calculatePrayerTimes(latitude, longitude, now, calcMethod, asrMadhab, timeZone);
   const upcoming = today.prayers.filter((p) => p.name !== 'sunrise' && p.time > now);
   if (upcoming.length > 0) {
     return upcoming[0];
   }
-  const tomorrow = new Date(now);
+  const tomorrow = getDateInTimeZone(now, timeZone);
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowTimes = calculatePrayerTimes(latitude, longitude, tomorrow, calcMethod, asrMadhab);
+  const tomorrowTimes = calculatePrayerTimes(latitude, longitude, tomorrow, calcMethod, asrMadhab, timeZone);
   return tomorrowTimes.prayers[0];
 }
 
-export function formatTime12h(date: Date): string {
-  let hours = date.getHours();
-  const minutes = date.getMinutes();
-  const ampm = hours >= 12 ? 'م' : 'ص';
-  hours = hours % 12 || 12;
-  const minStr = minutes < 10 ? `0${minutes}` : `${minutes}`;
-  return `${hours}:${minStr} ${ampm}`;
+export function getPrayerTimeZone(timeZone?: string, cityName?: string): string {
+  if (timeZone && isTimeZone(timeZone)) return timeZone;
+  return CITY_PRESETS.find((city) => city.name === cityName)?.timeZone
+    ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+function isTimeZone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function getDateInTimeZone(date: Date, timeZone: string): Date {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return new Date(Number(values.year), Number(values.month) - 1, Number(values.day), 12);
+}
+
+function getTimeZoneOffset(date: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+    hourCycle: 'h23',
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  const wallClock = Date.UTC(
+    Number(values.year),
+    Number(values.month) - 1,
+    Number(values.day),
+    Number(values.hour),
+    Number(values.minute),
+    Number(values.second),
+  );
+  return wallClock - Math.floor(date.getTime() / 1000) * 1000;
+}
+
+function convertWallClockToInstant(wallClock: Date, timeZone: string): Date {
+  const wallClockAsUtc = Date.UTC(
+    wallClock.getUTCFullYear(),
+    wallClock.getUTCMonth(),
+    wallClock.getUTCDate(),
+    wallClock.getUTCHours(),
+    wallClock.getUTCMinutes(),
+    wallClock.getUTCSeconds(),
+  );
+  const initialOffset = getTimeZoneOffset(new Date(wallClockAsUtc), timeZone);
+  const candidate = new Date(wallClockAsUtc - initialOffset);
+  const offset = getTimeZoneOffset(candidate, timeZone);
+  return new Date(wallClockAsUtc - offset + wallClock.getUTCMilliseconds());
+}
+
+export function formatTime12h(
+  date: Date,
+  timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone,
+): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${values.hour}:${values.minute} ${values.dayPeriod === 'PM' ? 'م' : 'ص'}`;
 }
 
 /**
@@ -148,27 +220,28 @@ export interface CityPreset {
   name: string;
   latitude: number;
   longitude: number;
+  timeZone: string;
 }
 
 export const CITY_PRESETS: CityPreset[] = [
-  { name: 'القاهرة', latitude: 30.0444, longitude: 31.2357 },
-  { name: 'مكة المكرمة', latitude: 21.4225, longitude: 39.8262 },
-  { name: 'المدينة المنورة', latitude: 24.5247, longitude: 39.5692 },
-  { name: 'الرياض', latitude: 24.7136, longitude: 46.6753 },
-  { name: 'الإسكندرية', latitude: 31.2001, longitude: 29.9187 },
-  { name: 'بيروت', latitude: 33.8938, longitude: 35.5018 },
-  { name: 'عمّان', latitude: 31.9454, longitude: 35.9284 },
-  { name: 'بغداد', latitude: 33.3152, longitude: 44.3661 },
-  { name: 'دمشق', latitude: 33.5138, longitude: 36.2765 },
-  { name: 'الجزائر', latitude: 36.7538, longitude: 3.0588 },
-  { name: 'تونس', latitude: 36.8065, longitude: 10.1815 },
-  { name: 'الرباط', latitude: 34.0209, longitude: -6.8416 },
-  { name: 'الدوحة', latitude: 25.2854, longitude: 51.531 },
-  { name: 'الكويت', latitude: 29.3759, longitude: 47.9774 },
-  { name: 'المنامة', latitude: 26.2285, longitude: 50.586 },
-  { name: 'أبو ظبي', latitude: 24.4539, longitude: 54.3773 },
-  { name: 'دبي', latitude: 25.2048, longitude: 55.2708 },
-  { name: 'صنعاء', latitude: 15.3694, longitude: 44.191 },
-  { name: 'الخرطوم', latitude: 15.5007, longitude: 32.5599 },
-  { name: 'إسطنبول', latitude: 41.0082, longitude: 28.9784 },
+  { name: 'القاهرة', latitude: 30.0444, longitude: 31.2357, timeZone: 'Africa/Cairo' },
+  { name: 'مكة المكرمة', latitude: 21.4225, longitude: 39.8262, timeZone: 'Asia/Riyadh' },
+  { name: 'المدينة المنورة', latitude: 24.5247, longitude: 39.5692, timeZone: 'Asia/Riyadh' },
+  { name: 'الرياض', latitude: 24.7136, longitude: 46.6753, timeZone: 'Asia/Riyadh' },
+  { name: 'الإسكندرية', latitude: 31.2001, longitude: 29.9187, timeZone: 'Africa/Cairo' },
+  { name: 'بيروت', latitude: 33.8938, longitude: 35.5018, timeZone: 'Asia/Beirut' },
+  { name: 'عمّان', latitude: 31.9454, longitude: 35.9284, timeZone: 'Asia/Amman' },
+  { name: 'بغداد', latitude: 33.3152, longitude: 44.3661, timeZone: 'Asia/Baghdad' },
+  { name: 'دمشق', latitude: 33.5138, longitude: 36.2765, timeZone: 'Asia/Damascus' },
+  { name: 'الجزائر', latitude: 36.7538, longitude: 3.0588, timeZone: 'Africa/Algiers' },
+  { name: 'تونس', latitude: 36.8065, longitude: 10.1815, timeZone: 'Africa/Tunis' },
+  { name: 'الرباط', latitude: 34.0209, longitude: -6.8416, timeZone: 'Africa/Casablanca' },
+  { name: 'الدوحة', latitude: 25.2854, longitude: 51.531, timeZone: 'Asia/Qatar' },
+  { name: 'الكويت', latitude: 29.3759, longitude: 47.9774, timeZone: 'Asia/Kuwait' },
+  { name: 'المنامة', latitude: 26.2285, longitude: 50.586, timeZone: 'Asia/Bahrain' },
+  { name: 'أبو ظبي', latitude: 24.4539, longitude: 54.3773, timeZone: 'Asia/Dubai' },
+  { name: 'دبي', latitude: 25.2048, longitude: 55.2708, timeZone: 'Asia/Dubai' },
+  { name: 'صنعاء', latitude: 15.3694, longitude: 44.191, timeZone: 'Asia/Aden' },
+  { name: 'الخرطوم', latitude: 15.5007, longitude: 32.5599, timeZone: 'Africa/Khartoum' },
+  { name: 'إسطنبول', latitude: 41.0082, longitude: 28.9784, timeZone: 'Europe/Istanbul' },
 ];

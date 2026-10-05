@@ -4,7 +4,14 @@ import { Card, Button, Badge, SectionHeader, EmptyState } from '@/components/ui'
 import { PrayerStatusSheet } from '@/components/PrayerStatusSheet';
 import { PrayerWeekGrid } from '@/components/PrayerWeekGrid';
 import type { Settings } from '@/db/database';
-import { calculatePrayerTimes, formatTime12h, getTimeUntil, getNextPrayer, CITY_PRESETS } from '@/utils/prayerTimes';
+import {
+  calculatePrayerTimes,
+  formatTime12h,
+  getTimeUntil,
+  getNextPrayer,
+  getPrayerTimeZone,
+  CITY_PRESETS,
+} from '@/utils/prayerTimes';
 import {
   getDayPrayerRecords,
   confirmPrayer,
@@ -68,6 +75,7 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
           longitude: settings.longitude,
           calcMethod: settings.calcMethod,
           asrMadhab: settings.asrMadhab,
+          timeZone: getPrayerTimeZone(settings.timeZone, settings.cityName),
         }
       : undefined;
 
@@ -94,7 +102,7 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
     setGrid(g);
     setStats(summariseGrid(g));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.latitude, settings.longitude, settings.calcMethod, settings.asrMadhab]);
+  }, [settings.latitude, settings.longitude, settings.calcMethod, settings.asrMadhab, settings.timeZone, settings.cityName]);
 
   useEffect(() => {
     load();
@@ -102,12 +110,13 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
     return () => clearInterval(interval);
   }, [load]);
 
+  const timeZone = getPrayerTimeZone(settings.timeZone, settings.cityName);
   const prayerResult = settings.latitude != null && settings.longitude != null
-    ? calculatePrayerTimes(settings.latitude, settings.longitude, today, settings.calcMethod, settings.asrMadhab)
+    ? calculatePrayerTimes(settings.latitude, settings.longitude, today, settings.calcMethod, settings.asrMadhab, timeZone)
     : null;
 
   const nextPrayer = settings.latitude != null && settings.longitude != null
-    ? getNextPrayer(settings.latitude, settings.longitude, settings.calcMethod, settings.asrMadhab)
+    ? getNextPrayer(settings.latitude, settings.longitude, settings.calcMethod, settings.asrMadhab, timeZone)
     : null;
 
   const handlePick = async (status: PrayerStatus) => {
@@ -129,7 +138,14 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
   };
 
   const handleLocationPick = async (lat: number, lng: number, name: string) => {
-    onSaveSettings({ latitude: lat, longitude: lng, cityName: name, locationMethod: 'manual' });
+    const city = CITY_PRESETS.find((preset) => preset.name === name);
+    onSaveSettings({
+      latitude: lat,
+      longitude: lng,
+      cityName: name,
+      ...(city ? { timeZone: city.timeZone } : {}),
+      locationMethod: 'manual',
+    });
     setShowLocation(false);
   };
 
@@ -141,6 +157,7 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
             latitude: pos.coords.latitude,
             longitude: pos.coords.longitude,
             cityName: 'موقعي الحالي',
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             locationMethod: 'auto',
           });
           setShowLocation(false);
@@ -194,7 +211,7 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
               <p className="text-primary-200 text-sm mt-1">{getTimeUntil(nextPrayer.time, now)}</p>
             </div>
             <div className="text-left">
-              <p className="text-3xl font-bold text-gold-300">{formatTime12h(nextPrayer.time)}</p>
+              <p className="text-3xl font-bold text-gold-300">{formatTime12h(nextPrayer.time, timeZone)}</p>
             </div>
           </div>
         </div>
@@ -218,7 +235,7 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
                 </div>
                 <div className="flex-1">
                   <p className="font-semibold text-primary-800 dark:text-primary-100">{prayer.arabicName}</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">{formatTime12h(prayer.time)}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{formatTime12h(prayer.time, timeZone)}</p>
                 </div>
                 {isSunrise ? (
                   <Badge variant="gold"><Sun size={10} /> شروق</Badge>
@@ -391,7 +408,9 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
               today,
               settings.calcMethod,
               settings.asrMadhab,
+              timeZone,
             ).prayers.find((p) => p.name === sheet.prayer)!.time,
+            timeZone,
           )}
           status={
             (grid.find((g) => g.date === sheet.date)?.status[sheet.prayer] ??

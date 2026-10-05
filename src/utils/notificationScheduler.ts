@@ -3,7 +3,7 @@ import { Capacitor } from '@capacitor/core';
 import { getSettings } from '@/db/database';
 import type { Settings } from '@/db/database';
 import { getAdhanSound } from '@/data/adhanSounds';
-import { calculatePrayerTimes } from '@/utils/prayerTimes';
+import { calculatePrayerTimes, getDateInTimeZone, getPrayerTimeZone } from '@/utils/prayerTimes';
 import { generateDailyTasks, getTodayTasks } from '@/utils/taskManager';
 import { genNotificationId, cancelAllNotifications, hasNotificationPermission } from '@/utils/notifications';
 
@@ -113,14 +113,15 @@ export async function rescheduleAllNotifications(): Promise<void> {
 
   // 1. Schedule prayer notifications for today + tomorrow
   if (settings.latitude != null && settings.longitude != null) {
-    const today = new Date();
+    const timeZone = getPrayerTimeZone(settings.timeZone, settings.cityName);
+    const today = getDateInTimeZone(new Date(), timeZone);
     const todayPrayers = calculatePrayerTimes(
-      settings.latitude, settings.longitude, today, settings.calcMethod, settings.asrMadhab
+      settings.latitude, settings.longitude, today, settings.calcMethod, settings.asrMadhab, timeZone
     );
-    const tomorrow = new Date();
+    const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     const tomorrowPrayers = calculatePrayerTimes(
-      settings.latitude, settings.longitude, tomorrow, settings.calcMethod, settings.asrMadhab
+      settings.latitude, settings.longitude, tomorrow, settings.calcMethod, settings.asrMadhab, timeZone
     );
 
     const allPrayers = [...todayPrayers.prayers, ...tomorrowPrayers.prayers];
