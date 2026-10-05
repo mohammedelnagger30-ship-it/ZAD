@@ -2,6 +2,8 @@ name: Android APK release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
@@ -30,9 +32,12 @@ jobs:
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
             version="$INPUT_VERSION"
             tag="v${version#v}"
-          else
+          elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             tag="${GITHUB_REF_NAME}"
             version="${tag#v}"
+          else
+            version="1.0.${GITHUB_RUN_NUMBER}"
+            tag="v${version}"
           fi
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Release version must use MAJOR.MINOR.PATCH, received: $version" >&2

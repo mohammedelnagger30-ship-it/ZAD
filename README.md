@@ -197,11 +197,11 @@ The app includes no Supabase credentials in source control. Builds without the t
 
 ### GitHub releases and APK updates
 
-The `Android APK release` workflow publishes a signed APK when a `vMAJOR.MINOR.PATCH` tag is pushed. It also supports a manual release from the GitHub Actions tab. In-app update checking reads the latest public GitHub release and opens its APK asset; Android still requires the user to confirm installation.
+Every push to `main` runs the `Android APK release` workflow, which builds a signed APK and publishes it as a new public GitHub release (`v1.0.RUN_NUMBER`). The workflow also supports releases from a `vMAJOR.MINOR.PATCH` tag or a manual run from the GitHub Actions tab. In-app update checking reads the latest public GitHub release and offers its APK; the user must confirm installation in Android.
 
 1. Create the stable release key once with `powershell -ExecutionPolicy Bypass -File scripts\create-release-key.ps1`. Back up both ignored files `android\app\zad-release.jks` and `android\app\keystore.properties` securely. Never replace or lose this key.
 2. Authenticate `gh` with `gh auth login`, then run `powershell -ExecutionPolicy Bypass -File scripts\configure-github-release-secrets.ps1`. It uploads signing secrets and the Supabase build configuration without printing their values.
-3. Publish the repository's initial commit to `main`, then push a release tag such as `v1.0.1`.
+3. Push completed changes to `main`; each push creates a new APK release. Use tags or the manual workflow only when you need to choose a specific version.
 
 The existing distributed APKs are debug-signed and cannot be upgraded in place with the new release key. Users must back up their app data, uninstall the old build once, and install the first release APK. Every later release signed with this preserved key can be installed as an update without removing app data.
 
