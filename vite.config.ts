@@ -44,8 +44,20 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2,json}'],
+        globIgnores: ['**/quranText-*.js'],
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
         runtimeCaching: [
+          {
+            urlPattern: /\/assets\/quranText-[^/]+\.js$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'quran-text',
+              expiration: {
+                maxEntries: 2,
+                maxAgeSeconds: 60 * 60 * 24 * 365,
+              },
+            },
+          },
           {
             // The @import in index.css pulls the *stylesheet* from googleapis and the
             // actual .woff2 files from gstatic. Caching only googleapis left every
