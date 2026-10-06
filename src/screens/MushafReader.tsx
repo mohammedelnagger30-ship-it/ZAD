@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -58,6 +58,12 @@ export function MushafReader({ settings, initialPage = 1, onClose }: MushafReade
 
   const totalPages = getTotalPages();
 
+  // Touch swipe handling
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const touchEndRef = useRef<{ x: number; y: number } | null>(null);
+
+  const minSwipeDistance = 50;
+
   // Load persisted page bookmarks. Component state would lose them on every close.
   useEffect(() => {
     let cancelled = false;
@@ -95,6 +101,62 @@ export function MushafReader({ settings, initialPage = 1, onClose }: MushafReade
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [currentPage, goToPage, showJumpTo]);
+
+  // Touch swipe handling for page navigation
+  useEffect(() => {
+    const onTouchStart = (e: Event) => {
+      const touchEvent = e as TouchEvent;
+      touchEndRef.current = null;
+      touchStartRef.current = {
+        x: touchEvent.changedTouches[0].screenX,
+        y: touchEvent.changedTouches[0].screenY,
+      };
+    };
+
+    const onTouchMove = (e: Event) => {
+      const touchEvent = e as TouchEvent;
+      touchEndRef.current = {
+        x: touchEvent.changedTouches[0].screenX,
+        y: touchEvent.changedTouches[0].screenY,
+      };
+    };
+
+    const onTouchEnd = () => {
+      if (!touchStartRef.current || !touchEndRef.current) return;
+
+      const deltaX = touchStartRef.current.x - touchEndRef.current.x;
+      const deltaY = Math.abs(touchStartRef.current.y - touchEndRef.current.y);
+
+      // Only handle horizontal swipes (ignore vertical scrolls)
+      if (deltaY > minSwipeDistance) return;
+
+      if (deltaX > minSwipeDistance) {
+        // Swipe left -> next page (RTL: left swipe moves forward)
+        goToPage(currentPage + 1);
+      } else if (deltaX < -minSwipeDistance) {
+        // Swipe right -> previous page
+        goToPage(currentPage - 1);
+      }
+
+      touchStartRef.current = null;
+      touchEndRef.current = null;
+    };
+
+    const container = document.querySelector('.mushaf-page');
+    if (container) {
+      container.addEventListener('touchstart', onTouchStart, { passive: true });
+      container.addEventListener('touchmove', onTouchMove, { passive: true });
+      container.addEventListener('touchend', onTouchEnd);
+    }
+
+    return () => {
+      if (container) {
+        container.removeEventListener('touchstart', onTouchStart);
+        container.removeEventListener('touchmove', onTouchMove);
+        container.removeEventListener('touchend', onTouchEnd);
+      }
+    };
+  }, [currentPage, goToPage]);
 
   const toggleBookmark = useCallback((page: number) => {
     setBookmarkedPages((prev) => {
@@ -230,7 +292,7 @@ export function MushafReader({ settings, initialPage = 1, onClose }: MushafReade
       </div>
 
       {/* Page */}
-      <div className="flex-1 overflow-auto px-3 py-4">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 touch-pan-y">
         {/* Paper mode sizes the sheet itself, so it must not be clamped to the reading
             column — at zoom 1 the sheet already fits, and above that the reader scrolls. */}
         <div className={paperMode ? 'mx-auto overflow-x-auto' : 'mx-auto max-w-2xl'}>

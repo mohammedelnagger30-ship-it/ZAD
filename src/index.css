@@ -143,11 +143,11 @@ body {
    is already in the bundle. `--fs` is the base Quran size; the reader's zoom sets it.
    ============================================================ */
 .mushaf-page {
-  --paper: #f9f3e3;
-  --ink: #1d170f;
-  --frame: #8a6934;
-  --frame-soft: rgba(138, 105, 52, 0.34);
-  --wash: rgba(138, 105, 52, 0.08);
+  --paper: #f4ecd8;
+  --ink: #1a1209;
+  --frame: #8b6914;
+  --frame-soft: rgba(139, 105, 20, 0.35);
+  --wash: rgba(139, 105, 20, 0.08);
   --fs: 26px;
   --lh: 2.05;
 
@@ -159,21 +159,21 @@ body {
   color: var(--ink);
   background-color: var(--paper);
   background-image:
-    radial-gradient(130% 78% at 50% 0%, rgba(255, 255, 255, 0.45), transparent 62%),
-    radial-gradient(110% 68% at 50% 100%, rgba(140, 109, 58, 0.06), transparent 64%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 32%),
+    radial-gradient(130% 78% at 50% 0%, rgba(255, 255, 255, 0.5), transparent 62%),
+    radial-gradient(110% 68% at 50% 100%, rgba(139, 105, 20, 0.08), transparent 64%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.2), transparent 32%),
     repeating-linear-gradient(
       to bottom,
       transparent 0,
       transparent calc(var(--fs) * 1.7),
-      rgba(138, 105, 52, 0.04) calc(var(--fs) * 1.7),
-      rgba(138, 105, 52, 0.04) calc(var(--fs) * 1.74)
+      rgba(139, 105, 20, 0.05) calc(var(--fs) * 1.7),
+      rgba(139, 105, 20, 0.05) calc(var(--fs) * 1.74)
     );
   box-shadow:
-    0 32px 60px -32px rgba(47, 30, 10, 0.58),
-    0 10px 22px rgba(47, 30, 10, 0.11),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.55),
-    inset 0 0 0 2px rgba(138, 105, 52, 0.08);
+    0 32px 60px -32px rgba(30, 20, 5, 0.5),
+    0 10px 22px rgba(30, 20, 5, 0.12),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.6),
+    inset 0 0 0 2px rgba(139, 105, 20, 0.1);
 }
 
 .mushaf-page::before {
@@ -186,20 +186,23 @@ body {
 }
 
 .mushaf-page--night {
-  --paper: #15120c;
-  --ink: #e7dcc0;
-  --frame: #b79a5b;
-  --frame-soft: rgba(183, 154, 91, 0.48);
-  --wash: rgba(183, 154, 91, 0.11);
-  box-shadow: 0 20px 45px -20px rgba(0, 0, 0, 0.85), 0 2px 5px rgba(0, 0, 0, 0.5);
+  --paper: #18140e;
+  --ink: #e8dcc4;
+  --frame: #c9a852;
+  --frame-soft: rgba(201, 168, 82, 0.4);
+  --wash: rgba(201, 168, 82, 0.1);
+  box-shadow:
+    0 20px 45px -20px rgba(0, 0, 0, 0.75),
+    0 2px 5px rgba(0, 0, 0, 0.4),
+    inset 0 0 0 1px rgba(201, 168, 82, 0.2);
 }
 
 .mushaf-page--paper {
-  --paper: #f5ebd1;
-  --ink: #22180d;
-  --frame: #8f7136;
-  --frame-soft: rgba(143, 113, 54, 0.4);
-  --wash: rgba(143, 113, 54, 0.09);
+  --paper: #f4ecd8;
+  --ink: #1a1209;
+  --frame: #8b6914;
+  --frame-soft: rgba(139, 105, 20, 0.35);
+  --wash: rgba(139, 105, 20, 0.08);
 
   /*
    * The sheet is sized in `em` and so is everything inside it.
@@ -232,11 +235,14 @@ body {
   border: 0;
   border-radius: 0.12em;
   background:
-    radial-gradient(120% 80% at 50% 0%, rgba(255, 255, 255, 0.3), transparent 60%),
-    linear-gradient(160deg, #f8f0da 0%, var(--paper) 45%, #efe2c2 100%);
+    radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.4) 0%, transparent 70%),
+    radial-gradient(ellipse at 50% 100%, rgba(139, 105, 20, 0.08) 0%, transparent 60%),
+    linear-gradient(180deg, #f8f2de 0%, var(--paper) 40%, #ede6c9 100%);
   box-shadow:
-    0 18px 40px -22px rgba(62, 46, 17, 0.58),
-    inset 0 0 0 1px rgba(108, 83, 38, 0.12);
+    0 20px 45px -25px rgba(30, 20, 5, 0.45),
+    0 8px 18px rgba(30, 20, 5, 0.15),
+    inset 0 0 0 1px rgba(139, 105, 20, 0.15),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.3);
 }
 
 .mushaf-page--paper::before {
