@@ -197,28 +197,43 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
   }
 
   return (
-    <div className="space-y-5 pb-4">
+    <div className="space-y-6 pb-6">
+      {/* Enhanced Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-primary-800 dark:text-primary-100">مواقيت الصلاة</h1>
-        <button onClick={() => setShowLocation(true)} className="flex items-center gap-1 text-sm text-primary-600 dark:text-gold-400">
-          <MapPin size={16} /> {settings.cityName || 'الموقع'}
+        <div>
+          <h1 className="text-3xl font-bold text-primary-800 dark:text-primary-100">مواقيت الصلاة</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            {formatArabicDate(today)} — {getHijriDate(today)}
+          </p>
+        </div>
+        <button
+          onClick={() => setShowLocation(true)}
+          className="flex items-center gap-2 rounded-2xl border-2 border-primary-200 bg-white px-4 py-2.5 text-sm font-semibold text-primary-700 shadow-md transition-all hover:border-primary-400 hover:shadow-lg dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-200 dark:hover:border-primary-600"
+        >
+          <MapPin size={18} />
+          {settings.cityName || 'الموقع'}
         </button>
       </div>
 
-      {/* Date */}
-      <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
-        {formatArabicDate(today)} — {getHijriDate(today)}
-      </p>
-
-      {/* Next prayer highlight */}
+      {/* Enhanced Next Prayer Highlight */}
       {nextPrayer && (
-        <div className="bg-gradient-to-bl from-primary-700 to-primary-900 dark:from-primary-800 dark:to-primary-950 rounded-3xl p-5 text-white relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-32 h-32 bg-gold-400/10 rounded-full -translate-x-16 -translate-y-16" />
-          <div className="relative flex items-center justify-between">
-            <div>
-              <p className="text-gold-300 text-sm">الصلاة القادمة</p>
-              <h2 className="text-3xl font-bold mt-1">{nextPrayer.arabicName}</h2>
-              <p className="text-primary-200 text-sm mt-1">{getTimeUntil(nextPrayer.time, now)}</p>
+        <div className="relative isolate overflow-hidden rounded-[2rem] bg-gradient-to-br from-primary-600 via-primary-700 to-primary-900 p-6 text-white shadow-2xl dark:from-primary-700 dark:via-primary-800 dark:to-primary-950">
+          {/* Decorative patterns */}
+          <div className="pointer-events-none absolute -right-20 -top-20 -z-10 h-64 w-64 rounded-full border-4 border-white/5" />
+          <div className="pointer-events-none absolute -right-10 top-10 -z-10 h-40 w-40 rounded-full border-4 border-white/5" />
+          <div className="pointer-events-none absolute right-1/3 bottom-0 -z-10 h-48 w-48 rounded-full border-4 border-white/5 opacity-50" />
+          <Clock className="pointer-events-none absolute -right-8 bottom-0 -z-10 h-40 w-40 rotate-12 text-white/[0.05]" />
+
+          <div className="relative flex items-center justify-between gap-6">
+            <div className="flex-1">
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 backdrop-blur-sm">
+                <span className="h-2 w-2 rounded-full bg-gold-400 animate-pulse" />
+                <p className="text-xs font-semibold text-white/90">الصلاة القادمة</p>
+              </div>
+              <h2 className="text-4xl font-bold leading-tight sm:text-5xl">{nextPrayer.arabicName}</h2>
+              <p className="mt-3 text-xl text-gold-300 font-semibold">
+                {getTimeUntil(nextPrayer.time, now)}
+              </p>
               <button
                 type="button"
                 onClick={() => {
@@ -232,57 +247,65 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
                     })
                   );
                 }}
-                className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-gold-400/20 hover:bg-gold-400/30 px-3 py-1.5 text-xs font-semibold text-gold-300 backdrop-blur-sm transition border border-gold-400/30"
+                className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-gold-400/20 hover:bg-gold-400/30 px-4 py-2.5 text-sm font-bold text-gold-300 backdrop-blur-sm transition-all hover:scale-105 border border-gold-400/30 shadow-lg"
               >
-                <Sparkles size={14} />
-                عرض صفحة الأذان (معاينة)
+                <Sparkles size={16} />
+                عرض صفحة الأذان
               </button>
             </div>
-            <div className="text-left">
-              <p className="text-3xl font-bold text-gold-300">{formatTime12h(nextPrayer.time, timeZone)}</p>
+            <div className="flex flex-col items-center justify-center rounded-3xl bg-white/10 backdrop-blur-sm px-6 py-4 border border-white/20 shadow-xl">
+              <p className="text-5xl font-bold text-gold-300 sm:text-6xl">
+                {formatTime12h(nextPrayer.time, timeZone)}
+              </p>
+              <p className="mt-1 text-xs text-white/70">وقت الصلاة</p>
             </div>
           </div>
         </div>
       )}
 
-      {/* All prayer times with confirmation */}
+      {/* Enhanced Prayer Times List */}
       <div>
         <SectionHeader title="صلوات اليوم" icon={<Moon size={20} />} />
-        <p className="mb-3 text-xs leading-5 text-gray-500 dark:text-gray-400">
-          تظهر السنة الراتبة بجوار فرضها: ركعتان قبل الفجر، وست للظهر (أربع قبلًا واثنتان بعدًا)، وركعتان بعد المغرب وركعتان بعد العشاء.
-        </p>
-        <div className="space-y-3">
+        <div className="mb-4 rounded-2xl bg-primary-50 dark:bg-primary-900/30 p-4 border border-primary-100 dark:border-primary-800">
+          <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+            تظهر السنة الراتبة بجوار فرضها: ركعتان قبل الفجر، وست للظهر (أربع قبلًا واثنتان بعدًا)، وركعتان بعد المغرب وركعتان بعد العشاء.
+          </p>
+        </div>
+        <div className="space-y-4">
           {prayerResult.prayers.map((prayer) => {
             const isSunrise = prayer.name === 'sunrise';
             const Icon = PRAYER_ICONS[prayer.name] || Moon;
             const confirmed = (records[prayer.name] as PrayerStatus | null | undefined) ?? null;
-            // Sunrise is not a prayer, and an upcoming prayer has nothing to confirm yet.
             const answerable = !isSunrise && prayer.passed;
             const attachedSunnahs = SUNNAH_TYPES.filter((sunnah) => sunnah.prayer === prayer.name);
             const isAsr = prayer.name === 'asr';
 
             const row = (
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${prayer.passed ? 'bg-primary-100 dark:bg-primary-800' : 'bg-gray-50 dark:bg-gray-800/50'}`}>
-                  <Icon size={20} className={prayer.passed ? 'text-primary-600 dark:text-gold-400' : 'text-gray-400'} />
+              <div className="flex items-center gap-4">
+                <div className={`relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border-2 ${
+                  prayer.passed
+                    ? 'border-primary-300 bg-gradient-to-br from-primary-100 to-primary-200 dark:border-primary-700 dark:from-primary-800 dark:to-primary-900'
+                    : 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50'
+                }`}>
+                  <Icon size={24} className={prayer.passed ? 'text-primary-600 dark:text-gold-400' : 'text-gray-400'} />
+                  {prayer.passed && <div className="absolute -bottom-1 -right-1 h-2.5 w-2.5 rounded-full bg-gold-400 shadow-sm" />}
                 </div>
-                <div className="flex-1">
-                  <p className="font-semibold text-primary-800 dark:text-primary-100">{prayer.arabicName}</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">{formatTime12h(prayer.time, timeZone)}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="text-lg font-bold text-primary-800 dark:text-primary-100">{prayer.arabicName}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{formatTime12h(prayer.time, timeZone)}</p>
                 </div>
                 {isSunrise ? (
-                  <Badge variant="gold"><Sun size={10} /> شروق</Badge>
+                  <Badge variant="gold"><Sun size={12} /> شروق</Badge>
                 ) : !prayer.passed ? (
                   <Badge variant="neutral">{getTimeUntil(prayer.time, now)}</Badge>
                 ) : (
-                  <span className="flex flex-col items-end gap-0.5">
-                    {confirmed === 'ontime' && <Badge variant="success"><Check size={10} /> في وقتها</Badge>}
-                    {confirmed === 'late' && <Badge variant="warning"><Clock size={10} /> قضاء</Badge>}
-                    {confirmed === 'missed' && <Badge variant="error"><X size={10} /> لم صلَّ</Badge>}
+                  <span className="flex flex-col items-end gap-1">
+                    {confirmed === 'ontime' && <Badge variant="success"><Check size={12} /> في وقتها</Badge>}
+                    {confirmed === 'late' && <Badge variant="warning"><Clock size={12} /> قضاء</Badge>}
+                    {confirmed === 'missed' && <Badge variant="error"><X size={12} /> لم صلَّ</Badge>}
                     {!confirmed && <Badge variant="neutral">لم تسجّلها</Badge>}
-                    {/* The whole row is the affordance, so there is nothing to miss. */}
-                    <span className="text-[11px] text-primary-600 dark:text-gold-400">
-                      {confirmed ? 'اضغط للتغيير أو التراجع' : 'اضغط للتأكيد'}
+                    <span className="text-xs text-primary-600 dark:text-gold-400 font-medium">
+                      {confirmed ? 'اضغط للتغيير' : 'اضغط للتأكيد'}
                     </span>
                   </span>
                 )}
@@ -290,7 +313,7 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
             );
 
             const prayerCard = !answerable ? (
-              <Card>{row}</Card>
+              <Card className="!p-5">{row}</Card>
             ) : (
               <button
                 onClick={() =>
@@ -309,10 +332,10 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
                       : 'مسجّلة، التعديل مقفول')
                     : 'لم تسجّل بعد، اضغط للتأكيد'
                 }`}
-                className={`block w-full text-right p-4 rounded-2xl border-r-4 transition-smooth active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:focus-visible:ring-gold-400 ${
+                className={`block w-full text-right p-5 rounded-3xl border-r-4 transition-all duration-300 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary-100 dark:focus-visible:ring-primary-900/50 ${
                   confirmed
-                    ? 'border-r-primary-500 bg-white dark:bg-primary-900/40 hover:bg-primary-50 dark:hover:bg-primary-800/40'
-                    : 'border-r-gray-200 dark:border-r-gray-700 bg-white dark:bg-primary-900/40 hover:border-r-primary-400 dark:hover:border-r-primary-600'
+                    ? 'border-r-primary-500 bg-white dark:bg-primary-900/40 hover:bg-primary-50 dark:hover:bg-primary-800/40 shadow-md'
+                    : 'border-r-gray-200 dark:border-r-gray-700 bg-white dark:bg-primary-900/40 hover:border-r-primary-400 dark:hover:border-r-primary-600 hover:shadow-lg'
                 }`}
               >
                 {row}
@@ -320,17 +343,19 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
             );
 
             return (
-              <div className="space-y-2" key={prayer.name}>
+              <div className="space-y-3" key={prayer.name}>
                 {prayerCard}
                 {(attachedSunnahs.length > 0 || isAsr) && (
-                  <div className="mr-3 space-y-1 border-r-2 border-primary-100 pr-3 dark:border-primary-800">
-                    <p className="text-xs font-semibold text-primary-600 dark:text-gold-400">
+                  <div className="mr-4 space-y-2 border-r-2 border-primary-200 pr-4 dark:border-primary-800">
+                    <p className="text-sm font-bold text-primary-700 dark:text-gold-400 mb-2">
                       سنن ونوافل مرتبطة بصلاة {prayer.arabicName}
                     </p>
                     {isAsr && (
-                      <p className="rounded-xl bg-white px-3 py-2 text-xs leading-5 text-gray-500 dark:bg-primary-900/40 dark:text-gray-400">
-                        لا تُدرج هنا راتبة مؤكدة مخصوصة للعصر؛ وتختلف النوافل قبله باختلاف المذاهب.
-                      </p>
+                      <div className="rounded-2xl bg-primary-50 dark:bg-primary-900/30 px-4 py-3 border border-primary-100 dark:border-primary-800">
+                        <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+                          لا تُدرج هنا راتبة مؤكدة مخصوصة للعصر؛ وتختلف النوافل قبله باختلاف المذاهب.
+                        </p>
+                      </div>
                     )}
                     {attachedSunnahs.map((sunnah) => (
                       <button
@@ -338,26 +363,26 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
                         type="button"
                         aria-pressed={!!sunnahRecords[sunnah.key]}
                         onClick={() => void handleSunnahToggle(sunnah.key)}
-                        className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-right transition-smooth ${
+                        className={`flex w-full items-center justify-between gap-4 rounded-2xl px-4 py-3 text-right transition-all duration-300 ${
                           sunnahRecords[sunnah.key]
-                            ? 'bg-success-50 text-success-700 dark:bg-success-900/20 dark:text-success-300'
-                            : 'bg-white text-gray-700 dark:bg-primary-900/40 dark:text-gray-200'
+                            ? 'bg-success-50 text-success-700 dark:bg-success-900/20 dark:text-success-300 border-2 border-success-200 dark:border-success-800 shadow-sm'
+                            : 'bg-white text-gray-700 dark:bg-primary-900/40 dark:text-gray-200 border-2 border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600'
                         }`}
                       >
-                        <span>
-                          <span className="block text-sm font-medium">{sunnah.label}</span>
+                        <span className="flex-1">
+                          <span className="block text-sm font-bold">{sunnah.label}</span>
                           {sunnah.note && (
-                            <span className="mt-0.5 block text-[11px] text-gray-500 dark:text-gray-400">
+                            <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">
                               {sunnah.note}
                             </span>
                           )}
                         </span>
-                        <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
+                        <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
                           sunnahRecords[sunnah.key]
-                            ? 'border-success-500 bg-success-500'
+                            ? 'border-success-500 bg-success-500 shadow-md'
                             : 'border-gray-300 dark:border-gray-600'
                         }`}>
-                          {sunnahRecords[sunnah.key] && <Check size={12} className="text-white" />}
+                          {sunnahRecords[sunnah.key] && <Check size={14} className="text-white" />}
                         </span>
                       </button>
                     ))}
@@ -369,39 +394,40 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
         </div>
       </div>
 
-      {/* Qibla direction */}
-      <Card className="flex items-center gap-4">
-        <div className="w-14 h-14 rounded-2xl bg-gold-100 dark:bg-gold-900/30 flex items-center justify-center">
-          <Compass size={28} className="text-gold-600 dark:text-gold-400" />
+      {/* Enhanced Qibla Direction */}
+      <Card className="!p-5 flex items-center gap-5 hover:shadow-lg transition-shadow">
+        <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl bg-gradient-to-br from-gold-100 to-gold-200 dark:from-gold-900/30 dark:to-gold-900/50 shadow-md">
+          <Compass size={32} className="text-gold-600 dark:text-gold-400" />
+          <div className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full bg-gold-400 shadow-sm" />
         </div>
-        <div>
-          <p className="text-sm text-gray-500 dark:text-gray-400">اتجاه القبلة</p>
-          <p className="text-xl font-bold text-primary-800 dark:text-primary-100">
+        <div className="flex-1">
+          <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">اتجاه القبلة</p>
+          <p className="text-2xl font-bold text-primary-800 dark:text-primary-100 mt-1">
             {Math.round(prayerResult.qiblaDirection)}° من الشمال
           </p>
         </div>
       </Card>
 
-      {/* Independent voluntary prayers */}
+      {/* Enhanced Independent Voluntary Prayers */}
       <div>
         <SectionHeader title="نوافل مستقلة" icon={<Sun size={20} />} />
-        <Card noPadding>
-          <div className="p-3 grid grid-cols-2 gap-2">
+        <Card noPadding className="!p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {SUNNAH_TYPES.filter((sunnah) => !sunnah.prayer).map((sunnah) => (
               <button
                 key={sunnah.key}
                 onClick={() => handleSunnahToggle(sunnah.key)}
-                className={`flex items-center justify-between p-2.5 rounded-xl transition-smooth ${
+                className={`flex items-center justify-between p-4 rounded-2xl transition-all duration-300 ${
                   sunnahRecords[sunnah.key]
-                    ? 'bg-success-50 dark:bg-success-900/20 text-success-700 dark:text-success-300'
-                    : 'bg-gray-50 dark:bg-gray-800/30 text-gray-600 dark:text-gray-300'
+                    ? 'bg-success-50 dark:bg-success-900/20 text-success-700 dark:text-success-300 border-2 border-success-200 dark:border-success-800 shadow-sm'
+                    : 'bg-gray-50 dark:bg-gray-800/30 text-gray-600 dark:text-gray-300 border-2 border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600'
                 }`}
               >
-                <span className="text-sm font-medium">{sunnah.label}</span>
-                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                  sunnahRecords[sunnah.key] ? 'border-success-500 bg-success-500' : 'border-gray-300 dark:border-gray-600'
+                <span className="text-sm font-bold">{sunnah.label}</span>
+                <div className={`h-6 w-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                  sunnahRecords[sunnah.key] ? 'border-success-500 bg-success-500 shadow-md' : 'border-gray-300 dark:border-gray-600'
                 }`}>
-                  {sunnahRecords[sunnah.key] && <Check size={12} className="text-white" />}
+                  {sunnahRecords[sunnah.key] && <Check size={14} className="text-white" />}
                 </div>
               </button>
             ))}
@@ -409,62 +435,73 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
         </Card>
       </div>
 
-      {/* Weekly grid: which prayer, on which day. Tappable, so history can be corrected. */}
+      {/* Enhanced Weekly Grid */}
       {grid.length > 0 && (
         <div>
           <SectionHeader title="صلوات الأسبوع" icon={<BarChart3 size={20} />} />
-          <Card>
+          <Card className="!p-5">
             <PrayerWeekGrid
               grid={grid}
               onEdit={(date, prayer, _status, label) =>
                 setSheet({ date, prayer, label, isHistorical: date !== todayKey() })
               }
             />
-            <p className="mt-3 text-xs leading-5 text-gray-500 dark:text-gray-400">
-              يمكنك تسجيل اليوم أو أمس فقط؛ الأيام الأقدم للعرض. بعد كل تأكيد لديك ١٠ ثوانٍ للتراجع أو التصحيح.
-            </p>
+            <div className="mt-4 rounded-2xl bg-primary-50 dark:bg-primary-900/30 p-4 border border-primary-100 dark:border-primary-800">
+              <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+                يمكنك تسجيل اليوم أو أمس فقط؛ الأيام الأقدم للعرض. بعد كل تأكيد لديك ١٠ ثوانٍ للتراجع أو التصحيح.
+              </p>
+            </div>
           </Card>
         </div>
       )}
 
-      {/* Weekly stats */}
+      {/* Enhanced Weekly Stats */}
       {stats && (
         <div>
           <SectionHeader title="ملخص الأسبوع" icon={<BarChart3 size={20} />} />
-          <Card>
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-sm text-gray-500 dark:text-gray-400">نسبة الالتزام</p>
-              <p className="text-2xl font-bold text-primary-700 dark:text-gold-400">{stats.percentage}%</p>
+          <Card className="!p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">نسبة الالتزام</p>
+                <p className="text-4xl font-bold text-primary-700 dark:text-gold-400 mt-1">{stats.percentage}%</p>
+              </div>
+              <div className="h-20 w-20 rounded-full border-4 border-primary-200 dark:border-primary-800 flex items-center justify-center">
+                <div className="h-16 w-16 rounded-full bg-gradient-to-br from-primary-500 to-gold-400 flex items-center justify-center">
+                  <span className="text-white font-bold text-lg">{stats.percentage}%</span>
+                </div>
+              </div>
             </div>
-            <div className="w-full h-3 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+            <div className="w-full h-4 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden shadow-inner">
               <div
-                className="h-full bg-gradient-to-l from-primary-500 to-gold-400 rounded-full transition-all duration-500"
+                className="h-full bg-gradient-to-r from-primary-500 via-primary-600 to-gold-400 rounded-full transition-all duration-700 ease-out shadow-lg"
                 style={{ width: `${stats.percentage}%` }}
               />
             </div>
-            <div className="grid grid-cols-4 gap-2 mt-3">
-              <div className="text-center">
-                <p className="text-lg font-bold text-success-600">{stats.ontime}</p>
-                <p className="text-xs text-gray-500">في وقتها</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6">
+              <div className="rounded-2xl bg-success-50 dark:bg-success-900/20 p-4 border border-success-200 dark:border-success-800 text-center">
+                <p className="text-2xl font-bold text-success-600">{stats.ontime}</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">في وقتها</p>
               </div>
-              <div className="text-center">
-                <p className="text-lg font-bold text-warning-600">{stats.late}</p>
-                <p className="text-xs text-gray-500">قضاء</p>
+              <div className="rounded-2xl bg-warning-50 dark:bg-warning-900/20 p-4 border border-warning-200 dark:border-warning-800 text-center">
+                <p className="text-2xl font-bold text-warning-600">{stats.late}</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">قضاء</p>
               </div>
-              <div className="text-center">
-                <p className="text-lg font-bold text-error-600">{stats.missed}</p>
-                <p className="text-xs text-gray-500">فائتة</p>
+              <div className="rounded-2xl bg-error-50 dark:bg-error-900/20 p-4 border border-error-200 dark:border-error-800 text-center">
+                <p className="text-2xl font-bold text-error-600">{stats.missed}</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">فائتة</p>
               </div>
-              <div className="text-center">
-                <p className="text-lg font-bold text-gray-400">{stats.unconfirmed}</p>
-                <p className="text-xs text-gray-500">لم تسجّلها</p>
+              <div className="rounded-2xl bg-gray-50 dark:bg-gray-800/30 p-4 border border-gray-200 dark:border-gray-700 text-center">
+                <p className="text-2xl font-bold text-gray-400">{stats.unconfirmed}</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">لم تسجّلها</p>
               </div>
             </div>
             {stats.unconfirmed > 0 && (
-              <p className="mt-3 pt-3 border-t border-primary-100 dark:border-primary-800/50 text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                «لم تسجّلها» يعني إن الوقت عدّى والتسجيل مش موجود — مش إنك ما صليتهاش.
-                اضغط على أي خانة في الشبكة فوق تسجّلها.
-              </p>
+              <div className="mt-4 rounded-2xl bg-primary-50 dark:bg-primary-900/30 p-4 border border-primary-100 dark:border-primary-800">
+                <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+                  «لم تسجّلها» يعني إن الوقت عدّى والتسجيل مش موجود — مش إنك ما صليتهاش.
+                  اضغط على أي خانة في الشبكة فوق تسجّلها.
+                </p>
+              </div>
             )}
           </Card>
         </div>
