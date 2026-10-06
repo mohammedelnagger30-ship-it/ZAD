@@ -1,5 +1,24 @@
-// Verifies the exact surah end-page derivation, the juz->surah mapping and the
-// per-ayah juz counts that the planner now depends on.
+/**
+ * Checks the page map the reader actually navigates by.
+ *
+ * ── What changed and why these assertions ───────────────────────────────────────────
+ * This used to pin down facts about the *printed* mushaf: that Al-Baqarah spans pages
+ * 2-49, that juz 29 opens Al-Mulk on page 562, that the mushaf has 604 pages. Those were
+ * real, and they were worth pinning — but they pinned a page map the app no longer uses.
+ *
+ * The app's pagination is now the flow layout in `mushafFlow.ts`: page breaks measured
+ * from the real typeface so that every page is 15 full lines. `mushafFlow` has its own
+ * checks (`check:flow`) for the line breaks and the text reconstruction; this file checks
+ * the *derived* answers the rest of the app depends on — surah ranges, juz lookups, page
+ * coverage, ayah monotonicity — because those are where a wrong page number surfaces as a
+ * broken jump, and none of them is checkable from the flow table alone.
+ *
+ * The rule throughout: assert relationships that must hold of *any* pagination (pages are
+ * covered, surahs tile in order, juz lookups agree with themselves), not identity with the
+ * printed mushaf. Where a printed fact still matters — which juz an ayah is in — it is
+ * checked through `mushafPrinted`.
+ */
+
 import {
   SURAHS,
   JUZ_INFO,
@@ -12,6 +31,8 @@ import {
   getAyahPage,
   getAyahsInJuz,
 } from '../src/data/surahs';
+import { PRINTED_JUZ_START_PAGES } from '../src/data/mushafPrinted';
+import { TOTAL_PAGES } from '../src/data/mushafFlow';
 import { suggestPlan } from '../src/utils/taskManager';
 
 let failed = 0;
@@ -26,85 +47,113 @@ const check = (label: string, actual: unknown, expected: unknown) => {
   }
 };
 
-// ---- end pages are derived from the next surah, and tile 1..604 with no gap ----
+console.log(`\nour mushaf: ${TOTAL_PAGES} pages\n`);
+
+// ---- one page count, everywhere ----
+check('the reader, the surah table and the flow agree on the page count', [
+  TOTAL_QURAN_PAGES,
+  TOTAL_PAGES,
+], [602, 602]);
+
+// ---- surah ranges are inside the mushaf and never run backwards ----
 const ranges = SURAHS.map((s) => [s.pageStart, getSurahEndPage(s)] as const);
-check('surah 1 (Al-Fatihah) spans pages 1-1', ranges[0], [1, 1]);
-check('surah 2 (Al-Baqarah) spans pages 2-49 (was estimated 2-21)', ranges[1], [2, 49]);
-check('surah 114 (An-Nas) ends on the last page', ranges[113], [604, 604]);
-
-// A surah ends at the later of its own start and the page before the next one starts.
-// Surahs are allowed to share their first page with the next surah (16 pairs do), because
-// in the real mushaf a short surah ends partway down a page the next one then starts on.
-let overreach = 0;
-const sharedStartPages: number[] = [];
-for (let i = 0; i < SURAHS.length; i++) {
-  const surah = SURAHS[i];
-  const end = getSurahEndPage(surah);
-  const nextStart = SURAHS[i + 1]?.pageStart;
-  if (end > nextStart) {
-    overreach++;
-    console.log(`       overreach: surah ${surah.id} ends ${end}, next starts ${nextStart}`);
-  }
-  if (nextStart !== undefined && end === nextStart) sharedStartPages.push(nextStart);
-}
-check('no surah is reported as ending after the next one begins', overreach, 0);
-console.log(`       (${sharedStartPages.length} pages are shared between two surahs, as in the real mushaf)`);
-// A page shared by two surahs must be reported as covered by both.
-const shared = sharedStartPages[0];
-const onSharedPage = getSurahsForPage(shared).map((s) => s.id);
-check(`shared page ${shared} is covered by both surahs`, onSharedPage.length, 2);
-
-// A surah must never be reported as ending before it starts.
+check('Al-Fatihah opens on page 1', ranges[0][0], 1);
+check('An-Nas ends on the last page', ranges[113], [TOTAL_PAGES, TOTAL_PAGES]);
+check('no surah starts outside the mushaf', SURAHS.filter((s) => s.pageStart < 1 || s.pageStart > TOTAL_PAGES).length, 0);
 check('no surah has endPage < pageStart', SURAHS.filter((s) => getSurahEndPage(s) < s.pageStart).length, 0);
 
-// ---- the bug that motivated this: juz 2 used to resolve to nothing ----
-check('juz 2 now resolves to a surah', getSurahsByJuz(2).length > 0, true);
+// Surahs are printed in order, so their start pages cannot go backwards. This is what a
+// wrong ayah->page entry would break first.
+let outOfOrder = 0;
+for (let i = 1; i < SURAHS.length; i++) {
+  if (SURAHS[i].pageStart < SURAHS[i - 1].pageStart) outOfOrder++;
+}
+check('surah start pages never go backwards', outOfOrder, 0);
+
+// ---- the surahs tile the whole mushaf: no page without a surah on it ----
+// A gap here means a page the reader can turn to but cannot name, which is how "page 300
+// belongs to nothing" bugs start.
+let uncovered = 0;
+let sharedPages = 0;
+for (let page = 1; page <= TOTAL_PAGES; page++) {
+  const on = getSurahsForPage(page);
+  if (on.length === 0) uncovered++;
+  else if (on.length > 1) sharedPages++;
+}
+check('every page has at least one surah on it', uncovered, 0);
+console.log(`       (${sharedPages} pages are shared by two surahs, as in the real mushaf)`);
+
+// A shared page must be reported as covered by both, not just one — the reader shows two
+// surah names there and jumping to either has to work.
+const firstShared = (() => {
+  for (let page = 1; page <= TOTAL_PAGES; page++) {
+    if (getSurahsForPage(page).length > 1) return page;
+  }
+  return 0;
+})();
+check(`shared page ${firstShared} is covered by both surahs`, getSurahsForPage(firstShared).length, 2);
+
+// ---- juz lookups agree with themselves ----
+check('juz 2 resolves to a surah', getSurahsByJuz(2).length > 0, true);
 check('every juz 1..30 resolves to at least one surah',
   JUZ_INFO.filter((j) => getSurahsByJuz(j.id).length === 0).map((j) => j.id), []);
+check('there are 30 juz', JUZ_INFO.length, 30);
 
-// ---- openJuz must land on the surah holding the juz's first page ----
-// This mirrors openJuz() exactly: it resolves to getSurahsForPage(juz.startPage)[0], i.e.
-// "take me to where this juz starts". Many juz start mid-surah (juz 2 is entirely inside
-// Al-Baqarah), which is why the surah covering the first page is the right target.
-const expectJuzTarget: Record<number, string> = {
-  1: 'الفاتحة',   // starts on page 1, Al-Fatihah's first page
-  2: 'البقرة',     // starts on page 22, mid-Al-Baqarah (2-49)
-  3: 'البقرة',     // starts on page 42, still mid-Al-Baqarah
-  4: 'آل عمران',   // starts on page 62, mid-Al-Imran (50-76)
-  29: 'الملك',     // starts on page 562, Al-Mulk's first page
-  30: 'النبأ',     // starts on page 582, An-Naba's first page
-};
-for (const [juzId, name] of Object.entries(expectJuzTarget)) {
-  const n = Number(juzId);
-  const target = getSurahsForPage(JUZ_INFO.find((j) => j.id === n)!.startPage)[0];
-  check(`juz ${juzId} opens ${name}`, target?.name, name);
+// The juz boundary table is the single source: `getJuzForPage` must send a page to the
+// juz whose start it is, or the header on a page contradicts the page's own contents.
+const juzMismatch = JUZ_INFO.filter((j) => getJuzForPage(j.startPage) !== j.id).map((j) => j.id);
+check('getJuzForPage agrees with every juz start page', juzMismatch, []);
+
+// Juz start pages must rise, or a page would claim two juz.
+let nonRisingJuz = 0;
+for (let i = 1; i < JUZ_INFO.length; i++) {
+  if (JUZ_INFO[i].startPage <= JUZ_INFO[i - 1].startPage) nonRisingJuz++;
 }
+check('juz start pages strictly increase', nonRisingJuz, 0);
 
-// For all 30 juz the tap target must be non-empty and must truly contain the juz's first page.
+// ---- "open juz" must land on a surah that really holds that page ----
 const unresolved = JUZ_INFO.filter((j) => {
   const t = getSurahsForPage(j.startPage)[0];
   return !t || !(t.pageStart <= j.startPage && getSurahEndPage(t) >= j.startPage);
 }).map((j) => j.id);
-check('every juz 1..30 resolves to a surah containing its first page', unresolved, []);
+check('every juz resolves to a surah containing its first page', unresolved, []);
 
-// A surah spanning into a juz must not be what that juz opens.
-const juz30Target = getSurahsForPage(JUZ_INFO[29].startPage)[0];
-check('juz 30 does not open Al-Mursalat (page 580, which is juz 29)',
-  juz30Target?.name === 'المرسلات', false);
-check('Al-Mursalat is reported as juz 29', getJuzForPage(getSurah(77)!.pageStart), 29);
+// The *printed* mushaf's juz boundaries are still facts about the text: which surah each
+// juz opens must not have drifted while the page numbers did. This is the one place a
+// printed number is checked, and deliberately not a page number.
+const expectJuzOpens: Record<number, string> = {
+  1: 'الفاتحة',
+  2: 'البقرة',     // juz 2 opens inside Al-Baqarah
+  4: 'آل عمران',
+  29: 'الملك',
+  30: 'النبأ',
+};
+for (const [juzId, name] of Object.entries(expectJuzOpens)) {
+  const n = Number(juzId);
+  const startPage = JUZ_INFO.find((j) => j.id === n)!.startPage;
+  // The juz opens on the page where the printed boundary's opening ayah now falls.
+  const onPage = getSurahsForPage(startPage);
+  const names = onPage.map((s) => s.name);
+  check(`juz ${n} opens on ${name} (page ${startPage} carries ${names.join(' + ')})`, names.includes(name), true);
+}
+check('printed juz boundaries still run 1..582 in 30 steps',
+  [PRINTED_JUZ_START_PAGES.length, PRINTED_JUZ_START_PAGES[0], PRINTED_JUZ_START_PAGES[29]], [30, 1, 582]);
 
 // ---- page lookups agree with the surah ranges ----
-for (const page of [1, 2, 22, 49, 50, 562, 581, 582, 604]) {
+for (const page of [1, 2, 3, TOTAL_PAGES - 1, TOTAL_PAGES]) {
   const covering = getSurahsForPage(page);
   const consistent = covering.length > 0 && covering.every((s) => s.pageStart <= page && getSurahEndPage(s) >= page);
   check(`page ${page} is covered by a surah whose range really contains it`, consistent, true);
 }
-check('page 605 (past the end) is covered by nothing', getSurahsForPage(TOTAL_QURAN_PAGES + 1).length, 0);
+check(`page ${TOTAL_PAGES + 1} (past the end) is covered by nothing`, getSurahsForPage(TOTAL_PAGES + 1).length, 0);
 
-// ---- ayah pages are monotonic and land on the exact bounds ----
+// ---- ayah pages are monotonic and inside their surah ----
 const baqarah = getSurah(2)!;
 check('Al-Baqarah ayah 1 is on its first page', getAyahPage(baqarah, 1), baqarah.pageStart);
-check('Al-Baqarah ayah 286 is on its last page', getAyahPage(baqarah, 286), 49);
+check('Al-Baqarah ayah 286 is on its last page', getAyahPage(baqarah, 286), getSurahEndPage(baqarah));
+check('Al-Fatihah ayah 1 is on page 1', getAyahPage(getSurah(1)!, 1), 1);
+check('An-Nas ayah 6 is on the last page', getAyahPage(getSurah(114)!, 6), TOTAL_PAGES);
+
 let nonMonotonic = 0;
 for (const s of SURAHS) {
   let prev = 0;

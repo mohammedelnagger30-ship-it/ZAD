@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Plus, Trash2, Sparkles, Check, X, Calendar, Clock, BookOpenCheck, Search, RotateCcw, CircleDashed } from 'lucide-react';
 import { Card, Button, Badge, EmptyState } from '@/components/ui';
 import { db, type HifzPlan, type HifzProgress, type ProgressType } from '@/db/database';
-import { SURAHS, JUZ_INFO, getSurah, toArabicNumber } from '@/data/surahs';
+import { SURAHS, JUZ_INFO, getSurah, toArabicNumber, TOTAL_QURAN_PAGES } from '@/data/surahs';
 import { describePortion, suggestPlan, generateDailyTasks } from '@/utils/taskManager';
 import { rescheduleAllNotifications } from '@/utils/notificationScheduler';
 import { getDayNameShort } from '@/utils/dateUtils';
@@ -545,7 +545,7 @@ function CreatePlanModal({ onClose, onSave }: { onClose: () => void; onSave: (pl
   const [portionType, setPortionType] = useState<'surah' | 'juz' | 'page'>('surah');
   const [surahId, setSurahId] = useState(1);
   const [juzId, setJuzId] = useState(30);
-  const [pageId, setPageId] = useState(604);
+  const [pageId, setPageId] = useState(TOTAL_QURAN_PAGES);
   const [fromAyah, setFromAyah] = useState(1);
   const [toAyah, setToAyah] = useState<number | null>(null);
   const [time, setTime] = useState('06:00');
@@ -677,7 +677,7 @@ function CreatePlanModal({ onClose, onSave }: { onClose: () => void; onSave: (pl
             <input
               type="number"
               min={1}
-              max={604}
+              max={TOTAL_QURAN_PAGES}
               value={pageId}
               onChange={(e) => setPageId(parseInt(e.target.value) || 1)}
               className="w-full bg-gray-50 dark:bg-primary-800/30 border border-primary-100 dark:border-primary-800 rounded-xl py-2 px-3 text-sm text-primary-800 dark:text-primary-100"

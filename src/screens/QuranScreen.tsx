@@ -737,7 +737,7 @@ function SurahListItem({ surah, onOpen, onHifz }: { surah: SurahMeta; onOpen: ()
 function PageBrowser({ onSelectPage }: { onSelectPage: (page: number) => void }) {
   return (
     <div className="grid grid-cols-5 gap-2">
-      {Array.from({ length: 604 }, (_, i) => i + 1).map((page) => (
+      {Array.from({ length: TOTAL_QURAN_PAGES }, (_, i) => i + 1).map((page) => (
         <button
           key={page}
           onClick={() => onSelectPage(page)}

@@ -467,7 +467,7 @@ for (let surahId = 1; surahId <= 114; surahId++) {
   }
 }
 check(placed === TOTAL_AYAHS, 'every ayah is placed on exactly one page', `${placed} placed`);
-check(perPage.size === getTotalPages(), 'all 604 pages carry text', `${perPage.size} do`);
+check(perPage.size === getTotalPages(), 'every page of our mushaf carries text', `${perPage.size} of ${getTotalPages()}`);
 check(
   [...perPage.values()].every((n) => n > 0),
   'no mushaf page is empty',

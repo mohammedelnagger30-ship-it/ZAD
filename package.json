@@ -11,15 +11,18 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "check:data": "tsx --tsconfig tsconfig.app.json scripts/check-quran-data.ts",
     "check:pages": "tsx --tsconfig tsconfig.app.json scripts/check-page-map.ts",
+    "check:flow": "tsx --tsconfig tsconfig.app.json scripts/check-mushaf-flow.ts",
     "check:icons": "powershell -ExecutionPolicy Bypass -File scripts/check-icons.ps1",
     "check:prayer-times": "tsx --tsconfig tsconfig.app.json scripts/check-prayer-timezones.ts",
     "icons": "powershell -ExecutionPolicy Bypass -File scripts/make-icons.ps1",
-    "verify": "npm run typecheck && npm run lint && npm run check:data && npm run check:text && npm run check:content && npm run check:pages && npm run check:icons && npm run check:prayer-times && npm run build",
+    "verify": "npm run typecheck && npm run lint && npm run check:data && npm run check:text && npm run check:content && npm run check:pages && npm run check:flow && npm run check:icons && npm run check:prayer-times && npm run build",
     "data:fetch": "tsx scripts/fetch-content.ts",
     "data:tafsir": "tsx scripts/fetch-tafsir.ts",
     "data:catalog": "tsx scripts/build-content-catalog.ts",
     "check:text": "tsx --tsconfig tsconfig.app.json scripts/check-quran-text.ts",
-    "check:content": "tsx --tsconfig tsconfig.app.json scripts/check-content.ts"
+    "check:content": "tsx --tsconfig tsconfig.app.json scripts/check-content.ts",
+    "build:flow": "node scripts/measure-word-widths.mjs && tsx scripts/build-mushaf-flow.ts",
+    "build:flow:only": "tsx scripts/build-mushaf-flow.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",

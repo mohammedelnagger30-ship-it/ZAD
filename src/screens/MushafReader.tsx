@@ -231,12 +231,15 @@ export function MushafReader({ settings, initialPage = 1, onClose }: MushafReade
 
       {/* Page */}
       <div className="flex-1 overflow-auto px-3 py-4">
-        <div className="mx-auto max-w-2xl">
+        {/* Paper mode sizes the sheet itself, so it must not be clamped to the reading
+            column — at zoom 1 the sheet already fits, and above that the reader scrolls. */}
+        <div className={paperMode ? 'mx-auto overflow-x-auto' : 'mx-auto max-w-2xl'}>
           <MushafPage
             page={currentPage}
             fontSize={effectiveFontSize}
             night={nightMode}
             paper={paperMode}
+            paperZoom={zoom}
             lineHeight={1.9 + (lineSpacing - 1) * 0.55}
             letterSpacing={0.01 + Math.max(0, lineSpacing - 1) * 0.01}
             wordSpacing={wordSpacing}

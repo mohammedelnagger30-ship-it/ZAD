@@ -1,8 +1,16 @@
-// Mushaf page metadata — Madani layout (Hafs an Asim)
-// Maps each page to its surah, juz, hizb, and special markers
-// Source: Standard Madani Mushaf page mapping (604 pages, 15 lines per page)
+// Mushaf page metadata for *our* mushaf — the flow layout in `mushafFlow`.
+//
+// What a page carries: which juz and hizb it sits in, which surahs open on it, and whether
+// a sajdah ayah is printed there. Which page an ayah is on is not answered here — that is
+// `getAyahPage`, a lookup in the generated flow table, and the whole point of generating
+// that table is that this file no longer has to guess.
+//
+// The printed mushaf's own page count (604) and boundary tables live in `mushafPrinted`.
+// `mushafFlow` maps those boundaries through our line breaks at build time, so what the
+// reader shows is always our own pagination and never a mixture of the two.
 
 import { SURAHS, getAyahPage, getJuzForPage, toArabicNumber } from './surahs';
+import { TOTAL_PAGES, HIZB_START_PAGES as FLOW_HIZB_START_PAGES, getPageLineCount } from './mushafFlow';
 
 export interface PageMeta {
   page: number;
@@ -11,7 +19,7 @@ export interface PageMeta {
   rubAlHizb: number | null;   // quarter hizb marker
   surahStart: number[];       // surah IDs that start on this page
   isSajdah: boolean;          // contains a sajdah ayah
-  lines: number;              // typically 15
+  lines: number;              // 15, or fewer where a surah heading needed room
 }
 
 // Sajdah ayahs in the Quran (standard Hafs layout)
@@ -34,25 +42,13 @@ export const SAJDAH_AYAHS: { surahId: number; ayah: number; type: 'wajib' | 'mus
   { surahId: 96, ayah: 19, type: 'wajib' },
 ];
 
-// Hizb boundaries — each juz has 2 hizbs, each hizb has 4 quarters
-// hizbNumber = (juz-1)*2 + half
-export const HIZB_START_PAGES: Record<number, number> = {
-  1: 1, 2: 11, 3: 22, 4: 32, 5: 42, 6: 52, 7: 62, 8: 72,
-  9: 82, 10: 92, 11: 102, 12: 112, 13: 122, 14: 132, 15: 142,
-  16: 152, 17: 162, 18: 172, 19: 182, 20: 192, 21: 202, 22: 212,
-  23: 222, 24: 232, 25: 242, 26: 252, 27: 262, 28: 272, 29: 282,
-  30: 292, 31: 302, 32: 312, 33: 322, 34: 332, 35: 342, 36: 352,
-  37: 362, 38: 372, 39: 382, 40: 392, 41: 402, 42: 412, 43: 422,
-  44: 432, 45: 442, 46: 452, 47: 462, 48: 472, 49: 482, 50: 492,
-  51: 502, 52: 512, 53: 522, 54: 532, 55: 542, 56: 552, 57: 562,
-  58: 572, 59: 582, 60: 592,
-};
+/** Page on which each hizb begins, in our mushaf. Two per juz. */
+export const HIZB_START_PAGES = FLOW_HIZB_START_PAGES;
 
-export const HIZB_INFO = Object.entries(HIZB_START_PAGES).map(([hizb, startPage]) => ({
-  id: Number(hizb),
-  startPage,
-  name: `الحزب ${toArabicNumber(Number(hizb))}`,
-}));
+export const HIZB_INFO = Object.entries(HIZB_START_PAGES)
+  .map(([hizb, startPage]) => ({ id: Number(hizb), startPage }))
+  .sort((a, b) => a.id - b.id)
+  .map(({ id, startPage }) => ({ id, startPage, name: `الحزب ${toArabicNumber(id)}` }));
 
 function buildPageMeta(): Map<number, PageMeta> {
   const pages = new Map<number, PageMeta>();
@@ -77,10 +73,10 @@ function buildPageMeta(): Map<number, PageMeta> {
   // Build reverse hizb lookup
   const pageToHizb: Record<number, number> = {};
   for (const [hizb, page] of Object.entries(HIZB_START_PAGES)) {
-    pageToHizb[page] = parseInt(hizb);
+    pageToHizb[page] = parseInt(hizb, 10);
   }
 
-  for (let p = 1; p <= 604; p++) {
+  for (let p = 1; p <= TOTAL_PAGES; p++) {
     pages.set(p, {
       page: p,
       juz: getJuzForPage(p),
@@ -88,7 +84,7 @@ function buildPageMeta(): Map<number, PageMeta> {
       rubAlHizb: null,
       surahStart: surahStartByPage[p] || [],
       isSajdah: sajdahPages.has(p),
-      lines: 15,
+      lines: getPageLineCount(p),
     });
   }
 
@@ -102,14 +98,14 @@ export function getPageMeta(page: number): PageMeta | undefined {
 }
 
 export function getTotalPages(): number {
-  return 604;
+  return TOTAL_PAGES;
 }
 
 export function getHizbForPage(page: number): number {
   let result = 1;
   for (const [hizb, startPage] of Object.entries(HIZB_START_PAGES)) {
     if (page >= startPage) {
-      result = parseInt(hizb);
+      result = parseInt(hizb, 10);
     } else {
       break;
     }
@@ -117,14 +113,14 @@ export function getHizbForPage(page: number): number {
   return result;
 }
 
-// Verification check — confirms 604 pages are mapped
+// Verification check — confirms every page of our mushaf is mapped
 export function verifyPageIntegrity(): { totalPages: number; valid: boolean; missingPages: number[] } {
   const missing: number[] = [];
-  for (let p = 1; p <= 604; p++) {
+  for (let p = 1; p <= TOTAL_PAGES; p++) {
     if (!PAGE_META.has(p)) missing.push(p);
   }
   return {
-    totalPages: 604,
+    totalPages: TOTAL_PAGES,
     valid: missing.length === 0,
     missingPages: missing,
   };
