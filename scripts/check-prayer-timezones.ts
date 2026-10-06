@@ -35,12 +35,20 @@ for (const { date, timeZone, latitude, longitude } of cases) {
   for (const [name, wallClock] of expectedTimes) {
     const prayer = actual.prayers.find((item) => item.name === name);
     if (!prayer) throw new Error(`Missing ${name} prayer in ${timeZone}.`);
+    const expectedWallClock = new Date(Date.UTC(
+      wallClock.getFullYear(),
+      wallClock.getMonth(),
+      wallClock.getDate(),
+      wallClock.getHours(),
+      wallClock.getMinutes(),
+      wallClock.getSeconds(),
+    ));
     const expectedDisplay = new Intl.DateTimeFormat('en-US', {
       timeZone: 'UTC',
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
-    }).format(wallClock);
+    }).format(expectedWallClock);
     const expectedArabic = expectedDisplay.replace('AM', 'ص').replace('PM', 'م');
     if (formatTime12h(prayer.time, timeZone) !== expectedArabic) {
       throw new Error(`${name} time does not match ${timeZone}: expected ${expectedArabic}.`);

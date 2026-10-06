@@ -142,17 +142,17 @@ function getTimeZoneOffset(date: Date, timeZone: string): number {
 
 function convertWallClockToInstant(wallClock: Date, timeZone: string): Date {
   const wallClockAsUtc = Date.UTC(
-    wallClock.getUTCFullYear(),
-    wallClock.getUTCMonth(),
-    wallClock.getUTCDate(),
-    wallClock.getUTCHours(),
-    wallClock.getUTCMinutes(),
-    wallClock.getUTCSeconds(),
+    wallClock.getFullYear(),
+    wallClock.getMonth(),
+    wallClock.getDate(),
+    wallClock.getHours(),
+    wallClock.getMinutes(),
+    wallClock.getSeconds(),
   );
   const initialOffset = getTimeZoneOffset(new Date(wallClockAsUtc), timeZone);
   const candidate = new Date(wallClockAsUtc - initialOffset);
   const offset = getTimeZoneOffset(candidate, timeZone);
-  return new Date(wallClockAsUtc - offset + wallClock.getUTCMilliseconds());
+  return new Date(wallClockAsUtc - offset + wallClock.getMilliseconds());
 }
 
 export function formatTime12h(

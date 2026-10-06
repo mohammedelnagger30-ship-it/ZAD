@@ -100,10 +100,10 @@
 
 | التسجيل | المؤدي | الترخيص | المصدر | الملف المضمّن |
 |---|---|---|---|---|
-| أذان الجمعة الثاني | عاصم جاويد | CC0 1.0 | [Internet Archive](https://archive.org/details/icr-friday-prayer-2nd-adhan-17th-may-2024-9th-dhul-qadah-1445-by-asim-javed) | `android/app/src/main/res/raw/adhan_asim_javed.mp3` |
-| أذان | Adam-synagda | CC0 1.0 | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Beautiful_adhan.ogg) | `android/app/src/main/res/raw/adhan_adam_synagda.ogg` |
+| أذان الجمعة الثاني | عاصم جاويد | CC0 1.0 | [Internet Archive](https://archive.org/details/icr-friday-prayer-2nd-adhan-17th-may-2024-9th-dhul-qadah-1445-by-asim-javed) | `android/app/src/main/res/raw/adhan_asim_javed.mp3`; `public/audio/adhan_asim_javed.mp3` |
+| أذان | Adam-synagda | CC0 1.0 | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Beautiful_adhan.ogg) | `android/app/src/main/res/raw/adhan_adam_synagda.ogg`; `public/audio/adhan_adam_synagda.ogg` |
 
-يختار المستخدم صوت الأذان من الإعدادات. إشعارات الصلاة تعمل بالتسجيل المختار على أندرويد؛ وقد يقيّد النظام التشغيل بحسب إعدادات الإشعارات أو وضع عدم الإزعاج. التسجيلان ليسا منسوبين إلى مؤذنين مشهورين.
+يختار المستخدم صوت الأذان من الإعدادات. يمكن تشغيل التسجيل كاملًا من معاينة مباشرة، كما تستخدمه إشعارات الصلاة على أندرويد؛ وقد يقيّد النظام صوت الإشعار بحسب مستوى صوت الإشعارات أو وضع عدم الإزعاج. التسجيلان ليسا منسوبين إلى مؤذنين مشهورين.
 
 ### تسجيلات الأذكار
 

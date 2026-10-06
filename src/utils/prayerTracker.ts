@@ -75,6 +75,19 @@ export async function getSunnahRecord(date: string, type: string): Promise<Sunna
   return records.find((r) => r.type === type);
 }
 
+export async function getDaySunnahRecords(date: string): Promise<SunnahRecord[]> {
+  return db.sunnahRecords.where('date').equals(date).toArray();
+}
+
+export async function setSunnah(date: string, type: string, done: boolean): Promise<void> {
+  const existing = await getSunnahRecord(date, type);
+  if (existing) {
+    await db.sunnahRecords.update(existing.id!, { done });
+  } else {
+    await db.sunnahRecords.add({ date, type, done });
+  }
+}
+
 export async function toggleSunnah(date: string, type: string): Promise<void> {
   const existing = await getSunnahRecord(date, type);
   if (existing) {

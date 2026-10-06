@@ -16,8 +16,8 @@ import {
   getDayPrayerRecords,
   confirmPrayer,
   clearPrayer,
-  getSunnahRecord,
-  toggleSunnah,
+  getDaySunnahRecords,
+  setSunnah,
   getPrayerGrid,
   summariseGrid,
   PRAYER_LABELS_AR,
@@ -46,13 +46,19 @@ const PRAYER_ICONS: Record<string, typeof Moon> = {
   fajr: Sunrise, sunrise: Sun, dhuhr: Sun, asr: Sun, maghrib: Sunset, isha: Moon,
 };
 
-const SUNNAH_TYPES = [
-  { key: 'witr', label: 'الوتر' },
-  { key: 'duha', label: 'الضحى' },
-  { key: 'rawatib_fajr', label: 'ركعتا الفجر' },
-  { key: 'rawatib_dhuhr', label: 'السنن الراتبة للظهر' },
-  { key: 'rawatib_maghrib', label: 'السنن الراتبة للمغرب' },
-  { key: 'rawatib_isha', label: 'السنن الراتبة للعشاء' },
+const SUNNAH_TYPES: {
+  key: string;
+  label: string;
+  prayer?: PrayerKey;
+  note?: string;
+}[] = [
+  { key: 'rawatib_fajr', prayer: 'fajr', label: 'ركعتان قبل الفجر', note: 'من السنن الرواتب المؤكدة' },
+  { key: 'rawatib_dhuhr_before', prayer: 'dhuhr', label: 'أربع ركعات قبل الظهر', note: 'سنة راتبة' },
+  { key: 'rawatib_dhuhr_after', prayer: 'dhuhr', label: 'ركعتان بعد الظهر', note: 'سنة راتبة' },
+  { key: 'rawatib_maghrib', prayer: 'maghrib', label: 'ركعتان بعد المغرب', note: 'سنة راتبة' },
+  { key: 'rawatib_isha', prayer: 'isha', label: 'ركعتان بعد العشاء', note: 'سنة راتبة' },
+  { key: 'witr', prayer: 'isha', label: 'صلاة الوتر', note: 'نافلة بعد العشاء' },
+  { key: 'duha', label: 'صلاة الضحى', note: 'نافلة مستقلة' },
 ];
 
 export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
@@ -90,10 +96,14 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
     setRecords(map);
     setConfirmedAt(times);
 
-    const sunnahMap: Record<string, boolean> = {};
-    for (const s of SUNNAH_TYPES) {
-      const rec = await getSunnahRecord(todayKey(), s.key);
-      sunnahMap[s.key] = rec?.done ?? false;
+    const sunnahRows = await getDaySunnahRecords(todayKey());
+    const sunnahMap: Record<string, boolean> = Object.fromEntries(
+      sunnahRows.map((row) => [row.type, row.done]),
+    );
+    // Preserve the older combined Dhuhr checkbox until the user records each rak'ah group.
+    if (sunnahMap.rawatib_dhuhr !== undefined) {
+      sunnahMap.rawatib_dhuhr_before ??= sunnahMap.rawatib_dhuhr;
+      sunnahMap.rawatib_dhuhr_after ??= sunnahMap.rawatib_dhuhr;
     }
     setSunnahRecords(sunnahMap);
 
@@ -133,8 +143,8 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
   };
 
   const handleSunnahToggle = async (type: string) => {
-    await toggleSunnah(todayKey(), type);
-    load();
+    await setSunnah(todayKey(), type, !sunnahRecords[type]);
+    await load();
   };
 
   const handleLocationPick = async (lat: number, lng: number, name: string) => {
@@ -220,13 +230,18 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
       {/* All prayer times with confirmation */}
       <div>
         <SectionHeader title="صلوات اليوم" icon={<Moon size={20} />} />
-        <div className="space-y-2">
+        <p className="mb-3 text-xs leading-5 text-gray-500 dark:text-gray-400">
+          تظهر السنة الراتبة بجوار فرضها: ركعتان قبل الفجر، وست للظهر (أربع قبلًا واثنتان بعدًا)، وركعتان بعد المغرب وركعتان بعد العشاء.
+        </p>
+        <div className="space-y-3">
           {prayerResult.prayers.map((prayer) => {
             const isSunrise = prayer.name === 'sunrise';
             const Icon = PRAYER_ICONS[prayer.name] || Moon;
             const confirmed = (records[prayer.name] as PrayerStatus | null | undefined) ?? null;
             // Sunrise is not a prayer, and an upcoming prayer has nothing to confirm yet.
             const answerable = !isSunrise && prayer.passed;
+            const attachedSunnahs = SUNNAH_TYPES.filter((sunnah) => sunnah.prayer === prayer.name);
+            const isAsr = prayer.name === 'asr';
 
             const row = (
               <div className="flex items-center gap-3">
@@ -256,19 +271,15 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
               </div>
             );
 
-            if (!answerable) {
-              return <Card key={prayer.name}>{row}</Card>;
-            }
-
-            const key = prayer.name as PrayerKey;
-            return (
+            const prayerCard = !answerable ? (
+              <Card>{row}</Card>
+            ) : (
               <button
-                key={prayer.name}
                 onClick={() =>
                   setSheet({
                     date: todayKey(),
-                    prayer: key,
-                    label: PRAYER_LABELS_AR[key],
+                    prayer: prayer.name as PrayerKey,
+                    label: PRAYER_LABELS_AR[prayer.name as PrayerKey],
                     isHistorical: false,
                   })
                 }
@@ -289,6 +300,53 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
                 {row}
               </button>
             );
+
+            return (
+              <div className="space-y-2" key={prayer.name}>
+                {prayerCard}
+                {(attachedSunnahs.length > 0 || isAsr) && (
+                  <div className="mr-3 space-y-1 border-r-2 border-primary-100 pr-3 dark:border-primary-800">
+                    <p className="text-xs font-semibold text-primary-600 dark:text-gold-400">
+                      سنن ونوافل مرتبطة بصلاة {prayer.arabicName}
+                    </p>
+                    {isAsr && (
+                      <p className="rounded-xl bg-white px-3 py-2 text-xs leading-5 text-gray-500 dark:bg-primary-900/40 dark:text-gray-400">
+                        لا تُدرج هنا راتبة مؤكدة مخصوصة للعصر؛ وتختلف النوافل قبله باختلاف المذاهب.
+                      </p>
+                    )}
+                    {attachedSunnahs.map((sunnah) => (
+                      <button
+                        key={sunnah.key}
+                        type="button"
+                        aria-pressed={!!sunnahRecords[sunnah.key]}
+                        onClick={() => void handleSunnahToggle(sunnah.key)}
+                        className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-right transition-smooth ${
+                          sunnahRecords[sunnah.key]
+                            ? 'bg-success-50 text-success-700 dark:bg-success-900/20 dark:text-success-300'
+                            : 'bg-white text-gray-700 dark:bg-primary-900/40 dark:text-gray-200'
+                        }`}
+                      >
+                        <span>
+                          <span className="block text-sm font-medium">{sunnah.label}</span>
+                          {sunnah.note && (
+                            <span className="mt-0.5 block text-[11px] text-gray-500 dark:text-gray-400">
+                              {sunnah.note}
+                            </span>
+                          )}
+                        </span>
+                        <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
+                          sunnahRecords[sunnah.key]
+                            ? 'border-success-500 bg-success-500'
+                            : 'border-gray-300 dark:border-gray-600'
+                        }`}>
+                          {sunnahRecords[sunnah.key] && <Check size={12} className="text-white" />}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
           })}
         </div>
       </div>
@@ -306,12 +364,12 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
         </div>
       </Card>
 
-      {/* Sunnah prayers */}
+      {/* Independent voluntary prayers */}
       <div>
-        <SectionHeader title="السنن والنوافل" icon={<Sun size={20} />} />
+        <SectionHeader title="نوافل مستقلة" icon={<Sun size={20} />} />
         <Card noPadding>
           <div className="p-3 grid grid-cols-2 gap-2">
-            {SUNNAH_TYPES.map((sunnah) => (
+            {SUNNAH_TYPES.filter((sunnah) => !sunnah.prayer).map((sunnah) => (
               <button
                 key={sunnah.key}
                 onClick={() => handleSunnahToggle(sunnah.key)}
