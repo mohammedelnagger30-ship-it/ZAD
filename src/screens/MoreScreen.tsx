@@ -131,7 +131,7 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
                 رفيقك اليومي لتلاوة وتدبر وحفظ القرآن الكريم وإتمام الأذكار والصلوات بدون إنترنت.
               </p>
               <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 mt-1.5">
-                الإصدار 1.14.0 • تطوير متكامل
+                الإصدار 1.15.0 • تطوير متكامل
               </p>
             </div>
           </div>
