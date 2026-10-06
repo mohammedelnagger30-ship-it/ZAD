@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState, useEffect, useCallback } from 'react';
+import { CloudOff, X } from 'lucide-react';
 import { useSettings, useTheme, useNavigation } from '@/hooks/useApp';
 import { BottomNav } from '@/components/BottomNav';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -254,6 +255,82 @@ function StartupMessage({
   );
 }
 
+/**
+ * Shown when cloud sync is failing or the device is offline.
+ *
+ * Once the app stopped treating a failed first sync as fatal, a sync problem could
+ * otherwise pass completely unnoticed — the only place sync status appeared was the
+ * settings screen, so a user whose data had not reached the cloud would have no reason to
+ * look. This says so plainly and says what is still true: everything works, and the
+ * changes are waiting.
+ */
+function SyncNotice({
+  syncState,
+  onSyncNow,
+}: {
+  syncState: CloudSyncState | null;
+  onSyncNow: (() => Promise<void>) | undefined;
+}) {
+  // Dismissal lasts for the session, the same as the update banner. Re-arming it on recovery
+  // looked tidier but needed a 'synced' state to key off, and sync goes error → syncing →
+  // error on every retry, so it re-armed mid-outage or not at all depending on whether a
+  // given attempt finished. A notice the user has read once does not need to come back.
+  const failing = syncState?.status === 'error' || syncState?.status === 'offline';
+  const [dismissed, setDismissed] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+
+  if (!failing || dismissed) return null;
+
+  const offline = syncState?.status === 'offline';
+  const retry = async () => {
+    if (!onSyncNow) return;
+    setRetrying(true);
+    try {
+      await onSyncNow();
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  return (
+    <div
+      role="status"
+      className="mb-3 flex items-start gap-3 rounded-2xl border border-gold-300 bg-gold-50 p-3 text-sm dark:border-gold-700 dark:bg-primary-900"
+      dir="rtl"
+    >
+      <CloudOff size={18} className="mt-0.5 shrink-0 text-gold-600 dark:text-gold-300" />
+      <div className="flex-1">
+        <p className="font-semibold text-primary-900 dark:text-primary-50">
+          {offline ? 'لا يوجد اتصال بالإنترنت' : 'تعذّرت مزامنة بياناتك'}
+        </p>
+        <p className="mt-0.5 text-primary-800 dark:text-primary-100">
+          {offline
+            ? 'التطبيق يعمل ببياناته المحفوظة على الجهاز، وستُرفع تعديلاتك تلقائياً عند عودة الاتصال.'
+            : 'التطبيق يعمل ببياناته المحفوظة على الجهاز، وتعديلاتك لم تُرفع بعد إلى حسابك.'}
+        </p>
+        {onSyncNow && (
+          <button
+            type="button"
+            onClick={() => void retry()}
+            disabled={retrying}
+            className="mt-2 rounded-lg bg-primary-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+          >
+            {retrying ? 'جارٍ المحاولة…' : 'حاول الآن'}
+          </button>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={() => setDismissed(true)}
+        aria-label="إخفاء تنبيه المزامنة"
+        className="shrink-0 rounded-lg p-1 text-primary-600 hover:bg-gold-100 dark:text-primary-200 dark:hover:bg-primary-800"
+      >
+        <X size={16} />
+      </button>
+    </div>
+  );
+}
+
 function AppContent({
   accountEmail,
   onSignOut,
@@ -397,6 +474,7 @@ function AppContent({
       <div className="min-h-screen bg-surface-light dark:bg-surface-dark text-primary-900 dark:text-primary-50" dir="rtl">
         <main className="min-h-screen min-h-dvh px-4 pt-4 pb-24 md:pr-24 md:pl-8 md:pt-8 md:pb-8">
           <div className="w-full max-w-md mx-auto md:max-w-3xl xl:max-w-5xl 2xl:max-w-6xl">
+            <SyncNotice syncState={syncState} onSyncNow={onSyncNow} />
             <Suspense fallback={<ScreenLoading />}>
               {/* Selecting the active tab again remounts its screen. */}
               {screen === 'home' && <HomeScreen key={`home-${resetNonce}`} settings={settings} navigate={navigate} />}

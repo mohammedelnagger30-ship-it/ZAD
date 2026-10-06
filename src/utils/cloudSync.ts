@@ -599,7 +599,14 @@ export async function startCloudSync(
   statusCallback = onStatus;
   installMutationHooks();
   publish('syncing');
-  await synchronizeNow();
+  // A cloud failure is not a reason to keep the app closed. Everything the app reads is
+  // already in IndexedDB, a pull that fails partway leaves local data untouched, and the
+  // push never ran — so nothing is lost, it just has not reached the cloud yet. Failing
+  // here used to replace the whole app with a retry screen, which meant a 401, a 5xx or a
+  // captive portal at launch locked the user out of their own Quran. The interval, the
+  // online listener and the realtime channel below all retry, so the only thing this await
+  // buys is the first merge landing before the first paint.
+  await synchronizeNow().catch(() => {});
   syncInterval = setInterval(() => {
     void synchronizeNow().catch(() => {});
   }, 60_000);
