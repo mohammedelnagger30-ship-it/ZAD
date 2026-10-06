@@ -1,4 +1,4 @@
-﻿import { LocalNotifications, type LocalNotificationSchema } from '@capacitor/local-notifications';
+import { LocalNotifications, type LocalNotificationSchema } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 import { getSettings } from '@/db/database';
 import type { Settings } from '@/db/database';
@@ -176,6 +176,12 @@ export async function rescheduleAllNotifications(): Promise<void> {
         sound: settings.adhanSound ? getAdhanSound(settings.adhanVoiceId).file : undefined,
         smallIcon: 'ic_notification',
         iconColor: '#1f734e',
+        extra: {
+          type: 'prayer',
+          prayerKey: prayer.name,
+          prayerName: prayer.arabicName,
+          time: prayer.time.toISOString(),
+        },
       });
 
       // Pre-prayer reminder

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Moon, Sunrise, MapPin, Compass, BarChart3, Sun, Sunset, Check, X, Clock } from 'lucide-react';
+import { Moon, Sunrise, MapPin, Compass, BarChart3, Sun, Sunset, Check, X, Clock, Sparkles } from 'lucide-react';
 import { Card, Button, Badge, SectionHeader, EmptyState } from '@/components/ui';
 import { PrayerStatusSheet } from '@/components/PrayerStatusSheet';
 import { PrayerWeekGrid } from '@/components/PrayerWeekGrid';
@@ -116,7 +116,7 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
 
   useEffect(() => {
     load();
-    const interval = setInterval(() => setNow(new Date()), 30000);
+    const interval = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(interval);
   }, [load]);
 
@@ -219,6 +219,24 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
               <p className="text-gold-300 text-sm">الصلاة القادمة</p>
               <h2 className="text-3xl font-bold mt-1">{nextPrayer.arabicName}</h2>
               <p className="text-primary-200 text-sm mt-1">{getTimeUntil(nextPrayer.time, now)}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  window.dispatchEvent(
+                    new CustomEvent('zad:trigger-azan', {
+                      detail: {
+                        prayerKey: (nextPrayer?.name as PrayerKey) || 'fajr',
+                        prayerName: nextPrayer?.arabicName || 'الفجر',
+                        isPreview: true,
+                      },
+                    })
+                  );
+                }}
+                className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-gold-400/20 hover:bg-gold-400/30 px-3 py-1.5 text-xs font-semibold text-gold-300 backdrop-blur-sm transition border border-gold-400/30"
+              >
+                <Sparkles size={14} />
+                عرض صفحة الأذان (معاينة)
+              </button>
             </div>
             <div className="text-left">
               <p className="text-3xl font-bold text-gold-300">{formatTime12h(nextPrayer.time, timeZone)}</p>

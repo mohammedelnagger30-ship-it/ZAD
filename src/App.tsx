@@ -17,18 +17,25 @@ import { AzanOverlayModal } from '@/components/AzanOverlayModal';
 import { useAzanTrigger } from '@/hooks/useAzanTrigger';
 
 const ONBOARDED_KEY = 'hifzi-onboarded';
+// Latch used by lazyWithRetry: after a chunk 404 we reload once; a reloaded page that
+// fails again surfaces the real error instead of reloading in a loop.
+const LAZY_RETRY_KEY = 'hifzi-lazy-reload-tried';
 
 /**
- * Wrap a screen's dynamic import in a single retry.
+ * Wrap a screen's dynamic import in a single-reload recovery.
  *
  * A route chunk can be served either by the service worker's precache or by the APK's own
  * assets, and for a brief window right after an in-app update those two disagree: the page asks
  * for the new hashed filename while the old worker is still in control, so the dynamic import
- * rejects with "Failed to fetch dynamically imported module" once and then would load fine the
- * next moment. A rejected import otherwise propagates up to the top-level ErrorBoundary and
- * blanks the whole app. Retrying once after a pause lets the freshly activated worker answer.
- * If the chunk is genuinely gone (corrupt install), the original error still surfaces instead
- * of retrying forever.
+ * rejects once with "Failed to fetch dynamically imported module". A rejected import would
+ * otherwise propagate up to the top-level ErrorBoundary and blank the whole app.
+ *
+ * A same-URL retry cannot succeed: Chromium (and the app's WebView) caches the failed import
+ * in the module map for the document's lifetime, so re-importing the identical URL fails
+ * instantly without even hitting the network. The only recovery is to reload: a fresh document
+ * starts with a clean module map, and by then the newly activated service worker serves the
+ * chunk. We reload at most once per boot (latch); a reloaded page that still cannot load the
+ * chunk lets the true error reach the error boundary instead of reloading forever.
  */
 // The constraint mirrors @types/react's own `lazy()` (T extends ComponentType<any>); a concrete
 // props type cannot name it because function components are contravariant in their props.
@@ -36,15 +43,25 @@ const ONBOARDED_KEY = 'hifzi-onboarded';
 type LazyScreenModule = { default: ComponentType<any> };
 
 function lazyWithRetry<M extends LazyScreenModule>(loader: () => Promise<M>) {
-  let retried = false;
   return lazy(async () => {
     try {
-      return await loader();
+      const module = await loader();
+      // A successfully loaded screen re-arms the latch so a later transient failure
+      // (e.g. a future in-app update) can trigger recovery again.
+      sessionStorage.removeItem(LAZY_RETRY_KEY);
+      return module;
     } catch (error) {
-      if (retried) throw error;
-      retried = true;
-      await new Promise((resolve) => window.setTimeout(resolve, 800));
-      return loader();
+      if (sessionStorage.getItem(LAZY_RETRY_KEY)) {
+        throw error; // already reloaded once this boot: surface the real failure
+      }
+      sessionStorage.setItem(LAZY_RETRY_KEY, '1');
+      window.location.reload();
+      // The frame is torn down during navigation; keep the lazy promise pending so no error
+      // boundary flashes in the dying frame. If the reload is blocked for some reason, surface
+      // the original error after a grace period.
+      return new Promise<M>((_, reject) => {
+        window.setTimeout(() => reject(error), 15000);
+      });
     }
   });
 }
@@ -167,7 +184,7 @@ function AppUpdateNotice() {
 
 function Application() {
   const [session, setSession] = useState<Session | null>(null);
-  const [authLoading, setAuthLoading] = useState(isSupabaseConfigured);
+  const [authChecked, setAuthChecked] = useState(!isSupabaseConfigured);
 
   useEffect(() => {
     if (!supabase) return;
@@ -176,12 +193,12 @@ function Application() {
       if (error) console.error('Could not restore Supabase session:', error.message);
       if (alive) {
         setSession(data.session);
-        setAuthLoading(false);
+        setAuthChecked(true);
       }
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
-      setAuthLoading(false);
+      setAuthChecked(true);
     });
     return () => {
       alive = false;
@@ -189,8 +206,8 @@ function Application() {
     };
   }, []);
 
-  if (isSupabaseConfigured && authLoading) {
-    return <StartupMessage message="جارٍ التحقق من الحساب..." />;
+  if (isSupabaseConfigured && !authChecked) {
+    return <AppContent accountEmail={undefined} onSignOut={undefined} syncState={null} onSyncNow={undefined} />;
   }
   if (isSupabaseConfigured && !session) {
     return <AuthScreen onAuthenticated={() => {}} />;
@@ -202,9 +219,6 @@ function Application() {
 }
 
 function AuthenticatedApp({ session }: { session: Session }) {
-  const [ready, setReady] = useState(false);
-  const [startupError, setStartupError] = useState('');
-  const [retryNonce, setRetryNonce] = useState(0);
   const [syncState, setSyncState] = useState<CloudSyncState>({
     status: 'syncing',
     lastSyncedAt: null,
@@ -212,30 +226,18 @@ function AuthenticatedApp({ session }: { session: Session }) {
   });
 
   useEffect(() => {
-    let cancelled = false;
     let stopSync: (() => void) | undefined;
-    setReady(false);
-    setStartupError('');
     void startCloudSync(session.user.id, setSyncState)
       .then((stop) => {
-        if (cancelled) stop();
-        else {
-          stopSync = stop;
-          setReady(true);
-        }
+        stopSync = stop;
       })
       .catch((error: unknown) => {
-        if (!cancelled) {
-          setStartupError(error instanceof Error ? error.message : 'تعذّرت مزامنة بيانات الحساب.');
-        }
+        console.error('Cloud sync initial background error:', error);
       });
     return () => {
-      cancelled = true;
       stopSync?.();
     };
-  }, [session.user.id, retryNonce]);
-
-  const retrySync = useCallback(() => setRetryNonce((nonce) => nonce + 1), []);
+  }, [session.user.id]);
 
   const handleSignOut = useCallback(async () => {
     if (!supabase) return;
@@ -245,16 +247,6 @@ function AuthenticatedApp({ session }: { session: Session }) {
     await clearLocalUserData();
   }, []);
 
-  if (startupError) {
-    return (
-      <StartupMessage
-        message={`تعذّرت مزامنة الحساب: ${startupError}`}
-        action={retrySync}
-        actionLabel="إعادة المحاولة"
-      />
-    );
-  }
-  if (!ready) return <StartupMessage message="جارٍ تحميل بياناتك ومزامنتها..." />;
   return (
     <AppContent
       accountEmail={session.user.email}

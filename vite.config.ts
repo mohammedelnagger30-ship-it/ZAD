@@ -17,9 +17,9 @@ export default defineConfig(({ mode }) => {
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg', 'icons/*.png'],
       manifest: {
-        name: 'Nour ZAD',
-        short_name: 'Nour ZAD',
-        description: 'Nour ZAD — رفيق القرآن والعبادة اليومية',
+        name: 'Sakinah',
+        short_name: 'Sakinah',
+        description: 'Sakinah — Quran, prayer & daily worship',
         dir: 'rtl',
         lang: 'ar',
         theme_color: '#1f734e',

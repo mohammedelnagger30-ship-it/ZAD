@@ -3,7 +3,7 @@ import { AlertTriangle, Pause, Play, RotateCcw, Square, Volume2 } from 'lucide-r
 import { Card } from '@/components/ui';
 import { AUDIO_RECITERS } from '@/data/audioReciters';
 import type { SurahMeta } from '@/data/surahs';
-import { loadSurahAudio, type SurahAudioSource } from '@/utils/quranAudio';
+import { loadSurahAudio, type SurahAudioSource, type VerseTiming } from '@/utils/quranAudio';
 import { toArabicNumber } from '@/data/surahs';
 
 export interface AyahPlaybackControls {
@@ -32,11 +32,11 @@ export function AudioRecitationPlayer({
   const audioRef = useRef<HTMLAudioElement>(null);
   const activeAyahRef = useRef<number | null>(null);
   const continuousRef = useRef(false);
-  const requestRef = useRef(0);
   const verseEndRef = useRef<number | null>(null);
   const repeatRemainingRef = useRef(1);
   const sourceUrlRef = useRef<string | null>(null);
-  const [requestId, setRequestId] = useState(0);
+  const currentTimingRef = useRef<VerseTiming | null>(null);
+
   const [activeAyah, setActiveAyah] = useState<number | null>(null);
   const [selectedAyah, setSelectedAyah] = useState<number | null>(1);
   const [repeatCount, setRepeatCount] = useState(3);
@@ -46,53 +46,92 @@ export function AudioRecitationPlayer({
   const [source, setSource] = useState<SurahAudioSource | null>(null);
   const [sourceLoading, setSourceLoading] = useState(true);
 
-  const selectAyah = useCallback((ayah: number) => {
-    if (activeAyahRef.current !== null) {
-      requestRef.current += 1;
-      audioRef.current?.pause();
-      activeAyahRef.current = null;
-      continuousRef.current = false;
-      setActiveAyah(null);
-      setIsPlaying(false);
+  // Stop playback completely
+  const stop = useCallback(() => {
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
     }
+    activeAyahRef.current = null;
+    continuousRef.current = false;
+    verseEndRef.current = null;
+    currentTimingRef.current = null;
+    repeatRemainingRef.current = 1;
+    setActiveAyah(null);
+    setIsPlaying(false);
+  }, []);
+
+  // Select an Ayah without playing
+  const selectAyah = useCallback((ayah: number) => {
     setSelectedAyah(ayah);
   }, []);
 
-  const playAyah = useCallback((ayah: number, continuous = false) => {
-    activeAyahRef.current = ayah;
-    continuousRef.current = continuous;
-    verseEndRef.current = null;
-    setSelectedAyah(ayah);
-    setActiveAyah(ayah);
-    setError(null);
-    requestRef.current += 1;
-    setRequestId(requestRef.current);
-  }, []);
+  // Core function to start or seek playback to a specific Ayah
+  const playAyah = useCallback(
+    (ayah: number, continuous = false) => {
+      if (!source) return;
+      const audio = audioRef.current;
+      if (!audio) return;
+
+      const timing = source.verseTimings.find((item) => item.ayah === ayah);
+      if (!timing) {
+        setError(`توقيت الآية ${ayah} غير متاح`);
+        return;
+      }
+
+      setError(null);
+      activeAyahRef.current = ayah;
+      continuousRef.current = continuous;
+      currentTimingRef.current = timing;
+      setSelectedAyah(ayah);
+      setActiveAyah(ayah);
+
+      // In single-ayah repeat mode, record the end time for looping/stopping
+      if (!continuous) {
+        verseEndRef.current = timing.endMs / 1000;
+      } else {
+        verseEndRef.current = null;
+      }
+
+      // Ensure audio source URL is set
+      if (audio.src !== source.url) {
+        audio.src = source.url;
+      }
+
+      audio.currentTime = timing.startMs / 1000;
+      audio.playbackRate = playbackRate;
+
+      audio
+        .play()
+        .then(() => {
+          setIsPlaying(true);
+        })
+        .catch((cause: unknown) => {
+          setIsPlaying(false);
+          setError(cause instanceof Error ? cause.message : 'تعذّر تشغيل التلاوة');
+        });
+    },
+    [source, playbackRate]
+  );
 
   const startSelectedAyah = useCallback(() => {
     if (selectedAyah === null) return;
     const audio = audioRef.current;
-    if (activeAyahRef.current !== selectedAyah || !audio) {
-      repeatRemainingRef.current = repeatCount;
-      playAyah(selectedAyah, false);
-      return;
-    }
-    if (audio.paused) {
-      void audio.play().then(
-        () => setIsPlaying(true),
-        (cause: unknown) => setError(cause instanceof Error ? cause.message : 'تعذّر تشغيل التلاوة'),
-      );
-    } else {
+    if (!audio) return;
+
+    if (activeAyahRef.current === selectedAyah && isPlaying) {
       audio.pause();
       setIsPlaying(false);
+      return;
     }
-  }, [playAyah, repeatCount, selectedAyah]);
+
+    repeatRemainingRef.current = repeatCount;
+    playAyah(selectedAyah, false);
+  }, [playAyah, repeatCount, selectedAyah, isPlaying]);
 
   const updateRepeatCount = (count: number) => {
     setRepeatCount(count);
-    if (activeAyahRef.current !== null && !continuousRef.current) {
-      repeatRemainingRef.current = count;
-    }
+    repeatRemainingRef.current = count;
   };
 
   const replayAyah = useCallback(() => {
@@ -104,37 +143,27 @@ export function AudioRecitationPlayer({
 
   const updatePlaybackRate = (rate: number) => {
     setPlaybackRate(rate);
-    if (audioRef.current) audioRef.current.playbackRate = rate;
+    if (audioRef.current) {
+      audioRef.current.playbackRate = rate;
+    }
   };
 
-  useEffect(() => {
-    if (audioRef.current) audioRef.current.playbackRate = playbackRate;
-  }, [playbackRate]);
-
-  const stop = useCallback(() => {
-    requestRef.current += 1;
-    activeAyahRef.current = null;
-    continuousRef.current = false;
-    repeatRemainingRef.current = 1;
-    audioRef.current?.pause();
-    setActiveAyah(null);
-    setIsPlaying(false);
-  }, []);
-
+  // Load Surah Audio file & verse metadata
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
+
+    stop();
     setSource(null);
     setSourceLoading(true);
     setError(null);
-    setIsPlaying(false);
-    setActiveAyah(null);
-    activeAyahRef.current = null;
-    continuousRef.current = false;
+
     void loadSurahAudio(reciterId, surah.id, controller.signal)
       .then((nextSource) => {
         if (active) {
-          if (sourceUrlRef.current?.startsWith('blob:')) URL.revokeObjectURL(sourceUrlRef.current);
+          if (sourceUrlRef.current?.startsWith('blob:')) {
+            URL.revokeObjectURL(sourceUrlRef.current);
+          }
           sourceUrlRef.current = nextSource.blob ? nextSource.url : null;
           setSource(nextSource);
         } else if (nextSource.blob) {
@@ -147,121 +176,78 @@ export function AudioRecitationPlayer({
         }
       })
       .finally(() => {
-        if (active) setSourceLoading(false);
+        if (active) {
+          setSourceLoading(false);
+        }
       });
+
     return () => {
       active = false;
       controller.abort();
     };
-  }, [reciterId, surah.id]);
+  }, [reciterId, surah.id, stop]);
 
-  useEffect(() => {
-    if (activeAyah === null || requestId === 0 || !source) return;
-    const audio = audioRef.current;
-    if (!audio) return;
-    const request = requestId;
-    let cancelled = false;
-    const controller = new AbortController();
-
-    const startPlayback = async () => {
-      try {
-        const timing = source.verseTimings.find((item) => item.ayah === activeAyah);
-        if (!timing) throw new Error(`توقيت الآية ${activeAyah} غير متاح`);
-        if (audio.src !== source.url) {
-          audio.src = source.url;
-          await new Promise<void>((resolve, reject) => {
-            const onLoaded = () => {
-              audio.removeEventListener('loadedmetadata', onLoaded);
-              audio.removeEventListener('error', onError);
-              resolve();
-            };
-            const onError = () => {
-              audio.removeEventListener('loadedmetadata', onLoaded);
-              audio.removeEventListener('error', onError);
-              reject(new Error('تعذّر تحميل ملف التلاوة'));
-            };
-            const onAbort = () => {
-              audio.removeEventListener('loadedmetadata', onLoaded);
-              audio.removeEventListener('error', onError);
-              reject(new DOMException('تم إلغاء تحميل بيانات الصوت', 'AbortError'));
-            };
-            audio.addEventListener('loadedmetadata', onLoaded, { once: true });
-            audio.addEventListener('error', onError, { once: true });
-            controller.signal.addEventListener('abort', onAbort, { once: true });
-            if (audio.readyState >= 1) onLoaded();
-          });
-        }
-        if (cancelled || requestRef.current !== request) return;
-        audio.currentTime = timing.startMs / 1000;
-        verseEndRef.current = timing.endMs / 1000;
-        await audio.play();
-        if (!cancelled && requestRef.current === request) setIsPlaying(true);
-      } catch (cause) {
-        if (!cancelled && requestRef.current === request) {
-          setIsPlaying(false);
-          setError(cause instanceof Error ? cause.message : 'تعذّر تشغيل التلاوة');
-        }
-      }
-    };
-
-    void startPlayback();
-    return () => {
-      cancelled = true;
-      controller.abort();
-      audio.pause();
-    };
-  }, [activeAyah, requestId, source]);
-
+  // Clean up object URLs on unmount
   useEffect(() => () => {
     audioRef.current?.pause();
-    if (sourceUrlRef.current) URL.revokeObjectURL(sourceUrlRef.current);
+    if (sourceUrlRef.current) {
+      URL.revokeObjectURL(sourceUrlRef.current);
+    }
   }, []);
 
-  const finishAyah = () => {
-    const current = activeAyahRef.current;
-    verseEndRef.current = null;
-    if (!continuousRef.current && current !== null) {
-      if (repeatRemainingRef.current === 0 || repeatRemainingRef.current > 1) {
-        if (repeatRemainingRef.current > 1) repeatRemainingRef.current -= 1;
-        playAyah(current, false);
-        return;
-      }
-    }
-    if (continuousRef.current && current !== null && current < surah.ayahCount) {
-      repeatRemainingRef.current = 1;
-      playAyah(current + 1, true);
-      return;
-    }
-    activeAyahRef.current = null;
-    continuousRef.current = false;
-    setActiveAyah(null);
-    setIsPlaying(false);
-  };
-
+  // Seamless real-time timeupdate handler
   const handleTimeUpdate = () => {
     const audio = audioRef.current;
-    if (audio && verseEndRef.current !== null && audio.currentTime >= verseEndRef.current) {
-      audio.pause();
-      finishAyah();
+    if (!audio || !source) return;
+
+    const currentMs = audio.currentTime * 1000;
+
+    // 1. Continuous Surah Playback mode (Seamless stream, no pauses between verses!)
+    if (continuousRef.current) {
+      const currentVerse = source.verseTimings.find(
+        (v) => currentMs >= v.startMs && currentMs < v.endMs
+      );
+
+      if (currentVerse && currentVerse.ayah !== activeAyahRef.current) {
+        activeAyahRef.current = currentVerse.ayah;
+        setActiveAyah(currentVerse.ayah);
+        setSelectedAyah(currentVerse.ayah);
+      }
+      return;
     }
+
+    // 2. Single Ayah repeat mode
+    if (verseEndRef.current !== null && audio.currentTime >= verseEndRef.current) {
+      if (repeatRemainingRef.current > 1) {
+        repeatRemainingRef.current -= 1;
+        if (currentTimingRef.current) {
+          audio.currentTime = currentTimingRef.current.startMs / 1000;
+        }
+      } else {
+        stop();
+      }
+    }
+  };
+
+  const handleEnded = () => {
+    stop();
   };
 
   const toggleSurah = () => {
     const audio = audioRef.current;
-    if (!audio) return;
-    if (!audio.paused) {
+    if (!audio || !source) return;
+
+    if (isPlaying) {
       audio.pause();
       setIsPlaying(false);
-    } else if (activeAyah !== null) {
-      continuousRef.current = true;
-      repeatRemainingRef.current = 1;
-      void audio.play().then(
-        () => setIsPlaying(true),
-        (cause: unknown) => setError(cause instanceof Error ? cause.message : 'تعذّر تشغيل التلاوة'),
-      );
+    } else if (activeAyah !== null && continuousRef.current) {
+      audio
+        .play()
+        .then(() => setIsPlaying(true))
+        .catch(() => setIsPlaying(false));
     } else {
       repeatRemainingRef.current = 1;
-      playAyah(1, true);
+      playAyah(selectedAyah || 1, true);
     }
   };
 
@@ -281,7 +267,9 @@ export function AudioRecitationPlayer({
               className="w-full rounded-xl border border-primary-200 bg-white px-3 py-2.5 text-sm text-primary-800 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
             >
               {AUDIO_RECITERS.map((reciter) => (
-                <option key={reciter.id} value={reciter.id}>{reciter.name}</option>
+                <option key={reciter.id} value={reciter.id}>
+                  {reciter.name}
+                </option>
               ))}
             </select>
           </label>
@@ -397,7 +385,7 @@ export function AudioRecitationPlayer({
       <audio
         ref={audioRef}
         preload="metadata"
-        onEnded={finishAyah}
+        onEnded={handleEnded}
         onTimeUpdate={handleTimeUpdate}
       />
       {children({ activeAyah, isPlaying, selectedAyah, selectAyah, playSelectedAyah: startSelectedAyah })}

@@ -62,7 +62,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
 
   useEffect(() => {
     load();
-    const interval = setInterval(() => setNow(new Date()), 30000);
+    const interval = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(interval);
   }, [load]);
 

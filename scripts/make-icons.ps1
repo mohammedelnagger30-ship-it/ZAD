@@ -13,23 +13,26 @@ $outDir = Join-Path $root 'public\icons'
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
 # Palette (kept in sync with public\icon.svg).
-$BgTop     = [System.Drawing.Color]::FromArgb(255, 26, 122, 97)    # #1A7A61
-$BgMid     = [System.Drawing.Color]::FromArgb(255, 14, 71, 57)     # #0E4739
-$BgBottom  = [System.Drawing.Color]::FromArgb(255, 8, 31, 26)      # #081F1A
-$CoverTop  = [System.Drawing.Color]::FromArgb(255, 23, 113, 83)    # #177153
-$CoverMid  = [System.Drawing.Color]::FromArgb(255, 15, 83, 64)     # #0F5340
-$CoverBot  = [System.Drawing.Color]::FromArgb(255, 10, 58, 44)     # #0A3A2C
-$SpineTop  = [System.Drawing.Color]::FromArgb(255, 11, 64, 48)     # #0B4030
-$SpineBot  = [System.Drawing.Color]::FromArgb(255, 6, 37, 27)      # #06251B
-$GoldLight = [System.Drawing.Color]::FromArgb(255, 247, 231, 178)  # #F7E7B2
-$Gold      = [System.Drawing.Color]::FromArgb(255, 217, 183, 94)   # #D9B75E
-$GoldDark  = [System.Drawing.Color]::FromArgb(255, 184, 132, 42)   # #B8842A
-$GoldSoft  = [System.Drawing.Color]::FromArgb(255, 240, 214, 130)  # #F0D682
-$PagesTop  = [System.Drawing.Color]::FromArgb(255, 237, 227, 203)  # #EDE3CB
-$PagesBot  = [System.Drawing.Color]::FromArgb(255, 251, 246, 234)  # #FBF6EA
-$PageLine  = [System.Drawing.Color]::FromArgb(190, 207, 193, 160)  # #CFC1A0 @75%
-$Ink       = [System.Drawing.Color]::FromArgb(255, 10, 62, 47)     # #0A3E2F
-$Shadow    = [System.Drawing.Color]::FromArgb(255, 2, 16, 10)      # #02100A
+# "Sakinah" calm scheme: misty sage-teal field, soft cover, champagne ornament.
+# Low chroma + gentle contrast = serene; every accent still lands in the ranges
+# scripts\check-icons.ps1 classifies as green field / gold mark.
+$BgTop     = [System.Drawing.Color]::FromArgb(255, 62, 126, 110)   # #3E7E6E
+$BgMid     = [System.Drawing.Color]::FromArgb(255, 30, 79, 69)     # #1E4F45
+$BgBottom  = [System.Drawing.Color]::FromArgb(255, 13, 42, 37)     # #0D2A25
+$CoverTop  = [System.Drawing.Color]::FromArgb(255, 46, 111, 95)    # #2E6F5F
+$CoverMid  = [System.Drawing.Color]::FromArgb(255, 36, 90, 75)     # #245A4B
+$CoverBot  = [System.Drawing.Color]::FromArgb(255, 26, 69, 59)     # #1A453B
+$SpineTop  = [System.Drawing.Color]::FromArgb(255, 25, 66, 56)     # #194238
+$SpineBot  = [System.Drawing.Color]::FromArgb(255, 16, 49, 42)     # #10312A
+$GoldLight = [System.Drawing.Color]::FromArgb(255, 239, 228, 184)  # #EFE4B8
+$Gold      = [System.Drawing.Color]::FromArgb(255, 201, 174, 116)  # #C9AE74
+$GoldDark  = [System.Drawing.Color]::FromArgb(255, 158, 132, 80)   # #9E8450
+$GoldSoft  = [System.Drawing.Color]::FromArgb(255, 217, 200, 140)  # #D9C88C
+$PagesTop  = [System.Drawing.Color]::FromArgb(255, 233, 226, 210)  # #E9E2D2
+$PagesBot  = [System.Drawing.Color]::FromArgb(255, 246, 241, 229)  # #F6F1E5
+$PageLine  = [System.Drawing.Color]::FromArgb(190, 201, 191, 169)  # #C9BFA9 @75%
+$Ink       = [System.Drawing.Color]::FromArgb(255, 14, 51, 44)     # #0E332C
+$Shadow    = [System.Drawing.Color]::FromArgb(255, 5, 19, 15)      # #05130F
 
 function Add-RoundedRect {
     param(
@@ -101,15 +104,15 @@ function New-Mark {
     Add-RoundedRect -Path $bgPath -X 0 -Y 0 -W 512 -H 512 -R 112
     $g.FillPath((New-GradientBrush -X 0 -Y 0 -W 512 -H 512 -Colors @($BgTop, $BgMid, $BgBottom)), $bgPath)
 
-    # Sparkles.
-    $sparkle = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(217, 247, 231, 178))
+    # Sparkles (kept faint — they should whisper, not sparkle).
+    $sparkle = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(150, 239, 228, 184))
     foreach ($s in @(
-        @(78.0, 74.0, 8.0, 217),
-        @(436.0, 80.0, 6.0, 179),
-        @(76.0, 438.0, 6.5, 179),
-        @(438.0, 442.0, 8.0, 204)
+        @(78.0, 74.0, 8.0, 150),
+        @(436.0, 80.0, 6.0, 122),
+        @(76.0, 438.0, 6.5, 122),
+        @(438.0, 442.0, 8.0, 142)
     )) {
-        $sparkle.Color = [System.Drawing.Color]::FromArgb([int]$s[3], 247, 231, 178)
+        $sparkle.Color = [System.Drawing.Color]::FromArgb([int]$s[3], 239, 228, 184)
         $r = [float]$s[2]
         $g.FillEllipse($sparkle, [float]([double]$s[0] - $r), [float]([double]$s[1] - $r), [float](2 * $r), [float](2 * $r))
     }
@@ -118,16 +121,16 @@ function New-Mark {
     $shadowPath = New-Object System.Drawing.Drawing2D.GraphicsPath
     $shadowPath.AddEllipse([float]116, [float]414, [float]280, [float]32)
     $shadowBrush = New-Object System.Drawing.Drawing2D.PathGradientBrush($shadowPath)
-    $shadowBrush.CenterColor = [System.Drawing.Color]::FromArgb(150, 2, 16, 10)
+    $shadowBrush.CenterColor = [System.Drawing.Color]::FromArgb(112, 5, 19, 15)
     $edge = New-Object 'System.Drawing.Color[]' $shadowPath.PointCount
-    for ($i = 0; $i -lt $shadowPath.PointCount; $i++) { $edge[$i] = [System.Drawing.Color]::FromArgb(0, 2, 16, 10) }
+    for ($i = 0; $i -lt $shadowPath.PointCount; $i++) { $edge[$i] = [System.Drawing.Color]::FromArgb(0, 5, 19, 15) }
     $shadowBrush.SurroundColors = $edge
     $g.FillPath($shadowBrush, $shadowPath)
 
     # Cast shadow just behind the book (right/bottom rim).
     $castPath = New-Object System.Drawing.Drawing2D.GraphicsPath
     Add-RoundedRect -Path $castPath -X 134 -Y 112 -W 252 -H 312 -R 16
-    $g.FillPath((New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(95, 2, 16, 10))), $castPath)
+    $g.FillPath((New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(68, 5, 19, 15))), $castPath)
 
     # Page block: cream, peeking out on the fore-edge and the bottom.
     $pagesPath = New-Object System.Drawing.Drawing2D.GraphicsPath
@@ -171,7 +174,7 @@ function New-Mark {
 
     $innerPath = New-Object System.Drawing.Drawing2D.GraphicsPath
     Add-RoundedRect -Path $innerPath -X 191 -Y 145 -W 154 -H 214 -R 10
-    $g.DrawPath((New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(191, 217, 183, 94), [float]1.8)), $innerPath)
+    $g.DrawPath((New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(191, 201, 174, 116), [float]1.8)), $innerPath)
 
     # Corner ornaments.
     foreach ($c in @(@(180.0, 134.0), @(356.0, 134.0), @(180.0, 370.0), @(356.0, 370.0))) {
@@ -195,7 +198,7 @@ function New-Mark {
     # Central medallion: dark disc, gold rings, 8-point star.
     $g.FillEllipse((New-Object System.Drawing.SolidBrush($Ink)), [float]228, [float]212, [float]80, [float]80)
     $g.DrawEllipse((New-Object System.Drawing.Pen((New-GoldBrush -X 228 -Y 212 -W 80 -H 80), [float]5)), [float]228, [float]212, [float]80, [float]80)
-    $g.DrawEllipse((New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(204, 217, 183, 94), [float]1.8)), [float]238, [float]222, [float]60, [float]60)
+    $g.DrawEllipse((New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(204, 201, 174, 116), [float]1.8)), [float]238, [float]222, [float]60, [float]60)
 
     $starPath = New-Object System.Drawing.Drawing2D.GraphicsPath
     Add-RoundedRect -Path $starPath -X 250 -Y 234 -W 36 -H 36 -R 3
@@ -243,17 +246,17 @@ function Save-OgImage {
     $mark.Dispose()
 
     # TextRenderer (GDI/Uniscribe) shapes text correctly; Graphics.DrawString does not.
-    $white = [System.Drawing.Color]::FromArgb(255, 248, 250, 248)
-    $muted = [System.Drawing.Color]::FromArgb(220, 212, 175, 55)
+    $white = [System.Drawing.Color]::FromArgb(255, 242, 247, 244)
+    $muted = [System.Drawing.Color]::FromArgb(215, 215, 203, 178)
     $titleFont = New-Object System.Drawing.Font('Segoe UI', 92, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
     $subFont   = New-Object System.Drawing.Font('Segoe UI', 34, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
 
     [System.Windows.Forms.TextRenderer]::DrawText(
-        $g, 'Nour ZAD',
+        $g, 'Sakinah',
         $titleFont, (New-Object System.Drawing.Point(494, 196)), $white,
         [System.Windows.Forms.TextFormatFlags]::NoPadding)
 
-    $rulePen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(255, 212, 175, 55), [float]5)
+    $rulePen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(255, 201, 174, 116), [float]5)
     $g.DrawLine($rulePen, 496, 330, 920, 330)
 
     [System.Windows.Forms.TextRenderer]::DrawText(

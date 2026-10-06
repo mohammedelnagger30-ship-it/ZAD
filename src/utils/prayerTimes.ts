@@ -177,13 +177,31 @@ export function formatTime12h(
  */
 export function getTimeUntil(date: Date, now: Date = new Date()): string {
   const diff = date.getTime() - now.getTime();
-  if (diff <= 0) return 'انتهى';
-  const hours = Math.floor(diff / (1000 * 60 * 60));
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  if (diff <= 0) return 'حَانَ الآنْ';
+
+  const totalSeconds = Math.ceil(diff / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+
   if (hours > 0) {
-    return `بعد ${hours} ساعة و ${minutes} دقيقة`;
+    const hourText = hours === 1 ? 'ساعة' : hours === 2 ? 'ساعتين' : `${hours} ساعات`;
+    if (minutes === 0) {
+      return `بعد ${hourText}`;
+    }
+    const minText = minutes === 1 ? 'دقيقة' : minutes === 2 ? 'دقيقتين' : `${minutes} دقيقة`;
+    return `بعد ${hourText} و ${minText}`;
   }
-  return `بعد ${minutes} دقيقة`;
+
+  if (minutes === 0) {
+    return 'خلال أقل من دقيقة';
+  }
+  if (minutes === 1) {
+    return 'بعد دقيقة واحدة';
+  }
+  if (minutes === 2) {
+    return 'بعد دقيقتين';
+  }
+  return `بعد ${minutes} دقائق`;
 }
 
 export const CALC_METHODS = [

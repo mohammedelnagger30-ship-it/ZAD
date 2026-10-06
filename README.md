@@ -1,4 +1,4 @@
-# Nour ZAD — Quran & Daily Worship App
+# Sakinah — Quran & Daily Worship App
 
 An offline-first Islamic app for Quran memorization, daily worship tracking, prayer times, and hadith library. The entire UI is in Arabic with full RTL support.
 
@@ -161,7 +161,7 @@ npm run typecheck  # Type checking
 The app requests notification permissions during onboarding. For reliable scheduled reminders:
 
 - **Exact alarm permission**: Android 12+ requires `SCHEDULE_EXACT_ALARM` permission (already in Capacitor Local Notifications plugin)
-- **Battery optimization**: Users should disable battery optimization for the app in Settings → Apps → Nour ZAD → Battery → Unrestricted
+- **Battery optimization**: Users should disable battery optimization for the app in Settings → Apps → Sakinah → Battery → Unrestricted
 
 ### Building for iOS
 

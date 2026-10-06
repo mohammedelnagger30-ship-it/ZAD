@@ -1,43 +1,43 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#1A7A61"/>
-      <stop offset="0.5" stop-color="#0E4739"/>
-      <stop offset="1" stop-color="#081F1A"/>
+      <stop offset="0" stop-color="#3E7E6E"/>
+      <stop offset="0.5" stop-color="#1E4F45"/>
+      <stop offset="1" stop-color="#0D2A25"/>
     </linearGradient>
     <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#F7E7B2"/>
-      <stop offset="0.5" stop-color="#D9B75E"/>
-      <stop offset="1" stop-color="#B8842A"/>
+      <stop offset="0" stop-color="#EFE4B8"/>
+      <stop offset="0.5" stop-color="#C9AE74"/>
+      <stop offset="1" stop-color="#9E8450"/>
     </linearGradient>
     <!-- Same gold ramp, pinned to the cover box so the headbands sit on the
          same diagonal the generator uses. -->
     <linearGradient id="goldBand" gradientUnits="userSpaceOnUse" x1="130" y1="102" x2="370" y2="402">
-      <stop offset="0" stop-color="#F7E7B2"/>
-      <stop offset="0.5" stop-color="#D9B75E"/>
-      <stop offset="1" stop-color="#B8842A"/>
+      <stop offset="0" stop-color="#EFE4B8"/>
+      <stop offset="0.5" stop-color="#C9AE74"/>
+      <stop offset="1" stop-color="#9E8450"/>
     </linearGradient>
     <linearGradient id="goldRule" gradientUnits="userSpaceOnUse" x1="214" y1="179" x2="322" y2="193">
-      <stop offset="0" stop-color="#F7E7B2"/>
-      <stop offset="0.5" stop-color="#D9B75E"/>
-      <stop offset="1" stop-color="#B8842A"/>
+      <stop offset="0" stop-color="#EFE4B8"/>
+      <stop offset="0.5" stop-color="#C9AE74"/>
+      <stop offset="1" stop-color="#9E8450"/>
     </linearGradient>
     <linearGradient id="pages" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#EDE3CB"/>
-      <stop offset="1" stop-color="#FBF6EA"/>
+      <stop offset="0" stop-color="#E9E2D2"/>
+      <stop offset="1" stop-color="#F6F1E5"/>
     </linearGradient>
     <linearGradient id="cover" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#177153"/>
-      <stop offset="0.5" stop-color="#0F5340"/>
-      <stop offset="1" stop-color="#0A3A2C"/>
+      <stop offset="0" stop-color="#2E6F5F"/>
+      <stop offset="0.5" stop-color="#245A4B"/>
+      <stop offset="1" stop-color="#1A453B"/>
     </linearGradient>
     <linearGradient id="spine" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#0B4030"/>
-      <stop offset="1" stop-color="#06251B"/>
+      <stop offset="0" stop-color="#194238"/>
+      <stop offset="1" stop-color="#10312A"/>
     </linearGradient>
     <radialGradient id="ground" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#02100A" stop-opacity="0.59"/>
-      <stop offset="1" stop-color="#02100A" stop-opacity="0"/>
+      <stop offset="0" stop-color="#05130F" stop-opacity="0.44"/>
+      <stop offset="1" stop-color="#05130F" stop-opacity="0"/>
     </radialGradient>
   </defs>
 
@@ -45,22 +45,22 @@
   <rect width="512" height="512" rx="112" fill="url(#bg)"/>
 
   <!-- Sparkles -->
-  <g fill="#F7E7B2">
-    <circle cx="78" cy="74" r="8" opacity="0.85"/>
-    <circle cx="436" cy="80" r="6" opacity="0.7"/>
-    <circle cx="76" cy="438" r="6.5" opacity="0.7"/>
-    <circle cx="438" cy="442" r="8" opacity="0.8"/>
+  <g fill="#EFE4B8">
+    <circle cx="78" cy="74" r="8" opacity="0.59"/>
+    <circle cx="436" cy="80" r="6" opacity="0.48"/>
+    <circle cx="76" cy="438" r="6.5" opacity="0.48"/>
+    <circle cx="438" cy="442" r="8" opacity="0.56"/>
   </g>
 
   <!-- Soft ground shadow -->
   <ellipse cx="256" cy="430" rx="140" ry="16" fill="url(#ground)"/>
 
   <!-- Cast shadow just behind the book (right/bottom rim) -->
-  <rect x="134" y="112" width="252" height="312" rx="16" fill="#02100A" opacity="0.37"/>
+  <rect x="134" y="112" width="252" height="312" rx="16" fill="#05130F" opacity="0.27"/>
 
   <!-- Page block: cream, peeking out on the fore-edge and the bottom -->
   <rect x="142" y="114" width="240" height="300" rx="12" fill="url(#pages)"/>
-  <g stroke="#CFC1A0" stroke-opacity="0.745" stroke-width="1.4" fill="none">
+  <g stroke="#C9BFA9" stroke-opacity="0.745" stroke-width="1.4" fill="none">
     <path d="M375 122V406"/>
     <path d="M379 122V406"/>
     <path d="M150 407H374"/>
@@ -79,7 +79,7 @@
   <rect x="180" y="134" width="176" height="236" rx="14" fill="none"
         stroke="url(#gold)" stroke-width="5"/>
   <rect x="191" y="145" width="154" height="214" rx="10" fill="none"
-        stroke="#D9B75E" stroke-opacity="0.75" stroke-width="1.8"/>
+        stroke="#C9AE74" stroke-opacity="0.75" stroke-width="1.8"/>
 
   <!-- Corner ornaments -->
   <g fill="url(#gold)">
@@ -102,11 +102,11 @@
   </g>
 
   <!-- Central medallion: dark disc, gold rings, eight-point star -->
-  <circle cx="268" cy="252" r="40" fill="#0A3E2F"/>
+  <circle cx="268" cy="252" r="40" fill="#0E332C"/>
   <circle cx="268" cy="252" r="40" fill="none" stroke="url(#gold)" stroke-width="5"/>
-  <circle cx="268" cy="252" r="30" fill="none" stroke="#D9B75E" stroke-opacity="0.8" stroke-width="1.8"/>
+  <circle cx="268" cy="252" r="30" fill="none" stroke="#C9AE74" stroke-opacity="0.8" stroke-width="1.8"/>
   <rect x="250" y="234" width="36" height="36" rx="3" fill="url(#gold)"/>
   <rect x="250" y="234" width="36" height="36" rx="3" fill="url(#gold)" transform="rotate(45 268 252)"/>
-  <circle cx="268" cy="252" r="11" fill="#0A3E2F"/>
-  <circle cx="268" cy="252" r="5.5" fill="#F0D682"/>
+  <circle cx="268" cy="252" r="11" fill="#0E332C"/>
+  <circle cx="268" cy="252" r="5.5" fill="#D9C88C"/>
 </svg>

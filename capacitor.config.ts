@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.hifzi.app',
-  appName: 'Nour ZAD',
+  appName: 'Sakinah',
   webDir: 'dist',
   backgroundColor: '#0f1a14',
   plugins: {
