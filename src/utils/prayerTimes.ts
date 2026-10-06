@@ -182,9 +182,14 @@ export function getTimeUntil(date: Date, now: Date = new Date()): string {
   const totalSeconds = Math.ceil(diff / 1000);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
 
-  if (hours > 0) {
+  // If more than 1 hour, show hours
+  if (hours >= 1) {
     const hourText = hours === 1 ? 'ساعة' : hours === 2 ? 'ساعتين' : `${hours} ساعات`;
+    if (minutes === 0 && seconds === 0) {
+      return `بعد ${hourText}`;
+    }
     if (minutes === 0) {
       return `بعد ${hourText}`;
     }
@@ -192,16 +197,32 @@ export function getTimeUntil(date: Date, now: Date = new Date()): string {
     return `بعد ${hourText} و ${minText}`;
   }
 
-  if (minutes === 0) {
+  // Less than 1 hour - show minutes
+  if (minutes >= 1) {
+    if (minutes === 1) {
+      return `بعد دقيقة واحدة`;
+    }
+    if (minutes === 2) {
+      return `بعد دقيقتين`;
+    }
+    if (minutes <= 10) {
+      return `بعد ${minutes} دقائق`;
+    }
+    // For 11-59 minutes, just show the number
+    return `بعد ${minutes} دقيقة`;
+  }
+
+  // Less than 1 minute - show seconds
+  if (seconds === 0) {
     return 'خلال أقل من دقيقة';
   }
-  if (minutes === 1) {
-    return 'بعد دقيقة واحدة';
+  if (seconds === 1) {
+    return 'خلال ثانية واحدة';
   }
-  if (minutes === 2) {
-    return 'بعد دقيقتين';
+  if (seconds <= 10) {
+    return `خلال ${seconds} ثوانٍ`;
   }
-  return `بعد ${minutes} دقائق`;
+  return `خلال ${seconds} ثانية`;
 }
 
 export const CALC_METHODS = [

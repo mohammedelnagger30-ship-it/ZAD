@@ -79,7 +79,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
   // Calculate prayer times
   const prayerTimeZone = getPrayerTimeZone(settings.timeZone, settings.cityName);
   const prayerResult = settings.latitude != null && settings.longitude != null
-    ? calculatePrayerTimes(settings.latitude, settings.longitude, today, settings.calcMethod, settings.asrMadhab, prayerTimeZone)
+    ? calculatePrayerTimes(settings.latitude, settings.longitude, now, settings.calcMethod, settings.asrMadhab, prayerTimeZone)
     : null;
 
   const nextPrayer = settings.latitude != null && settings.longitude != null

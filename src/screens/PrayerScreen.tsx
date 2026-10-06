@@ -122,7 +122,7 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
 
   const timeZone = getPrayerTimeZone(settings.timeZone, settings.cityName);
   const prayerResult = settings.latitude != null && settings.longitude != null
-    ? calculatePrayerTimes(settings.latitude, settings.longitude, today, settings.calcMethod, settings.asrMadhab, timeZone)
+    ? calculatePrayerTimes(settings.latitude, settings.longitude, now, settings.calcMethod, settings.asrMadhab, timeZone)
     : null;
 
   const nextPrayer = settings.latitude != null && settings.longitude != null
