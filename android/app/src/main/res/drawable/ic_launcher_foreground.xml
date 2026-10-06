@@ -3,16 +3,121 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
+    <!--
+      Closed Mushaf mark, scaled from public/icon.svg (512px grid -> 108dp grid
+      at 0.166). Everything stays inside a 66dp-diameter circle centred at
+      (54,54) — worst point is ~32.7dp from centre — so no launcher mask
+      (circle, squircle, rounded square) can ever clip the book.
+    -->
+
+    <!-- Page block (cream fore-edge + bottom edge) -->
     <path
-        android:pathData="M29,30 L71,30 L71,38 L43,62 L71,62 L71,70 L29,70 L29,62 L57,38 L29,38 Z"
-        android:fillColor="#FFF9EA" />
+        android:fillColor="#F4EDD9"
+        android:pathData="M37.068,30.428 H72.924 a1.992,1.992 0 0 1 1.992,1.992 V78.236 a1.992,1.992 0 0 1 -1.992,1.992 H37.068 a1.992,1.992 0 0 1 -1.992,-1.992 V32.42 a1.992,1.992 0 0 1 1.992,-1.992 Z" />
+
+    <!-- Cover -->
+    <path
+        android:fillColor="#125B45"
+        android:pathData="M35.74,28.436 H70.268 a2.656,2.656 0 0 1 2.656,2.656 V75.58 a2.656,2.656 0 0 1 -2.656,2.656 H35.74 a2.656,2.656 0 0 1 -2.656,-2.656 V31.092 a2.656,2.656 0 0 1 2.656,-2.656 Z" />
+
+    <!-- Spine -->
+    <path
+        android:fillColor="#072A20"
+        android:pathData="M35.74,28.436 H39.06 V78.236 H35.74 a2.656,2.656 0 0 1 -2.656,-2.656 V31.092 a2.656,2.656 0 0 1 2.656,-2.656 Z" />
+
+    <!-- Gold spine headbands -->
+    <path
+        android:fillColor="#D9B75E"
+        android:pathData="M33.084,33.748 H39.06 V35.242 H33.084 Z" />
+    <path
+        android:fillColor="#D9B75E"
+        android:pathData="M33.084,71.43 H39.06 V72.924 H33.084 Z" />
+
+    <!-- Gold double frame -->
     <path
         android:fillColor="#00000000"
-        android:pathData="M57,38 L43,62"
-        android:strokeColor="#D4AF57"
-        android:strokeWidth="4.8"
+        android:pathData="M43.708,33.748 H68.276 a2.324,2.324 0 0 1 2.324,2.324 V70.6 a2.324,2.324 0 0 1 -2.324,2.324 H43.708 a2.324,2.324 0 0 1 -2.324,-2.324 V36.072 a2.324,2.324 0 0 1 2.324,-2.324 Z"
+        android:strokeColor="#D4AF37"
+        android:strokeWidth="0.9" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M44.87,35.574 H67.114 a1.66,1.66 0 0 1 1.66,1.66 V69.438 a1.66,1.66 0 0 1 -1.66,1.66 H44.87 a1.66,1.66 0 0 1 -1.66,-1.66 V37.234 a1.66,1.66 0 0 1 1.66,-1.66 Z"
+        android:strokeColor="#80D4AF37"
+        android:strokeWidth="0.45" />
+
+    <!-- Corner ornaments -->
+    <path
+        android:fillColor="#D9B75E"
+        android:pathData="M41.384,32.254 L42.878,33.748 L41.384,35.242 L39.89,33.748 Z" />
+    <path
+        android:fillColor="#D9B75E"
+        android:pathData="M70.6,32.254 L72.094,33.748 L70.6,35.242 L69.106,33.748 Z" />
+    <path
+        android:fillColor="#D9B75E"
+        android:pathData="M41.384,71.43 L42.878,72.924 L41.384,74.418 L39.89,72.924 Z" />
+    <path
+        android:fillColor="#D9B75E"
+        android:pathData="M70.6,71.43 L72.094,72.924 L70.6,74.418 L69.106,72.924 Z" />
+
+    <!-- Flourish rules -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M47.028,42.38 H53.004"
+        android:strokeColor="#D9B75E"
+        android:strokeWidth="0.55"
         android:strokeLineCap="round" />
     <path
-        android:pathData="M75,22 L77,27 L82,29 L77,31 L75,36 L73,31 L68,29 L73,27 Z"
-        android:fillColor="#F0D682" />
+        android:fillColor="#00000000"
+        android:pathData="M58.98,42.38 H64.956"
+        android:strokeColor="#D9B75E"
+        android:strokeWidth="0.55"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M47.028,64.292 H53.004"
+        android:strokeColor="#D9B75E"
+        android:strokeWidth="0.55"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M58.98,64.292 H64.956"
+        android:strokeColor="#D9B75E"
+        android:strokeWidth="0.55"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#D9B75E"
+        android:pathData="M55.992,41.218 L57.152,42.38 L55.992,43.542 L54.828,42.38 Z" />
+    <path
+        android:fillColor="#D9B75E"
+        android:pathData="M55.992,63.13 L57.152,64.292 L55.992,65.454 L54.828,64.292 Z" />
+
+    <!-- Central medallion -->
+    <path
+        android:fillColor="#0A3E2F"
+        android:pathData="M49.352,53.336 a6.64,6.64 0 1 0 13.28,0 a6.64,6.64 0 1 0 -13.28,0 Z" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M49.352,53.336 a6.64,6.64 0 1 0 13.28,0 a6.64,6.64 0 1 0 -13.28,0 Z"
+        android:strokeColor="#D4AF37"
+        android:strokeWidth="0.85" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M51.012,53.336 a4.98,4.98 0 1 0 9.96,0 a4.98,4.98 0 1 0 -9.96,0 Z"
+        android:strokeColor="#80D9B75E"
+        android:strokeWidth="0.45" />
+
+    <!-- Eight-point star -->
+    <path
+        android:fillColor="#D9B75E"
+        android:pathData="M53.004,50.348 H58.98 V56.324 H53.004 Z" />
+    <path
+        android:fillColor="#D9B75E"
+        android:pathData="M55.992,49.11 L60.218,53.336 L55.992,57.562 L51.766,53.336 Z" />
+    <path
+        android:fillColor="#0A3E2F"
+        android:pathData="M54.166,53.336 a1.826,1.826 0 1 0 3.652,0 a1.826,1.826 0 1 0 -3.652,0 Z" />
+    <path
+        android:fillColor="#F0D682"
+        android:pathData="M55.079,53.336 a0.913,0.913 0 1 0 1.826,0 a0.913,0.913 0 1 0 -1.826,0 Z" />
 </vector>

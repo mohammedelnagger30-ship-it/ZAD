@@ -59,7 +59,7 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
         <div className="flex items-start gap-3">
           <Info size={20} className="text-primary-500 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-semibold text-primary-700 dark:text-primary-200 mb-1">عن نور زاد</p>
+            <p className="text-sm font-semibold text-primary-700 dark:text-primary-200 mb-1">عن Nour ZAD</p>
             <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
               تطبيق حفظ القرآن الكريم وتتبع العبادات اليومية. تعمل الميزات الأساسية بدون إنترنت، ويمكن تنزيل التفاسير وكتب الحديث لاستخدامها لاحقاً.
             </p>

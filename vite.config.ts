@@ -17,9 +17,9 @@ export default defineConfig(({ mode }) => {
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg', 'icons/*.png'],
       manifest: {
-        name: 'نور زاد | Nour ZAD',
-        short_name: 'نور زاد',
-        description: 'نور زاد — رفيق القرآن والعبادة اليومية',
+        name: 'Nour ZAD',
+        short_name: 'Nour ZAD',
+        description: 'Nour ZAD — رفيق القرآن والعبادة اليومية',
         dir: 'rtl',
         lang: 'ar',
         theme_color: '#1f734e',

@@ -82,7 +82,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-700 text-gold-300">
           <BookOpen size={28} />
         </div>
-        <h1 className="text-center text-2xl font-bold text-primary-900 dark:text-primary-50">نور زاد | Nour ZAD</h1>
+        <h1 className="text-center text-2xl font-bold text-primary-900 dark:text-primary-50">Nour ZAD</h1>
         <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-300">
           سجّل الدخول لمزامنة بياناتك بين أجهزتك بأمان.
         </p>

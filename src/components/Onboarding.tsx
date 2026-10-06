@@ -44,7 +44,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     // Welcome
     {
       icon: <Heart size={64} className="text-gold-500" />,
-      title: 'مرحباً بك في نور زاد',
+      title: 'مرحباً بك في Nour ZAD',
       description: 'تطبيقك الشامل لحفظ القرآن الكريم وتتبع العبادات اليومية. يعمل بالكامل بدون إنترنت.',
       action: () => setStep(1),
       actionLabel: 'ابدأ',

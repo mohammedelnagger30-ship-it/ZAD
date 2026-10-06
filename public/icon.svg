@@ -10,30 +10,103 @@
       <stop offset="0.5" stop-color="#D9B75E"/>
       <stop offset="1" stop-color="#B8842A"/>
     </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#04150F" flood-opacity="0.35"/>
-    </filter>
+    <!-- Same gold ramp, pinned to the cover box so the headbands sit on the
+         same diagonal the generator uses. -->
+    <linearGradient id="goldBand" gradientUnits="userSpaceOnUse" x1="130" y1="102" x2="370" y2="402">
+      <stop offset="0" stop-color="#F7E7B2"/>
+      <stop offset="0.5" stop-color="#D9B75E"/>
+      <stop offset="1" stop-color="#B8842A"/>
+    </linearGradient>
+    <linearGradient id="goldRule" gradientUnits="userSpaceOnUse" x1="214" y1="179" x2="322" y2="193">
+      <stop offset="0" stop-color="#F7E7B2"/>
+      <stop offset="0.5" stop-color="#D9B75E"/>
+      <stop offset="1" stop-color="#B8842A"/>
+    </linearGradient>
+    <linearGradient id="pages" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#EDE3CB"/>
+      <stop offset="1" stop-color="#FBF6EA"/>
+    </linearGradient>
+    <linearGradient id="cover" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#177153"/>
+      <stop offset="0.5" stop-color="#0F5340"/>
+      <stop offset="1" stop-color="#0A3A2C"/>
+    </linearGradient>
+    <linearGradient id="spine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0B4030"/>
+      <stop offset="1" stop-color="#06251B"/>
+    </linearGradient>
+    <radialGradient id="ground" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#02100A" stop-opacity="0.59"/>
+      <stop offset="1" stop-color="#02100A" stop-opacity="0"/>
+    </radialGradient>
   </defs>
 
-  <rect width="512" height="512" rx="120" fill="url(#bg)"/>
-  <circle cx="392" cy="148" r="54" fill="none" stroke="#F5D77A" stroke-opacity="0.7" stroke-width="8"/>
-  <path d="M394 86a58 58 0 1 1 0 116a44 44 0 1 0 0-116z" fill="#F7E7B2" fill-opacity="0.9"/>
-  <path d="M420 98a42 42 0 0 1-58 58a30 30 0 1 0 58-58z" fill="#1A7A61"/>
+  <!-- Rounded deep-green field -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
 
-  <g filter="url(#shadow)">
-    <path d="M128 336c0-29 24-53 53-53h74v170h-74c-29 0-53-24-53-53V336z" fill="#F6F1E5"/>
-    <path d="M384 336c0-29-24-53-53-53h-74v170h74c29 0 53-24 53-53V336z" fill="#FDF7EE"/>
-    <path d="M256 286v170" stroke="url(#gold)" stroke-width="14" stroke-linecap="round"/>
-    <path d="M170 242c24-18 47-29 86-30v50c-34 0-62 12-86 35V242z" fill="#E8D7A0" opacity="0.8"/>
-    <path d="M342 242c-24-18-47-29-86-30v50c34 0 62 12 86 35V242z" fill="#E8D7A0" opacity="0.8"/>
-    <path d="M188 176c18-14 38-23 68-28l0 40c-19 2-35 10-52 23l-16-35z" fill="#F7E7B2" opacity="0.95"/>
-    <path d="M324 176c-18-14-38-23-68-28l0 40c19 2 35 10 52 23l16-35z" fill="#F7E7B2" opacity="0.95"/>
-    <path d="M256 168l24 52-24 54-24-54 24-52z" fill="#D9B75E"/>
+  <!-- Sparkles -->
+  <g fill="#F7E7B2">
+    <circle cx="78" cy="74" r="8" opacity="0.85"/>
+    <circle cx="436" cy="80" r="6" opacity="0.7"/>
+    <circle cx="76" cy="438" r="6.5" opacity="0.7"/>
+    <circle cx="438" cy="442" r="8" opacity="0.8"/>
   </g>
 
-  <path d="M92 390c55-42 88-59 164-64v32c-63 4-102 22-156 58l-8-26z" fill="#E7B14B" opacity="0.18"/>
-  <path d="M420 390c-55-42-88-59-164-64v32c63 4 102 22 156 58l8-26z" fill="#E7B14B" opacity="0.18"/>
-  <circle cx="158" cy="148" r="8" fill="#F7E7B2"/>
-  <circle cx="360" cy="112" r="6" fill="#F7E7B2"/>
-  <circle cx="430" cy="210" r="7" fill="#F7E7B2"/>
+  <!-- Soft ground shadow -->
+  <ellipse cx="256" cy="430" rx="140" ry="16" fill="url(#ground)"/>
+
+  <!-- Cast shadow just behind the book (right/bottom rim) -->
+  <rect x="134" y="112" width="252" height="312" rx="16" fill="#02100A" opacity="0.37"/>
+
+  <!-- Page block: cream, peeking out on the fore-edge and the bottom -->
+  <rect x="142" y="114" width="240" height="300" rx="12" fill="url(#pages)"/>
+  <g stroke="#CFC1A0" stroke-opacity="0.745" stroke-width="1.4" fill="none">
+    <path d="M375 122V406"/>
+    <path d="M379 122V406"/>
+    <path d="M150 407H374"/>
+    <path d="M150 411H374"/>
+  </g>
+
+  <!-- Cover -->
+  <rect x="130" y="102" width="240" height="300" rx="16" fill="url(#cover)"/>
+
+  <!-- Spine (rounded on the left only) + gold headbands -->
+  <path d="M146 102h20v300h-20a16 16 0 0 1-16-16v-268a16 16 0 0 1 16-16z" fill="url(#spine)"/>
+  <rect x="130" y="134" width="36" height="9" fill="url(#goldBand)"/>
+  <rect x="130" y="361" width="36" height="9" fill="url(#goldBand)"/>
+
+  <!-- Gold double frame -->
+  <rect x="180" y="134" width="176" height="236" rx="14" fill="none"
+        stroke="url(#gold)" stroke-width="5"/>
+  <rect x="191" y="145" width="154" height="214" rx="10" fill="none"
+        stroke="#D9B75E" stroke-opacity="0.75" stroke-width="1.8"/>
+
+  <!-- Corner ornaments -->
+  <g fill="url(#gold)">
+    <path d="M180 125l9 9-9 9-9-9z"/>
+    <path d="M356 125l9 9-9 9-9-9z"/>
+    <path d="M180 361l9 9-9 9-9-9z"/>
+    <path d="M356 361l9 9-9 9-9-9z"/>
+  </g>
+
+  <!-- Flourish rules + lozenges -->
+  <g fill="none" stroke="url(#goldRule)" stroke-width="2.6" stroke-linecap="round">
+    <path d="M214 186H250"/>
+    <path d="M286 186H322"/>
+    <path d="M214 318H250"/>
+    <path d="M286 318H322"/>
+  </g>
+  <g fill="url(#gold)">
+    <path d="M268 179l7 7-7 7-7-7z"/>
+    <path d="M268 311l7 7-7 7-7-7z"/>
+  </g>
+
+  <!-- Central medallion: dark disc, gold rings, eight-point star -->
+  <circle cx="268" cy="252" r="40" fill="#0A3E2F"/>
+  <circle cx="268" cy="252" r="40" fill="none" stroke="url(#gold)" stroke-width="5"/>
+  <circle cx="268" cy="252" r="30" fill="none" stroke="#D9B75E" stroke-opacity="0.8" stroke-width="1.8"/>
+  <rect x="250" y="234" width="36" height="36" rx="3" fill="url(#gold)"/>
+  <rect x="250" y="234" width="36" height="36" rx="3" fill="url(#gold)" transform="rotate(45 268 252)"/>
+  <circle cx="268" cy="252" r="11" fill="#0A3E2F"/>
+  <circle cx="268" cy="252" r="5.5" fill="#F0D682"/>
 </svg>

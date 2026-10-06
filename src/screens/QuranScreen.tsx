@@ -350,7 +350,7 @@ export function QuranScreen({ settings }: QuranScreenProps) {
             <span className="text-sm">رجوع</span>
           </button>
           <div className="text-center">
-            <h2 className="text-lg font-bold text-primary-800 dark:text-primary-100">مصحف نور زاد</h2>
+            <h2 className="text-lg font-bold text-primary-800 dark:text-primary-100">مصحف Nour ZAD</h2>
             {isHifz && <p className="text-xs text-gold-600 dark:text-gold-400">وضع الحفظ</p>}
           </div>
           <div className="flex items-center gap-1">

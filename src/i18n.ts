@@ -13,7 +13,7 @@ export interface TranslationStrings {
 }
 
 export const ar = {
-  app_name: 'نور زاد',
+  app_name: 'Nour ZAD',
   home: 'الرئيسية',
   quran: 'القرآن',
   tasks: 'المهام',

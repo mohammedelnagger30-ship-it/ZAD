@@ -1,5 +1,10 @@
 # Regenerates the PWA icon set from code so the binary assets are reproducible.
 #   powershell -ExecutionPolicy Bypass -File scripts\make-icons.ps1
+#
+# The mark is a closed Mushaf: dark-green cover, gold double frame, central
+# medallion, spine bands and cream page edges. Geometry lives in a 512x512
+# coordinate space and mirrors public\icon.svg exactly, so the SVG favicon and
+# every generated PNG stay pixel-comparable.
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 
@@ -7,13 +12,76 @@ $root = Split-Path -Parent $PSScriptRoot
 $outDir = Join-Path $root 'public\icons'
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
-$BgTop    = [System.Drawing.Color]::FromArgb(255, 23, 100, 71)  # #176447
-$BgBottom = [System.Drawing.Color]::FromArgb(255, 11, 36, 26)   # #0b241a
-$Gold     = [System.Drawing.Color]::FromArgb(255, 212, 175, 55) # #d4af37
-$GoldSoft = [System.Drawing.Color]::FromArgb(255, 240, 214, 130)
+# Palette (kept in sync with public\icon.svg).
+$BgTop     = [System.Drawing.Color]::FromArgb(255, 26, 122, 97)    # #1A7A61
+$BgMid     = [System.Drawing.Color]::FromArgb(255, 14, 71, 57)     # #0E4739
+$BgBottom  = [System.Drawing.Color]::FromArgb(255, 8, 31, 26)      # #081F1A
+$CoverTop  = [System.Drawing.Color]::FromArgb(255, 23, 113, 83)    # #177153
+$CoverMid  = [System.Drawing.Color]::FromArgb(255, 15, 83, 64)     # #0F5340
+$CoverBot  = [System.Drawing.Color]::FromArgb(255, 10, 58, 44)     # #0A3A2C
+$SpineTop  = [System.Drawing.Color]::FromArgb(255, 11, 64, 48)     # #0B4030
+$SpineBot  = [System.Drawing.Color]::FromArgb(255, 6, 37, 27)      # #06251B
+$GoldLight = [System.Drawing.Color]::FromArgb(255, 247, 231, 178)  # #F7E7B2
+$Gold      = [System.Drawing.Color]::FromArgb(255, 217, 183, 94)   # #D9B75E
+$GoldDark  = [System.Drawing.Color]::FromArgb(255, 184, 132, 42)   # #B8842A
+$GoldSoft  = [System.Drawing.Color]::FromArgb(255, 240, 214, 130)  # #F0D682
+$PagesTop  = [System.Drawing.Color]::FromArgb(255, 237, 227, 203)  # #EDE3CB
+$PagesBot  = [System.Drawing.Color]::FromArgb(255, 251, 246, 234)  # #FBF6EA
+$PageLine  = [System.Drawing.Color]::FromArgb(190, 207, 193, 160)  # #CFC1A0 @75%
+$Ink       = [System.Drawing.Color]::FromArgb(255, 10, 62, 47)     # #0A3E2F
+$Shadow    = [System.Drawing.Color]::FromArgb(255, 2, 16, 10)      # #02100A
 
-# Draws a refined Quranic app mark: open pages + crescent + light, suitable for
-# a professional Islamic learning and worship app.
+function Add-RoundedRect {
+    param(
+        [System.Drawing.Drawing2D.GraphicsPath]$Path,
+        [double]$X, [double]$Y, [double]$W, [double]$H, [double]$R
+    )
+    $r = [Math]::Min($R, [Math]::Min($W, $H) / 2)
+    $d = [float]($r * 2)
+    $Path.AddArc([float]$X, [float]$Y, $d, $d, 180, 90)
+    $Path.AddArc([float]($X + $W - $d), [float]$Y, $d, $d, 270, 90)
+    $Path.AddArc([float]($X + $W - $d), [float]($Y + $H - $d), $d, $d, 0, 90)
+    $Path.AddArc([float]$X, [float]($Y + $H - $d), $d, $d, 90, 90)
+    $Path.CloseFigure()
+}
+
+function Add-Diamond {
+    param(
+        [System.Drawing.Drawing2D.GraphicsPath]$Path,
+        [double]$Cx, [double]$Cy, [double]$Half
+    )
+    $Path.StartFigure()
+    $Path.AddLine([float]$Cx, [float]($Cy - $Half), [float]($Cx + $Half), [float]$Cy)
+    $Path.AddLine([float]($Cx + $Half), [float]$Cy, [float]$Cx, [float]($Cy + $Half))
+    $Path.AddLine([float]$Cx, [float]($Cy + $Half), [float]($Cx - $Half), [float]$Cy)
+    $Path.CloseFigure()
+}
+
+function New-GradientBrush {
+    param(
+        [double]$X, [double]$Y, [double]$W, [double]$H,
+        [System.Drawing.Color[]]$Colors,
+        [System.Drawing.Drawing2D.LinearGradientMode]$Mode = [System.Drawing.Drawing2D.LinearGradientMode]::ForwardDiagonal
+    )
+    $rect = New-Object System.Drawing.RectangleF([float]$X, [float]$Y, [float]$W, [float]$H)
+    $brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush($rect, $Colors[0], $Colors[$Colors.Count - 1], $Mode)
+    if ($Colors.Count -gt 2) {
+        $blend = New-Object System.Drawing.Drawing2D.ColorBlend($Colors.Count)
+        $blend.Colors = $Colors
+        $positions = New-Object 'System.Single[]' $Colors.Count
+        for ($i = 0; $i -lt $Colors.Count; $i++) { $positions[$i] = [float]($i / ($Colors.Count - 1)) }
+        $blend.Positions = $positions
+        $brush.InterpolationColors = $blend
+    }
+    return $brush
+}
+
+function New-GoldBrush {
+    param([double]$X, [double]$Y, [double]$W, [double]$H)
+    return New-GradientBrush -X $X -Y $Y -W $W -H $H -Colors @($GoldLight, $Gold, $GoldDark)
+}
+
+# Draws the Mushaf mark in a 512x512 space, scaled to $Size.
 function New-Mark {
     param([int]$Size, [double]$Scale = 1.0)
 
@@ -22,81 +90,127 @@ function New-Mark {
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.SmoothingMode     = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $g.PixelOffsetMode   = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
     $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
 
-    $rect = New-Object System.Drawing.RectangleF(0, 0, $Size, $Size)
-    $grad = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
-        $rect, $BgTop, $BgBottom, [System.Drawing.Drawing2D.LinearGradientMode]::Vertical)
-    $g.FillRectangle($grad, $rect)
+    $k = ($Size / 512.0) * $Scale
+    $g.ScaleTransform([float]$k, [float]$k)
 
-    $w = $Size * $Scale
-    $off = ($Size - $w) / 2
-    $g.TranslateTransform([float]$off, [float]$off)
-    $g.ScaleTransform([float]($w / 100), [float]($w / 100))
+    # Background: rounded deep-green field.
+    $bgPath = New-Object System.Drawing.Drawing2D.GraphicsPath
+    Add-RoundedRect -Path $bgPath -X 0 -Y 0 -W 512 -H 512 -R 112
+    $g.FillPath((New-GradientBrush -X 0 -Y 0 -W 512 -H 512 -Colors @($BgTop, $BgMid, $BgBottom)), $bgPath)
 
-    $glowPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(140, 245, 214, 120), [float]1.2)
-    $g.DrawArc($glowPen, 65, 12, 38, 38, 0, 360)
+    # Sparkles.
+    $sparkle = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(217, 247, 231, 178))
+    foreach ($s in @(
+        @(78.0, 74.0, 8.0, 217),
+        @(436.0, 80.0, 6.0, 179),
+        @(76.0, 438.0, 6.5, 179),
+        @(438.0, 442.0, 8.0, 204)
+    )) {
+        $sparkle.Color = [System.Drawing.Color]::FromArgb([int]$s[3], 247, 231, 178)
+        $r = [float]$s[2]
+        $g.FillEllipse($sparkle, [float]([double]$s[0] - $r), [float]([double]$s[1] - $r), [float](2 * $r), [float](2 * $r))
+    }
 
-    $crescent = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $crescent.AddEllipse(60, 14, 30, 30)
-    $crescent.AddEllipse(70, 19, 22, 22)
-    $crescent.FillMode = [System.Drawing.Drawing2D.FillMode]::Alternate
-    $g.FillPath((New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 247, 231, 178))), $crescent)
+    # Soft ground shadow.
+    $shadowPath = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $shadowPath.AddEllipse([float]116, [float]414, [float]280, [float]32)
+    $shadowBrush = New-Object System.Drawing.Drawing2D.PathGradientBrush($shadowPath)
+    $shadowBrush.CenterColor = [System.Drawing.Color]::FromArgb(150, 2, 16, 10)
+    $edge = New-Object 'System.Drawing.Color[]' $shadowPath.PointCount
+    for ($i = 0; $i -lt $shadowPath.PointCount; $i++) { $edge[$i] = [System.Drawing.Color]::FromArgb(0, 2, 16, 10) }
+    $shadowBrush.SurroundColors = $edge
+    $g.FillPath($shadowBrush, $shadowPath)
 
-    $leftPage = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $leftPage.AddPolygon([System.Drawing.PointF[]]@(
-        (New-Object System.Drawing.PointF(15, 68)),
-        (New-Object System.Drawing.PointF(47, 38)),
-        (New-Object System.Drawing.PointF(47, 79)),
-        (New-Object System.Drawing.PointF(15, 87))))
-    $g.FillPath((New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 246, 241, 229))), $leftPage)
+    # Cast shadow just behind the book (right/bottom rim).
+    $castPath = New-Object System.Drawing.Drawing2D.GraphicsPath
+    Add-RoundedRect -Path $castPath -X 134 -Y 112 -W 252 -H 312 -R 16
+    $g.FillPath((New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(95, 2, 16, 10))), $castPath)
 
-    $rightPage = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $rightPage.AddPolygon([System.Drawing.PointF[]]@(
-        (New-Object System.Drawing.PointF(85, 68)),
-        (New-Object System.Drawing.PointF(53, 38)),
-        (New-Object System.Drawing.PointF(53, 79)),
-        (New-Object System.Drawing.PointF(85, 87))))
-    $g.FillPath((New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 253, 247, 238))), $rightPage)
+    # Page block: cream, peeking out on the fore-edge and the bottom.
+    $pagesPath = New-Object System.Drawing.Drawing2D.GraphicsPath
+    Add-RoundedRect -Path $pagesPath -X 142 -Y 114 -W 240 -H 300 -R 12
+    $g.FillPath((New-GradientBrush -X 142 -Y 114 -W 240 -H 300 -Colors @($PagesTop, $PagesBot)), $pagesPath)
 
-    $g.DrawLine((New-Object System.Drawing.Pen($Gold, [float]3.4)), 50, 36, 50, 84)
+    $pagePen = New-Object System.Drawing.Pen($PageLine, [float]1.4)
+    $g.DrawLine($pagePen, [float]375, [float]122, [float]375, [float]406)
+    $g.DrawLine($pagePen, [float]379, [float]122, [float]379, [float]406)
+    $g.DrawLine($pagePen, [float]150, [float]407, [float]374, [float]407)
+    $g.DrawLine($pagePen, [float]150, [float]411, [float]374, [float]411)
 
-    $goldBook = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $goldBook.AddPolygon([System.Drawing.PointF[]]@(
-        (New-Object System.Drawing.PointF(28, 46)),
-        (New-Object System.Drawing.PointF(41, 38)),
-        (New-Object System.Drawing.PointF(41, 74)),
-        (New-Object System.Drawing.PointF(28, 68))))
-    $g.FillPath((New-Object System.Drawing.SolidBrush($GoldSoft)), $goldBook)
+    # Cover.
+    $coverPath = New-Object System.Drawing.Drawing2D.GraphicsPath
+    Add-RoundedRect -Path $coverPath -X 130 -Y 102 -W 240 -H 300 -R 16
+    $g.FillPath((New-GradientBrush -X 130 -Y 102 -W 240 -H 300 -Colors @($CoverTop, $CoverMid, $CoverBot)), $coverPath)
 
-    $goldBook2 = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $goldBook2.AddPolygon([System.Drawing.PointF[]]@(
-        (New-Object System.Drawing.PointF(72, 46)),
-        (New-Object System.Drawing.PointF(59, 38)),
-        (New-Object System.Drawing.PointF(59, 74)),
-        (New-Object System.Drawing.PointF(72, 68))))
-    $g.FillPath((New-Object System.Drawing.SolidBrush($GoldSoft)), $goldBook2)
+    # Spine (rounded on the left only) + gold headbands.
+    $spinePath = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $spinePath.StartFigure()
+    $spinePath.AddLine([float]146, [float]102, [float]166, [float]102)
+    $spinePath.AddLine([float]166, [float]102, [float]166, [float]402)
+    $spinePath.AddLine([float]166, [float]402, [float]146, [float]402)
+    $spinePath.AddArc([float]130, [float]370, [float]32, [float]32, 90, 90)
+    $spinePath.AddLine([float]130, [float]386, [float]130, [float]118)
+    $spinePath.AddArc([float]130, [float]102, [float]32, [float]32, 180, 90)
+    $spinePath.CloseFigure()
+    $g.FillPath((New-GradientBrush -X 130 -Y 102 -W 36 -H 300 -Colors @($SpineTop, $SpineBot) -Mode ([System.Drawing.Drawing2D.LinearGradientMode]::Horizontal)), $spinePath)
 
-    $highlight = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $highlight.AddPolygon([System.Drawing.PointF[]]@(
-        (New-Object System.Drawing.PointF(20, 27)),
-        (New-Object System.Drawing.PointF(24, 33)),
-        (New-Object System.Drawing.PointF(30, 35)),
-        (New-Object System.Drawing.PointF(24, 38)),
-        (New-Object System.Drawing.PointF(20, 44)),
-        (New-Object System.Drawing.PointF(16, 38)),
-        (New-Object System.Drawing.PointF(10, 35)),
-        (New-Object System.Drawing.PointF(16, 33))))
-    $g.FillPath((New-Object System.Drawing.SolidBrush($GoldSoft)), $highlight)
+    # NOTE: never name a local after a palette colour ($Gold, $Ink, ...) — PowerShell
+    # scopes are case-insensitive and dynamically resolved, so the palette entry
+    # would resolve to this local for any function called below this point.
+    $bandBrush = New-GoldBrush -X 130 -Y 102 -W 240 -H 300
+    $g.FillRectangle($bandBrush, [float]130, [float]134, [float]36, [float]9)
+    $g.FillRectangle($bandBrush, [float]130, [float]361, [float]36, [float]9)
 
-    $frame = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $frame.AddArc(12, 10, 14, 14, 180, 90)
-    $frame.AddArc(74, 10, 14, 14, 270, 90)
-    $frame.AddArc(74, 76, 14, 14, 0, 90)
-    $frame.AddArc(12, 76, 14, 14, 90, 90)
-    $frame.CloseFigure()
-    $framePen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(120, 212, 175, 87), [float]1.0)
-    $g.DrawPath($framePen, $frame)
+    # Gold double frame.
+    $framePath = New-Object System.Drawing.Drawing2D.GraphicsPath
+    Add-RoundedRect -Path $framePath -X 180 -Y 134 -W 176 -H 236 -R 14
+    $g.DrawPath((New-Object System.Drawing.Pen((New-GoldBrush -X 180 -Y 134 -W 176 -H 236), [float]5)), $framePath)
+
+    $innerPath = New-Object System.Drawing.Drawing2D.GraphicsPath
+    Add-RoundedRect -Path $innerPath -X 191 -Y 145 -W 154 -H 214 -R 10
+    $g.DrawPath((New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(191, 217, 183, 94), [float]1.8)), $innerPath)
+
+    # Corner ornaments.
+    foreach ($c in @(@(180.0, 134.0), @(356.0, 134.0), @(180.0, 370.0), @(356.0, 370.0))) {
+        $dPath = New-Object System.Drawing.Drawing2D.GraphicsPath
+        Add-Diamond -Path $dPath -Cx $c[0] -Cy $c[1] -Half 9
+        $g.FillPath((New-GoldBrush -X ($c[0] - 9) -Y ($c[1] - 9) -W 18 -H 18), $dPath)
+    }
+
+    # Flourish rules + lozenges.
+    $rulePen = New-Object System.Drawing.Pen((New-GoldBrush -X 214 -Y 179 -W 108 -H 14), [float]2.6)
+    $rulePen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+    $rulePen.EndCap   = [System.Drawing.Drawing2D.LineCap]::Round
+    foreach ($y in @(186.0, 318.0)) {
+        $g.DrawLine($rulePen, [float]214, [float]$y, [float]250, [float]$y)
+        $g.DrawLine($rulePen, [float]286, [float]$y, [float]322, [float]$y)
+        $lozenge = New-Object System.Drawing.Drawing2D.GraphicsPath
+        Add-Diamond -Path $lozenge -Cx 268 -Cy $y -Half 7
+        $g.FillPath((New-GoldBrush -X 261 -Y ($y - 7) -W 14 -H 14), $lozenge)
+    }
+
+    # Central medallion: dark disc, gold rings, 8-point star.
+    $g.FillEllipse((New-Object System.Drawing.SolidBrush($Ink)), [float]228, [float]212, [float]80, [float]80)
+    $g.DrawEllipse((New-Object System.Drawing.Pen((New-GoldBrush -X 228 -Y 212 -W 80 -H 80), [float]5)), [float]228, [float]212, [float]80, [float]80)
+    $g.DrawEllipse((New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(204, 217, 183, 94), [float]1.8)), [float]238, [float]222, [float]60, [float]60)
+
+    $starPath = New-Object System.Drawing.Drawing2D.GraphicsPath
+    Add-RoundedRect -Path $starPath -X 250 -Y 234 -W 36 -H 36 -R 3
+    $g.FillPath((New-GoldBrush -X 250 -Y 234 -W 36 -H 36), $starPath)
+
+    $savedState = $g.Save()
+    $g.TranslateTransform([float]268, [float]252)
+    $g.RotateTransform([float]45)
+    $starRotated = New-Object System.Drawing.Drawing2D.GraphicsPath
+    Add-RoundedRect -Path $starRotated -X -18 -Y -18 -W 36 -H 36 -R 3
+    $g.FillPath((New-GoldBrush -X -18 -Y -18 -W 36 -H 36), $starRotated)
+    $g.Restore($savedState)
+
+    $g.FillEllipse((New-Object System.Drawing.SolidBrush($Ink)), [float]257, [float]241, [float]22, [float]22)
+    $g.FillEllipse((New-Object System.Drawing.SolidBrush($GoldSoft)), [float]262.5, [float]246.5, [float]11, [float]11)
 
     $g.Dispose()
     return $bmp
@@ -116,6 +230,7 @@ function Save-OgImage {
     $bmp = New-Object System.Drawing.Bitmap($w, $h)
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.SmoothingMode     = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $g.PixelOffsetMode   = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
     $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
 
     $rect = New-Object System.Drawing.RectangleF(0, 0, $w, $h)
@@ -127,28 +242,24 @@ function Save-OgImage {
     $g.DrawImage($mark, 60, ($h - 380) / 2, 380, 380)
     $mark.Dispose()
 
-    # TextRenderer (GDI/Uniscribe) shapes Arabic correctly; Graphics.DrawString does not.
+    # TextRenderer (GDI/Uniscribe) shapes text correctly; Graphics.DrawString does not.
     $white = [System.Drawing.Color]::FromArgb(255, 248, 250, 248)
     $muted = [System.Drawing.Color]::FromArgb(220, 212, 175, 55)
-    $titleFont = New-Object System.Drawing.Font('Segoe UI', 84, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+    $titleFont = New-Object System.Drawing.Font('Segoe UI', 92, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
     $subFont   = New-Object System.Drawing.Font('Segoe UI', 34, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
-    $latinFont = New-Object System.Drawing.Font('Segoe UI', 28, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
 
     [System.Windows.Forms.TextRenderer]::DrawText(
-        $g, 'نور زاد',
-        $titleFont, (New-Object System.Drawing.Point(490, 214)), $white,
+        $g, 'Nour ZAD',
+        $titleFont, (New-Object System.Drawing.Point(494, 196)), $white,
         [System.Windows.Forms.TextFormatFlags]::NoPadding)
 
-    $subtitle = 'Quran, prayer & daily worship'
-    [System.Windows.Forms.TextRenderer]::DrawText(
-        $g, $subtitle, $subFont, (New-Object System.Drawing.Point(492, 336)), $muted,
-        [System.Windows.Forms.TextFormatFlags]::NoPadding)
+    $rulePen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(255, 212, 175, 55), [float]5)
+    $g.DrawLine($rulePen, 496, 330, 920, 330)
 
     [System.Windows.Forms.TextRenderer]::DrawText(
-        $g, 'Nour ZAD', $latinFont,
-        (New-Object System.Drawing.Point(492, 402)),
-        [System.Drawing.Color]::FromArgb(180, 248, 250, 248),
-        [System.Windows.Forms.TextFormatFlags]::NoPadding)
+        $g, 'Quran, prayer & daily worship', $subFont,
+        (New-Object System.Drawing.Point(496, 362)), $muted,
+        [System.Windows.Forms.TextFormatFlags]::NoPadding -bor [System.Windows.Forms.TextFormatFlags]::NoPrefix)
 
     $g.Dispose()
     $path = Join-Path $outDir 'og-image.png'
