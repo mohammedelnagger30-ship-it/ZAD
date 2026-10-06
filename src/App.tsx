@@ -7,8 +7,7 @@ import { generateDailyTasks, markMissedTasks } from '@/utils/taskManager';
 import { rescheduleAllNotifications } from '@/utils/notificationScheduler';
 import { clearLocalUserData, startCloudSync, synchronizeNow, type CloudSyncState } from '@/utils/cloudSync';
 import { isSupabaseConfigured, supabase } from '@/utils/supabaseClient';
-import { checkForAppUpdate, type AppUpdateCheck } from '@/utils/appUpdates';
-import { Browser } from '@capacitor/browser';
+import { useAppUpdate } from '@/hooks/useAppUpdate';
 import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import type { Session } from '@supabase/supabase-js';
@@ -39,67 +38,93 @@ function App() {
 }
 
 function AppUpdateNotice() {
-  const [update, setUpdate] = useState<AppUpdateCheck | null>(null);
-  const [error, setError] = useState('');
+  const {
+    update,
+    error,
+    checking,
+    downloading,
+    progress,
+    pending,
+    installHint,
+    startDownload,
+    cancelDownload,
+    install,
+    openInBrowser,
+  } = useAppUpdate();
   const [dismissed, setDismissed] = useState(false);
 
-  const checkUpdate = useCallback(() => {
-    if (!Capacitor.isNativePlatform()) return;
-    void checkForAppUpdate()
-      .then(setUpdate)
-      .catch((cause: unknown) => {
-        setError(cause instanceof Error ? cause.message : 'تعذّر التحقق من تحديث التطبيق.');
-      });
-  }, []);
+  const available = update?.status === 'available' ? update : null;
+  if (dismissed || (!error && !available && !pending && !downloading)) return null;
 
-  useEffect(() => {
-    checkUpdate();
-  }, [checkUpdate]);
+  const percent = progress && progress.percent >= 0 ? progress.percent : null;
 
-  useEffect(() => {
-    let remove: (() => void) | undefined;
-
-    if (Capacitor.isNativePlatform()) {
-      CapApp.addListener('resume', () => {
-        checkUpdate();
-      }).then((handle) => {
-        remove = () => { void handle.remove(); };
-      }).catch(() => {
-        // Resume listener may not be available in all contexts
-      });
-    }
-
-    return () => remove?.();
-  }, [checkUpdate]);
-
-  if (dismissed || (!error && update?.status !== 'available')) return null;
   return (
     <aside className="fixed inset-x-3 top-[calc(env(safe-area-inset-top,0px)+0.75rem)] z-[100] mx-auto max-w-lg rounded-2xl border border-gold-300 bg-white p-4 shadow-xl dark:border-gold-600 dark:bg-primary-900" dir="rtl">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="font-semibold text-primary-900 dark:text-primary-50">
-            {update?.status === 'available' ? `يتوفر تحديث جديد — الإصدار ${update.version}` : 'تعذّر التحقق من تحديث التطبيق'}
+            {downloading
+              ? 'جارٍ تنزيل التحديث…'
+              : pending
+                ? 'اكتمل تنزيل التحديث'
+                : available
+                  ? `يتوفر تحديث جديد — الإصدار ${available.version}`
+                  : 'تعذّر التحقق من تحديث التطبيق'}
           </p>
+          {checking && !downloading && !pending && (
+            <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">جارٍ التحقق من وجود إصدار جديد...</p>
+          )}
           {error && <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">{error}</p>}
-          {update?.status === 'available' && (
+          {!downloading && installHint && (
+            <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">{installHint}</p>
+          )}
+          {!error && !downloading && !pending && available && (
             <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
-              سيتم فتح رابط التنزيل في المتصفح. إذا لم يبدأ التنزيل تلقائياً، اضغط مطولاً على الرابط واختر "تنزيل" أو "حفظ". بعد اكتمال التنزيل، افتح الملف من التنزيلات لتثبيته.
+              يبدأ التنزيل داخل التطبيق مباشرة، ثم اضغط «تثبيت» لإتمام التحديث دون مغادرة التطبيق.
             </p>
           )}
         </div>
         <button type="button" onClick={() => setDismissed(true)} aria-label="إخفاء" className="text-gray-500">×</button>
       </div>
-      {update?.status === 'available' && (
+
+      {downloading ? (
+        <div className="mt-3">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-primary-100 dark:bg-primary-800">
+            <div
+              className={`h-full rounded-full bg-primary-600 transition-all ${percent === null ? 'animate-pulse' : ''}`}
+              style={{ width: `${percent === null ? 35 : percent}%` }}
+            />
+          </div>
+          <div className="mt-1 flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
+            <span>{percent === null ? 'جارٍ التنزيل...' : `تم ${percent}%`}</span>
+            <button type="button" onClick={() => void cancelDownload()} className="underline">إلغاء</button>
+          </div>
+        </div>
+      ) : pending ? (
         <button
           type="button"
-          onClick={() => {
-            void Browser.open({ url: update.downloadUrl }).catch((cause: unknown) => {
-              setError(cause instanceof Error ? cause.message : 'تعذّر فتح رابط التحديث.');
-            });
-          }}
+          onClick={() => void install()}
           className="mt-3 w-full rounded-xl bg-primary-700 px-4 py-2.5 text-sm font-semibold text-white"
         >
-          تنزيل التحديث
+          تثبيت التحديث {pending.version}
+        </button>
+      ) : available ? (
+        <button
+          type="button"
+          onClick={() => void startDownload()}
+          className="mt-3 w-full rounded-xl bg-primary-700 px-4 py-2.5 text-sm font-semibold text-white"
+        >
+          تنزيل التحديث {available.version}
+        </button>
+      ) : null}
+
+      {available && error && !downloading && !pending && (
+        <button
+          type="button"
+          onClick={() => void openInBrowser()}
+          className="mt-2 w-full text-xs text-gray-600 underline dark:text-gray-300"
+        >
+          تنزيل عبر المتصفح كبديل
         </button>
       )}
     </aside>

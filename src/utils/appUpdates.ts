@@ -1,5 +1,6 @@
 import { App } from '@capacitor/app';
-import { Capacitor } from '@capacitor/core';
+import { Browser } from '@capacitor/browser';
+import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core';
 
 const GITHUB_RELEASE_API = 'https://api.github.com/repos/mohammedelnagger30-ship-it/ZAD/releases/latest';
 
@@ -59,4 +60,134 @@ export async function checkForAppUpdate(): Promise<AppUpdateCheck> {
   // Use the raw download URL to ensure browser downloads the file instead of trying to open it
   const downloadUrl = asset.browser_download_url;
   return { status: 'available', version: releaseVersion, downloadUrl };
+}
+
+// ---------------------------------------------------------------------------
+// In-app updater: the APK is downloaded by the native plugin and handed to the
+// Android package installer. Opening the release URL in the device browser used
+// to stall after the progress bar filled, leaving users with no file to open.
+// ---------------------------------------------------------------------------
+
+export interface UpdateProgress {
+  /** Bytes written so far. */
+  loaded: number;
+  /** Expected size in bytes, or 0 when the server did not report it. */
+  total: number;
+  /** 0-99 while streaming, 100 when finished, -1 when the total is unknown. */
+  percent: number;
+}
+
+export type InstallOutcome = 'launched' | 'permission-required';
+
+interface AppUpdaterPlugin {
+  download(options: { url: string; fileName: string }): Promise<{ path: string; size: number }>;
+  cancel(): Promise<void>;
+  canInstall(): Promise<{ granted: boolean }>;
+  install(options: { path: string }): Promise<{ status: InstallOutcome }>;
+  addListener(eventName: 'progress', listenerFunc: (event: UpdateProgress) => void): Promise<PluginListenerHandle>;
+}
+
+const AppUpdater = registerPlugin<AppUpdaterPlugin>('AppUpdater');
+
+export interface PendingUpdate {
+  version: string;
+  path: string;
+}
+
+const PENDING_UPDATE_KEY = 'hifzi-pending-update';
+
+/** The in-app installer only exists in the native build. */
+export function isUpdateInstallerAvailable(): boolean {
+  return Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('AppUpdater');
+}
+
+/** Reads the APK that was downloaded but not installed yet (survives screen changes). */
+export function readPendingUpdate(): PendingUpdate | null {
+  try {
+    const raw = localStorage.getItem(PENDING_UPDATE_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    const { version, path } = parsed as { version?: unknown; path?: unknown };
+    if (typeof version !== 'string' || typeof path !== 'string') return null;
+    return { version, path };
+  } catch {
+    return null;
+  }
+}
+
+export function clearPendingUpdate(): void {
+  try {
+    localStorage.removeItem(PENDING_UPDATE_KEY);
+  } catch {
+    // Storage may be unavailable; the native file check still protects installs.
+  }
+}
+
+/** Extracts the Capacitor error code, when the native side provided one. */
+export function getErrorCode(error: unknown): string | null {
+  if (error && typeof error === 'object' && 'code' in error) {
+    const { code } = error as { code?: unknown };
+    if (typeof code === 'string') return code;
+  }
+  return null;
+}
+
+/** Builds a JS error carrying a Capacitor-style code, so callers can branch on it. */
+function codedError(message: string, code: string): Error {
+  const error = new Error(message) as Error & { code: string };
+  error.code = code;
+  return error;
+}
+
+export async function downloadAppUpdate(
+  url: string,
+  version: string,
+  onProgress: (progress: UpdateProgress) => void,
+): Promise<void> {
+  if (!isUpdateInstallerAvailable()) {
+    throw codedError('تنزيل التحديث داخل التطبيق غير متاح على هذا الجهاز.', 'installer-unavailable');
+  }
+  const listener = await AppUpdater.addListener('progress', onProgress);
+  try {
+    const result = await AppUpdater.download({ url, fileName: `ZAD-v${version}.apk` });
+    localStorage.setItem(PENDING_UPDATE_KEY, JSON.stringify({ version, path: result.path }));
+  } finally {
+    await listener.remove().catch(() => undefined);
+  }
+}
+
+export async function cancelAppUpdateDownload(): Promise<void> {
+  if (!isUpdateInstallerAvailable()) return;
+  await AppUpdater.cancel();
+}
+
+let installInFlight = false;
+
+/** Opens the system installer, or the unknown-sources screen when permission is missing. */
+export async function installAppUpdate(path: string): Promise<InstallOutcome> {
+  if (!isUpdateInstallerAvailable()) {
+    throw codedError('تثبيت التحديث داخل التطبيق غير متاح على هذا الجهاز.', 'installer-unavailable');
+  }
+  if (installInFlight) {
+    throw codedError('تم فتح شاشة التثبيت بالفعل.', 'already-launching');
+  }
+  installInFlight = true;
+  try {
+    const result = await AppUpdater.install({ path });
+    return result.status;
+  } finally {
+    installInFlight = false;
+  }
+}
+
+export async function isInstallPermissionGranted(): Promise<boolean> {
+  if (!isUpdateInstallerAvailable()) return false;
+  const result = await AppUpdater.canInstall();
+  return result.granted === true;
+}
+
+/** Fallback for devices where the in-app installer is unavailable. */
+export async function openUpdateInBrowser(url: string): Promise<void> {
+  await Browser.open({ url });
 }

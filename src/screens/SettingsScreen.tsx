@@ -13,8 +13,7 @@ import { requestNotificationPermission } from '@/utils/notifications';
 import { db, type Settings } from '@/db/database';
 import { COLOR_PALETTES, type ColorPalette } from '@/utils/colorThemes';
 import type { CloudSyncState } from '@/utils/cloudSync';
-import { checkForAppUpdate, type AppUpdateCheck } from '@/utils/appUpdates';
-import { Browser } from '@capacitor/browser';
+import { useAppUpdate } from '@/hooks/useAppUpdate';
 import { ADHKAR_CATEGORIES } from '@/data/adhkar';
 import { TOTAL_QURAN_PAGES } from '@/data/surahs';
 
@@ -195,25 +194,21 @@ export function SettingsScreen({
   const [dhikrPermissionStatus, setDhikrPermissionStatus] = useState('');
   const [accountActionStatus, setAccountActionStatus] = useState('');
   const [accountActionBusy, setAccountActionBusy] = useState(false);
-  const [appUpdate, setAppUpdate] = useState<AppUpdateCheck | null>(null);
-  const [updateError, setUpdateError] = useState('');
-  const [checkingUpdate, setCheckingUpdate] = useState(false);
-
-  const checkUpdate = useCallback(async () => {
-    setCheckingUpdate(true);
-    setUpdateError('');
-    try {
-      setAppUpdate(await checkForAppUpdate());
-    } catch (error) {
-      setUpdateError(error instanceof Error ? error.message : 'تعذّر التحقق من التحديثات.');
-    } finally {
-      setCheckingUpdate(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (Capacitor.isNativePlatform()) void checkUpdate();
-  }, [checkUpdate]);
+  const {
+    update: appUpdate,
+    checking: checkingUpdate,
+    error: updateError,
+    downloading: updating,
+    progress: updateProgress,
+    pending: pendingUpdate,
+    installHint: updateInstallHint,
+    check: checkUpdate,
+    startDownload: startUpdateDownload,
+    cancelDownload: cancelUpdateDownload,
+    install: installUpdate,
+    openInBrowser: openUpdateInBrowserFallback,
+  } = useAppUpdate();
+  const updatePercent = updateProgress && updateProgress.percent >= 0 ? updateProgress.percent : null;
 
   const testAdhan = useCallback(async () => {
     if (!Capacitor.isNativePlatform()) {
@@ -489,33 +484,72 @@ export function SettingsScreen({
             <Smartphone size={18} /> تحديث التطبيق
           </p>
           {checkingUpdate && <p role="status" className="text-xs text-gray-500 dark:text-gray-400">جارٍ التحقق من وجود إصدار جديد...</p>}
-          {!checkingUpdate && appUpdate?.status === 'available' && (
+          {!checkingUpdate && !updating && !pendingUpdate && appUpdate?.status === 'available' && (
             <>
               <p className="text-sm text-primary-700 dark:text-primary-200">يتوفر إصدار جديد: {appUpdate.version}</p>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">سيتم فتح رابط التنزيل في المتصفح. إذا لم يبدأ التنزيل تلقائياً، اضغط مطولاً على الرابط واختر "تنزيل" أو "حفظ". بعد اكتمال التنزيل، افتح الملف من التنزيلات لتثبيته.</p>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">ينزلّ التحديث داخل التطبيق مباشرة، ثم تضغط «تثبيت» لإتمام التحديث دون مغادرة التطبيق.</p>
               <Button
                 variant="primary"
                 size="sm"
                 className="mt-3 w-full"
-                onClick={() => {
-                  if (!appUpdate || appUpdate.status !== 'available') return;
-                  void Browser.open({ url: appUpdate.downloadUrl }).catch((error: unknown) => {
-                    setUpdateError(error instanceof Error ? error.message : 'تعذّر فتح رابط التحديث.');
-                  });
-                }}
+                onClick={() => void startUpdateDownload()}
               >
                 <Download size={16} /> تنزيل الإصدار {appUpdate.version}
               </Button>
             </>
           )}
-          {!checkingUpdate && appUpdate?.status === 'current' && (
+          {updating && (
+            <div className="mt-1">
+              <div className="h-2 w-full overflow-hidden rounded-full bg-primary-100 dark:bg-primary-800">
+                <div
+                  className={`h-full rounded-full bg-primary-600 transition-all ${updatePercent === null ? 'animate-pulse' : ''}`}
+                  style={{ width: `${updatePercent === null ? 35 : updatePercent}%` }}
+                />
+              </div>
+              <div className="mt-1 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                <span>{updatePercent === null ? 'جارٍ التنزيل...' : `تم ${updatePercent}%`}</span>
+                <button type="button" onClick={() => void cancelUpdateDownload()} className="underline">إلغاء التنزيل</button>
+              </div>
+            </div>
+          )}
+          {!updating && pendingUpdate && (
+            <>
+              <p className="text-sm text-primary-700 dark:text-primary-200">اكتمل تنزيل التحديث {pendingUpdate.version} وهو جاهز للتثبيت.</p>
+              <Button
+                variant="primary"
+                size="sm"
+                className="mt-3 w-full"
+                onClick={() => void installUpdate()}
+              >
+                <Check size={16} /> تثبيت التحديث الآن
+              </Button>
+            </>
+          )}
+          {!checkingUpdate && !updating && appUpdate?.status === 'current' && (
             <p className="text-xs text-gray-500 dark:text-gray-400">التطبيق محدّث — الإصدار {appUpdate.version}</p>
           )}
-          {!checkingUpdate && appUpdate?.status === 'no-release' && (
+          {!checkingUpdate && !updating && appUpdate?.status === 'no-release' && (
             <p className="text-xs text-gray-500 dark:text-gray-400">لا يوجد إصدار منشور حاليًا.</p>
           )}
-          {updateError && <p role="alert" className="mt-2 text-xs text-red-600 dark:text-red-300">تعذّر التحقق: {updateError}</p>}
-          <Button variant="secondary" size="sm" className="mt-3 w-full" disabled={checkingUpdate} onClick={() => void checkUpdate()}>
+          {updateInstallHint && !updating && (
+            <p role="status" className="mt-2 text-xs text-primary-600 dark:text-primary-300">{updateInstallHint}</p>
+          )}
+          {updateError && (
+            <div className="mt-2">
+              <p role="alert" className="text-xs text-red-600 dark:text-red-300">تعذّر: {updateError}</p>
+              {appUpdate?.status === 'available' && !updating && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="mt-2 w-full"
+                  onClick={() => void openUpdateInBrowserFallback()}
+                >
+                  تنزيل عبر المتصفح كبديل
+                </Button>
+              )}
+            </div>
+          )}
+          <Button variant="secondary" size="sm" className="mt-3 w-full" disabled={checkingUpdate || updating} onClick={() => void checkUpdate()}>
             <RefreshCw size={15} /> التحقق الآن
           </Button>
         </Card>
