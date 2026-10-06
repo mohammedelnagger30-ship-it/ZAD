@@ -43,7 +43,7 @@ function AppUpdateNotice() {
   const [error, setError] = useState('');
   const [dismissed, setDismissed] = useState(false);
 
-  useEffect(() => {
+  const checkUpdate = useCallback(() => {
     if (!Capacitor.isNativePlatform()) return;
     void checkForAppUpdate()
       .then(setUpdate)
@@ -51,6 +51,26 @@ function AppUpdateNotice() {
         setError(cause instanceof Error ? cause.message : 'تعذّر التحقق من تحديث التطبيق.');
       });
   }, []);
+
+  useEffect(() => {
+    checkUpdate();
+  }, [checkUpdate]);
+
+  useEffect(() => {
+    let remove: (() => void) | undefined;
+
+    if (Capacitor.isNativePlatform()) {
+      CapApp.addListener('resume', () => {
+        checkUpdate();
+      }).then((handle) => {
+        remove = () => { void handle.remove(); };
+      }).catch(() => {
+        // Resume listener may not be available in all contexts
+      });
+    }
+
+    return () => remove?.();
+  }, [checkUpdate]);
 
   if (dismissed || (!error && update?.status !== 'available')) return null;
   return (
@@ -63,7 +83,7 @@ function AppUpdateNotice() {
           {error && <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">{error}</p>}
           {update?.status === 'available' && (
             <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
-              نزّل APK ثم افتحه من التنزيلات لتثبيته. سيطلب Android تأكيد التحديث.
+              سيتم فتح رابط التنزيل في المتصفح. بعد اكتمال التنزيل، افتح الملف من التنزيلات لتثبيته. يُنصح باستخدام WiFi للتنزيل.
             </p>
           )}
         </div>
@@ -307,7 +327,7 @@ function AppContent({
       <div className="min-h-screen bg-surface-light dark:bg-surface-dark flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 mx-auto mb-4 overflow-hidden rounded-2xl shadow-lg animate-pulse-soft">
-            <img src="/icon.svg" alt="نور زاد" className="h-full w-full" />
+            <img src="/icon.svg" alt="Nour ZAD" className="h-full w-full" />
           </div>
           <p className="text-primary-600 dark:text-primary-300 text-sm">جارٍ التحميل...</p>
         </div>

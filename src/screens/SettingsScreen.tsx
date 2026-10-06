@@ -1,7 +1,6 @@
-import { useState, useCallback, useEffect } from 'react';
-import { Moon, Sun, Monitor, Bell, Volume2, MapPin, Type, Download, Upload, Settings as SettingsIcon, Info, Check, Cloud, LogOut, RefreshCw, Smartphone } from 'lucide-react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { Moon, Sun, Monitor, Bell, Volume2, MapPin, Type, Download, Upload, Settings as SettingsIcon, Info, Check, Cloud, LogOut, RefreshCw, Smartphone, Play, Square } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
-import { Browser } from '@capacitor/browser';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Card, Button } from '@/components/ui';
 import { TimeOptionButton } from '@/components/TimeOptionButton';
@@ -15,7 +14,9 @@ import { db, type Settings } from '@/db/database';
 import { COLOR_PALETTES, type ColorPalette } from '@/utils/colorThemes';
 import type { CloudSyncState } from '@/utils/cloudSync';
 import { checkForAppUpdate, type AppUpdateCheck } from '@/utils/appUpdates';
+import { Browser } from '@capacitor/browser';
 import { ADHKAR_CATEGORIES } from '@/data/adhkar';
+import { TOTAL_QURAN_PAGES } from '@/data/surahs';
 
 interface SettingsScreenProps {
   settings: Settings;
@@ -144,7 +145,7 @@ function isValidBackupRow(table: BackupTable, value: unknown): value is Record<s
         && isFiniteNumber(value.createdAt)
         && (value.note === undefined || typeof value.note === 'string');
     case 'pageBookmarks':
-      return Number.isInteger(value.page) && (value.page as number) >= 1 && (value.page as number) <= 604
+      return Number.isInteger(value.page) && (value.page as number) >= 1 && (value.page as number) <= TOTAL_QURAN_PAGES
         && isFiniteNumber(value.createdAt);
     case 'prayerRecords':
       return isDateKey(value.date)
@@ -188,6 +189,9 @@ export function SettingsScreen({
 }: SettingsScreenProps) {
   const [exportStatus, setExportStatus] = useState('');
   const [adhanTestStatus, setAdhanTestStatus] = useState('');
+  const [adhanPreviewStatus, setAdhanPreviewStatus] = useState('');
+  const [previewingAdhanId, setPreviewingAdhanId] = useState<string | null>(null);
+  const adhanAudioRef = useRef<HTMLAudioElement | null>(null);
   const [dhikrPermissionStatus, setDhikrPermissionStatus] = useState('');
   const [accountActionStatus, setAccountActionStatus] = useState('');
   const [accountActionBusy, setAccountActionBusy] = useState(false);
@@ -240,6 +244,72 @@ export function SettingsScreen({
       setAdhanTestStatus(error instanceof Error ? `تعذّر تشغيل التجربة: ${error.message}` : 'تعذّر تشغيل تجربة الأذان.');
     }
   }, [settings]);
+
+  const stopAdhanPreview = useCallback(() => {
+    const audio = adhanAudioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.src = '';
+      adhanAudioRef.current = null;
+    }
+    setPreviewingAdhanId(null);
+  }, []);
+
+  const playAdhanPreview = useCallback(async () => {
+    const sound = ADHAN_SOUNDS.find((item) => item.id === settings.adhanVoiceId) ?? ADHAN_SOUNDS[0];
+    if (previewingAdhanId === sound.id) {
+      stopAdhanPreview();
+      setAdhanPreviewStatus('تم إيقاف الاستماع.');
+      return;
+    }
+
+    stopAdhanPreview();
+    setAdhanPreviewStatus('');
+    const audio = new Audio(`${import.meta.env.BASE_URL}audio/${sound.file}`);
+    audio.preload = 'auto';
+    audio.onended = () => {
+      if (adhanAudioRef.current === audio) {
+        adhanAudioRef.current = null;
+        setPreviewingAdhanId(null);
+        setAdhanPreviewStatus('انتهى تشغيل تسجيل الأذان.');
+      }
+    };
+    audio.onerror = () => {
+      if (adhanAudioRef.current === audio) {
+        adhanAudioRef.current = null;
+        setPreviewingAdhanId(null);
+        setAdhanPreviewStatus('تعذّر تشغيل ملف الأذان. تحقّق من توفر الملف ثم أعد المحاولة.');
+      }
+    };
+    adhanAudioRef.current = audio;
+    setPreviewingAdhanId(sound.id);
+
+    try {
+      await audio.play();
+      setAdhanPreviewStatus(`يُشغّل تسجيل ${sound.name} كاملًا الآن.`);
+    } catch (error) {
+      if (adhanAudioRef.current === audio) {
+        adhanAudioRef.current = null;
+        setPreviewingAdhanId(null);
+      }
+      setAdhanPreviewStatus(
+        error instanceof Error ? `تعذّر تشغيل الأذان: ${error.message}` : 'تعذّر تشغيل الأذان.',
+      );
+    }
+  }, [previewingAdhanId, settings.adhanVoiceId, stopAdhanPreview]);
+
+  useEffect(() => {
+    if (previewingAdhanId && previewingAdhanId !== settings.adhanVoiceId) {
+      stopAdhanPreview();
+      setAdhanPreviewStatus('تم إيقاف التسجيل بعد تغيير صوت الأذان.');
+    }
+  }, [previewingAdhanId, settings.adhanVoiceId, stopAdhanPreview]);
+
+  useEffect(() => () => {
+    adhanAudioRef.current?.pause();
+    adhanAudioRef.current = null;
+  }, []);
 
   const enableRandomDhikrNotifications = useCallback(async () => {
     if (!Capacitor.isNativePlatform()) {
@@ -422,7 +492,7 @@ export function SettingsScreen({
           {!checkingUpdate && appUpdate?.status === 'available' && (
             <>
               <p className="text-sm text-primary-700 dark:text-primary-200">يتوفر إصدار جديد: {appUpdate.version}</p>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">بعد تنزيل الملف، افتحه من التنزيلات واختر «تحديث». سيطلب Android تأكيد التثبيت.</p>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">سيتم فتح رابط التنزيل في المتصفح. بعد اكتمال التنزيل، افتح الملف من التنزيلات لتثبيته. يُنصح باستخدام WiFi للتنزيل.</p>
               <Button
                 variant="primary"
                 size="sm"
@@ -547,8 +617,22 @@ export function SettingsScreen({
                 ))}
               </select>
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                التسجيلات مضمنة وتعمل دون إنترنت. قد يؤثر وضع عدم الإزعاج أو إعداد صوت الإشعارات في الهاتف على التشغيل.
+                استمع للتسجيل كاملًا، أو جرّب صوت إشعار الصلاة. مستوى صوت الوسائط والإشعارات يتحكم بهما الهاتف كلٌّ على حدة.
               </p>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void playAdhanPreview()}
+                className="mt-2 w-full"
+              >
+                {previewingAdhanId === settings.adhanVoiceId ? <Square size={16} /> : <Play size={16} />}
+                {previewingAdhanId === settings.adhanVoiceId ? 'إيقاف الأذان' : 'استمع للأذان كاملًا'}
+              </Button>
+              {adhanPreviewStatus && (
+                <p role="status" className="mt-2 text-xs text-primary-600 dark:text-gold-400">
+                  {adhanPreviewStatus}
+                </p>
+              )}
               <Button variant="secondary" size="sm" onClick={testAdhan} className="mt-2 w-full">
                 <Volume2 size={16} /> تجربة صوت الأذان
               </Button>
@@ -728,7 +812,7 @@ export function SettingsScreen({
           <Info size={18} /> عن التطبيق
         </p>
         <div className="space-y-1 text-xs text-gray-500 dark:text-gray-400">
-          <p>نور زاد — رفيق القرآن والعبادة اليومية</p>
+          <p>Nour ZAD — رفيق القرآن والعبادة اليومية</p>
           <p>يعمل بالكامل بدون إنترنت بعد التثبيت</p>
           <p className="mt-2">جميع البيانات مخزنة محلياً على جهازك</p>
         </div>
