@@ -198,11 +198,11 @@ body {
 }
 
 .mushaf-page--paper {
-  --paper: #f4ecd8;
-  --ink: #1a1209;
-  --frame: #8b6914;
-  --frame-soft: rgba(139, 105, 20, 0.35);
-  --wash: rgba(139, 105, 20, 0.08);
+  --paper: #f7f0dc;
+  --ink: #1f1508;
+  --frame: #7a5a0f;
+  --frame-soft: rgba(122, 90, 15, 0.3);
+  --wash: rgba(122, 90, 15, 0.06);
 
   /*
    * The sheet is sized in `em` and so is everything inside it.
@@ -233,16 +233,17 @@ body {
   padding: 1.35em 1.7em 2.55em;
   overflow: hidden;
   border: 0;
-  border-radius: 0.12em;
+  border-radius: 0.08em;
   background:
-    radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.4) 0%, transparent 70%),
-    radial-gradient(ellipse at 50% 100%, rgba(139, 105, 20, 0.08) 0%, transparent 60%),
-    linear-gradient(180deg, #f8f2de 0%, var(--paper) 40%, #ede6c9 100%);
+    radial-gradient(ellipse at 30% 20%, rgba(255, 255, 255, 0.5) 0%, transparent 50%),
+    radial-gradient(ellipse at 70% 80%, rgba(122, 90, 15, 0.06) 0%, transparent 50%),
+    linear-gradient(135deg, #faf6e8 0%, var(--paper) 50%, #ebe4d0 100%);
   box-shadow:
-    0 20px 45px -25px rgba(30, 20, 5, 0.45),
-    0 8px 18px rgba(30, 20, 5, 0.15),
-    inset 0 0 0 1px rgba(139, 105, 20, 0.15),
-    inset 0 0 0 2px rgba(255, 255, 255, 0.3);
+    0 25px 50px -20px rgba(25, 15, 5, 0.4),
+    0 10px 20px rgba(25, 15, 5, 0.15),
+    inset 0 0 0 1px rgba(122, 90, 15, 0.12),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
 .mushaf-page--paper::before {
@@ -257,23 +258,28 @@ body {
   border-width: 1px;
   box-shadow:
     inset 0 0 0 0.28em var(--paper),
-    inset 0 0 0 0.33em var(--frame-soft);
+    inset 0 0 0 0.33em var(--frame-soft),
+    inset 0 0 0 0.38em rgba(122, 90, 15, 0.15);
 }
 
 .mushaf-page--paper .mushaf-frame::after {
   inset: 0.22em;
+  border-color: rgba(122, 90, 15, 0.25);
 }
 
 .mushaf-page--paper .mushaf-corner {
-  width: 0.9em;
-  height: 0.9em;
-  padding: 0.03em;
+  width: 0.95em;
+  height: 0.95em;
+  padding: 0.04em;
+  color: var(--frame);
+  background: var(--paper);
+  filter: drop-shadow(0 1px 1px rgba(30, 20, 5, 0.15));
 }
 
-.mushaf-page--paper .mushaf-corner--tr { top: -0.45em; right: -0.45em; }
-.mushaf-page--paper .mushaf-corner--tl { top: -0.45em; left: -0.45em; }
-.mushaf-page--paper .mushaf-corner--br { bottom: -0.45em; right: -0.45em; }
-.mushaf-page--paper .mushaf-corner--bl { bottom: -0.45em; left: -0.45em; }
+.mushaf-page--paper .mushaf-corner--tr { top: -0.48em; right: -0.48em; }
+.mushaf-page--paper .mushaf-corner--tl { top: -0.48em; left: -0.48em; }
+.mushaf-page--paper .mushaf-corner--br { bottom: -0.48em; right: -0.48em; }
+.mushaf-page--paper .mushaf-corner--bl { bottom: -0.48em; left: -0.48em; }
 
 .mushaf-paper-content {
   position: relative;
@@ -296,6 +302,7 @@ body {
   color: var(--ink);
   font-family: 'Amiri Quran', 'Amiri', serif;
   font-size: 1em;
+  text-shadow: 0 0.5px 0 rgba(255, 255, 255, 0.15);
 }
 
 .mushaf-paper-line {
@@ -311,6 +318,8 @@ body {
   text-align: justify;
   text-justify: inter-word;
   font-variant-ligatures: common-ligatures;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /*
@@ -336,15 +345,18 @@ body {
 }
 
 .mushaf-paper-heading-box {
-  padding: 0.12em 0.85em;
+  padding: 0.1em 0.9em;
   border: 1px solid var(--frame-soft);
-  border-radius: 0.15em;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+  border-radius: 0.12em;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.5),
+    0 1px 2px rgba(30, 20, 5, 0.08);
   color: var(--frame);
-  font-size: 0.82em;
+  font-size: 0.81em;
   font-weight: 700;
-  letter-spacing: 0;
+  letter-spacing: 0.01em;
   white-space: nowrap;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.3), transparent);
 }
 
 .mushaf-paper-line--basmala {
@@ -405,13 +417,17 @@ body {
   margin-inline: 0.1em;
   border: 1px solid var(--frame);
   border-radius: 50%;
-  box-shadow: inset 0 0 0 1px var(--frame-soft);
+  box-shadow:
+    inset 0 0 0 1px var(--frame-soft),
+    inset 0 0 0 2px var(--paper),
+    0 1px 2px rgba(30, 20, 5, 0.1);
   color: var(--frame);
   font-family: 'Amiri Quran', 'Amiri', serif;
   font-size: 0.5em;
   font-weight: 700;
   line-height: 1;
   vertical-align: middle;
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.3), transparent 50%);
 }
 
 /* Part, page and hizb along the foot, the way a printed mushaf carries them. */
@@ -425,12 +441,15 @@ body {
   font-size: 0.5em;
   font-weight: 700;
   white-space: nowrap;
+  text-shadow: 0 0.5px 0 rgba(255, 255, 255, 0.4);
 }
 
 .mushaf-paper-folio__page {
-  padding: 0.1em 0.5em;
+  padding: 0.12em 0.55em;
   border: 1px solid var(--frame-soft);
   border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
 }
 
 .mushaf-paper-sajdah {
