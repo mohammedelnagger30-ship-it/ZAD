@@ -197,7 +197,7 @@ The app includes no Supabase credentials in source control. Builds without the t
 
 ### GitHub releases and APK updates
 
-Every push to `main` runs the `Android APK release` workflow, which builds a signed APK and publishes it as a new public GitHub release (`v1.0.RUN_NUMBER`). The workflow also supports releases from a `vMAJOR.MINOR.PATCH` tag or a manual run from the GitHub Actions tab. In-app update checking reads the latest public GitHub release and offers its APK; the user must confirm installation in Android.
+Every push to `main` runs the `Android APK release` workflow, which builds a signed APK and publishes it as a new public GitHub release (`v1.0.RUN_NUMBER`). The workflow also supports releases from a `vMAJOR.MINOR.PATCH` tag or a manual run from the GitHub Actions tab. In-app update checking reads the latest public GitHub release, then the `AppUpdater` Android plugin downloads the APK inside the app (progress bar, cancel) and hands it to the system installer; the user confirms the install in Android, granting "install unknown apps" for this app once if needed. Opening the release URL in the device browser remains as a fallback.
 
 1. Create the stable release key once with `powershell -ExecutionPolicy Bypass -File scripts\create-release-key.ps1`. Back up both ignored files `android\app\zad-release.jks` and `android\app\keystore.properties` securely. Never replace or lose this key.
 2. Authenticate `gh` with `gh auth login`, then run `powershell -ExecutionPolicy Bypass -File scripts\configure-github-release-secrets.ps1`. It uploads signing secrets and the Supabase build configuration without printing their values.

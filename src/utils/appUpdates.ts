@@ -20,13 +20,38 @@ function compareVersions(left: string, right: string): number {
   return 0;
 }
 
+// GitHub allows only a handful of unauthenticated calls per hour, and the
+// update banner plus the settings card both ask on mount and on resume.
+const CHECK_CACHE_TTL_MS = 120_000;
+
+let cachedCheck: { checkedAt: number; result: AppUpdateCheck } | null = null;
+let checkInFlight: Promise<AppUpdateCheck> | null = null;
+
 export async function checkForAppUpdate(): Promise<AppUpdateCheck> {
   if (!Capacitor.isNativePlatform()) return { status: 'unavailable' };
+  if (cachedCheck && Date.now() - cachedCheck.checkedAt < CHECK_CACHE_TTL_MS) return cachedCheck.result;
+  if (checkInFlight) return checkInFlight;
+
+  checkInFlight = fetchUpdateCheck()
+    .then((result) => {
+      cachedCheck = { checkedAt: Date.now(), result };
+      return result;
+    })
+    .finally(() => {
+      checkInFlight = null;
+    });
+  return checkInFlight;
+}
+
+async function fetchUpdateCheck(): Promise<AppUpdateCheck> {
   const response = await fetch(GITHUB_RELEASE_API, {
     headers: { Accept: 'application/vnd.github+json' },
     cache: 'no-store',
   });
   if (response.status === 404) return { status: 'no-release' };
+  if (response.status === 403 || response.status === 429) {
+    throw new Error('تم تجاوز حد طلبات التحقق مؤقتًا — أعد المحاولة بعد دقائق.');
+  }
   if (!response.ok) throw new Error(`GitHub returned HTTP ${response.status}.`);
 
   const release: unknown = await response.json();

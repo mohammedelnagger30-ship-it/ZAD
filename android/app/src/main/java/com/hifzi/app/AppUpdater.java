@@ -18,6 +18,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -205,9 +206,16 @@ public class AppUpdater extends Plugin {
             if (cancelled) {
                 throw new DownloadCancelledException();
             }
-            if (expectedBytes > 0 && loadedBytes != expectedBytes) {
+            // A short read means the transfer died early; a non-ZIP body means the
+            // server sent an error page instead of the APK.
+            if (expectedBytes > 0 && loadedBytes < expectedBytes) {
                 deleteQuietly(target);
                 call.reject("توقّف التنزيل قبل اكتماله — أعد المحاولة.", "incomplete-download");
+                return;
+            }
+            if (!looksLikeZip(target)) {
+                deleteQuietly(target);
+                call.reject("الملف المنزّل ليس ملف تثبيت صالحًا — أعد المحاولة.", "invalid-apk");
                 return;
             }
 
@@ -221,8 +229,13 @@ public class AppUpdater extends Plugin {
             deleteQuietly(target);
             call.reject("تم إلغاء التنزيل.", "cancelled");
         } catch (Exception e) {
-            Logger.error(getLogTag(), "Update download failed", e);
             deleteQuietly(target);
+            if (cancelled) {
+                // cancel() closes the socket, so the reader usually lands here.
+                call.reject("تم إلغاء التنزيل.", "cancelled");
+                return;
+            }
+            Logger.error(getLogTag(), "Update download failed", e);
             call.reject("تعذّر تنزيل التحديث: " + e.getMessage(), "download-failed");
         } finally {
             if (connection != null) {
@@ -241,6 +254,15 @@ public class AppUpdater extends Plugin {
         data.put("total", totalBytes);
         data.put("percent", percent);
         notifyListeners("progress", data);
+    }
+
+    /** APKs are ZIP archives, so the body must start with the ZIP local header. */
+    private boolean looksLikeZip(File file) {
+        try (InputStream in = new BufferedInputStream(new FileInputStream(file))) {
+            return in.read() == 'P' && in.read() == 'K';
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     private boolean hasInstallPermission() {
