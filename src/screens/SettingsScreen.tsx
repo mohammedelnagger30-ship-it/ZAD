@@ -492,7 +492,7 @@ export function SettingsScreen({
           {!checkingUpdate && appUpdate?.status === 'available' && (
             <>
               <p className="text-sm text-primary-700 dark:text-primary-200">يتوفر إصدار جديد: {appUpdate.version}</p>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">سيتم فتح رابط التنزيل في المتصفح. بعد اكتمال التنزيل، افتح الملف من التنزيلات لتثبيته. يُنصح باستخدام WiFi للتنزيل.</p>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">سيتم فتح رابط التنزيل في المتصفح. إذا لم يبدأ التنزيل تلقائياً، اضغط مطولاً على الرابط واختر "تنزيل" أو "حفظ". بعد اكتمال التنزيل، افتح الملف من التنزيلات لتثبيته.</p>
               <Button
                 variant="primary"
                 size="sm"

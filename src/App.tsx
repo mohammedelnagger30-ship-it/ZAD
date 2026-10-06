@@ -83,7 +83,7 @@ function AppUpdateNotice() {
           {error && <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">{error}</p>}
           {update?.status === 'available' && (
             <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
-              سيتم فتح رابط التنزيل في المتصفح. بعد اكتمال التنزيل، افتح الملف من التنزيلات لتثبيته. يُنصح باستخدام WiFi للتنزيل.
+              سيتم فتح رابط التنزيل في المتصفح. إذا لم يبدأ التنزيل تلقائياً، اضغط مطولاً على الرابط واختر "تنزيل" أو "حفظ". بعد اكتمال التنزيل، افتح الملف من التنزيلات لتثبيته.
             </p>
           )}
         </div>

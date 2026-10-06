@@ -56,5 +56,7 @@ export async function checkForAppUpdate(): Promise<AppUpdateCheck> {
   if (compareVersions(releaseVersion, installedVersion.replace(/^v/, '')) <= 0) {
     return { status: 'current', version: installedVersion };
   }
-  return { status: 'available', version: releaseVersion, downloadUrl: asset.browser_download_url };
+  // Use the raw download URL to ensure browser downloads the file instead of trying to open it
+  const downloadUrl = asset.browser_download_url;
+  return { status: 'available', version: releaseVersion, downloadUrl };
 }
