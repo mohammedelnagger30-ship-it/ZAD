@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Check, X, Clock, Flame, BookOpen, Moon, Sunrise, BookText, ChevronLeft, Sparkles, Calendar } from 'lucide-react';
+import { Check, X, Clock, Flame, BookOpen, Moon, Sunrise, BookText, ChevronLeft, Sparkles, Calendar, Heart, Repeat } from 'lucide-react';
 import { Card, Button, Badge, SectionHeader, EmptyState, type BadgeProps } from '@/components/ui';
 import { PrayerStatusSheet } from '@/components/PrayerStatusSheet';
 import { type DailyTask, type Settings, type TaskStatus } from '@/db/database';
@@ -197,6 +197,53 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Quick Shortcuts */}
+      <div className="grid grid-cols-4 gap-2.5">
+        <button
+          type="button"
+          onClick={() => navigate('quran')}
+          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-sm hover:border-primary-400 transition-all hover:scale-[1.02] active:scale-95"
+        >
+          <div className="h-10 w-10 rounded-xl bg-primary-100 dark:bg-primary-800 text-primary-700 dark:text-gold-400 flex items-center justify-center mb-1.5 shadow-sm">
+            <BookOpen size={20} />
+          </div>
+          <span className="text-xs font-bold text-primary-900 dark:text-primary-100">المصحف</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigate('prayer')}
+          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-sm hover:border-primary-400 transition-all hover:scale-[1.02] active:scale-95"
+        >
+          <div className="h-10 w-10 rounded-xl bg-primary-100 dark:bg-primary-800 text-primary-700 dark:text-gold-400 flex items-center justify-center mb-1.5 shadow-sm">
+            <Moon size={20} />
+          </div>
+          <span className="text-xs font-bold text-primary-900 dark:text-primary-100">الصلاة</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigate('adhkar')}
+          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-sm hover:border-primary-400 transition-all hover:scale-[1.02] active:scale-95"
+        >
+          <div className="h-10 w-10 rounded-xl bg-primary-100 dark:bg-primary-800 text-primary-700 dark:text-gold-400 flex items-center justify-center mb-1.5 shadow-sm">
+            <Heart size={20} />
+          </div>
+          <span className="text-xs font-bold text-primary-900 dark:text-primary-100">الأذكار</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigate('tasbih')}
+          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-sm hover:border-primary-400 transition-all hover:scale-[1.02] active:scale-95"
+        >
+          <div className="h-10 w-10 rounded-xl bg-primary-100 dark:bg-primary-800 text-primary-700 dark:text-gold-400 flex items-center justify-center mb-1.5 shadow-sm">
+            <Repeat size={20} />
+          </div>
+          <span className="text-xs font-bold text-primary-900 dark:text-primary-100">المسبحة</span>
+        </button>
       </div>
 
       <Card className="border-gold-200 bg-gradient-to-bl from-gold-50 to-white dark:border-gold-800/50 dark:from-gold-900/20 dark:to-primary-900/50">

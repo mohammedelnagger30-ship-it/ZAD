@@ -257,28 +257,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
   );
 }
 
-function StartupMessage({
-  message,
-  action,
-  actionLabel,
-}: {
-  message: string;
-  action?: () => void;
-  actionLabel?: string;
-}) {
-  return (
-    <div className="min-h-screen bg-surface-light dark:bg-surface-dark flex items-center justify-center px-4" dir="rtl">
-      <div className="w-full max-w-md rounded-2xl border border-primary-100 bg-white p-6 text-center shadow-sm dark:border-primary-800 dark:bg-primary-900">
-        <p role={action ? 'alert' : 'status'} className="text-sm text-primary-700 dark:text-primary-200">{message}</p>
-        {action && (
-          <button type="button" onClick={action} className="mt-4 rounded-xl bg-primary-700 px-5 py-2.5 text-sm font-semibold text-white">
-            {actionLabel ?? 'إعادة المحاولة'}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
+
 
 /**
  * Shown when cloud sync is failing or the device is offline.
