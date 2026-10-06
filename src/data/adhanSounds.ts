@@ -7,6 +7,24 @@ export interface AdhanSound {
 
 export const ADHAN_SOUNDS: AdhanSound[] = [
   {
+    id: 'mishary_alafasy_fajr',
+    name: 'مشاري راشد العفاسي — أذان الفجر (مقام حجاز)',
+    file: 'adhan_mishary_alafasy_fajr.mp3',
+    source: 'Archive.org',
+  },
+  {
+    id: 'makkah_masjid',
+    name: 'المسجد الحرام مكة — أذان',
+    file: 'adhan_makkah_masjid.mp3',
+    source: 'IslamDownload',
+  },
+  {
+    id: 'makkah_2',
+    name: 'مكة — أذان',
+    file: 'adhan_makkah_2.mp3',
+    source: 'IslamDownload',
+  },
+  {
     id: 'asim_javed',
     name: 'عاصم جاويد — أذان الجمعة الثاني',
     file: 'adhan_asim_javed.mp3',
