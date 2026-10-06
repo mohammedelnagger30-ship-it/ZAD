@@ -13,12 +13,12 @@ $outDir = Join-Path $root 'public\icons'
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
 # Palette (kept in sync with public\icon.svg).
-# "Sakinah" calm scheme: misty sage-teal field, soft cover, champagne ornament.
+# "Sakinah" calm scheme: white/gray field, soft cover, champagne ornament.
 # Low chroma + gentle contrast = serene; every accent still lands in the ranges
 # scripts\check-icons.ps1 classifies as green field / gold mark.
-$BgTop     = [System.Drawing.Color]::FromArgb(255, 62, 126, 110)   # #3E7E6E
-$BgMid     = [System.Drawing.Color]::FromArgb(255, 30, 79, 69)     # #1E4F45
-$BgBottom  = [System.Drawing.Color]::FromArgb(255, 13, 42, 37)     # #0D2A25
+$BgTop     = [System.Drawing.Color]::FromArgb(255, 245, 245, 245)   # #F5F5F5
+$BgMid     = [System.Drawing.Color]::FromArgb(255, 232, 232, 232)     # #E8E8E8
+$BgBottom  = [System.Drawing.Color]::FromArgb(255, 220, 220, 220)     # #DCDCDC
 $CoverTop  = [System.Drawing.Color]::FromArgb(255, 46, 111, 95)    # #2E6F5F
 $CoverMid  = [System.Drawing.Color]::FromArgb(255, 36, 90, 75)     # #245A4B
 $CoverBot  = [System.Drawing.Color]::FromArgb(255, 26, 69, 59)     # #1A453B
