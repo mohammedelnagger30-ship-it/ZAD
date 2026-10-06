@@ -31,25 +31,22 @@ android {
         }
         signingProperties.load(new StringReader(signingPropertiesText))
     }
-    def releaseKeystorePath = System.getenv('ZAD_KEYSTORE_PATH') ?: signingProperties.getProperty('storeFile')
+    // Use app-release.jks consistently for all releases to ensure updates work
+    def releaseKeystorePath = System.getenv('ZAD_KEYSTORE_PATH') ?: signingProperties.getProperty('storeFile') ?: 'app-release.jks'
     def releaseStorePassword = System.getenv('ZAD_KEYSTORE_PASSWORD') ?: signingProperties.getProperty('storePassword')
     def releaseKeyAlias = System.getenv('ZAD_KEY_ALIAS') ?: signingProperties.getProperty('keyAlias')
     def releaseKeyPassword = System.getenv('ZAD_KEY_PASSWORD') ?: signingProperties.getProperty('keyPassword')
     signingConfigs {
         release {
-            if (releaseKeystorePath && releaseStorePassword && releaseKeyAlias && releaseKeyPassword) {
-                storeFile file(releaseKeystorePath)
-                storePassword releaseStorePassword
-                keyAlias releaseKeyAlias
-                keyPassword releaseKeyPassword
-            }
+            storeFile file(releaseKeystorePath)
+            storePassword releaseStorePassword
+            keyAlias releaseKeyAlias
+            keyPassword releaseKeyPassword
         }
     }
     buildTypes {
         release {
-            if (releaseKeystorePath && releaseStorePassword && releaseKeyAlias && releaseKeyPassword) {
-                signingConfig signingConfigs.release
-            }
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
