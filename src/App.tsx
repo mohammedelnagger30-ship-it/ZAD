@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useEffect, useCallback } from 'react';
+import { lazy, Suspense, type ComponentType, useState, useEffect, useCallback } from 'react';
 import { CloudOff, X } from 'lucide-react';
 import { useSettings, useTheme, useNavigation } from '@/hooks/useApp';
 import { BottomNav } from '@/components/BottomNav';
@@ -13,21 +13,54 @@ import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import type { Session } from '@supabase/supabase-js';
 import type { Settings } from '@/db/database';
+import { AzanOverlayModal } from '@/components/AzanOverlayModal';
+import { useAzanTrigger } from '@/hooks/useAzanTrigger';
 
 const ONBOARDED_KEY = 'hifzi-onboarded';
 
-const HomeScreen = lazy(() => import('@/screens/HomeScreen').then((module) => ({ default: module.HomeScreen })));
-const Onboarding = lazy(() => import('@/components/Onboarding').then((module) => ({ default: module.Onboarding })));
-const QuranScreen = lazy(() => import('@/screens/QuranScreen').then((module) => ({ default: module.QuranScreen })));
-const PlannerScreen = lazy(() => import('@/screens/PlannerScreen').then((module) => ({ default: module.PlannerScreen })));
-const PrayerScreen = lazy(() => import('@/screens/PrayerScreen').then((module) => ({ default: module.PrayerScreen })));
-const HadithScreen = lazy(() => import('@/screens/HadithScreen').then((module) => ({ default: module.HadithScreen })));
-const ProgressScreen = lazy(() => import('@/screens/ProgressScreen').then((module) => ({ default: module.ProgressScreen })));
-const SettingsScreen = lazy(() => import('@/screens/SettingsScreen').then((module) => ({ default: module.SettingsScreen })));
-const MoreScreen = lazy(() => import('@/screens/MoreScreen').then((module) => ({ default: module.MoreScreen })));
-const ContentLibrary = lazy(() => import('@/screens/ContentLibrary').then((module) => ({ default: module.ContentLibrary })));
-const AdhkarScreen = lazy(() => import('@/screens/AdhkarScreen').then((module) => ({ default: module.AdhkarScreen })));
-const TasbihScreen = lazy(() => import('@/screens/TasbihScreen').then((module) => ({ default: module.TasbihScreen })));
+/**
+ * Wrap a screen's dynamic import in a single retry.
+ *
+ * A route chunk can be served either by the service worker's precache or by the APK's own
+ * assets, and for a brief window right after an in-app update those two disagree: the page asks
+ * for the new hashed filename while the old worker is still in control, so the dynamic import
+ * rejects with "Failed to fetch dynamically imported module" once and then would load fine the
+ * next moment. A rejected import otherwise propagates up to the top-level ErrorBoundary and
+ * blanks the whole app. Retrying once after a pause lets the freshly activated worker answer.
+ * If the chunk is genuinely gone (corrupt install), the original error still surfaces instead
+ * of retrying forever.
+ */
+// The constraint mirrors @types/react's own `lazy()` (T extends ComponentType<any>); a concrete
+// props type cannot name it because function components are contravariant in their props.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type LazyScreenModule = { default: ComponentType<any> };
+
+function lazyWithRetry<M extends LazyScreenModule>(loader: () => Promise<M>) {
+  let retried = false;
+  return lazy(async () => {
+    try {
+      return await loader();
+    } catch (error) {
+      if (retried) throw error;
+      retried = true;
+      await new Promise((resolve) => window.setTimeout(resolve, 800));
+      return loader();
+    }
+  });
+}
+
+const HomeScreen = lazyWithRetry(() => import('@/screens/HomeScreen').then((module) => ({ default: module.HomeScreen })));
+const Onboarding = lazyWithRetry(() => import('@/components/Onboarding').then((module) => ({ default: module.Onboarding })));
+const QuranScreen = lazyWithRetry(() => import('@/screens/QuranScreen').then((module) => ({ default: module.QuranScreen })));
+const PlannerScreen = lazyWithRetry(() => import('@/screens/PlannerScreen').then((module) => ({ default: module.PlannerScreen })));
+const PrayerScreen = lazyWithRetry(() => import('@/screens/PrayerScreen').then((module) => ({ default: module.PrayerScreen })));
+const HadithScreen = lazyWithRetry(() => import('@/screens/HadithScreen').then((module) => ({ default: module.HadithScreen })));
+const ProgressScreen = lazyWithRetry(() => import('@/screens/ProgressScreen').then((module) => ({ default: module.ProgressScreen })));
+const SettingsScreen = lazyWithRetry(() => import('@/screens/SettingsScreen').then((module) => ({ default: module.SettingsScreen })));
+const MoreScreen = lazyWithRetry(() => import('@/screens/MoreScreen').then((module) => ({ default: module.MoreScreen })));
+const ContentLibrary = lazyWithRetry(() => import('@/screens/ContentLibrary').then((module) => ({ default: module.ContentLibrary })));
+const AdhkarScreen = lazyWithRetry(() => import('@/screens/AdhkarScreen').then((module) => ({ default: module.AdhkarScreen })));
+const TasbihScreen = lazyWithRetry(() => import('@/screens/TasbihScreen').then((module) => ({ default: module.TasbihScreen })));
 
 function App() {
   return (
@@ -347,6 +380,7 @@ function AppContent({
   const { screen, params, navigate, resetNonce, goBack } = useNavigation();
   const [onboarded, setOnboarded] = useState<boolean | null>(null);
   const [syncRevision, setSyncRevision] = useState(0);
+  const { azanState, closeAzan } = useAzanTrigger(settings);
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform() || onboarded === null || !onboarded) return;
@@ -429,7 +463,7 @@ function AppContent({
       <div className="min-h-screen bg-surface-light dark:bg-surface-dark flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 mx-auto mb-4 overflow-hidden rounded-2xl shadow-lg animate-pulse-soft">
-            <img src="/icon.svg" alt="Nour ZAD" className="h-full w-full" />
+            <img src="/icon.svg" alt="Sakinah" className="h-full w-full" />
           </div>
           <p className="text-primary-600 dark:text-primary-300 text-sm">جارٍ التحميل...</p>
         </div>
@@ -506,6 +540,18 @@ function AppContent({
           </div>
         </main>
         <BottomNav current={screen} onNavigate={navigate} />
+        {settings && (
+          <AzanOverlayModal
+            isOpen={azanState.isOpen}
+            prayerKey={azanState.prayerKey}
+            prayerName={azanState.prayerName}
+            prayerTime={azanState.prayerTime}
+            settings={settings}
+            isPreview={azanState.isPreview}
+            onClose={closeAzan}
+            onNavigateToAdhkar={() => navigate('adhkar')}
+          />
+        )}
       </div>
     </ErrorBoundary>
   );
