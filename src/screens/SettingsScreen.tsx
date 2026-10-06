@@ -1,12 +1,11 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Moon, Sun, Monitor, Bell, Volume2, MapPin, Type, Download, Upload, Settings as SettingsIcon, Info, Check, Cloud, LogOut, RefreshCw, Smartphone, Play, Square } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
-import { LocalNotifications } from '@capacitor/local-notifications';
 import { Card, Button } from '@/components/ui';
 import { TimeOptionButton } from '@/components/TimeOptionButton';
 import { CALC_METHODS, CALC_METHOD_NAMES_AR } from '@/utils/prayerTimes';
 import { ADHAN_SOUNDS, DEFAULT_ADHAN_SOUND_ID } from '@/data/adhanSounds';
-import { createNotificationChannels, rescheduleAllNotifications } from '@/utils/notificationScheduler';
+import { rescheduleAllNotifications } from '@/utils/notificationScheduler';
 import { requestNotificationPermission } from '@/utils/notifications';
 // `db` drives the backup export/import and `Settings` types the props. Both were used
 // here without ever being imported, so this screen did not compile.
@@ -187,7 +186,6 @@ export function SettingsScreen({
   onSignOut,
 }: SettingsScreenProps) {
   const [exportStatus, setExportStatus] = useState('');
-  const [adhanTestStatus, setAdhanTestStatus] = useState('');
   const [adhanPreviewStatus, setAdhanPreviewStatus] = useState('');
   const [previewingAdhanId, setPreviewingAdhanId] = useState<string | null>(null);
   const adhanAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -209,36 +207,6 @@ export function SettingsScreen({
     openInBrowser: openUpdateInBrowserFallback,
   } = useAppUpdate();
   const updatePercent = updateProgress && updateProgress.percent >= 0 ? updateProgress.percent : null;
-
-  const testAdhan = useCallback(async () => {
-    if (!Capacitor.isNativePlatform()) {
-      setAdhanTestStatus('تشغيل صوت الإشعار متاح في تطبيق أندرويد فقط.');
-      return;
-    }
-    try {
-      if (!(await requestNotificationPermission())) {
-        setAdhanTestStatus('اسمح بالإشعارات من إعدادات الهاتف لتجربة الأذان.');
-        return;
-      }
-      await createNotificationChannels(settings);
-      const sound = ADHAN_SOUNDS.find((item) => item.id === settings.adhanVoiceId) ?? ADHAN_SOUNDS[0];
-      await LocalNotifications.schedule({
-        notifications: [{
-          id: 999999,
-          title: 'تجربة صوت الأذان',
-          body: `الصوت المختار: ${sound.name}`,
-          schedule: { at: new Date(Date.now() + 1500), allowWhileIdle: true },
-          channelId: settings.adhanSound ? `prayer-${sound.id}` : 'prayer-muted',
-          sound: settings.adhanSound ? sound.file : undefined,
-          smallIcon: 'ic_notification',
-          iconColor: '#1f734e',
-        }],
-      });
-      setAdhanTestStatus('سيصلك إشعار تجريبي خلال لحظات.');
-    } catch (error) {
-      setAdhanTestStatus(error instanceof Error ? `تعذّر تشغيل التجربة: ${error.message}` : 'تعذّر تشغيل تجربة الأذان.');
-    }
-  }, [settings]);
 
   const stopAdhanPreview = useCallback(() => {
     const audio = adhanAudioRef.current;
@@ -651,7 +619,7 @@ export function SettingsScreen({
                 ))}
               </select>
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                استمع للتسجيل كاملًا، أو جرّب صوت إشعار الصلاة. مستوى صوت الوسائط والإشعارات يتحكم بهما الهاتف كلٌّ على حدة.
+                استمع للتسجيل كاملًا. مستوى صوت الوسائط والإشعارات يتحكم بهما الهاتف كلٌّ على حدة.
               </p>
               <Button
                 variant="secondary"
@@ -665,14 +633,6 @@ export function SettingsScreen({
               {adhanPreviewStatus && (
                 <p role="status" className="mt-2 text-xs text-primary-600 dark:text-gold-400">
                   {adhanPreviewStatus}
-                </p>
-              )}
-              <Button variant="secondary" size="sm" onClick={testAdhan} className="mt-2 w-full">
-                <Volume2 size={16} /> تجربة صوت الأذان
-              </Button>
-              {adhanTestStatus && (
-                <p role="status" className="mt-2 text-xs text-primary-600 dark:text-gold-400">
-                  {adhanTestStatus}
                 </p>
               )}
             </div>
@@ -846,7 +806,7 @@ export function SettingsScreen({
           <Info size={18} /> عن التطبيق
         </p>
         <div className="space-y-1 text-xs text-gray-500 dark:text-gray-400">
-          <p>Nour ZAD — رفيق القرآن والعبادة اليومية</p>
+          <p>Sakinah — رفيق القرآن والعبادة اليومية</p>
           <p>يعمل بالكامل بدون إنترنت بعد التثبيت</p>
           <p className="mt-2">جميع البيانات مخزنة محلياً على جهازك</p>
         </div>
