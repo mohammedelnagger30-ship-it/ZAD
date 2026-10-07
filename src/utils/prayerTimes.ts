@@ -55,6 +55,7 @@ export function calculatePrayerTimes(
   const qiblaDirection = Qibla(coords);
 
   const now = new Date();
+  const nowInTimeZone = convertWallClockToInstant(now, timeZone);
   const prayerTimes: { name: string; arabicName: string; time: Date }[] = [
     { name: 'fajr', arabicName: 'الفجر', time: pt.fajr },
     { name: 'sunrise', arabicName: 'الشروق', time: pt.sunrise },
@@ -66,7 +67,7 @@ export function calculatePrayerTimes(
 
   const prayers: PrayerTimeInfo[] = prayerTimes.map((prayer) => {
     const time = convertWallClockToInstant(prayer.time, timeZone);
-    return { ...prayer, time, passed: time < now };
+    return { ...prayer, time, passed: time < nowInTimeZone };
   });
 
   return { prayers, qiblaDirection, date: prayerDate };
@@ -81,7 +82,9 @@ export function getNextPrayer(
 ): PrayerTimeInfo | null {
   const now = new Date();
   const today = calculatePrayerTimes(latitude, longitude, now, calcMethod, asrMadhab, timeZone);
-  const upcoming = today.prayers.filter((p) => p.name !== 'sunrise' && p.time > now);
+  // Use the current time in the specified timezone for comparison
+  const nowInTimeZone = convertWallClockToInstant(now, timeZone);
+  const upcoming = today.prayers.filter((p) => p.name !== 'sunrise' && p.time > nowInTimeZone);
   if (upcoming.length > 0) {
     return upcoming[0];
   }
