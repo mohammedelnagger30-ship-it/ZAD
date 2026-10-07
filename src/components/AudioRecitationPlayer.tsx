@@ -213,6 +213,12 @@ export function AudioRecitationPlayer({
         setActiveAyah(currentVerse.ayah);
         setSelectedAyah(currentVerse.ayah);
       }
+
+      // Check if we've reached the end of the last verse
+      const lastVerse = source.verseTimings[source.verseTimings.length - 1];
+      if (currentMs >= lastVerse.endMs) {
+        stop();
+      }
       return;
     }
 
@@ -230,7 +236,25 @@ export function AudioRecitationPlayer({
   };
 
   const handleEnded = () => {
-    stop();
+    // Only stop if we're not in continuous mode or if we've truly reached the end
+    // In continuous mode, the audio should play until the end of the surah
+    if (!continuousRef.current) {
+      stop();
+    } else {
+      // In continuous mode, stop playback only if we've reached the last verse
+      if (source && activeAyahRef.current === source.verseTimings[source.verseTimings.length - 1].ayah) {
+        stop();
+      } else {
+        // If playback ended unexpectedly in continuous mode, try to continue
+        // This handles cases where the audio file might have buffering issues
+        const nextAyah = activeAyahRef.current ? activeAyahRef.current + 1 : 1;
+        if (source && nextAyah <= source.verseTimings.length) {
+          playAyah(nextAyah, true);
+        } else {
+          stop();
+        }
+      }
+    }
   };
 
   const toggleSurah = () => {
@@ -384,9 +408,20 @@ export function AudioRecitationPlayer({
       </Card>
       <audio
         ref={audioRef}
-        preload="metadata"
+        preload="auto"
         onEnded={handleEnded}
         onTimeUpdate={handleTimeUpdate}
+        onError={() => {
+          if (continuousRef.current && isPlaying) {
+            // Try to recover from errors in continuous mode
+            const nextAyah = activeAyahRef.current ? activeAyahRef.current + 1 : 1;
+            if (source && nextAyah <= source.verseTimings.length) {
+              playAyah(nextAyah, true);
+            } else {
+              stop();
+            }
+          }
+        }}
       />
       {children({ activeAyah, isPlaying, selectedAyah, selectAyah, playSelectedAyah: startSelectedAyah })}
     </>
