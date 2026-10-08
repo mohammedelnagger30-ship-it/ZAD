@@ -148,6 +148,12 @@ body {
   --frame: #8b6914;
   --frame-soft: rgba(139, 105, 20, 0.35);
   --wash: rgba(139, 105, 20, 0.08);
+  /* What the selected and the bookmarked ayah wear, and the ink that goes on the
+     frame's own disc: all three are answered from the sheet's palette, so night has
+     only to restate them for the whole page to agree with itself. */
+  --selected-wash: rgba(212, 160, 23, 0.2);
+  --bookmark-wash: rgba(212, 160, 23, 0.12);
+  --frame-on: #ffffff;
   --fs: 26px;
   --lh: 2.05;
 
@@ -186,37 +192,44 @@ body {
 }
 
 .mushaf-page--night {
-  --paper: #18140e;
-  --ink: #e8dcc4;
-  --frame: #c9a852;
-  --frame-soft: rgba(201, 168, 82, 0.4);
-  --wash: rgba(201, 168, 82, 0.1);
+  --paper: #191510;
+  --ink: #ede3cd;
+  --frame: #cfa95c;
+  --frame-soft: rgba(207, 169, 92, 0.4);
+  --wash: rgba(207, 169, 92, 0.1);
+  --selected-wash: rgba(207, 169, 92, 0.3);
+  --bookmark-wash: rgba(207, 169, 92, 0.16);
+  --frame-on: #171008;
 
   /*
    * The light sheet's sheen is a highlight bouncing off paper. Inherited unchanged on a
    * dark sheet it is just white paint, and it washed the top third of every night page
    * grey. The night sheet gets the same shape of light in its own colour instead: a
    * warm bloom from the head of the page, and rules in gold rather than brown.
+   *
+   * The gold above is the gold the chrome wears — the reader's accent, its frame and
+   * its fittings are one colour at different strengths, which is what makes the frame
+   * and the page read as one object rather than a theme over a template.
    */
   background-image:
-    radial-gradient(130% 78% at 50% 0%, rgba(201, 168, 82, 0.09), transparent 62%),
-    radial-gradient(110% 68% at 50% 100%, rgba(201, 168, 82, 0.05), transparent 64%),
-    linear-gradient(180deg, rgba(232, 220, 196, 0.05), transparent 32%),
+    radial-gradient(130% 78% at 50% 0%, rgba(207, 169, 92, 0.1), transparent 62%),
+    radial-gradient(110% 68% at 50% 100%, rgba(207, 169, 92, 0.05), transparent 64%),
+    linear-gradient(180deg, rgba(237, 227, 205, 0.05), transparent 32%),
     repeating-linear-gradient(
       to bottom,
       transparent 0,
       transparent calc(var(--fs) * 1.7),
-      rgba(201, 168, 82, 0.05) calc(var(--fs) * 1.7),
-      rgba(201, 168, 82, 0.05) calc(var(--fs) * 1.74)
+      rgba(207, 169, 92, 0.05) calc(var(--fs) * 1.7),
+      rgba(207, 169, 92, 0.05) calc(var(--fs) * 1.74)
     );
   box-shadow:
-    0 20px 45px -20px rgba(0, 0, 0, 0.75),
-    0 2px 5px rgba(0, 0, 0, 0.4),
-    inset 0 0 0 1px rgba(201, 168, 82, 0.2);
+    0 26px 55px -22px rgba(0, 0, 0, 0.85),
+    0 3px 8px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(207, 169, 92, 0.22);
 }
 
 .mushaf-page--night::before {
-  border-color: rgba(201, 168, 82, 0.18);
+  border-color: rgba(207, 169, 92, 0.18);
 }
 
 /* A restrained triple rule gives the page a printed, illuminated-manuscript edge. */
@@ -355,11 +368,11 @@ body {
 }
 
 .quran-surah-ayah__text--selected {
-  background: rgba(212, 160, 23, 0.2);
+  background: var(--selected-wash);
 }
 
 .quran-surah-ayah__text--bookmarked {
-  background: rgba(212, 160, 23, 0.12);
+  background: var(--bookmark-wash);
 }
 
 .quran-surah-ayah__actions {
@@ -388,13 +401,11 @@ body {
   outline-offset: 2px;
 }
 
+/* The marker struck out in the frame's own gold, with the sheet's ink on the disc —
+   white on night gold measured 2.2:1, the ink on the same gold measures 8.5:1. */
 .mushaf-ayah-mark--active {
-  color: #fff;
+  color: var(--frame-on);
   background: var(--frame);
-}
-
-.mushaf-page--night .quran-surah-ayah__text--selected {
-  background: rgba(212, 160, 23, 0.3);
 }
 
 .mushaf-ayah {
@@ -573,6 +584,14 @@ body {
   --chip: rgb(var(--primary-50));
   --chip-fg: rgb(var(--primary-700));
   --gold: #d4a017;
+  --on-gold: #2a1c05;
+  /* A control sitting above its track — the selected jump tab — and the fittings that
+     follow the reader rather than the app: text selection, the scrollbar, a hover. */
+  --raised: var(--panel);
+  --selection: rgb(var(--primary-500) / 0.3);
+  --scroll-thumb: rgb(var(--primary-500) / 0.3);
+  --scroll-thumb-hover: rgb(var(--primary-500) / 0.5);
+  --hover: rgb(15 23 42 / 0.05);
 
   position: fixed;
   inset: 0;
@@ -598,20 +617,36 @@ body {
   --accent-soft: rgb(var(--primary-900));
   --chip: rgb(var(--primary-900));
   --chip-fg: rgb(var(--primary-200));
+  --hover: rgb(255 255 255 / 0.06);
 }
 
+/*
+ * Night: the manuscript read by lamplight. One warm ramp runs the whole frame — the
+ * sheet behind everything deepest, the chrome a step above it, controls a step above
+ * that — and a single gold does the accent, the frame and the fittings, so nothing
+ * around the page competes with it. Every value is a step in that ramp rather than a
+ * colour chosen to match its neighbour, which is what keeps a dark UI from reading as
+ * a stack of unrelated darks.
+ */
 .mushaf-shell[data-mode='night'] {
   color-scheme: dark;
-  --surface: #0b0906;
-  --panel: #14100a;
-  --line: #2a2317;
-  --fg: #e7dcc0;
-  --fg-muted: #a89877;
-  --accent: #c9a852;
-  --accent-soft: #241d12;
-  --on-accent: #1c150a;
-  --chip: #1e1810;
-  --chip-fg: #e2d4b0;
+  --surface: #0a0a09;
+  --panel: #17140f;
+  --line: #2c261b;
+  --fg: #ece4d1;
+  --fg-muted: #a99d84;
+  --accent: #cfa95c;
+  --accent-soft: #2e2718;
+  --on-accent: #171008;
+  --chip: #1f1b14;
+  --chip-fg: #e5d9b8;
+  --gold: #d9b56a;
+  --on-gold: #171008;
+  --raised: #282218;
+  --selection: rgb(207 169 92 / 0.34);
+  --scroll-thumb: rgb(207 169 92 / 0.3);
+  --scroll-thumb-hover: rgb(207 169 92 / 0.5);
+  --hover: rgb(207 169 92 / 0.12);
 }
 
 .mushaf-shell button:focus-visible,
@@ -620,6 +655,39 @@ body {
 .mushaf-shell [role='button']:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* The reader's own fittings: text selected inside it, and the scrollbar that runs
+   down its sheets, take the reading mode's gold rather than arriving as the app
+   theme's colour (selection) or the browser's (scrollbar) on a gold page. */
+.mushaf-shell ::selection {
+  background: var(--selection);
+}
+
+.mushaf-shell ::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+}
+
+.mushaf-shell ::-webkit-scrollbar-thumb:hover {
+  background: var(--scroll-thumb-hover);
+}
+
+/* The sheet arrives from below with a lamp under it: a deeper shadow than day casts,
+   and one gold hairline where the panel meets the page behind it. */
+.mushaf-shell[data-mode='night'] .mushaf-sheet__panel {
+  box-shadow:
+    0 -26px 60px -26px rgb(0 0 0 / 0.9),
+    0 -1px 0 rgb(207 169 92 / 0.14);
+}
+
+.mushaf-shell[data-mode='night'] .mushaf-sheet__backdrop {
+  background: rgb(0 0 0 / 0.68);
+}
+
+/* The one hero action in night is struck gold rather than painted it — a shallow
+   gradient, enough to read as metal without becoming a highlight of its own. */
+.mushaf-shell[data-mode='night'] .mushaf-tool--primary {
+  background: linear-gradient(180deg, #dab871, #c49a4c);
 }
 
 /* ---- Top bar ---- */
@@ -694,7 +762,7 @@ body {
 
 .mushaf-iconbtn--gold[aria-pressed='true'] {
   background: var(--gold);
-  color: #2a1c05;
+  color: var(--on-gold);
 }
 
 /* ---- Reading area ---- */
@@ -1032,10 +1100,18 @@ body {
     color 0.18s ease;
 }
 
+/* Raised above its own track in both modes: white on day's grey chips, and a lighter
+   step of the night ramp on night's — the old value, the panel, is darker than the
+   chip after dark, so the selected tab used to read as pressed in rather than out. */
 .mushaf-tab[aria-selected='true'] {
-  background: var(--panel);
+  background: var(--raised);
   color: var(--fg);
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.14);
+}
+
+.mushaf-tab:hover:not([aria-selected='true']) {
+  background: var(--hover);
+  color: var(--fg);
 }
 
 .mushaf-jumpbar {
