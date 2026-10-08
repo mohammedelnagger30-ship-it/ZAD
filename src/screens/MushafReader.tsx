@@ -1,17 +1,19 @@
-import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode, RefObject, TouchEvent as ReactTouchEvent, WheelEvent as ReactWheelEvent } from 'react';
 import {
-  ChevronLeft,
-  ChevronRight,
   Bookmark,
+  List,
+  Moon,
+  MoveHorizontal,
+  MoveVertical,
+  ScrollText,
+  SlidersHorizontal,
+  Sun,
   X,
   ZoomIn,
   ZoomOut,
-  Moon,
-  Sun,
-  List,
-  BookOpen,
-  ScrollText,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { MushafPage } from '@/components/mushaf/MushafPage';
 import { TafsirBottomSheet } from '@/components/TafsirBottomSheet';
 import { AudioRecitationPlayer } from '@/components/AudioRecitationPlayer';
@@ -32,6 +34,8 @@ interface MushafReaderProps {
   settings: Settings;
   initialPage?: number;
   onClose: () => void;
+  /** Reported on every turn, so the caller can reopen the reader where it was left. */
+  onPageChange?: (page: number) => void;
 }
 
 const ZOOM_STEP = 0.1;
@@ -39,30 +43,290 @@ const ZOOM_MIN = 0.8;
 const ZOOM_MAX = 2;
 /** Pages are the smallest useful jump target; below this the text stops being readable. */
 const PAGE_KEYBOARD_STEP = 10;
+const SWIPE_DISTANCE = 50;
+const PREFS_KEY = 'zad:mushaf-prefs';
 
-export function MushafReader({ settings, initialPage = 1, onClose }: MushafReaderProps) {
-  const [currentPage, setCurrentPage] = useState(initialPage);
-  const [zoom, setZoom] = useState(1);
-  const [readingScale, setReadingScale] = useState(1);
-  const [lineSpacing, setLineSpacing] = useState(1);
-  const [wordSpacing, setWordSpacing] = useState(0);
-  const [readingMode, setReadingMode] = useState(false);
-  const [nightMode, setNightMode] = useState(false);
-  const [paperMode, setPaperMode] = useState(false);
-  const [showJumpTo, setShowJumpTo] = useState(false);
-  const [jumpTarget, setJumpTarget] = useState<'page' | 'surah' | 'juz' | 'hizb'>('page');
-  const [bookmarkedPages, setBookmarkedPages] = useState<Set<number>>(new Set());
+/**
+ * The vertical stack never holds the whole mushaf: 602 sheets of set type are far too
+ * many to mount. It keeps a sliding window instead — LEAF_PRELOAD sheets to open on,
+ * LEAF_CHUNK sheets added at a time when the reader runs out, and never more than
+ * LEAF_WINDOW at once, so the tail is trimmed as the head grows.
+ */
+const LEAF_PRELOAD = 8;
+const LEAF_CHUNK = 6;
+const LEAF_WINDOW = 40;
+/** Within this many pixels of the head the stack pre-loads, so it never dead-ends. */
+const LEAF_HEADROOM = 8;
+
+type MushafMode = 'day' | 'paper' | 'night';
+/** Which way the reader travels: down a stack of sheets, or across one sheet at a time. */
+type Orientation = 'vertical' | 'horizontal';
+type SheetName = 'jump' | 'options';
+type JumpTarget = 'page' | 'surah' | 'juz' | 'hizb';
+
+/**
+ * How the reader looks, kept in one object on purpose.
+ *
+ * Night, paper, zoom and spacing used to live in five independent pieces of
+ * state, so the shell could end up half themed — chrome in one mode, page in
+ * another — and every change was lost on close. One object, one writer, one
+ * key in localStorage.
+ */
+interface MushafPrefs {
+  mode: MushafMode;
+  orientation: Orientation;
+  zoom: number;
+  readingScale: number;
+  lineSpacing: number;
+  wordSpacing: number;
+}
+
+const DEFAULT_PREFS: MushafPrefs = {
+  mode: 'day',
+  orientation: 'vertical',
+  zoom: 1,
+  readingScale: 1,
+  lineSpacing: 1,
+  wordSpacing: 0,
+};
+
+const JUMP_TABS: { id: JumpTarget; label: string }[] = [
+  { id: 'page', label: 'صفحة' },
+  { id: 'surah', label: 'سورة' },
+  { id: 'juz', label: 'جزء' },
+  { id: 'hizb', label: 'حزب' },
+];
+
+const MODES: { id: MushafMode; label: string; Icon: LucideIcon }[] = [
+  { id: 'day', label: 'نهاري', Icon: Sun },
+  { id: 'paper', label: 'ورقي', Icon: ScrollText },
+  { id: 'night', label: 'ليلي', Icon: Moon },
+];
+
+const ORIENTATIONS: { id: Orientation; label: string; hint: string; Icon: LucideIcon }[] = [
+  {
+    id: 'vertical',
+    label: 'بالطول',
+    hint: 'التنقّل الافتراضي: تنزل بالصفحة تحتها فتأتي التي بعدها، بلا أزرار.',
+    Icon: MoveVertical,
+  },
+  {
+    id: 'horizontal',
+    label: 'بالعرض',
+    hint: 'ورقة واحدة أمامك: اسحب يميناً أو يساراً لقلبها، أو استخدم أسهم لوحة المفاتيح.',
+    Icon: MoveHorizontal,
+  },
+];
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
+  const n = typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+function loadPrefs(): MushafPrefs {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (!raw) return DEFAULT_PREFS;
+    const parsed = JSON.parse(raw) as Partial<MushafPrefs>;
+    return {
+      mode: parsed.mode === 'paper' || parsed.mode === 'night' ? parsed.mode : 'day',
+      // Saved before the option existed, so it opens the way it reads by default.
+      orientation: parsed.orientation === 'horizontal' ? 'horizontal' : 'vertical',
+      zoom: clampNumber(parsed.zoom, ZOOM_MIN, ZOOM_MAX, DEFAULT_PREFS.zoom),
+      readingScale: clampNumber(parsed.readingScale, 0.85, 1.35, DEFAULT_PREFS.readingScale),
+      lineSpacing: clampNumber(parsed.lineSpacing, 0.9, 1.35, DEFAULT_PREFS.lineSpacing),
+      wordSpacing: clampNumber(parsed.wordSpacing, 0, 0.3, DEFAULT_PREFS.wordSpacing),
+    };
+  } catch {
+    return DEFAULT_PREFS;
+  }
+}
+
+export function MushafReader({ settings, initialPage = 1, onClose, onPageChange }: MushafReaderProps) {
+  const totalPages = getTotalPages();
+  const startPage = Math.min(totalPages, Math.max(1, Math.round(initialPage) || 1));
+
+  const [currentPage, setCurrentPage] = useState(startPage);
+  const [prefs, setPrefs] = useState<MushafPrefs>(loadPrefs);
+  const [sheet, setSheet] = useState<SheetName | null>(null);
+  const [jumpTarget, setJumpTarget] = useState<JumpTarget>('page');
+  const [pageField, setPageField] = useState('');
+  const [turnDir, setTurnDir] = useState<'next' | 'prev'>('next');
+  const [bookmarkedPages, setBookmarkedPages] = useState<Set<number>>(() => new Set<number>());
   const [selectedReadingAyah, setSelectedReadingAyah] = useState<{ surahId: number; ayahNumber: number } | null>(null);
   const [tafsirAyah, setTafsirAyah] = useState<{ surahId: number; ayahNumber: number } | null>(null);
   const [reciterId, setReciterId] = useState(loadPreferredReciter);
+  const orientation = prefs.orientation;
 
-  const totalPages = getTotalPages();
+  /**
+   * The window of sheets the vertical stack has in the DOM. Horizontal mode never
+   * touches it: it renders one page, and comes back to this window if the reader
+   * switches to the stack later.
+   */
+  const [leaves, setLeaves] = useState(() => ({
+    first: startPage,
+    last: Math.min(totalPages, startPage + LEAF_PRELOAD - 1),
+  }));
 
-  // Touch swipe handling
+  const currentPageRef = useRef(startPage);
+  const leavesRef = useRef(leaves);
+  const anchorRef = useRef<{ page: number; top: number; scrollTop: number } | null>(null);
+  /** A jump whose sheet is not mounted yet, landed the moment the stack has it. */
+  const pendingLeafRef = useRef<number | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const pageGridRef = useRef<HTMLDivElement>(null);
+  const sheetPanelRef = useRef<HTMLDivElement>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const touchEndRef = useRef<{ x: number; y: number } | null>(null);
 
-  const minSwipeDistance = 50;
+  const leafEl = useCallback(
+    (page: number) => scrollRef.current?.querySelector<HTMLElement>(`[data-page="${page}"]`) ?? null,
+    [],
+  );
+
+  /** Put the top of a sheet level with the top of the reading area. */
+  const scrollToLeaf = useCallback(
+    (page: number) => {
+      const container = scrollRef.current;
+      const el = leafEl(page);
+      if (!container || !el) return false;
+      // Scroll coordinates start at the content box, `getBoundingClientRect` at the
+      // border box: without the scroller's own padding a jump lands the sheet a
+      // gutter too high, touching the top bar.
+      const gutter = parseFloat(getComputedStyle(container).paddingTop) || 0;
+      container.scrollTop += el.getBoundingClientRect().top - container.getBoundingClientRect().top - gutter;
+      return true;
+    },
+    [leafEl],
+  );
+
+  /**
+   * Land on a sheet now if the stack already holds it, and remember it if the stack is
+   * still rendering — a jump is asked for in an event, but the sheet it is aiming at may
+   * only exist after the commit that follows it.
+   */
+  const landOnLeaf = useCallback(
+    (page: number) => {
+      pendingLeafRef.current = scrollToLeaf(page) ? null : page;
+    },
+    [scrollToLeaf],
+  );
+
+  // The other half of `landOnLeaf`: sheet present, jump owed, land on it. Runs before
+  // the browser paints, so the reader never sees the old position first.
+  useLayoutEffect(() => {
+    const target = pendingLeafRef.current;
+    if (target === null) return;
+    if (orientation !== 'vertical') {
+      pendingLeafRef.current = null;
+      return;
+    }
+    if (scrollToLeaf(target)) pendingLeafRef.current = null;
+  }, [leaves, orientation, scrollToLeaf]);
+
+  /**
+   * Slide the window. Moving its head changes where every sheet below it sits in the
+   * document, so the sheet that stays visible across the change is measured first and
+   * the scroller is corrected by however far that sheet moved — the pages are meant to
+   * arrive and leave underneath the eye, not to jump it.
+   */
+  const applyLeaves = useCallback(
+    (next: { first: number; last: number }) => {
+      const prev = leavesRef.current;
+      if (prev.first === next.first && prev.last === next.last) return;
+      if (next.first !== prev.first) {
+        const anchorPage = next.first > prev.first ? next.first : prev.first;
+        const container = scrollRef.current;
+        const el = leafEl(anchorPage);
+        // A sheet that is not in the document yet (the stack is re-opening around a
+        // jumped-to page) has no position to hold on to — but a sheet that is still to
+        // come does, and dropping it would drop the reader's place: two moves can be
+        // asked for before one commit, and the correction is measured against the
+        // layout both of them started from.
+        if (container && el) {
+          anchorRef.current = {
+            page: anchorPage,
+            top: el.getBoundingClientRect().top,
+            scrollTop: container.scrollTop,
+          };
+        }
+      }
+      leavesRef.current = next;
+      setLeaves(next);
+    },
+    [leafEl],
+  );
+
+  /** Ask for the sheets above the stack. Stopped by the reader having reached page 1. */
+  const prependLeaves = useCallback(
+    (headroom: number) => {
+      const container = scrollRef.current;
+      if (!container || container.scrollTop > headroom) return;
+      const current = leavesRef.current;
+      if (current.first <= 1) return;
+      const first = Math.max(1, current.first - LEAF_CHUNK);
+      applyLeaves({ first, last: Math.min(current.last, first + LEAF_WINDOW - 1) });
+    },
+    [applyLeaves],
+  );
+
+  // Runs after the window moved, before the browser paints the result of it.
+  useLayoutEffect(() => {
+    const anchor = anchorRef.current;
+    if (!anchor) return;
+    anchorRef.current = null;
+    const container = scrollRef.current;
+    const el = leafEl(anchor.page);
+    if (!container || !el) return;
+    // Measured in the document rather than on the screen: a scroll that slipped in
+    // while React was still committing belongs to the reader, not to the stack, and
+    // paying for it here would cancel the reader's own movement.
+    const was = anchor.top + anchor.scrollTop;
+    const now = el.getBoundingClientRect().top + container.scrollTop;
+    container.scrollTop += now - was;
+  }, [leaves.first, leafEl]);
+
+  // A reloaded document restores every scroll box to where it was, which drops a
+  // freshly opened page half way down its sheet. The reader owns its scroller, so
+  // it takes scroll restoration back while it is on screen, and puts the scroller
+  // back on the page being read — the head of a sheet in horizontal mode, the top
+  // of that sheet's leaf in the stack.
+  const resetScroll = useCallback(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+    if (orientation === 'vertical') scrollToLeaf(currentPageRef.current);
+    else container.scrollTo({ top: 0 });
+  }, [orientation, scrollToLeaf]);
+
+  useEffect(() => {
+    const previous = history.scrollRestoration;
+    try {
+      history.scrollRestoration = 'manual';
+    } catch {
+      /* Not every context allows the flag; the reset below still runs. */
+    }
+
+    resetScroll();
+    // The type is set by a font that may still be arriving on a cold open: when it
+    // lands the lines re-break and the sheet the reader opened on moves under them.
+    // Land on it again — but only if the reader has not moved on since.
+    const openedOn = currentPageRef.current;
+    document.fonts.ready
+      .then(() => {
+        if (currentPageRef.current === openedOn) resetScroll();
+      })
+      .catch(() => {});
+    window.addEventListener('pageshow', resetScroll);
+
+    return () => {
+      window.removeEventListener('pageshow', resetScroll);
+      try {
+        history.scrollRestoration = previous;
+      } catch {
+        /* Ignore a rejected restore of the flag. */
+      }
+    };
+  }, [resetScroll]);
 
   // Load persisted page bookmarks. Component state would lose them on every close.
   useEffect(() => {
@@ -82,81 +346,193 @@ export function MushafReader({ settings, initialPage = 1, onClose }: MushafReade
 
   const goToPage = useCallback(
     (page: number) => {
-      if (page >= 1 && page <= totalPages) {
-        setCurrentPage(page);
-        setShowJumpTo(false);
+      const target = Math.min(totalPages, Math.max(1, Math.round(page) || 1));
+      if (target !== currentPageRef.current) {
+        // The direction decides which way the new sheet slides in.
+        setTurnDir(target > currentPageRef.current ? 'next' : 'prev');
+        currentPageRef.current = target;
+        setCurrentPage(target);
+        setSelectedReadingAyah(null);
+        onPageChange?.(target);
+      }
+      setSheet(null);
+
+      if (orientation !== 'vertical') return;
+      // Open the window around the target if the stack does not hold it yet, then land
+      // on it — now if the sheet is already there, right after the commit if it is not.
+      const stack = leavesRef.current;
+      if (target < stack.first || target > stack.last) {
+        applyLeaves({ first: target, last: Math.min(totalPages, target + LEAF_PRELOAD - 1) });
+      }
+      landOnLeaf(target);
+    },
+    [totalPages, onPageChange, orientation, applyLeaves, landOnLeaf],
+  );
+
+  const updatePrefs = useCallback((patch: Partial<MushafPrefs>) => {
+    setPrefs((prev) => {
+      const next = { ...prev, ...patch };
+      try {
+        localStorage.setItem(PREFS_KEY, JSON.stringify(next));
+      } catch {
+        /* Losing a preference costs nothing; breaking a render would. */
+      }
+      return next;
+    });
+  }, []);
+
+  /**
+   * Swap between the stack and the single sheet. The stack has to open around the
+   * page being read — otherwise it would come back on whatever window the last
+   * vertical session left behind — and `resetScroll` puts the scroller on it.
+   */
+  const setOrientation = useCallback(
+    (next: Orientation) => {
+      if (next === orientation) return;
+      updatePrefs({ orientation: next });
+      if (next !== 'vertical') return;
+      const target = currentPageRef.current;
+      const stack = leavesRef.current;
+      if (target < stack.first || target > stack.last) {
+        applyLeaves({ first: target, last: Math.min(totalPages, target + LEAF_PRELOAD - 1) });
       }
     },
-    [totalPages],
+    [orientation, updatePrefs, applyLeaves, totalPages],
   );
+
+  const zoomIn = useCallback(() => updatePrefs({ zoom: clampNumber(prefs.zoom + ZOOM_STEP, ZOOM_MIN, ZOOM_MAX, 1) }), [prefs.zoom, updatePrefs]);
+  const zoomOut = useCallback(() => updatePrefs({ zoom: clampNumber(prefs.zoom - ZOOM_STEP, ZOOM_MIN, ZOOM_MAX, 1) }), [prefs.zoom, updatePrefs]);
+
+  /**
+   * What a scrolled stack owes the rest of the reader: the sheet hanging over the top
+   * of the reading area owns the header, the progress line and the bookmark — exactly
+   * as the sheet a page turn lands on does — and the window is fed from whichever end
+   * is running out. Done on the scroll event itself: the browser already delivers those
+   * once a frame, and a reader whose tab has stopped painting must not stop keeping up.
+   */
+  const handleVerticalScroll = useCallback(() => {
+    const box = scrollRef.current;
+    if (!box) return;
+
+    // The top sheet is the first one reaching into the reading area, not the last one
+    // starting above it — between two sheets there is a gap showing the shell, and
+    // counting the sheet behind that gap would name a page nobody is looking at.
+    const sheets = box.querySelectorAll<HTMLElement>('[data-page]');
+    if (sheets.length > 0) {
+      const boxTop = box.getBoundingClientRect().top;
+      let top = Number(sheets[sheets.length - 1].dataset.page);
+      for (const leaf of sheets) {
+        if (leaf.getBoundingClientRect().bottom > boxTop) {
+          top = Number(leaf.dataset.page);
+          break;
+        }
+      }
+      if (Number.isFinite(top) && top !== currentPageRef.current) {
+        currentPageRef.current = top;
+        setCurrentPage(top);
+        onPageChange?.(top);
+      }
+    }
+
+    const current = leavesRef.current;
+    const runningOut = box.scrollHeight - (box.scrollTop + box.clientHeight) < box.clientHeight;
+    if (runningOut && current.last < totalPages) {
+      const last = Math.min(totalPages, current.last + LEAF_CHUNK);
+      applyLeaves({ first: Math.max(current.first, last - LEAF_WINDOW + 1), last });
+    } else if (box.scrollTop < LEAF_HEADROOM) {
+      prependLeaves(LEAF_HEADROOM);
+    }
+  }, [applyLeaves, onPageChange, prependLeaves, totalPages]);
+
+  // A turned sheet opens at its head. The stack never joins in: there, scrolling is
+  // the reading, and pulling it back to the top on every crossing would be a jump.
+  useEffect(() => {
+    if (orientation === 'horizontal') scrollRef.current?.scrollTo({ top: 0 });
+  }, [currentPage, orientation]);
+
+  // Focus lands in the sheet that just opened, and Escape gives it back.
+  useEffect(() => {
+    if (sheet) sheetPanelRef.current?.focus();
+  }, [sheet]);
 
   // Page turns are the primary interaction here, so bind them to the keyboard as well.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (showJumpTo) return;
-      // In an RTL layout the left arrow advances, matching the on-screen button order.
-      if (e.key === 'ArrowLeft') goToPage(currentPage + (e.shiftKey ? PAGE_KEYBOARD_STEP : 1));
-      else if (e.key === 'ArrowRight') goToPage(currentPage - (e.shiftKey ? PAGE_KEYBOARD_STEP : 1));
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing =
+        !!target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable);
+
+      if (event.key === 'Escape') {
+        if (tafsirAyah) {
+          setTafsirAyah(null);
+          event.preventDefault();
+        } else if (sheet) {
+          setSheet(null);
+          event.preventDefault();
+        }
+        return;
+      }
+
+      if (sheet || tafsirAyah || typing) return;
+      // In an RTL layout the left arrow advances, matching the reading direction; in
+      // the stack the down arrow does the same job under the thumb.
+      const step = event.shiftKey ? PAGE_KEYBOARD_STEP : 1;
+      const forward = orientation === 'vertical' ? ['ArrowLeft', 'ArrowDown'] : ['ArrowLeft'];
+      const backward = orientation === 'vertical' ? ['ArrowRight', 'ArrowUp'] : ['ArrowRight'];
+      if (forward.includes(event.key)) {
+        event.preventDefault();
+        goToPage(currentPage + step);
+      } else if (backward.includes(event.key)) {
+        event.preventDefault();
+        goToPage(currentPage - step);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [currentPage, goToPage, showJumpTo]);
+  }, [currentPage, goToPage, orientation, sheet, tafsirAyah]);
 
-  // Touch swipe handling for page navigation
-  useEffect(() => {
-    const onTouchStart = (e: Event) => {
-      const touchEvent = e as TouchEvent;
-      touchEndRef.current = null;
-      touchStartRef.current = {
-        x: touchEvent.changedTouches[0].screenX,
-        y: touchEvent.changedTouches[0].screenY,
-      };
-    };
+  // Page turns by swipe. Bound to the scroller (not to the sheet inside it), so a
+  // gesture started on the margin counts too and a vertical scroll never turns a page.
+  const handleTouchStart = (event: ReactTouchEvent<HTMLDivElement>) => {
+    touchStartRef.current = { x: event.changedTouches[0].clientX, y: event.changedTouches[0].clientY };
+    touchEndRef.current = null;
+  };
 
-    const onTouchMove = (e: Event) => {
-      const touchEvent = e as TouchEvent;
-      touchEndRef.current = {
-        x: touchEvent.changedTouches[0].screenX,
-        y: touchEvent.changedTouches[0].screenY,
-      };
-    };
+  const handleTouchMove = (event: ReactTouchEvent<HTMLDivElement>) => {
+    touchEndRef.current = { x: event.changedTouches[0].clientX, y: event.changedTouches[0].clientY };
+  };
 
-    const onTouchEnd = () => {
-      if (!touchStartRef.current || !touchEndRef.current) return;
+  const handleTouchEnd = () => {
+    const start = touchStartRef.current;
+    const end = touchEndRef.current;
+    touchStartRef.current = null;
+    touchEndRef.current = null;
+    if (!start || !end) return;
 
-      const deltaX = touchStartRef.current.x - touchEndRef.current.x;
-      const deltaY = Math.abs(touchStartRef.current.y - touchEndRef.current.y);
+    const deltaX = start.x - end.x;
+    const deltaY = Math.abs(start.y - end.y);
+    if (deltaY > SWIPE_DISTANCE) return;
 
-      // Only handle horizontal swipes (ignore vertical scrolls)
-      if (deltaY > minSwipeDistance) return;
+    if (deltaX > SWIPE_DISTANCE) goToPage(currentPage + 1);
+    else if (deltaX < -SWIPE_DISTANCE) goToPage(currentPage - 1);
+  };
 
-      if (deltaX > minSwipeDistance) {
-        // Swipe left -> next page (RTL: left swipe moves forward)
-        goToPage(currentPage + 1);
-      } else if (deltaX < -minSwipeDistance) {
-        // Swipe right -> previous page
-        goToPage(currentPage - 1);
-      }
+  // In the stack, a drag or a wheel aimed at the head of the pages has nothing to
+  // move yet — no movement means no scroll event, which means no chance to ask for
+  // the sheets above. It asks here instead, once, and the scroll carries on.
+  const handleVerticalTouchMove = (event: ReactTouchEvent<HTMLDivElement>) => {
+    const start = touchStartRef.current;
+    if (!start) return;
+    if (event.changedTouches[0].clientY - start.y > 6) prependLeaves(1);
+  };
 
-      touchStartRef.current = null;
-      touchEndRef.current = null;
-    };
-
-    const container = document.querySelector('.mushaf-page');
-    if (container) {
-      container.addEventListener('touchstart', onTouchStart, { passive: true });
-      container.addEventListener('touchmove', onTouchMove, { passive: true });
-      container.addEventListener('touchend', onTouchEnd);
-    }
-
-    return () => {
-      if (container) {
-        container.removeEventListener('touchstart', onTouchStart);
-        container.removeEventListener('touchmove', onTouchMove);
-        container.removeEventListener('touchend', onTouchEnd);
-      }
-    };
-  }, [currentPage, goToPage]);
+  const handleVerticalWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+    if (event.deltaY < 0) prependLeaves(1);
+  };
 
   const toggleBookmark = useCallback((page: number) => {
     setBookmarkedPages((prev) => {
@@ -213,385 +589,422 @@ export function MushafReader({ settings, initialPage = 1, onClose }: MushafReade
     if (selectedReadingAyah) return getSurah(selectedReadingAyah.surahId);
     return surahsOnPage[0] ?? getSurah(1) ?? null;
   }, [selectedReadingAyah, surahsOnPage]);
+  const pageNumbers = useMemo(() => Array.from({ length: totalPages }, (_, i) => i + 1), [totalPages]);
 
   const isBookmarked = bookmarkedPages.has(currentPage);
-  const zoomPercent = Math.round(zoom * 100);
-  const effectiveFontSize = Math.round(settings.fontSize * zoom * readingScale);
+  const zoomPercent = Math.round(prefs.zoom * 100);
+  const effectiveFontSize = Math.round(settings.fontSize * prefs.zoom * prefs.readingScale);
+  const mode = prefs.mode;
+  const activeOrientation = ORIENTATIONS.find((o) => o.id === orientation) ?? ORIENTATIONS[0];
+
+  // Bring the current page into view when the page grid opens.
+  useEffect(() => {
+    if (sheet !== 'jump' || jumpTarget !== 'page') return;
+    const current = pageGridRef.current?.querySelector<HTMLElement>('[aria-current="true"]');
+    current?.scrollIntoView({ block: 'center' });
+  }, [sheet, jumpTarget]);
+
+  const openJumpSheet = () => {
+    setPageField('');
+    setJumpTarget('page');
+    setSheet(sheet === 'jump' ? null : 'jump');
+  };
+
+  const handleAyahPress = useCallback((surahId: number, ayahNumber: number) => {
+    setSelectedReadingAyah({ surahId, ayahNumber });
+    setTafsirAyah({ surahId, ayahNumber });
+  }, []);
+
+  /** The sheets the stack is currently holding, as page numbers. */
+  const leafPages = useMemo(() => {
+    const pages: number[] = [];
+    for (let page = leaves.first; page <= leaves.last; page += 1) pages.push(page);
+    return pages;
+  }, [leaves]);
 
   return (
-    <div className={`fixed inset-0 z-[60] flex flex-col ${nightMode ? 'bg-[#0b0906]' : 'bg-surface-light dark:bg-surface-dark'}`}>
-      {/* Top bar */}
-      <div className={`flex items-center justify-between px-3 py-2.5 border-b ${nightMode ? 'border-[#2a2317] bg-[#0b0906]' : 'border-primary-100 dark:border-primary-800 bg-white dark:bg-primary-900'}`}>
-        <button
-          onClick={onClose}
-          aria-label="إغلاق المصحف"
-          className={`w-9 h-9 rounded-lg flex items-center justify-center ${nightMode ? 'text-primary-300' : 'text-primary-600 dark:text-gold-400'}`}
-        >
+    <div className="mushaf-shell" data-mode={mode}>
+      {/* ── Above the page: who you are reading ─────────────────────────── */}
+      <header className="mushaf-topbar">
+        <button className="mushaf-iconbtn" onClick={onClose} aria-label="إغلاق المصحف">
           <X size={20} />
         </button>
 
-        <div className="text-center min-w-0 px-2">
-          <p className={`text-sm font-bold truncate ${nightMode ? 'text-[#e7dcc0]' : 'text-primary-800 dark:text-primary-100'}`}>
-            {surahsOnPage.length > 0
-              ? surahsOnPage.map((s) => s.name).join(' · ')
-              : `الجزء ${toArabicNumber(1 + Math.floor((currentPage - 1) / 20))}`}
+        <div className="mushaf-heading">
+          <p className="mushaf-heading__title">
+            {surahsOnPage.length > 0 ? surahsOnPage.map((s) => s.name).join(' · ') : `الجزء ${toArabicNumber(currentJuz)}`}
           </p>
-          <p className={`text-[11px] ${nightMode ? 'text-[#a89877]' : 'text-gray-500 dark:text-gray-400'}`}>
-            الصفحة {toArabicNumber(currentPage)} من {toArabicNumber(totalPages)}
+          <p className="mushaf-heading__meta">
+            الجزء {toArabicNumber(currentJuz)} · الحزب {toArabicNumber(currentHizb)}
           </p>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="mushaf-actions">
           <button
-            onClick={() => setReadingMode(!readingMode)}
-            aria-label={readingMode ? 'إغلاق القراءة الهادئة' : 'فتح القراءة الهادئة'}
-            className={`w-9 h-9 rounded-lg flex items-center justify-center ${readingMode ? 'bg-[#d8c79d] text-[#4f3a18]' : nightMode ? 'bg-[#241d12] text-primary-300' : 'bg-primary-100 dark:bg-primary-800 text-primary-600 dark:text-primary-300'}`}
-          >
-            <BookOpen size={16} />
-          </button>
-          <button
-            onClick={() => setPaperMode(!paperMode)}
-            aria-label={paperMode ? 'إيقاف الوضع الورقي' : 'تفعيل الوضع الورقي'}
-            className={`w-9 h-9 rounded-lg flex items-center justify-center ${paperMode ? 'bg-[#d8c79d] text-[#4f3a18]' : nightMode ? 'bg-[#241d12] text-primary-300' : 'bg-primary-100 dark:bg-primary-800 text-primary-600 dark:text-primary-300'}`}
-          >
-            <ScrollText size={16} />
-          </button>
-          <button
+            className="mushaf-iconbtn mushaf-iconbtn--gold"
             onClick={() => toggleBookmark(currentPage)}
             aria-label={isBookmarked ? 'إزالة العلامة من هذه الصفحة' : 'حفظ هذه الصفحة'}
             aria-pressed={isBookmarked}
-            className={`w-9 h-9 rounded-lg flex items-center justify-center ${isBookmarked ? 'bg-gold-500 text-white' : nightMode ? 'bg-[#241d12] text-primary-300' : 'bg-primary-100 dark:bg-primary-800 text-primary-600 dark:text-primary-300'}`}
           >
-            <Bookmark size={16} className={isBookmarked ? 'fill-current' : ''} />
+            <Bookmark size={17} className={isBookmarked ? 'fill-current' : ''} />
           </button>
           <button
-            onClick={() => setNightMode(!nightMode)}
-            aria-label={nightMode ? 'الوضع النهاري' : 'الوضع الليلي'}
-            className={`w-9 h-9 rounded-lg flex items-center justify-center ${nightMode ? 'bg-[#241d12] text-gold-400' : 'bg-primary-100 dark:bg-primary-800 text-primary-600 dark:text-primary-300'}`}
+            className="mushaf-iconbtn"
+            onClick={() => updatePrefs({ mode: mode === 'night' ? 'day' : 'night' })}
+            aria-label={mode === 'night' ? 'الوضع النهاري' : 'الوضع الليلي'}
+            aria-pressed={mode === 'night'}
           >
-            {nightMode ? <Sun size={16} /> : <Moon size={16} />}
+            {mode === 'night' ? <Sun size={17} /> : <Moon size={17} />}
           </button>
-        </div>
-      </div>
-
-      <div className="border-b px-3 py-2.5">
-        <div className="mx-auto flex max-w-xl items-center justify-between gap-2 text-[11px] sm:text-xs">
-          <div className={`rounded-xl px-2.5 py-1.5 ${nightMode ? 'bg-[#17120d] text-[#d8c69d]' : 'bg-primary-50 text-primary-700 dark:bg-primary-800 dark:text-primary-100'}`}>
-            <span className="opacity-70">الجزء</span>
-            <span className="mr-1 font-semibold">{toArabicNumber(currentJuz)}</span>
-          </div>
-          <div className={`rounded-xl px-2.5 py-1.5 ${nightMode ? 'bg-[#17120d] text-[#d8c69d]' : 'bg-primary-50 text-primary-700 dark:bg-primary-800 dark:text-primary-100'}`}>
-            <span className="opacity-70">الحزب</span>
-            <span className="mr-1 font-semibold">{toArabicNumber(currentHizb)}</span>
-          </div>
-          <div className={`rounded-xl px-2.5 py-1.5 ${nightMode ? 'bg-[#17120d] text-[#d8c69d]' : 'bg-primary-50 text-primary-700 dark:bg-primary-800 dark:text-primary-100'}`}>
-            <span className="opacity-70">الصفحة</span>
-            <span className="mr-1 font-semibold">{toArabicNumber(currentPage)}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Page */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 touch-pan-y">
-        {/* Paper mode sizes the sheet itself, so it must not be clamped to the reading
-            column — at zoom 1 the sheet already fits, and above that the reader scrolls. */}
-        <div className={paperMode ? 'mx-auto overflow-x-auto' : 'mx-auto max-w-2xl'}>
-          <MushafPage
-            page={currentPage}
-            fontSize={effectiveFontSize}
-            night={nightMode}
-            paper={paperMode}
-            paperZoom={zoom}
-            lineHeight={1.9 + (lineSpacing - 1) * 0.55}
-            letterSpacing={0.01 + Math.max(0, lineSpacing - 1) * 0.01}
-            wordSpacing={wordSpacing}
-            onAyahPress={(surahId, ayahNumber) => {
-              setSelectedReadingAyah({ surahId, ayahNumber });
-              setTafsirAyah({ surahId, ayahNumber });
-            }}
-            activeAyah={tafsirAyah}
-          />
-        </div>
-      </div>
-
-      {/* Zoom + tools */}
-      <div className={`shrink-0 border-t px-3 pb-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] pt-2.5 ${
-        nightMode ? 'border-[#2a2317] bg-[#0b0906]' : 'border-primary-100 dark:border-primary-800 bg-white dark:bg-primary-900'
-      }`}>
-        <div className="mx-auto flex max-w-xl items-center justify-between gap-2">
           <button
-            onClick={() => goToPage(currentPage + 1)}
-            disabled={currentPage >= totalPages}
-            className={`inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-semibold transition-all disabled:opacity-35 ${
-              nightMode ? 'bg-[#241d12] text-primary-200 hover:bg-[#302718]' : 'bg-primary-100 text-primary-700 hover:bg-primary-200 dark:bg-primary-800 dark:text-primary-100 dark:hover:bg-primary-700'
-            }`}
+            className="mushaf-iconbtn"
+            onClick={() => setSheet(sheet === 'options' ? null : 'options')}
+            aria-label="خيارات القراءة"
+            aria-expanded={sheet === 'options'}
           >
-            التالية <ChevronLeft size={17} />
-          </button>
-          <span className={`min-w-[4.75rem] rounded-xl px-2 py-2 text-center text-xs font-semibold tabular-nums ${
-            nightMode ? 'bg-[#161208] text-[#d6c7a5]' : 'bg-gray-50 text-gray-600 dark:bg-primary-950 dark:text-gray-300'
-          }`}>
-            {toArabicNumber(currentPage)} / {toArabicNumber(totalPages)}
-          </span>
-          <button
-            onClick={() => goToPage(currentPage - 1)}
-            disabled={currentPage <= 1}
-            className={`inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-semibold transition-all disabled:opacity-35 ${
-              nightMode ? 'bg-[#241d12] text-primary-200 hover:bg-[#302718]' : 'bg-primary-100 text-primary-700 hover:bg-primary-200 dark:bg-primary-800 dark:text-primary-100 dark:hover:bg-primary-700'
-            }`}
-          >
-            <ChevronRight size={17} /> السابقة
+            <SlidersHorizontal size={17} />
           </button>
         </div>
+      </header>
 
-        <div className="mx-auto mt-2 flex max-w-xl items-center justify-between gap-2">
-          <div className={`inline-flex items-center gap-1 rounded-xl p-1 ${
-            nightMode ? 'bg-[#161208]' : 'bg-gray-50 dark:bg-primary-950'
-          }`}>
-            <button
-              onClick={() => setZoom((z) => Math.max(ZOOM_MIN, Math.round((z - ZOOM_STEP) * 10) / 10))}
-              disabled={zoom <= ZOOM_MIN}
-              aria-label="تصغير الخط"
-              className={`flex h-8 w-9 items-center justify-center rounded-lg disabled:opacity-35 ${
-                nightMode ? 'text-primary-300 hover:bg-[#241d12]' : 'text-primary-700 hover:bg-primary-100 dark:text-primary-200 dark:hover:bg-primary-800'
-              }`}
-            >
-              <ZoomOut size={16} />
+      {/* ── The page ───────────────────────────────────────────────────── */}
+      <div
+        className="mushaf-scroll"
+        ref={scrollRef}
+        onScroll={orientation === 'vertical' ? handleVerticalScroll : undefined}
+        onWheel={orientation === 'vertical' ? handleVerticalWheel : undefined}
+        onTouchStart={handleTouchStart}
+        onTouchMove={orientation === 'vertical' ? handleVerticalTouchMove : handleTouchMove}
+        onTouchEnd={orientation === 'horizontal' ? handleTouchEnd : undefined}
+      >
+        {orientation === 'vertical' ? (
+          /* Sheets end to end: scrolling down is turning the page. */
+          <div className="mushaf-stack">
+            {leafPages.map((page) => (
+              <MushafLeaf
+                key={page}
+                page={page}
+                fontSize={effectiveFontSize}
+                night={mode === 'night'}
+                paper={mode === 'paper'}
+                paperZoom={prefs.zoom}
+                lineHeight={1.9 + (prefs.lineSpacing - 1) * 0.55}
+                letterSpacing={0.01 + Math.max(0, prefs.lineSpacing - 1) * 0.01}
+                wordSpacing={prefs.wordSpacing}
+                onAyahPress={handleAyahPress}
+                activeAyah={tafsirAyah}
+              />
+            ))}
+          </div>
+        ) : (
+          <div
+            className={`mushaf-turn ${mode === 'paper' ? 'mushaf-turn--wide' : 'mushaf-turn--column'}`}
+            data-dir={turnDir}
+            key={currentPage}
+          >
+            <MushafPage
+              page={currentPage}
+              fontSize={effectiveFontSize}
+              night={mode === 'night'}
+              paper={mode === 'paper'}
+              paperZoom={prefs.zoom}
+              lineHeight={1.9 + (prefs.lineSpacing - 1) * 0.55}
+              letterSpacing={0.01 + Math.max(0, prefs.lineSpacing - 1) * 0.01}
+              wordSpacing={prefs.wordSpacing}
+              onAyahPress={handleAyahPress}
+              activeAyah={tafsirAyah}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* ── Below the page: where you are going ────────────────────────── */}
+      <footer className="mushaf-dock">
+        <div className="mushaf-progress" aria-hidden="true">
+          <span style={{ width: `${Math.max(1.5, (currentPage / totalPages) * 100)}%` }} />
+        </div>
+
+        <div className="mushaf-tools">
+          <button className="mushaf-tool" onClick={openJumpSheet} aria-expanded={sheet === 'jump'}>
+            <List size={15} aria-hidden="true" /> انتقال إلى
+          </button>
+
+          <div className="mushaf-zoom">
+            <button onClick={zoomOut} disabled={prefs.zoom <= ZOOM_MIN} aria-label="تصغير الصفحة">
+              <ZoomOut size={15} />
             </button>
-            <span className={`min-w-10 text-center text-[11px] font-medium tabular-nums ${
-              nightMode ? 'text-[#a89877]' : 'text-gray-500 dark:text-gray-400'
-            }`}>
-              {toArabicNumber(zoomPercent)}%
-            </span>
-            <button
-              onClick={() => setZoom((z) => Math.min(ZOOM_MAX, Math.round((z + ZOOM_STEP) * 10) / 10))}
-              disabled={zoom >= ZOOM_MAX}
-              aria-label="تكبير الخط"
-              className={`flex h-8 w-9 items-center justify-center rounded-lg disabled:opacity-35 ${
-                nightMode ? 'text-primary-300 hover:bg-[#241d12]' : 'text-primary-700 hover:bg-primary-100 dark:text-primary-200 dark:hover:bg-primary-800'
-              }`}
-            >
-              <ZoomIn size={16} />
-            </button>
-          </div>
-          <button
-            onClick={() => setShowJumpTo(!showJumpTo)}
-            aria-expanded={showJumpTo}
-            className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-3 text-xs font-semibold transition-all ${
-              showJumpTo
-                ? 'bg-primary-600 text-white shadow-sm'
-                : nightMode
-                  ? 'bg-[#241d12] text-primary-200 hover:bg-[#302718]'
-                  : 'bg-primary-50 text-primary-700 hover:bg-primary-100 dark:bg-primary-800 dark:text-primary-100 dark:hover:bg-primary-700'
-            }`}
-          >
-            <List size={16} /> انتقال إلى
-          </button>
-        </div>
-      </div>
-
-      {readingMode && primarySurah && (
-        <div className={`absolute inset-x-3 bottom-24 z-40 rounded-3xl border p-4 shadow-2xl backdrop-blur-sm ${nightMode ? 'border-[#2a2317] bg-[#161208]/95 text-primary-100' : 'border-primary-100 bg-white/95 text-primary-900 dark:border-primary-800 dark:bg-primary-950/90 dark:text-primary-100'}`}>
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.22em] text-primary-400">قراءة هادئة</p>
-              <h3 className="text-sm font-bold">{primarySurah.name}</h3>
-            </div>
-            <button
-              onClick={() => setReadingMode(false)}
-              className="rounded-lg bg-primary-50 px-2 py-1 text-xs font-medium text-primary-700 dark:bg-primary-800 dark:text-primary-200"
-            >
-              إغلاق
+            <span className="mushaf-zoom__value">{toArabicNumber(zoomPercent)}%</span>
+            <button onClick={zoomIn} disabled={prefs.zoom >= ZOOM_MAX} aria-label="تكبير الصفحة">
+              <ZoomIn size={15} />
             </button>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            <label className="space-y-1 text-[11px] font-medium text-gray-600 dark:text-gray-300">
-              <span>حجم الخط</span>
+          <button
+            className="mushaf-tool"
+            onClick={() => setSheet(sheet === 'options' ? null : 'options')}
+            aria-expanded={sheet === 'options'}
+          >
+            <SlidersHorizontal size={15} aria-hidden="true" /> خيارات القراءة
+          </button>
+        </div>
+      </footer>
+
+      {/* ── Jump sheet ─────────────────────────────────────────────────── */}
+      <Sheet
+        open={sheet === 'jump'}
+        title="انتقال إلى"
+        onClose={() => setSheet(null)}
+        panelRef={sheetPanelRef}
+      >
+        <div className="mushaf-tabs" role="tablist" aria-label="طريقة الانتقال">
+          {JUMP_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              role="tab"
+              className="mushaf-tab"
+              aria-selected={jumpTarget === tab.id}
+              onClick={() => setJumpTarget(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {jumpTarget === 'page' && (
+          <>
+            <form
+              className="mushaf-jumpbar"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const value = Number(pageField);
+                if (value >= 1 && value <= totalPages) goToPage(value);
+              }}
+            >
               <input
+                className="mushaf-input"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={totalPages}
+                value={pageField}
+                onChange={(event) => setPageField(event.target.value)}
+                placeholder={`رقم الصفحة من ${toArabicNumber(totalPages)}`}
+                aria-label="رقم الصفحة"
+              />
+              <button className="mushaf-tool" type="submit">
+                اذهب
+              </button>
+            </form>
+
+            <div className="mushaf-grid mushaf-grid--page" ref={pageGridRef}>
+              {pageNumbers.map((p) => (
+                <button
+                  key={p}
+                  className="mushaf-cell"
+                  aria-label={`الصفحة ${toArabicNumber(p)}`}
+                  aria-current={p === currentPage ? 'true' : undefined}
+                  onClick={() => goToPage(p)}
+                >
+                  {toArabicNumber(p)}
+                  {bookmarkedPages.has(p) && <span className="mushaf-cell__dot" aria-hidden="true" />}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {jumpTarget === 'surah' && (
+          <div className="mushaf-grid mushaf-grid--card">
+            {SURAHS.map((s) => (
+              <button
+                key={s.id}
+                className="mushaf-cell mushaf-cell--card"
+                aria-current={surahsOnPage.some((on) => on.id === s.id) ? 'true' : undefined}
+                onClick={() => goToPage(s.pageStart)}
+              >
+                <span className="mushaf-cell__title">{s.name}</span>
+                <span className="mushaf-cell__sub">صفحة {toArabicNumber(s.pageStart)}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {jumpTarget === 'juz' && (
+          <div className="mushaf-grid mushaf-grid--card">
+            {JUZ_INFO.map((j) => (
+              <button
+                key={j.id}
+                className="mushaf-cell mushaf-cell--card"
+                aria-current={j.id === currentJuz ? 'true' : undefined}
+                onClick={() => goToPage(j.startPage)}
+              >
+                <span className="mushaf-cell__title">{j.name}</span>
+                <span className="mushaf-cell__sub">صفحة {toArabicNumber(j.startPage)}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {jumpTarget === 'hizb' && (
+          <div className="mushaf-grid mushaf-grid--card">
+            {HIZB_INFO.map((h) => (
+              <button
+                key={h.id}
+                className="mushaf-cell mushaf-cell--card"
+                aria-current={h.id === currentHizb ? 'true' : undefined}
+                onClick={() => goToPage(h.startPage)}
+              >
+                <span className="mushaf-cell__title">{h.name}</span>
+                <span className="mushaf-cell__sub">صفحة {toArabicNumber(h.startPage)}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </Sheet>
+
+      {/* ── Reading options sheet ──────────────────────────────────────── */}
+      <Sheet
+        open={sheet === 'options'}
+        title="خيارات القراءة"
+        onClose={() => setSheet(null)}
+        panelRef={sheetPanelRef}
+        darkSurface={mode === 'night'}
+      >
+        <section className="mushaf-section">
+          <p className="mushaf-section__title">التنقّل</p>
+          <div className="mushaf-seg mushaf-seg--pair">
+            {ORIENTATIONS.map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                className="mushaf-seg__item"
+                aria-pressed={orientation === id}
+                onClick={() => setOrientation(id)}
+              >
+                <Icon size={18} aria-hidden="true" />
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
+          <p className="mushaf-hint">{activeOrientation.hint}</p>
+        </section>
+
+        <section className="mushaf-section">
+          <p className="mushaf-section__title">المظهر</p>
+          <div className="mushaf-seg">
+            {MODES.map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                className="mushaf-seg__item"
+                aria-pressed={mode === id}
+                onClick={() => updatePrefs({ mode: id })}
+              >
+                <Icon size={18} aria-hidden="true" />
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="mushaf-section">
+          <p className="mushaf-section__title">القراءة</p>
+          <div className="mushaf-fields">
+            <label className="mushaf-field">
+              <span className="mushaf-field__label">
+                حجم الخط
+                <span className="mushaf-field__value">{toArabicNumber(Math.round(prefs.readingScale * 100))}%</span>
+              </span>
+              <input
+                className="mushaf-range"
                 type="range"
                 min={0.85}
                 max={1.35}
                 step={0.05}
-                value={readingScale}
-                onChange={(e) => setReadingScale(Number(e.target.value))}
-                className="w-full accent-primary-600"
+                value={prefs.readingScale}
+                onChange={(event) => updatePrefs({ readingScale: Number(event.target.value) })}
               />
             </label>
-            <label className="space-y-1 text-[11px] font-medium text-gray-600 dark:text-gray-300">
-              <span>تباعد السطور</span>
+
+            <label className="mushaf-field">
+              <span className="mushaf-field__label">
+                تباعد السطور
+                <span className="mushaf-field__value">{toArabicNumber(Math.round(prefs.lineSpacing * 100))}%</span>
+              </span>
               <input
+                className="mushaf-range"
                 type="range"
                 min={0.9}
                 max={1.35}
                 step={0.05}
-                value={lineSpacing}
-                onChange={(e) => setLineSpacing(Number(e.target.value))}
-                className="w-full accent-primary-600"
+                value={prefs.lineSpacing}
+                onChange={(event) => updatePrefs({ lineSpacing: Number(event.target.value) })}
               />
             </label>
-            <label className="space-y-1 text-[11px] font-medium text-gray-600 dark:text-gray-300">
-              <span>مسافة الكلمات</span>
+
+            <label className="mushaf-field">
+              <span className="mushaf-field__label">
+                مسافة الكلمات
+                <span className="mushaf-field__value">{toArabicNumber(Math.round(prefs.wordSpacing * 100))}%</span>
+              </span>
               <input
+                className="mushaf-range"
                 type="range"
                 min={0}
                 max={0.3}
                 step={0.02}
-                value={wordSpacing}
-                onChange={(e) => setWordSpacing(Number(e.target.value))}
-                className="w-full accent-primary-600"
+                value={prefs.wordSpacing}
+                onChange={(event) => updatePrefs({ wordSpacing: Number(event.target.value) })}
               />
             </label>
           </div>
 
-          <div className="mt-3 rounded-2xl border border-primary-100 bg-primary-50/60 p-3 dark:border-primary-800 dark:bg-primary-900/40">
-            <AudioRecitationPlayer
-              surah={primarySurah}
-              reciterId={reciterId}
-              onReciterChange={(nextReciterId) => {
-                setReciterId(nextReciterId);
-                savePreferredReciter(nextReciterId);
-              }}
-              onShowTafsir={(ayahNumber) => setTafsirAyah({ surahId: primarySurah.id, ayahNumber })}
-            >
-              {({ selectedAyah, isPlaying, selectAyah, playSelectedAyah }) => (
-                <div className="flex flex-col gap-2 text-xs sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-2">
+          <button className="mushaf-reset" onClick={() => updatePrefs(DEFAULT_PREFS)}>
+            إعادة الضبط
+          </button>
+        </section>
+
+        {primarySurah && (
+          <section className="mushaf-section">
+            <p className="mushaf-section__title">التلاوة الصوتية · سورة {primarySurah.name}</p>
+            <div className="mushaf-audio">
+              <AudioRecitationPlayer
+                surah={primarySurah}
+                reciterId={reciterId}
+                onReciterChange={(nextReciterId) => {
+                  setReciterId(nextReciterId);
+                  savePreferredReciter(nextReciterId);
+                }}
+                onShowTafsir={(ayahNumber) => setTafsirAyah({ surahId: primarySurah.id, ayahNumber })}
+              >
+                {({ selectedAyah, isPlaying, selectAyah, playSelectedAyah }) => (
+                  <div className="mushaf-audio__controls">
                     <button
-                      onClick={() => {
-                        if (selectedAyah !== null) {
-                          const target = Math.max(1, selectedAyah - 1);
-                          selectAyah(target);
-                        }
-                      }}
-                      className="rounded-lg border border-primary-200 bg-white px-2 py-1.5 text-primary-700 dark:border-primary-700 dark:bg-primary-800 dark:text-primary-200"
+                      className="mushaf-tool"
+                      disabled={selectedAyah === null}
+                      onClick={() => selectedAyah !== null && selectAyah(Math.max(1, selectedAyah - 1))}
                     >
                       الآية السابقة
                     </button>
                     <button
-                      onClick={() => {
-                        if (selectedAyah !== null) {
-                          const target = Math.min(primarySurah.ayahCount, selectedAyah + 1);
-                          selectAyah(target);
-                        }
-                      }}
-                      className="rounded-lg border border-primary-200 bg-white px-2 py-1.5 text-primary-700 dark:border-primary-700 dark:bg-primary-800 dark:text-primary-200"
+                      className="mushaf-tool"
+                      disabled={selectedAyah === null}
+                      onClick={() => selectedAyah !== null && selectAyah(Math.min(primarySurah.ayahCount, selectedAyah + 1))}
                     >
                       الآية التالية
                     </button>
+                    <button className="mushaf-tool mushaf-tool--primary" onClick={playSelectedAyah}>
+                      {isPlaying
+                        ? 'إيقاف/متابعة'
+                        : `استمع: ${selectedAyah ? toArabicNumber(selectedAyah) : 'الآية الحالية'}`}
+                    </button>
                   </div>
-
-                  <button
-                    onClick={playSelectedAyah}
-                    className="rounded-xl bg-primary-600 px-3 py-2 font-semibold text-white"
-                  >
-                    {isPlaying ? 'إيقاف/متابعة' : `استمع: ${selectedAyah ? toArabicNumber(selectedAyah) : 'الآية الحالية'}`}
-                  </button>
-                </div>
-              )}
-            </AudioRecitationPlayer>
-          </div>
-        </div>
-      )}
-
-      {/* Jump-to panel */}
-      {showJumpTo && (
-        <div
-          className={`absolute bottom-0 left-0 right-0 rounded-t-3xl shadow-xl p-5 max-h-[70vh] overflow-y-auto ${nightMode ? 'bg-[#161208] text-primary-100' : 'bg-white dark:bg-primary-900'}`}
-          dir="rtl"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-primary-800 dark:text-primary-100">انتقال إلى</h3>
-            <button onClick={() => setShowJumpTo(false)} aria-label="إغلاق" className="text-gray-400">
-              <X size={20} />
-            </button>
-          </div>
-
-          <div className="flex gap-2 mb-4">
-            {(['page', 'surah', 'juz', 'hizb'] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setJumpTarget(t)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
-                  jumpTarget === t
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-primary-50 dark:bg-primary-800 text-primary-600 dark:text-primary-300'
-                }`}
-              >
-                {t === 'page' ? 'صفحة' : t === 'surah' ? 'سورة' : t === 'juz' ? 'جزء' : 'حزب'}
-              </button>
-            ))}
-          </div>
-
-          {jumpTarget === 'page' && (
-            <div className="grid grid-cols-8 gap-1.5">
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => goToPage(p)}
-                  aria-label={`الصفحة ${toArabicNumber(p)}`}
-                  className={`relative aspect-square rounded-lg text-xs font-medium tabular-nums ${
-                    p === currentPage
-                      ? 'bg-primary-600 text-white'
-                      : 'bg-primary-50 dark:bg-primary-800 text-primary-700 dark:text-primary-200'
-                  }`}
-                >
-                  {toArabicNumber(p)}
-                  {bookmarkedPages.has(p) && (
-                    <span className="absolute top-0.5 left-0.5 w-1.5 h-1.5 rounded-full bg-gold-500" />
-                  )}
-                </button>
-              ))}
+                )}
+              </AudioRecitationPlayer>
             </div>
-          )}
+          </section>
+        )}
+      </Sheet>
 
-          {jumpTarget === 'surah' && (
-            <div className="grid grid-cols-3 gap-2">
-              {SURAHS.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => goToPage(s.pageStart)}
-                  className={`p-2 rounded-lg text-center ${nightMode ? 'bg-[#241d12] hover:bg-[#2f2617]' : 'bg-primary-50 dark:bg-primary-800 hover:bg-primary-100 dark:hover:bg-primary-700'}`}
-                >
-                  <p className="text-sm font-medium text-primary-800 dark:text-primary-100">{s.name}</p>
-                  <p className="text-xs text-gray-400">صفحة {toArabicNumber(s.pageStart)}</p>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {jumpTarget === 'juz' && (
-            <div className="grid grid-cols-3 gap-2">
-              {JUZ_INFO.map((j) => (
-                <button
-                  key={j.id}
-                  onClick={() => goToPage(j.startPage)}
-                  className={`p-2 rounded-lg text-center ${nightMode ? 'bg-[#241d12] hover:bg-[#2f2617]' : 'bg-primary-50 dark:bg-primary-800 hover:bg-primary-100 dark:hover:bg-primary-700'}`}
-                >
-                  <p className="text-sm font-medium text-primary-800 dark:text-primary-100">{j.name}</p>
-                  <p className="text-xs text-gray-400">صفحة {toArabicNumber(j.startPage)}</p>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {jumpTarget === 'hizb' && (
-            <div className="grid grid-cols-3 gap-2">
-              {HIZB_INFO.map((h) => (
-                <button
-                  key={h.id}
-                  onClick={() => goToPage(h.startPage)}
-                  className={`p-2 rounded-lg text-center ${nightMode ? 'bg-[#241d12] hover:bg-[#2f2617]' : 'bg-primary-50 dark:bg-primary-800 hover:bg-primary-100 dark:hover:bg-primary-700'}`}
-                >
-                  <p className="text-sm font-medium text-primary-800 dark:text-primary-100">{h.name}</p>
-                  <p className="text-xs text-gray-400">صفحة {toArabicNumber(h.startPage)}</p>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
+      {/* Rendered last so it stacks over the reader's own sheets. */}
       {tafsirAyah && (
         <TafsirBottomSheet
           surahId={tafsirAyah.surahId}
@@ -600,6 +1013,71 @@ export function MushafReader({ settings, initialPage = 1, onClose }: MushafReade
           onNavigateAyah={stepTafsirAyah}
         />
       )}
+    </div>
+  );
+}
+
+interface MushafLeafProps {
+  page: number;
+  fontSize: number;
+  night: boolean;
+  paper: boolean;
+  paperZoom: number;
+  lineHeight: number;
+  letterSpacing: number;
+  wordSpacing: number;
+  onAyahPress: (surahId: number, ayahNumber: number) => void;
+  activeAyah: { surahId: number; ayahNumber: number } | null;
+}
+
+/**
+ * One sheet of the vertical stack, and what makes holding forty of them affordable: a
+ * page crossing repaints the header, the progress line and the bookmark, never the
+ * sheets themselves, so a leaf whose props have not changed is not re-rendered. It
+ * carries `data-page` because that is what the scroll maths reads to know where it is.
+ */
+const MushafLeaf = memo(function MushafLeaf({ page, ...sheet }: MushafLeafProps) {
+  return (
+    <div className={`mushaf-leaf ${sheet.paper ? 'mushaf-leaf--wide' : 'mushaf-leaf--column'}`} data-page={page}>
+      <MushafPage page={page} {...sheet} />
+    </div>
+  );
+});
+
+interface SheetProps {
+  open: boolean;
+  title: string;
+  onClose: () => void;
+  panelRef: RefObject<HTMLDivElement>;
+  /**
+   * Puts the app's dark palette on the subtree. Only the reading modes that
+   * need it ask for it — the recitation card is the one piece of shared
+   * chrome here that still styles itself with `dark:` variants.
+   */
+  darkSurface?: boolean;
+  children: ReactNode;
+}
+
+function Sheet({ open, title, onClose, panelRef, darkSurface = false, children }: SheetProps) {
+  if (!open) return null;
+
+  return (
+    <div className="mushaf-sheet" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="mushaf-sheet__backdrop" onClick={onClose} aria-hidden="true" />
+      <div
+        className={`mushaf-sheet__panel${darkSurface ? ' dark' : ''}`}
+        ref={panelRef}
+        tabIndex={-1}
+      >
+        <div className="mushaf-sheet__grip" aria-hidden="true" />
+        <div className="mushaf-sheet__head">
+          <h2 className="mushaf-sheet__title">{title}</h2>
+          <button className="mushaf-iconbtn" onClick={onClose} aria-label="إغلاق">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="mushaf-sheet__body">{children}</div>
+      </div>
     </div>
   );
 }

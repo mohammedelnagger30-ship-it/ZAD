@@ -202,11 +202,11 @@ export function QuranScreen({ settings }: QuranScreenProps) {
           {/* Quick Stats & Actions */}
           <div className="relative mt-6 flex flex-wrap items-center gap-3">
             <button
-              onClick={() => { setMushafPage(1); setViewMode('mushaf'); }}
+              onClick={() => setViewMode('mushaf')}
               className="group inline-flex min-h-12 items-center gap-2.5 rounded-2xl bg-white px-5 py-3 text-base font-bold text-primary-800 shadow-lg transition-all hover:scale-105 hover:bg-primary-50 hover:shadow-xl focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/50"
             >
               <BookText size={20} className="group-hover:scale-110 transition-transform" />
-              افتح المصحف
+              {mushafPage > 1 ? `متابعة القراءة · الصفحة ${toArabicNumber(mushafPage)}` : 'افتح المصحف'}
             </button>
             <div className="flex items-center gap-2">
               <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-2.5 backdrop-blur-sm">
@@ -231,7 +231,7 @@ export function QuranScreen({ settings }: QuranScreenProps) {
             {([
               { mode: 'surah' as const, label: 'السور', icon: BookOpen, desc: 'تصفح جميع السور' },
               { mode: 'juz' as const, label: 'الأجزاء', icon: Layers, desc: 'تقسيم 30 جزء' },
-              { mode: 'page' as const, label: 'الصفحات', icon: BookText, desc: '604 صفحة' },
+              { mode: 'page' as const, label: 'الصفحات', icon: BookText, desc: `${TOTAL_QURAN_PAGES} صفحة` },
             ]).map((tab) => (
               <button
                 key={tab.mode}
@@ -579,7 +579,14 @@ export function QuranScreen({ settings }: QuranScreenProps) {
 
   // ---- MUSHAF VIEW ----
   if (viewMode === 'mushaf') {
-    return <MushafReader settings={settings} initialPage={mushafPage} onClose={() => setViewMode('list')} />;
+    return (
+      <MushafReader
+        settings={settings}
+        initialPage={mushafPage}
+        onClose={() => setViewMode('list')}
+        onPageChange={setMushafPage}
+      />
+    );
   }
 
   return null;

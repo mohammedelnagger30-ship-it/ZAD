@@ -400,8 +400,8 @@ function AppContent({
   }, [settings]);
 
   // Android drops pending alarms when the app is killed or the device reboots, and the
-  // notification window covers only today + tomorrow. Re-arming on every foreground
-  // keeps the schedule honest instead of assuming it survived.
+  // armed window is finite. Re-arming on every foreground keeps the schedule honest
+  // instead of assuming it survived.
   useEffect(() => {
     let remove: (() => void) | undefined;
 
@@ -519,6 +519,7 @@ function AppContent({
             prayerTime={azanState.prayerTime}
             settings={settings}
             isPreview={azanState.isPreview}
+            fromNotification={azanState.fromNotification}
             onClose={closeAzan}
             onNavigateToAdhkar={() => navigate('adhkar')}
           />

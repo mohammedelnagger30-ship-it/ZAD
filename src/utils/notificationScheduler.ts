@@ -3,11 +3,24 @@ import { Capacitor } from '@capacitor/core';
 import { getSettings } from '@/db/database';
 import type { Settings } from '@/db/database';
 import { getAdhanSound } from '@/data/adhanSounds';
-import { calculatePrayerTimes, getDateInTimeZone, getPrayerTimeZone } from '@/utils/prayerTimes';
+import {
+  addCalendarDays,
+  calculatePrayerTimesForDay,
+  calendarDayInZone,
+  getPrayerTimeZone,
+} from '@/utils/prayerTimes';
 import { generateDailyTasks, getTodayTasks } from '@/utils/taskManager';
 import { genNotificationId, cancelAllNotifications, hasNotificationPermission } from '@/utils/notifications';
 
 type DhikrReminderCategory = 'morning' | 'evening' | 'istighfar';
+
+/**
+ * How many days of prayer alarms are kept armed.
+ *
+ * Each open/resume rebuilds the whole queue, so this is the adhan's survival horizon
+ * when the app is never opened again: beyond it there is nothing left to fire.
+ */
+const PRAYER_NOTIFICATION_DAYS = 7;
 
 const DHIKR_REMINDER_MESSAGES: Record<DhikrReminderCategory, { title: string; messages: string[] }> = {
   morning: {
@@ -147,56 +160,65 @@ export async function rescheduleAllNotifications(): Promise<void> {
   // Ensure channels exist
   await createNotificationChannels(settings);
 
-  // 1. Schedule prayer notifications for today + tomorrow
+  // 1. Schedule prayer notifications for the next PRAYER_NOTIFICATION_DAYS days.
+  //
+  // More than "today + tomorrow" is what keeps the adhan firing while the app stays
+  // closed for a while: these alarms are the only thing that plays the adhan outside
+  // the process, so a two-day horizon meant the adhan silently stopped on day three.
   if (settings.latitude != null && settings.longitude != null) {
     const timeZone = getPrayerTimeZone(settings.timeZone, settings.cityName);
-    const today = getDateInTimeZone(new Date(), timeZone);
-    const todayPrayers = calculatePrayerTimes(
-      settings.latitude, settings.longitude, today, settings.calcMethod, settings.asrMadhab, timeZone
-    );
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowPrayers = calculatePrayerTimes(
-      settings.latitude, settings.longitude, tomorrow, settings.calcMethod, settings.asrMadhab, timeZone
-    );
-
-    const allPrayers = [...todayPrayers.prayers, ...tomorrowPrayers.prayers];
+    const firstDay = calendarDayInZone(new Date(), timeZone);
+    const now = Date.now();
     const notifications: LocalNotificationSchema[] = [];
 
-    for (const [prayerIndex, prayer] of allPrayers.entries()) {
-      if (prayer.name === 'sunrise') continue;
-      if (prayer.time <= new Date()) continue;
+    let prayerIndex = 0;
+    for (let dayOffset = 0; dayOffset < PRAYER_NOTIFICATION_DAYS; dayOffset += 1) {
+      const dayPrayers = calculatePrayerTimesForDay(
+        settings.latitude,
+        settings.longitude,
+        addCalendarDays(firstDay, dayOffset),
+        settings.calcMethod,
+        settings.asrMadhab,
+      );
 
-      notifications.push({
-        id: genNotificationId(10, prayer.time, prayerIndex),
-        title: `حان وقت صلاة ${prayer.arabicName}`,
-        body: `أدِّ صلاة ${prayer.arabicName} في وقتها`,
-        schedule: { at: prayer.time, allowWhileIdle: true },
-        channelId: settings.adhanSound ? `prayer-${getAdhanSound(settings.adhanVoiceId).id}` : 'prayer-muted',
-        sound: settings.adhanSound ? getAdhanSound(settings.adhanVoiceId).file : undefined,
-        smallIcon: 'ic_notification',
-        iconColor: '#1f734e',
-        extra: {
-          type: 'prayer',
-          prayerKey: prayer.name,
-          prayerName: prayer.arabicName,
-          time: prayer.time.toISOString(),
-        },
-      });
+      for (const prayer of dayPrayers.prayers) {
+        // `prayerIndex` keeps advancing across days while the date part of the id moves
+        // one day at a time, so the two never overlap (day k gets 7k..7k+5 of the sum).
+        const index = prayerIndex++;
+        if (prayer.name === 'sunrise') continue;
+        if (prayer.time.getTime() <= now) continue;
 
-      // Pre-prayer reminder
-      if (settings.prePrayerReminder > 0) {
-        const reminderTime = new Date(prayer.time.getTime() - settings.prePrayerReminder * 60000);
-        if (reminderTime > new Date()) {
-          notifications.push({
-            id: genNotificationId(11, prayer.time, prayerIndex),
-            title: `تذكير: صلاة ${prayer.arabicName} بعد ${settings.prePrayerReminder} دقيقة`,
-            body: `استعد لصلاة ${prayer.arabicName}`,
-            schedule: { at: reminderTime, allowWhileIdle: true },
-            channelId: 'prayer-reminder',
-            smallIcon: 'ic_notification',
-            iconColor: '#1f734e',
-          });
+        notifications.push({
+          id: genNotificationId(10, prayer.time, index),
+          title: `حان وقت صلاة ${prayer.arabicName}`,
+          body: `أدِّ صلاة ${prayer.arabicName} في وقتها`,
+          schedule: { at: prayer.time, allowWhileIdle: true },
+          channelId: settings.adhanSound ? `prayer-${getAdhanSound(settings.adhanVoiceId).id}` : 'prayer-muted',
+          sound: settings.adhanSound ? getAdhanSound(settings.adhanVoiceId).file : undefined,
+          smallIcon: 'ic_notification',
+          iconColor: '#1f734e',
+          extra: {
+            type: 'prayer',
+            prayerKey: prayer.name,
+            prayerName: prayer.arabicName,
+            time: prayer.time.toISOString(),
+          },
+        });
+
+        // Pre-prayer reminder
+        if (settings.prePrayerReminder > 0) {
+          const reminderTime = new Date(prayer.time.getTime() - settings.prePrayerReminder * 60000);
+          if (reminderTime.getTime() > now) {
+            notifications.push({
+              id: genNotificationId(11, prayer.time, index),
+              title: `تذكير: صلاة ${prayer.arabicName} بعد ${settings.prePrayerReminder} دقيقة`,
+              body: `استعد لصلاة ${prayer.arabicName}`,
+              schedule: { at: reminderTime, allowWhileIdle: true },
+              channelId: 'prayer-reminder',
+              smallIcon: 'ic_notification',
+              iconColor: '#1f734e',
+            });
+          }
         }
       }
     }

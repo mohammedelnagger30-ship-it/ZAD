@@ -38,6 +38,17 @@ export function getCalcMethod(method: string): CalculationParameters {
   }
 }
 
+/**
+ * Prayer times for one calendar day.
+ *
+ * `date` only picks the calendar day *in the city's own time zone*. adhan already
+ * returns absolute instants (its `Date` values are built with `Date.UTC` from the
+ * solar event expressed in UTC), so they must be handed to the rest of the app as-is.
+ * The earlier implementation re-read those values through the device clock and
+ * re-interpreted them in the city zone, which shifted every prayer by
+ * `deviceOffset − cityOffset`: the times were only right when the phone happened to
+ * sit in the selected city, and wrong (by hours, sometimes a whole day) otherwise.
+ */
 export function calculatePrayerTimes(
   latitude: number,
   longitude: number,
@@ -46,16 +57,36 @@ export function calculatePrayerTimes(
   asrMadhab: 'standard' | 'hanafi',
   timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone,
 ): PrayerTimesResult {
+  return calculatePrayerTimesForDay(
+    latitude,
+    longitude,
+    calendarDayInZone(date, timeZone),
+    calcMethod,
+    asrMadhab,
+  );
+}
+
+/**
+ * Same as {@link calculatePrayerTimes} but starting from an already-resolved calendar
+ * day. Use this whenever the day is known, so it cannot be re-derived — converting an
+ * instant to a day in another zone and back is what breaks at large zone differences.
+ */
+export function calculatePrayerTimesForDay(
+  latitude: number,
+  longitude: number,
+  day: CalendarDay,
+  calcMethod: string,
+  asrMadhab: 'standard' | 'hanafi',
+): PrayerTimesResult {
   const coords = new Coordinates(latitude, longitude);
   const params = getCalcMethod(calcMethod);
   params.madhab = asrMadhab === 'hanafi' ? Madhab.Hanafi : Madhab.Shafi;
 
-  const prayerDate = getDateInTimeZone(date, timeZone);
+  const prayerDate = calendarDayToDate(day);
   const pt = new PrayerTimes(coords, prayerDate, params);
   const qiblaDirection = Qibla(coords);
 
-  const now = new Date();
-  const nowInTimeZone = convertWallClockToInstant(now, timeZone);
+  const now = Date.now();
   const prayerTimes: { name: string; arabicName: string; time: Date }[] = [
     { name: 'fajr', arabicName: 'الفجر', time: pt.fajr },
     { name: 'sunrise', arabicName: 'الشروق', time: pt.sunrise },
@@ -65,10 +96,10 @@ export function calculatePrayerTimes(
     { name: 'isha', arabicName: 'العشاء', time: pt.isha },
   ];
 
-  const prayers: PrayerTimeInfo[] = prayerTimes.map((prayer) => {
-    const time = convertWallClockToInstant(prayer.time, timeZone);
-    return { ...prayer, time, passed: time < nowInTimeZone };
-  });
+  const prayers: PrayerTimeInfo[] = prayerTimes.map((prayer) => ({
+    ...prayer,
+    passed: prayer.time.getTime() < now,
+  }));
 
   return { prayers, qiblaDirection, date: prayerDate };
 }
@@ -82,16 +113,19 @@ export function getNextPrayer(
 ): PrayerTimeInfo | null {
   const now = new Date();
   const today = calculatePrayerTimes(latitude, longitude, now, calcMethod, asrMadhab, timeZone);
-  // Use the current time in the specified timezone for comparison
-  const nowInTimeZone = convertWallClockToInstant(now, timeZone);
-  const upcoming = today.prayers.filter((p) => p.name !== 'sunrise' && p.time > nowInTimeZone);
+  const upcoming = today.prayers.filter((p) => p.name !== 'sunrise' && p.time.getTime() > now.getTime());
   if (upcoming.length > 0) {
     return upcoming[0];
   }
-  const tomorrow = getDateInTimeZone(now, timeZone);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowTimes = calculatePrayerTimes(latitude, longitude, tomorrow, calcMethod, asrMadhab, timeZone);
-  return tomorrowTimes.prayers[0];
+
+  const tomorrowTimes = calculatePrayerTimesForDay(
+    latitude,
+    longitude,
+    addCalendarDays(calendarDayInZone(now, timeZone), 1),
+    calcMethod,
+    asrMadhab,
+  );
+  return tomorrowTimes.prayers.find((p) => p.name !== 'sunrise') ?? tomorrowTimes.prayers[0];
 }
 
 export function getPrayerTimeZone(timeZone?: string, cityName?: string): string {
@@ -109,53 +143,54 @@ function isTimeZone(value: string): boolean {
   }
 }
 
+/** A calendar day, independent of any time zone (month is 1-based). */
+export interface CalendarDay {
+  year: number;
+  month: number;
+  day: number;
+}
+
+/** Which calendar day `date` falls on *in* `timeZone` — the city's day, not the device's. */
+export function calendarDayInZone(date: Date, timeZone: string): CalendarDay {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return {
+    year: Number(values.year),
+    month: Number(values.month),
+    day: Number(values.day),
+  };
+}
+
+/** Move a calendar day by whole days. Day arithmetic happens on numbers, never on a Date. */
+export function addCalendarDays(day: CalendarDay, days: number): CalendarDay {
+  // Date.UTC normalises overflow (e.g. month 13, day 32) into the right day/month/year.
+  const shifted = new Date(Date.UTC(day.year, day.month - 1, day.day + days));
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+  };
+}
+
+/**
+ * Noon of a calendar day **in the device's zone**.
+ *
+ * adhan reads `getFullYear()/getMonth()/getDate()` off the date it is given, so the day
+ * must be presented as a local date the device will render as the intended one. This is
+ * the only place a prayer day is turned back into a `Date`.
+ */
+function calendarDayToDate(day: CalendarDay): Date {
+  return new Date(day.year, day.month - 1, day.day, 12);
+}
+
+/** Device-local noon of the calendar day `date` falls on in `timeZone`. */
 export function getDateInTimeZone(date: Date, timeZone: string): Date {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-  }).formatToParts(date);
-  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
-  return new Date(Number(values.year), Number(values.month) - 1, Number(values.day), 12);
-}
-
-function getTimeZoneOffset(date: Date, timeZone: string): number {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-    second: 'numeric',
-    hourCycle: 'h23',
-  }).formatToParts(date);
-  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
-  const wallClock = Date.UTC(
-    Number(values.year),
-    Number(values.month) - 1,
-    Number(values.day),
-    Number(values.hour),
-    Number(values.minute),
-    Number(values.second),
-  );
-  return wallClock - Math.floor(date.getTime() / 1000) * 1000;
-}
-
-function convertWallClockToInstant(wallClock: Date, timeZone: string): Date {
-  const wallClockAsUtc = Date.UTC(
-    wallClock.getFullYear(),
-    wallClock.getMonth(),
-    wallClock.getDate(),
-    wallClock.getHours(),
-    wallClock.getMinutes(),
-    wallClock.getSeconds(),
-  );
-  const initialOffset = getTimeZoneOffset(new Date(wallClockAsUtc), timeZone);
-  const candidate = new Date(wallClockAsUtc - initialOffset);
-  const offset = getTimeZoneOffset(candidate, timeZone);
-  return new Date(wallClockAsUtc - offset + wallClock.getMilliseconds());
+  return calendarDayToDate(calendarDayInZone(date, timeZone));
 }
 
 export function formatTime12h(

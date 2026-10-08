@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Play, Pause, Volume2, VolumeX, CheckCircle2, Bell, BookOpen, X, Sparkles, Clock, MapPin } from 'lucide-react';
 import type { Settings } from '@/db/database';
 import { getAdhanSound } from '@/data/adhanSounds';
-import { formatTime12h, getPrayerTimeZone } from '@/utils/prayerTimes';
+import { formatTime12h, getDateInTimeZone, getPrayerTimeZone } from '@/utils/prayerTimes';
 import { confirmPrayer, PRAYER_LABELS_AR, type PrayerKey } from '@/utils/prayerTracker';
 import { todayKey, formatArabicDate, getHijriDate } from '@/utils/dateUtils';
 import { LocalNotifications } from '@capacitor/local-notifications';
@@ -15,6 +15,11 @@ export interface AzanOverlayProps {
   prayerTime?: Date;
   settings: Settings;
   isPreview?: boolean;
+  /**
+   * Opened by the native adhan notification. The notification carries its own sound, so
+   * the overlay must not start a second copy of the adhan on top of it.
+   */
+  fromNotification?: boolean;
   onClose: () => void;
   onNavigateToAdhkar?: () => void;
 }
@@ -32,6 +37,7 @@ export function AzanOverlayModal({
   prayerTime,
   settings,
   isPreview = false,
+  fromNotification = false,
   onClose,
   onNavigateToAdhkar,
 }: AzanOverlayProps) {
@@ -50,6 +56,12 @@ export function AzanOverlayModal({
   const displayTime = prayerTime
     ? formatTime12h(prayerTime, timeZone)
     : formatTime12h(new Date(), timeZone);
+
+  /**
+   * The adhan reached us as a notification, so the notification channel has already
+   * sounded it. The overlay is the page, not a second speaker.
+   */
+  const systemAlreadyPlayed = fromNotification && settings.adhanSound && !isPreview;
 
   // Initialize and play audio
   useEffect(() => {
@@ -71,8 +83,10 @@ export function AzanOverlayModal({
     const handleEnded = () => setIsPlaying(false);
     audio.addEventListener('ended', handleEnded);
 
-    // Auto-play audio if enabled in settings (or preview)
-    if (settings.adhanSound || isPreview) {
+    // Auto-play audio if enabled in settings (or preview). A notification-opened overlay
+    // skips this: Android already played this adhan from the notification channel, and a
+    // second recording starting on top of it would overlap.
+    if ((settings.adhanSound || isPreview) && !systemAlreadyPlayed) {
       audio.play().then(() => {
         setIsPlaying(true);
       }).catch((err) => {
@@ -86,7 +100,7 @@ export function AzanOverlayModal({
       audio.pause();
       audioRef.current = null;
     };
-  }, [isOpen, audioUrl, settings.adhanSound, isPreview]);
+  }, [isOpen, audioUrl, settings.adhanSound, isPreview, systemAlreadyPlayed]);
 
   const togglePlay = () => {
     if (!audioRef.current) return;
@@ -163,7 +177,9 @@ export function AzanOverlayModal({
 
   if (!isOpen) return null;
 
-  const today = new Date();
+  // The adhan page belongs to the selected city, so the date it shows is the city's —
+  // on a device far from the selected zone these two days can differ.
+  const today = getDateInTimeZone(prayerTime ?? new Date(), timeZone);
 
   return (
     <div
@@ -253,7 +269,11 @@ export function AzanOverlayModal({
                 <div className="truncate text-right">
                   <p className="text-xs font-semibold text-white truncate">{adhanSound.name}</p>
                   <p className="text-[11px] text-emerald-400">
-                    {isPlaying ? 'جارٍ تشغيل الأذان الآن…' : 'موقوف مؤقتاً'}
+                    {isPlaying
+                      ? 'جارٍ تشغيل الأذان الآن…'
+                      : systemAlreadyPlayed
+                        ? 'شُغِّل الأذان مع التنبيه — اضغط للإعادة'
+                        : 'موقوف مؤقتاً'}
                   </p>
                 </div>
               </div>

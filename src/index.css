@@ -191,10 +191,32 @@ body {
   --frame: #c9a852;
   --frame-soft: rgba(201, 168, 82, 0.4);
   --wash: rgba(201, 168, 82, 0.1);
+
+  /*
+   * The light sheet's sheen is a highlight bouncing off paper. Inherited unchanged on a
+   * dark sheet it is just white paint, and it washed the top third of every night page
+   * grey. The night sheet gets the same shape of light in its own colour instead: a
+   * warm bloom from the head of the page, and rules in gold rather than brown.
+   */
+  background-image:
+    radial-gradient(130% 78% at 50% 0%, rgba(201, 168, 82, 0.09), transparent 62%),
+    radial-gradient(110% 68% at 50% 100%, rgba(201, 168, 82, 0.05), transparent 64%),
+    linear-gradient(180deg, rgba(232, 220, 196, 0.05), transparent 32%),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent calc(var(--fs) * 1.7),
+      rgba(201, 168, 82, 0.05) calc(var(--fs) * 1.7),
+      rgba(201, 168, 82, 0.05) calc(var(--fs) * 1.74)
+    );
   box-shadow:
     0 20px 45px -20px rgba(0, 0, 0, 0.75),
     0 2px 5px rgba(0, 0, 0, 0.4),
     inset 0 0 0 1px rgba(201, 168, 82, 0.2);
+}
+
+.mushaf-page--night::before {
+  border-color: rgba(201, 168, 82, 0.18);
 }
 
 .mushaf-page--paper {
@@ -789,6 +811,774 @@ body {
   font-size: 0.68rem;
   font-weight: 700;
   color: var(--frame);
+}
+
+/* ============================================================
+   Mushaf reader chrome — the frame around the sheet.
+
+   The reader is one design top to bottom: a bar above the page, a dock
+   below it, and sheets that rise from the foot. Every colour comes from
+   a token the reading mode sets (day / paper / night), so the controls
+   and the page read as one object instead of a themed sheet sitting in
+   an unrelated app bar. Nothing here uses Tailwind's `dark:` variants on
+   purpose: the reading mode and the app theme are two different choices
+   and both have to work in any combination.
+   ============================================================ */
+.mushaf-shell {
+  --surface: rgb(var(--surface-light));
+  --panel: #ffffff;
+  --line: rgb(var(--primary-100));
+  --fg: rgb(var(--primary-900));
+  --fg-muted: rgb(107 114 128);
+  --accent: rgb(var(--primary-600));
+  --accent-soft: rgb(var(--primary-50));
+  --on-accent: #ffffff;
+  --chip: rgb(var(--primary-50));
+  --chip-fg: rgb(var(--primary-700));
+  --gold: #d4a017;
+
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+  color: var(--fg);
+  /* Native controls (the jump field, scrollbars) follow the mode
+     rather than always drawing themselves as light widgets on a dark page. */
+  color-scheme: light;
+}
+
+.dark .mushaf-shell[data-mode='day'] {
+  color-scheme: dark;
+  --surface: rgb(var(--surface-dark));
+  --panel: #101c16;
+  --line: rgb(var(--primary-800));
+  --fg: rgb(var(--primary-100));
+  --fg-muted: rgb(156 163 175);
+  --accent: rgb(var(--primary-500));
+  --accent-soft: rgb(var(--primary-900));
+  --chip: rgb(var(--primary-900));
+  --chip-fg: rgb(var(--primary-200));
+}
+
+.mushaf-shell[data-mode='paper'] {
+  color-scheme: light;
+  --surface: #e9dfc4;
+  --panel: #f7f0dc;
+  --line: rgb(122 90 15 / 0.25);
+  --fg: #2a1e0b;
+  --fg-muted: #7b6845;
+  --accent: #7a5a0f;
+  --accent-soft: #efe6cc;
+  --chip: rgb(255 255 255 / 0.55);
+  --chip-fg: #4b3a17;
+}
+
+.mushaf-shell[data-mode='night'] {
+  color-scheme: dark;
+  --surface: #0b0906;
+  --panel: #14100a;
+  --line: #2a2317;
+  --fg: #e7dcc0;
+  --fg-muted: #a89877;
+  --accent: #c9a852;
+  --accent-soft: #241d12;
+  --on-accent: #1c150a;
+  --chip: #1e1810;
+  --chip-fg: #e2d4b0;
+}
+
+.mushaf-shell button:focus-visible,
+.mushaf-shell input:focus-visible,
+.mushaf-shell select:focus-visible,
+.mushaf-shell [role='button']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---- Top bar ---- */
+.mushaf-topbar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 0.65rem;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.mushaf-heading {
+  min-width: 0;
+  text-align: center;
+}
+
+.mushaf-heading__title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mushaf-heading__meta {
+  font-size: 0.68rem;
+  line-height: 1.4;
+  color: var(--fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mushaf-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.mushaf-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 0.8rem;
+  background: var(--chip);
+  color: var(--chip-fg);
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease,
+    transform 0.1s ease;
+}
+
+.mushaf-iconbtn:hover {
+  background: var(--accent-soft);
+}
+
+.mushaf-iconbtn:active {
+  transform: scale(0.94);
+}
+
+.mushaf-iconbtn[aria-pressed='true'],
+.mushaf-iconbtn[aria-expanded='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.mushaf-iconbtn--gold[aria-pressed='true'] {
+  background: var(--gold);
+  color: #2a1c05;
+}
+
+/* ---- Reading area ---- */
+.mushaf-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 1rem 0.75rem 1.25rem;
+  overscroll-behavior: contain;
+  /* Horizontal gestures belong to the page turn, vertical ones to the browser. */
+  touch-action: pan-y;
+  /* The stack slides sheets in above and below the viewport on purpose, and corrects
+     its own scroll as it does; the browser's anchoring would correct it a second time. */
+  overflow-anchor: none;
+}
+
+/*
+ * The printed sheet is sized as `100vw - 2rem`, so it needs a narrower gutter than
+ * the day sheet or it pushes a horizontal scrollbar onto a phone in paper mode.
+ */
+.mushaf-shell[data-mode='paper'] .mushaf-scroll {
+  padding-inline: 0.5rem;
+}
+
+/*
+ * Both ways of travelling lay the same sheet down: one column of type, or the printed
+ * page at the width it was measured for. `--column` is the turned sheet, `--leaf` the
+ * same sheet standing in the stack.
+ */
+.mushaf-turn--column,
+.mushaf-leaf--column {
+  width: 100%;
+  max-width: 42rem;
+  margin-inline: auto;
+}
+
+.mushaf-turn--wide,
+.mushaf-leaf--wide {
+  margin-inline: auto;
+  overflow-x: auto;
+}
+
+/*
+ * The default way through the mushaf: sheets end to end, so the scroll is the page
+ * turn. The gap is the shell showing between two leaves of paper, which is what
+ * separates them — no rule, no divider, nothing drawn on the page itself.
+ */
+.mushaf-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.mushaf-leaf {
+  /* A flex item refuses to drop below its min-content width by default; a sheet of
+     type has to be allowed to, or one long word would widen the whole stack. */
+  min-width: 0;
+}
+
+@keyframes mushaf-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes mushaf-sheet-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 1.5rem, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The page slides in from the side it came from, the way a leaf turns. */
+@keyframes mushaf-turn-next {
+  from {
+    opacity: 0;
+    transform: translate3d(-0.9rem, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes mushaf-turn-prev {
+  from {
+    opacity: 0;
+    transform: translate3d(0.9rem, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.mushaf-turn[data-dir='next'] {
+  animation: mushaf-turn-next 0.24s ease-out;
+}
+
+.mushaf-turn[data-dir='prev'] {
+  animation: mushaf-turn-prev 0.24s ease-out;
+}
+
+/* ---- Dock ---- */
+.mushaf-dock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.55rem 0.65rem calc(env(safe-area-inset-bottom, 0px) + 0.6rem);
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+}
+
+.mushaf-progress {
+  height: 2px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.mushaf-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+
+.mushaf-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 1.5rem;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* Drawn rather than inherited from the UA, so a slider belongs to the reading mode
+   instead of arriving as a stock light widget on a dark page. */
+.mushaf-range::-webkit-slider-runnable-track {
+  height: 0.35rem;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.mushaf-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 1.05rem;
+  height: 1.05rem;
+  margin-top: -0.35rem;
+  border-radius: 999px;
+  background: var(--accent);
+  border: 2px solid var(--panel);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
+}
+
+.mushaf-range::-moz-range-track {
+  height: 0.35rem;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.mushaf-range::-moz-range-thumb {
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 999px;
+  background: var(--accent);
+  border: 2px solid var(--panel);
+}
+
+.mushaf-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.mushaf-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 2.3rem;
+  padding: 0 0.55rem;
+  border-radius: 0.8rem;
+  background: var(--chip);
+  color: var(--chip-fg);
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: background-color 0.18s ease;
+}
+
+.mushaf-tool:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.mushaf-tool:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.mushaf-tool--primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  margin-inline-start: auto;
+}
+
+.mushaf-tool[aria-expanded='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.mushaf-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.2rem;
+  border-radius: 0.8rem;
+  background: var(--chip);
+}
+
+.mushaf-zoom button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 0.6rem;
+  color: var(--chip-fg);
+  transition: background-color 0.18s ease;
+}
+
+.mushaf-zoom button:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.mushaf-zoom button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.mushaf-zoom__value {
+  min-width: 2.5rem;
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Bottom sheets ---- */
+.mushaf-sheet {
+  position: fixed;
+  inset: 0;
+  /* Equal to the tafsir sheet's own z-index: the reader renders that one last,
+     so it wins without needing to know about the reader's sheets. */
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.mushaf-sheet__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 0.55);
+  animation: mushaf-fade-in 0.2s ease-out;
+}
+
+.mushaf-sheet__panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  max-height: min(85vh, 46rem);
+  background: var(--panel);
+  color: var(--fg);
+  border-top: 1px solid var(--line);
+  border-radius: 1.5rem 1.5rem 0 0;
+  box-shadow: 0 -20px 40px -24px rgb(0 0 0 / 0.6);
+  animation: mushaf-sheet-up 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.mushaf-sheet__panel:focus-visible {
+  outline: none;
+}
+
+.mushaf-sheet__grip {
+  width: 3rem;
+  height: 0.3rem;
+  margin: 0.55rem auto 0;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.mushaf-sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.4rem 0.75rem 0.55rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.mushaf-sheet__title {
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.mushaf-sheet__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.8rem 0.75rem calc(env(safe-area-inset-bottom, 0px) + 1rem);
+}
+
+/* ---- Jump sheet ---- */
+.mushaf-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.3rem;
+  padding: 0.25rem;
+  margin-bottom: 0.7rem;
+  border-radius: 0.95rem;
+  background: var(--chip);
+}
+
+.mushaf-tab {
+  padding: 0.5rem 0.2rem;
+  border-radius: 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--fg-muted);
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.mushaf-tab[aria-selected='true'] {
+  background: var(--panel);
+  color: var(--fg);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.14);
+}
+
+.mushaf-jumpbar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.7rem;
+}
+
+.mushaf-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 2.4rem;
+  padding: 0 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.8rem;
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.mushaf-input::placeholder {
+  color: var(--fg-muted);
+  font-weight: 500;
+}
+
+.mushaf-grid {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.mushaf-grid--page {
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+}
+
+.mushaf-grid--card {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 480px) {
+  .mushaf-grid--card {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.mushaf-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.3rem;
+  padding: 0.35rem;
+  border-radius: 0.7rem;
+  background: var(--chip);
+  color: var(--chip-fg);
+  font-size: 0.76rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  transition:
+    background-color 0.15s ease,
+    transform 0.1s ease;
+}
+
+.mushaf-cell:hover {
+  background: var(--accent-soft);
+}
+
+.mushaf-cell:active {
+  transform: scale(0.96);
+}
+
+.mushaf-cell[aria-current] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.mushaf-cell__dot {
+  position: absolute;
+  top: 0.3rem;
+  inset-inline-start: 0.35rem;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: var(--gold);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.12);
+}
+
+.mushaf-cell--card {
+  flex-direction: column;
+  gap: 0.1rem;
+  min-height: 3.4rem;
+  text-align: center;
+}
+
+.mushaf-cell__title {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.mushaf-cell__sub {
+  font-size: 0.66rem;
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+/* ---- Reading options sheet ---- */
+.mushaf-section + .mushaf-section {
+  margin-top: 1rem;
+}
+
+.mushaf-section__title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--fg-muted);
+}
+
+.mushaf-section__title::after {
+  content: '';
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--line);
+}
+
+.mushaf-seg {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.mushaf-seg__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.6rem 0.3rem;
+  border-radius: 1rem;
+  background: var(--chip);
+  color: var(--chip-fg);
+  font-size: 0.76rem;
+  font-weight: 700;
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease,
+    transform 0.1s ease;
+}
+
+.mushaf-seg__item:active {
+  transform: scale(0.97);
+}
+
+.mushaf-seg__item[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* The way of travelling has two answers, not three. */
+.mushaf-seg--pair {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* What the chosen way of travelling does, so the pair above is not a guess. */
+.mushaf-hint {
+  margin: 0.45rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.65;
+  color: var(--fg-muted);
+}
+
+.mushaf-fields {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.mushaf-field {
+  display: block;
+}
+
+.mushaf-field__label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.1rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--fg-muted);
+}
+
+.mushaf-field__value {
+  font-weight: 800;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.mushaf-reset {
+  display: block;
+  width: 100%;
+  min-height: 2.4rem;
+  margin-top: 0.75rem;
+  border-radius: 0.85rem;
+  background: var(--chip);
+  color: var(--chip-fg);
+  font-size: 0.78rem;
+  font-weight: 700;
+  transition: background-color 0.18s ease;
+}
+
+.mushaf-reset:hover {
+  background: var(--accent-soft);
+}
+
+/* The recitation card keeps the app's own light/dark styling wherever else
+   it is used; framed here it follows the app theme instead of fighting the
+   reading mode. Night mode flips the subtree to the app's dark palette so
+   a white card never lands on a black page. */
+.mushaf-audio__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
+.mushaf-audio {
+  padding: 0.35rem;
+  border-radius: 1.1rem;
+  background: rgb(var(--surface-light));
+  border: 1px solid rgb(var(--primary-100));
+}
+
+.dark .mushaf-audio {
+  color-scheme: dark;
+  background: rgb(var(--surface-dark));
+  border-color: rgb(var(--primary-800));
+}
+
+.mushaf-shell[data-mode='night'] .mushaf-audio {
+  background: transparent;
+  border-color: var(--line);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mushaf-turn[data-dir],
+  .mushaf-sheet__panel,
+  .mushaf-sheet__backdrop {
+    animation: none;
+  }
 }
 
 /* No-select for test mode */
