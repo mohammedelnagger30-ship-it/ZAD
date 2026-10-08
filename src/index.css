@@ -1302,36 +1302,6 @@ body {
   background: var(--accent-soft);
 }
 
-/* The recitation card keeps the app's own light/dark styling wherever else
-   it is used; framed here it follows the app theme instead of fighting the
-   reading mode. Night mode flips the subtree to the app's dark palette so
-   a white card never lands on a black page. */
-.mushaf-audio__controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
-  margin-top: 0.6rem;
-}
-
-.mushaf-audio {
-  padding: 0.35rem;
-  border-radius: 1.1rem;
-  background: rgb(var(--surface-light));
-  border: 1px solid rgb(var(--primary-100));
-}
-
-.dark .mushaf-audio {
-  color-scheme: dark;
-  background: rgb(var(--surface-dark));
-  border-color: rgb(var(--primary-800));
-}
-
-.mushaf-shell[data-mode='night'] .mushaf-audio {
-  background: transparent;
-  border-color: var(--line);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .mushaf-turn[data-dir],
   .mushaf-sheet__panel,

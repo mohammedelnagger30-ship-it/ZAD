@@ -17,7 +17,6 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { MushafPage } from '@/components/mushaf/MushafPage';
 import { TafsirBottomSheet } from '@/components/TafsirBottomSheet';
-import { AudioRecitationPlayer } from '@/components/AudioRecitationPlayer';
 import {
   SURAHS,
   JUZ_INFO,
@@ -175,7 +174,6 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
   const [pageField, setPageField] = useState('');
   const [turnDir, setTurnDir] = useState<'next' | 'prev'>('next');
   const [bookmarkedPages, setBookmarkedPages] = useState<Set<number>>(() => new Set<number>());
-  const [selectedReadingAyah, setSelectedReadingAyah] = useState<{ surahId: number; ayahNumber: number } | null>(null);
   const [tafsirAyah, setTafsirAyah] = useState<{ surahId: number; ayahNumber: number } | null>(null);
   const [reciterId, setReciterId] = useState(loadPreferredReciter);
   /**
@@ -401,7 +399,6 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
         setTurnDir(target > currentPageRef.current ? 'next' : 'prev');
         currentPageRef.current = target;
         setCurrentPage(target);
-        setSelectedReadingAyah(null);
         onPageChange?.(target);
       }
       setSheet(null);
@@ -509,9 +506,7 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
   /**
    * Put the reader on the ayah being recited: the sheet takes it, the page
    * highlights it, and the mushaf opens the page it is actually printed on — the
-   * recitation walks the surah, and the page is meant to walk with it. `goToPage`
-   * clears the selection to make room for a jump the reader asked for; this is not
-   * that jump, so the selection is put straight back.
+   * recitation walks the surah, and the page is meant to walk with it.
    */
   const showAyah = useCallback(
     (surahId: number, ayahNumber: number) => {
@@ -520,7 +515,6 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
       const choice = { surahId, ayahNumber };
       const page = getAyahPage(target, ayahNumber);
       if (page !== currentPageRef.current) goToPage(page);
-      setSelectedReadingAyah(choice);
       setAyahChoice(choice);
     },
     [goToPage],
@@ -528,7 +522,6 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
 
   const handleAyahPress = useCallback(
     (surahId: number, ayahNumber: number) => {
-      setSelectedReadingAyah({ surahId, ayahNumber });
       setAyahChoice({ surahId, ayahNumber });
       setVoiceEngaged(false);
       setVoicePhase('idle');
@@ -944,10 +937,6 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
   const surahsOnPage = useMemo(() => getSurahsForPage(currentPage), [currentPage]);
   const currentJuz = useMemo(() => getJuzForPage(currentPage), [currentPage]);
   const currentHizb = useMemo(() => getHizbForPage(currentPage), [currentPage]);
-  const primarySurah = useMemo(() => {
-    if (selectedReadingAyah) return getSurah(selectedReadingAyah.surahId);
-    return surahsOnPage[0] ?? getSurah(1) ?? null;
-  }, [selectedReadingAyah, surahsOnPage]);
   const pageNumbers = useMemo(() => Array.from({ length: totalPages }, (_, i) => i + 1), [totalPages]);
 
   const isBookmarked = bookmarkedPages.has(currentPage);
@@ -1350,47 +1339,6 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
             إعادة الضبط
           </button>
         </section>
-
-        {primarySurah && (
-          <section className="mushaf-section">
-            <p className="mushaf-section__title">التلاوة الصوتية · سورة {primarySurah.name}</p>
-            <div className="mushaf-audio">
-              <AudioRecitationPlayer
-                surah={primarySurah}
-                reciterId={reciterId}
-                onReciterChange={(nextReciterId) => {
-                  setReciterId(nextReciterId);
-                  savePreferredReciter(nextReciterId);
-                }}
-                onShowTafsir={(ayahNumber) => setTafsirAyah({ surahId: primarySurah.id, ayahNumber })}
-              >
-                {({ selectedAyah, isPlaying, selectAyah, playSelectedAyah }) => (
-                  <div className="mushaf-audio__controls">
-                    <button
-                      className="mushaf-tool"
-                      disabled={selectedAyah === null}
-                      onClick={() => selectedAyah !== null && selectAyah(Math.max(1, selectedAyah - 1))}
-                    >
-                      الآية السابقة
-                    </button>
-                    <button
-                      className="mushaf-tool"
-                      disabled={selectedAyah === null}
-                      onClick={() => selectedAyah !== null && selectAyah(Math.min(primarySurah.ayahCount, selectedAyah + 1))}
-                    >
-                      الآية التالية
-                    </button>
-                    <button className="mushaf-tool mushaf-tool--primary" onClick={playSelectedAyah}>
-                      {isPlaying
-                        ? 'إيقاف/متابعة'
-                        : `استمع: ${selectedAyah ? toArabicNumber(selectedAyah) : 'الآية الحالية'}`}
-                    </button>
-                  </div>
-                )}
-              </AudioRecitationPlayer>
-            </div>
-          </section>
-        )}
       </Sheet>
 
       {/* ── The pressed ayah: what it is needed for ───────────────────────── */}
