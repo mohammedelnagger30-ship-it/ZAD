@@ -1178,7 +1178,8 @@ body {
 
 /*
  * Every choice here has two answers — two ways of travelling, two ways of seeing the
- * page — so a segment is a pair of buttons, never thirds of a row.
+ * page, two lengths of listening — so a segment is a pair of buttons, never thirds
+ * of a row.
  */
 .mushaf-seg {
   display: grid;
@@ -1220,9 +1221,10 @@ body {
   color: var(--fg-muted);
 }
 
-/* The ayah's voice, once «التلاوة» is taken: the reciter it is read in, and the
-   transport that carries one ayah — play or pause, and the replay that runs it
-   again. It sits under its own rule so the choice above stays the answer. */
+/* The ayah's voice, once «التلاوة» is taken: the length it is heard in — one ayah,
+   or the whole surah — the reciter it is read in, and the transport that carries it:
+   play or pause, and the replay that runs it again. It sits under its own rule so
+   the choice above stays the answer. */
 .mushaf-voice {
   display: grid;
   gap: 0.55rem;
