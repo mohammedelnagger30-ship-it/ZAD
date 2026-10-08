@@ -169,6 +169,11 @@ export function MushafPage({
             {segment.ayahs.map((ayah) => {
               const isActive =
                 activeAyah?.surahId === ayah.surahId && activeAyah?.ayahNumber === ayah.ayahNumber;
+              // The last word carries the medallion inside one unbreakable tail, so the
+              // two are always cut from the line together.
+              const words = ayah.text.split(' ');
+              const head = words.slice(0, -1).join(' ');
+              const tail = words[words.length - 1];
               return (
                 <span key={`${ayah.surahId}:${ayah.ayahNumber}`}>
                   <span
@@ -186,10 +191,13 @@ export function MushafPage({
                     }}
                     style={isActive ? { background: 'var(--wash)' } : undefined}
                   >
-                    {ayah.text}
-                  </span>
-                  <span className="mushaf-ayah-mark" aria-hidden="true">
-                    {toArabicNumber(ayah.ayahNumber)}
+                    {head ? `${head} ` : null}
+                    <span className="mushaf-ayah-tail">
+                      {tail}
+                      <span className="mushaf-ayah-mark" aria-hidden="true">
+                        {toArabicNumber(ayah.ayahNumber)}
+                      </span>
+                    </span>
                   </span>{' '}
                 </span>
               );

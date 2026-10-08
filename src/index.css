@@ -348,6 +348,14 @@ body {
   cursor: pointer;
   border-radius: 0.2rem;
 }
+
+/* The ayah's last word and its medallion are cut from the line together — the way a
+   printed mushaf sets them. Without this the medallion, being a little box, can fail to
+   find room at the end of a full line and be left standing alone at the head of the next
+   one, where its number reads as belonging to the verse that follows. */
+.mushaf-ayah-tail {
+  white-space: nowrap;
+}
 .mushaf-ayah:hover {
   background: var(--wash);
   box-decoration-break: clone;

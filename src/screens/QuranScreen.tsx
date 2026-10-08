@@ -691,6 +691,31 @@ function AyahSpan({
       ? { background: 'var(--bookmark-wash)' }
       : undefined;
 
+  // The last word carries the medallion inside one unbreakable tail, so the two are cut
+  // from the line together — the number is never left standing at the head of a line,
+  // where in Arabic reading order it reads as belonging to the verse that follows.
+  const words = ayah.text.split(' ');
+  const head = words.slice(0, -1).join(' ');
+  const tailWord = words[words.length - 1];
+  const mark = (
+    <span className={`mushaf-ayah-mark${activeAudio ? ' mushaf-ayah-mark--active' : ''}`} aria-hidden="true">
+      {toArabicNumber(ayah.ayahNumber)}
+    </span>
+  );
+  const word = (value: string, index: number) => (
+    <span
+      key={index}
+      className="inline-block hover:bg-gold-100 dark:hover:bg-gold-900/30 rounded cursor-pointer mx-0.5"
+      onClick={(e) => {
+        e.stopPropagation();
+        const el = e.currentTarget;
+        el.style.opacity = el.style.opacity === '0' ? '1' : '0';
+      }}
+    >
+      {value}
+    </span>
+  );
+
   return (
     <span>
       <span
@@ -719,29 +744,37 @@ function AyahSpan({
         style={stateStyle}
       >
         {hideText ? (
-          <span className="bg-primary-200 dark:bg-primary-700 rounded px-2 select-none" style={{ opacity: 0 }}>
-            {ayah.text}
-          </span>
-        ) : hideWordByWord ? (
-          ayah.text.split(' ').map((word, i) => (
-            <span
-              key={i}
-              className="inline-block hover:bg-gold-100 dark:hover:bg-gold-900/30 rounded cursor-pointer mx-0.5"
-              onClick={(e) => {
-                e.stopPropagation();
-                const el = e.currentTarget;
-                el.style.opacity = el.style.opacity === '0' ? '1' : '0';
-              }}
-            >
-              {word}
+          <>
+            {head && (
+              <span className="bg-primary-200 dark:bg-primary-700 rounded px-2 select-none" style={{ opacity: 0 }}>
+                {head}
+                {' '}
+              </span>
+            )}
+            <span className="mushaf-ayah-tail">
+              <span className="bg-primary-200 dark:bg-primary-700 rounded px-2 select-none" style={{ opacity: 0 }}>
+                {tailWord}
+              </span>
+              {mark}
             </span>
-          ))
+          </>
+        ) : hideWordByWord ? (
+          <>
+            {words.slice(0, -1).map(word)}
+            <span className="mushaf-ayah-tail">
+              {word(tailWord, words.length - 1)}
+              {mark}
+            </span>
+          </>
         ) : (
-          ayah.text
+          <>
+            {head ? `${head} ` : null}
+            <span className="mushaf-ayah-tail">
+              {tailWord}
+              {mark}
+            </span>
+          </>
         )}
-      </span>
-      <span className={`mushaf-ayah-mark${activeAudio ? ' mushaf-ayah-mark--active' : ''}`} aria-hidden="true">
-        {toArabicNumber(ayah.ayahNumber)}
       </span>{' '}
     </span>
   );
