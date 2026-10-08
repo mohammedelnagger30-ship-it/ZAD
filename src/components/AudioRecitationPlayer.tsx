@@ -12,6 +12,8 @@ export interface AyahPlaybackControls {
   isPlaying: boolean;
   selectAyah: (ayah: number) => void;
   playSelectedAyah: () => void;
+  /** Take up any ayah of the surah and hear it from where it stands. */
+  playAyah: (ayah: number) => void;
 }
 
 interface AudioRecitationPlayerProps {
@@ -423,7 +425,7 @@ export function AudioRecitationPlayer({
           }
         }}
       />
-      {children({ activeAyah, isPlaying, selectedAyah, selectAyah, playSelectedAyah: startSelectedAyah })}
+      {children({ activeAyah, isPlaying, selectedAyah, selectAyah, playSelectedAyah: startSelectedAyah, playAyah })}
     </>
   );
 }

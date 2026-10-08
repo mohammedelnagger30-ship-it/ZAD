@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode, RefObject, TouchEvent as ReactTouchEvent, WheelEvent as ReactWheelEvent } from 'react';
+import type { TouchEvent as ReactTouchEvent, WheelEvent as ReactWheelEvent } from 'react';
 import {
   Bookmark,
   BookOpen,
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { MushafPage } from '@/components/mushaf/MushafPage';
+import { Sheet } from '@/components/mushaf/Sheet';
 import { TafsirBottomSheet } from '@/components/TafsirBottomSheet';
 import {
   SURAHS,
@@ -1475,40 +1476,3 @@ const MushafLeaf = memo(function MushafLeaf({ page, ...sheet }: MushafLeafProps)
   );
 });
 
-interface SheetProps {
-  open: boolean;
-  title: string;
-  onClose: () => void;
-  panelRef: RefObject<HTMLDivElement>;
-  /**
-   * Puts the app's dark palette on the subtree. Only the reading modes that
-   * need it ask for it — the recitation card is the one piece of shared
-   * chrome here that still styles itself with `dark:` variants.
-   */
-  darkSurface?: boolean;
-  children: ReactNode;
-}
-
-function Sheet({ open, title, onClose, panelRef, darkSurface = false, children }: SheetProps) {
-  if (!open) return null;
-
-  return (
-    <div className="mushaf-sheet" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="mushaf-sheet__backdrop" onClick={onClose} aria-hidden="true" />
-      <div
-        className={`mushaf-sheet__panel${darkSurface ? ' dark' : ''}`}
-        ref={panelRef}
-        tabIndex={-1}
-      >
-        <div className="mushaf-sheet__grip" aria-hidden="true" />
-        <div className="mushaf-sheet__head">
-          <h2 className="mushaf-sheet__title">{title}</h2>
-          <button className="mushaf-iconbtn" onClick={onClose} aria-label="إغلاق">
-            <X size={18} />
-          </button>
-        </div>
-        <div className="mushaf-sheet__body">{children}</div>
-      </div>
-    </div>
-  );
-}

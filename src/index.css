@@ -82,6 +82,38 @@
   --surface-dark: 25 23 17;
 }
 
+/*
+ * The reader's chrome tokens, stated for everywhere the reading shell is not. Its
+ * sheets rise from the foot of the page wherever they are opened — the surah view's
+ * ayah choice opens the very same sheet — and there it is the app's own theme that
+ * dresses them, not the reading mode. Inside .mushaf-shell every one of these is
+ * re-declared, so the reading mode keeps the last word where it belongs; these are
+ * only the answer everywhere else. The dark set rides on `html` only: the reader
+ * also puts a bare `.dark` class on a sheet's panel to reach Tailwind's variants,
+ * and these values must not reach in there to outrank the mode's own.
+ */
+:root {
+  --panel: #ffffff;
+  --line: rgb(var(--primary-100));
+  --fg: rgb(var(--primary-900));
+  --fg-muted: rgb(107 114 128);
+  --chip: rgb(var(--primary-50));
+  --chip-fg: rgb(var(--primary-700));
+  --accent: rgb(var(--primary-600));
+  --on-accent: #ffffff;
+}
+
+/* The app's dark theme, so a sheet raised outside the shell answers to it. */
+html.dark {
+  --panel: #101c16;
+  --line: rgb(var(--primary-800));
+  --fg: rgb(var(--primary-100));
+  --fg-muted: rgb(156 163 175);
+  --chip: rgb(var(--primary-900));
+  --chip-fg: rgb(var(--primary-200));
+  --accent: rgb(var(--primary-500));
+}
+
 * {
   -webkit-tap-highlight-color: transparent;
 }
