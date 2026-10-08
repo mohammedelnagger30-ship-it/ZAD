@@ -142,17 +142,23 @@ body {
    scanned images: 604 scanned pages would cost hundreds of megabytes, while the text
    is already in the bundle. `--fs` is the base Quran size; the reader's zoom sets it.
    ============================================================ */
+/*
+ * Day: a clean white page. White paper, neutral ink, and every rule, medallion, band
+ * and wash in one warm graphite — nothing on the sheet is yellow, so the only colour
+ * in the day frame comes from the app's own theme around it. Night states the same
+ * six tokens in gold below and the whole page changes register with them.
+ */
 .mushaf-page {
-  --paper: #f4ecd8;
-  --ink: #1a1209;
-  --frame: #8b6914;
-  --frame-soft: rgba(139, 105, 20, 0.35);
-  --wash: rgba(139, 105, 20, 0.08);
+  --paper: #ffffff;
+  --ink: #141414;
+  --frame: #57534e;
+  --frame-soft: rgba(87, 83, 78, 0.35);
+  --wash: rgba(87, 83, 78, 0.07);
   /* What the selected and the bookmarked ayah wear, and the ink that goes on the
      frame's own disc: all three are answered from the sheet's palette, so night has
      only to restate them for the whole page to agree with itself. */
-  --selected-wash: rgba(212, 160, 23, 0.2);
-  --bookmark-wash: rgba(212, 160, 23, 0.12);
+  --selected-wash: rgba(15, 23, 42, 0.12);
+  --bookmark-wash: rgba(15, 23, 42, 0.07);
   --frame-on: #ffffff;
   --fs: 26px;
   --lh: 2.05;
@@ -166,27 +172,27 @@ body {
   background-color: var(--paper);
   background-image:
     radial-gradient(130% 78% at 50% 0%, rgba(255, 255, 255, 0.5), transparent 62%),
-    radial-gradient(110% 68% at 50% 100%, rgba(139, 105, 20, 0.08), transparent 64%),
+    radial-gradient(110% 68% at 50% 100%, rgba(87, 83, 78, 0.06), transparent 64%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.2), transparent 32%),
     repeating-linear-gradient(
       to bottom,
       transparent 0,
       transparent calc(var(--fs) * 1.7),
-      rgba(139, 105, 20, 0.05) calc(var(--fs) * 1.7),
-      rgba(139, 105, 20, 0.05) calc(var(--fs) * 1.74)
+      rgba(87, 83, 78, 0.045) calc(var(--fs) * 1.7),
+      rgba(87, 83, 78, 0.045) calc(var(--fs) * 1.74)
     );
   box-shadow:
-    0 32px 60px -32px rgba(30, 20, 5, 0.5),
-    0 10px 22px rgba(30, 20, 5, 0.12),
+    0 32px 60px -32px rgba(15, 23, 42, 0.45),
+    0 10px 22px rgba(15, 23, 42, 0.1),
     inset 0 0 0 1px rgba(255, 255, 255, 0.6),
-    inset 0 0 0 2px rgba(139, 105, 20, 0.1);
+    inset 0 0 0 2px rgba(87, 83, 78, 0.1);
 }
 
 .mushaf-page::before {
   content: '';
   position: absolute;
   inset: 0.8rem 0.9rem 1rem 0.9rem;
-  border: 1px solid rgba(138, 105, 52, 0.2);
+  border: 1px solid rgba(87, 83, 78, 0.2);
   border-radius: 0.7rem;
   pointer-events: none;
 }
@@ -259,7 +265,7 @@ body {
   padding: 0.08rem;
   color: var(--frame);
   background: var(--paper);
-  filter: drop-shadow(0 1px 1px rgba(48, 35, 12, 0.14));
+  filter: drop-shadow(0 1px 1px rgba(15, 23, 42, 0.14));
 }
 .mushaf-corner--tr { top: -0.64rem; right: -0.64rem; }
 .mushaf-corner--tl { top: -0.64rem; left: -0.64rem; }
@@ -438,7 +444,7 @@ body {
   box-shadow:
     inset 0 0 0 2px var(--paper),
     inset 0 0 0 3px var(--frame-soft),
-    0 1px 2px rgba(48, 35, 12, 0.1);
+    0 1px 2px rgba(15, 23, 42, 0.12);
   font-size: calc(var(--fs) * 0.37);
   font-weight: 700;
   line-height: 1;
@@ -472,7 +478,7 @@ body {
   background:
     linear-gradient(90deg, transparent, var(--frame-soft), transparent) top / 42% 1px no-repeat,
     linear-gradient(180deg, var(--wash), transparent 82%);
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18), 0 1px 3px rgba(48, 35, 12, 0.04);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 1px 3px rgba(15, 23, 42, 0.05);
 }
 .mushaf-banner::before {
   content: '';
@@ -553,8 +559,8 @@ body {
   height: 2.15rem;
   border: 1.2px solid var(--frame);
   border-radius: 9999px;
-  background: linear-gradient(180deg, var(--paper), rgba(138, 105, 52, 0.04));
-  box-shadow: inset 0 0 0 1px rgba(138, 105, 52, 0.2), 0 2px 7px rgba(47, 30, 10, 0.08);
+  background: linear-gradient(180deg, var(--paper), rgba(87, 83, 78, 0.05));
+  box-shadow: inset 0 0 0 1px rgba(87, 83, 78, 0.2), 0 2px 7px rgba(15, 23, 42, 0.08);
   font-family: 'Cairo', sans-serif;
   font-size: 0.68rem;
   font-weight: 700;
@@ -583,8 +589,10 @@ body {
   --on-accent: #ffffff;
   --chip: rgb(var(--primary-50));
   --chip-fg: rgb(var(--primary-700));
-  --gold: #d4a017;
-  --on-gold: #2a1c05;
+  /* The marked star and the dot it leaves in the jump grid are a step of the page's
+     own frame rather than a colour of their own: graphite in day, gold after dark. */
+  --gold: #57534e;
+  --on-gold: #ffffff;
   /* A control sitting above its track — the selected jump tab — and the fittings that
      follow the reader rather than the app: text selection, the scrollbar, a hover. */
   --raised: var(--panel);
