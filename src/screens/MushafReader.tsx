@@ -2,13 +2,14 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import type { ReactNode, RefObject, TouchEvent as ReactTouchEvent, WheelEvent as ReactWheelEvent } from 'react';
 import {
   Bookmark,
+  BookOpen,
   List,
   Moon,
   MoveHorizontal,
   MoveVertical,
-  ScrollText,
   SlidersHorizontal,
   Sun,
+  Volume2,
   X,
   ZoomIn,
   ZoomOut,
@@ -27,7 +28,8 @@ import {
   toArabicNumber,
 } from '@/data/surahs';
 import { getTotalPages, HIZB_INFO, getHizbForPage } from '@/data/mushafPages';
-import { loadPreferredReciter, savePreferredReciter } from '@/data/audioReciters';
+import { loadPreferredReciter, savePreferredReciter, AUDIO_RECITERS } from '@/data/audioReciters';
+import { loadSurahAudio, type SurahAudioSource, type VerseTiming } from '@/utils/quranAudio';
 import { db, type Settings } from '@/db/database';
 
 interface MushafReaderProps {
@@ -58,7 +60,7 @@ const LEAF_WINDOW = 40;
 /** Within this many pixels of the head the stack pre-loads, so it never dead-ends. */
 const LEAF_HEADROOM = 8;
 
-type MushafMode = 'day' | 'paper' | 'night';
+type MushafMode = 'day' | 'night';
 /** Which way the reader travels: down a stack of sheets, or across one sheet at a time. */
 type Orientation = 'vertical' | 'horizontal';
 type SheetName = 'jump' | 'options';
@@ -67,7 +69,7 @@ type JumpTarget = 'page' | 'surah' | 'juz' | 'hizb';
 /**
  * How the reader looks, kept in one object on purpose.
  *
- * Night, paper, zoom and spacing used to live in five independent pieces of
+ * Night, zoom and spacing used to live in five independent pieces of
  * state, so the shell could end up half themed — chrome in one mode, page in
  * another — and every change was lost on close. One object, one writer, one
  * key in localStorage.
@@ -90,16 +92,20 @@ const DEFAULT_PREFS: MushafPrefs = {
   wordSpacing: 0,
 };
 
+/**
+ * The ways into the mushaf, ordered by how a reader reaches for them: the surah by
+ * name first — the list is the front door — then the parts, then a page number
+ * typed by someone who already knows it.
+ */
 const JUMP_TABS: { id: JumpTarget; label: string }[] = [
-  { id: 'page', label: 'صفحة' },
   { id: 'surah', label: 'سورة' },
   { id: 'juz', label: 'جزء' },
   { id: 'hizb', label: 'حزب' },
+  { id: 'page', label: 'صفحة' },
 ];
 
 const MODES: { id: MushafMode; label: string; Icon: LucideIcon }[] = [
   { id: 'day', label: 'نهاري', Icon: Sun },
-  { id: 'paper', label: 'ورقي', Icon: ScrollText },
   { id: 'night', label: 'ليلي', Icon: Moon },
 ];
 
@@ -129,7 +135,9 @@ function loadPrefs(): MushafPrefs {
     if (!raw) return DEFAULT_PREFS;
     const parsed = JSON.parse(raw) as Partial<MushafPrefs>;
     return {
-      mode: parsed.mode === 'paper' || parsed.mode === 'night' ? parsed.mode : 'day',
+      // Anything saved before the paper mode was dropped, or by a later build,
+      // opens as the default day sheet rather than on a mode nothing draws.
+      mode: parsed.mode === 'night' ? 'night' : 'day',
       // Saved before the option existed, so it opens the way it reads by default.
       orientation: parsed.orientation === 'horizontal' ? 'horizontal' : 'vertical',
       zoom: clampNumber(parsed.zoom, ZOOM_MIN, ZOOM_MAX, DEFAULT_PREFS.zoom),
@@ -149,13 +157,24 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
   const [currentPage, setCurrentPage] = useState(startPage);
   const [prefs, setPrefs] = useState<MushafPrefs>(loadPrefs);
   const [sheet, setSheet] = useState<SheetName | null>(null);
-  const [jumpTarget, setJumpTarget] = useState<JumpTarget>('page');
+  const [jumpTarget, setJumpTarget] = useState<JumpTarget>('surah');
   const [pageField, setPageField] = useState('');
   const [turnDir, setTurnDir] = useState<'next' | 'prev'>('next');
   const [bookmarkedPages, setBookmarkedPages] = useState<Set<number>>(() => new Set<number>());
   const [selectedReadingAyah, setSelectedReadingAyah] = useState<{ surahId: number; ayahNumber: number } | null>(null);
   const [tafsirAyah, setTafsirAyah] = useState<{ surahId: number; ayahNumber: number } | null>(null);
   const [reciterId, setReciterId] = useState(loadPreferredReciter);
+  /**
+   * The ayah last pressed, and which of its two uses the reader is being asked
+   * about: the meaning behind «التفسير», the voice behind «التلاوة».
+   */
+  const [ayahChoice, setAyahChoice] = useState<{ surahId: number; ayahNumber: number } | null>(null);
+  const [voiceEngaged, setVoiceEngaged] = useState(false);
+  const [voicePhase, setVoicePhase] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [voicePlaying, setVoicePlaying] = useState(false);
+  /** Set when this ayah has run to its end: «متابعة» then means the one after it. */
+  const [voiceDone, setVoiceDone] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const orientation = prefs.orientation;
 
   /**
@@ -174,8 +193,15 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
   /** A jump whose sheet is not mounted yet, landed the moment the stack has it. */
   const pendingLeafRef = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const pageGridRef = useRef<HTMLDivElement>(null);
   const sheetPanelRef = useRef<HTMLDivElement>(null);
+  /** The ayah's own panel: it can sit under the tafsir, which takes the focus. */
+  const ayahPanelRef = useRef<HTMLDivElement>(null);
+  const voiceAudioRef = useRef<HTMLAudioElement>(null);
+  /** The surah's file, held once per reciter and read for every ayah in it. */
+  const voiceSourceRef = useRef<{ surahId: number; source: SurahAudioSource } | null>(null);
+  const voiceTimingRef = useRef<VerseTiming | null>(null);
+  /** The blob URL's only handle — nothing else can release the file it maps to. */
+  const voiceUrlRef = useRef<string | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const touchEndRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -450,10 +476,217 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
     if (orientation === 'horizontal') scrollRef.current?.scrollTo({ top: 0 });
   }, [currentPage, orientation]);
 
+  /**
+   * A pressed ayah asks a question of its own: does the reader want what it means,
+   * or how it sounds? The sheet holds both answers — the tafsir behind one button,
+   * the recitation behind the other — and the voice is the reciter already chosen
+   * for this mushaf, changeable without leaving the ayah.
+   */
+  const handleAyahPress = useCallback((surahId: number, ayahNumber: number) => {
+    setSelectedReadingAyah({ surahId, ayahNumber });
+    setAyahChoice({ surahId, ayahNumber });
+    setVoiceEngaged(false);
+    setVoicePhase('idle');
+    setVoicePlaying(false);
+    setVoiceDone(false);
+    setVoiceError(null);
+  }, []);
+
+  const pauseVoice = useCallback(() => {
+    voiceAudioRef.current?.pause();
+    setVoicePlaying(false);
+  }, []);
+
+  /** The file is held only for as long as the ayah is being asked about. */
+  const releaseVoice = useCallback(() => {
+    if (voiceUrlRef.current) URL.revokeObjectURL(voiceUrlRef.current);
+    voiceUrlRef.current = null;
+    voiceSourceRef.current = null;
+    voiceTimingRef.current = null;
+  }, []);
+
+  const closeAyahChoice = useCallback(() => {
+    // The audio element leaves with the sheet, and an element no longer in the
+    // document is not paused for us — stop it while it can still be reached.
+    pauseVoice();
+    releaseVoice();
+    setAyahChoice(null);
+  }, [pauseVoice, releaseVoice]);
+
+  /**
+   * One ayah at a time, out of the surah's own file: playback opens at the
+   * millisecond this ayah opens and is cut at the millisecond the next one does.
+   * A pause inside the ayah resumes where it stopped; a finished ayah, or a
+   * deliberate replay, starts from the top of it.
+   */
+  const playAyahFrom = useCallback((source: SurahAudioSource, ayah: number, restart = false) => {
+    const audio = voiceAudioRef.current;
+    const timing = source.verseTimings.find((entry) => entry.ayah === ayah);
+    if (!audio || !timing) {
+      setVoicePhase('error');
+      setVoiceError('لم يُعثر على تلاوة لهذه الآية داخل ملف السورة.');
+      return;
+    }
+    voiceTimingRef.current = timing;
+    if (audio.src !== source.url) audio.src = source.url;
+    const start = timing.startMs / 1000;
+    const end = timing.endMs / 1000;
+    // A file that already ran out plays its last ayah again from that ayah, not
+    // from the surah's beginning — `ended` outranks a stale position inside it.
+    if (restart || audio.ended || audio.currentTime < start || audio.currentTime >= end) {
+      audio.currentTime = start;
+    }
+    audio.play().catch(() => {
+      setVoicePhase('error');
+      setVoiceError('تعذّر تشغيل التلاوة — أعد المحاولة.');
+    });
+    setVoiceDone(false);
+  }, []);
+
+  /**
+   * Get the surah's file, then play this ayah out of it. The reader's own reciter
+   * starts from the first tap; one never heard before needs the network first, so
+   * the transport says so instead of looking broken.
+   */
+  const startVoice = useCallback(
+    (reciter = reciterId, ayahNumber?: number) => {
+      if (!ayahChoice) return;
+      const ayah = ayahNumber ?? ayahChoice.ayahNumber;
+      const cached = voiceSourceRef.current;
+      if (cached && cached.surahId === ayahChoice.surahId) {
+        setVoicePhase('ready');
+        playAyahFrom(cached.source, ayah);
+        return;
+      }
+      const { surahId } = ayahChoice;
+      setVoicePhase('loading');
+      setVoiceError(null);
+      void loadSurahAudio(reciter, surahId)
+        .then((source) => {
+          // The reader may have closed the sheet while the file was on its way.
+          if (!voiceAudioRef.current) {
+            if (source.blob) URL.revokeObjectURL(source.url);
+            return;
+          }
+          releaseVoice();
+          if (source.blob) voiceUrlRef.current = source.url;
+          voiceSourceRef.current = { surahId, source };
+          setVoicePhase('ready');
+          playAyahFrom(source, ayah);
+        })
+        .catch((cause: unknown) => {
+          setVoicePhase('error');
+          setVoiceError(cause instanceof Error ? cause.message : 'تعذّر تجهيز التلاوة.');
+        });
+    },
+    [ayahChoice, reciterId, playAyahFrom, releaseVoice],
+  );
+
+  /**
+   * This ayah has had its full stretch: stop here, and offer what follows rather
+   * than the same ayah a second time.
+   */
+  const finishVoice = useCallback(() => {
+    voiceAudioRef.current?.pause();
+    setVoicePlaying(false);
+    setVoiceDone(true);
+  }, []);
+
+  /** Cut the recitation at the millisecond this ayah ends. */
+  const handleVoiceTime = useCallback(() => {
+    const audio = voiceAudioRef.current;
+    const timing = voiceTimingRef.current;
+    if (!audio || !timing) return;
+    if (audio.currentTime >= timing.endMs / 1000) finishVoice();
+  }, [finishVoice]);
+
+  /**
+   * Carry on with the next ayah out of the file already in hand — no refetch, the
+   * same recitation simply moves down one. The reader watches it happen: the sheet
+   * takes the new ayah, the page highlights it. A surah's last ayah has nothing
+   * after it, and says so on the button.
+   */
+  const playNextAyah = useCallback(() => {
+    const choice = ayahChoice;
+    const surah = choice ? getSurah(choice.surahId) : undefined;
+    if (!choice || !surah) return;
+    const next = choice.ayahNumber + 1;
+    if (next > surah.ayahCount) return;
+    setSelectedReadingAyah({ surahId: choice.surahId, ayahNumber: next });
+    setAyahChoice({ surahId: choice.surahId, ayahNumber: next });
+    setVoiceDone(false);
+    const cached = voiceSourceRef.current;
+    if (cached && cached.surahId === choice.surahId) {
+      playAyahFrom(cached.source, next);
+      return;
+    }
+    startVoice(reciterId, next);
+  }, [ayahChoice, playAyahFrom, startVoice, reciterId]);
+
+  /**
+   * Play or pause while the ayah runs; once it is over, the same button — reading
+   * «متابعة» — takes the reader to the ayah after it.
+   */
+  const toggleVoice = useCallback(() => {
+    if (voicePlaying) {
+      pauseVoice();
+      return;
+    }
+    if (voiceDone) {
+      playNextAyah();
+      return;
+    }
+    const cached = voiceSourceRef.current;
+    if (!cached) {
+      startVoice(); // a first run, or a retry after an error
+      return;
+    }
+    if (!ayahChoice) return;
+    playAyahFrom(cached.source, ayahChoice.ayahNumber);
+  }, [voicePlaying, voiceDone, pauseVoice, playNextAyah, startVoice, ayahChoice, playAyahFrom]);
+
+  const replayVoice = useCallback(() => {
+    const cached = voiceSourceRef.current;
+    if (!cached || !ayahChoice) return;
+    playAyahFrom(cached.source, ayahChoice.ayahNumber, true);
+  }, [ayahChoice, playAyahFrom]);
+
+  /** The first tap opens the voice; every tap after it plays or pauses this ayah. */
+  const openVoice = () => {
+    if (voiceEngaged) {
+      toggleVoice();
+      return;
+    }
+    setVoiceEngaged(true);
+    startVoice();
+  };
+
+  /** Mid-listen the reader switches voice: the same ayah is picked up in the new one. */
+  const handleVoiceReciter = (nextReciterId: string) => {
+    if (nextReciterId === reciterId) return;
+    pauseVoice();
+    releaseVoice();
+    setReciterId(nextReciterId);
+    savePreferredReciter(nextReciterId);
+    startVoice(nextReciterId);
+  };
+
   // Focus lands in the sheet that just opened, and Escape gives it back.
   useEffect(() => {
     if (sheet) sheetPanelRef.current?.focus();
   }, [sheet]);
+  useEffect(() => {
+    const panel = ayahPanelRef.current;
+    // Focus the panel only as the sheet opens. Following the recitation to the next
+    // ayah changes this value too, and taking focus off the button at that moment
+    // would cost the reader the tap that is already on its way.
+    if (!ayahChoice || !panel || panel.contains(document.activeElement)) return;
+    panel.focus();
+  }, [ayahChoice]);
+
+  // Leaving the reader while the ayah's voice is up must not leave the recitation
+  // behind it: the element goes out of the document, and that alone never stops it.
+  useLayoutEffect(() => () => void voiceAudioRef.current?.pause(), []);
 
   // Page turns are the primary interaction here, so bind them to the keyboard as well.
   useEffect(() => {
@@ -470,6 +703,9 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
         if (tafsirAyah) {
           setTafsirAyah(null);
           event.preventDefault();
+        } else if (ayahChoice) {
+          closeAyahChoice();
+          event.preventDefault();
         } else if (sheet) {
           setSheet(null);
           event.preventDefault();
@@ -477,7 +713,7 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
         return;
       }
 
-      if (sheet || tafsirAyah || typing) return;
+      if (sheet || tafsirAyah || ayahChoice || typing) return;
       // In an RTL layout the left arrow advances, matching the reading direction; in
       // the stack the down arrow does the same job under the thumb.
       const step = event.shiftKey ? PAGE_KEYBOARD_STEP : 1;
@@ -493,7 +729,7 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [currentPage, goToPage, orientation, sheet, tafsirAyah]);
+  }, [currentPage, goToPage, orientation, sheet, tafsirAyah, ayahChoice, closeAyahChoice]);
 
   // Page turns by swipe. Bound to the scroller (not to the sheet inside it), so a
   // gesture started on the margin counts too and a vertical scroll never turns a page.
@@ -595,25 +831,43 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
   const zoomPercent = Math.round(prefs.zoom * 100);
   const effectiveFontSize = Math.round(settings.fontSize * prefs.zoom * prefs.readingScale);
   const mode = prefs.mode;
+  const voiceReciterName = AUDIO_RECITERS.find((reciter) => reciter.id === reciterId)?.name ?? '';
+  const choiceSurah = ayahChoice ? getSurah(ayahChoice.surahId) : undefined;
+  /** Nothing follows the surah's own last ayah, so the transport stops offering it. */
+  const atLastAyah = !!ayahChoice && !!choiceSurah && ayahChoice.ayahNumber >= choiceSurah.ayahCount;
+  const voicePrimaryLabel =
+    voicePhase === 'loading'
+      ? 'جارٍ التجهيز…'
+      : voicePlaying
+        ? 'إيقاف مؤقت'
+        : voiceDone && atLastAyah
+          ? 'آخر آية'
+          : voicePhase === 'ready'
+            ? 'متابعة'
+            : 'استماع';
+  const voicePrimaryDisabled = voicePhase === 'loading' || (voiceDone && atLastAyah);
+  const voiceHint = !voiceEngaged
+    ? 'اختر ما تحتاجه لهذه الآية: تفسيرها، أو تلاوتها بالصوت الذي تفضله.'
+    : voiceDone && !atLastAyah
+      ? 'انتهت تلاوة الآية — «متابعة» تُشغّل التي تليها.'
+      : `تُتلى الآية بصوت ${voiceReciterName} — بدّل القارئ متى شئت.`;
+  /** The ayah under discussion, held on the page while either of its sheets is open. */
+  const activeReadingAyah = tafsirAyah ?? ayahChoice;
   const activeOrientation = ORIENTATIONS.find((o) => o.id === orientation) ?? ORIENTATIONS[0];
 
-  // Bring the current page into view when the page grid opens.
+  // Bring what the reader is already on into view when the jump sheet opens: the
+  // surah carrying this page in the list, or the page in the grid. Both mark
+  // themselves the same way, so one query answers for every tab.
   useEffect(() => {
-    if (sheet !== 'jump' || jumpTarget !== 'page') return;
-    const current = pageGridRef.current?.querySelector<HTMLElement>('[aria-current="true"]');
-    current?.scrollIntoView({ block: 'center' });
+    if (sheet !== 'jump') return;
+    sheetPanelRef.current?.querySelector<HTMLElement>('[aria-current="true"]')?.scrollIntoView({ block: 'center' });
   }, [sheet, jumpTarget]);
 
   const openJumpSheet = () => {
     setPageField('');
-    setJumpTarget('page');
+    setJumpTarget('surah');
     setSheet(sheet === 'jump' ? null : 'jump');
   };
-
-  const handleAyahPress = useCallback((surahId: number, ayahNumber: number) => {
-    setSelectedReadingAyah({ surahId, ayahNumber });
-    setTafsirAyah({ surahId, ayahNumber });
-  }, []);
 
   /** The sheets the stack is currently holding, as page numbers. */
   const leafPages = useMemo(() => {
@@ -686,19 +940,17 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
                 page={page}
                 fontSize={effectiveFontSize}
                 night={mode === 'night'}
-                paper={mode === 'paper'}
-                paperZoom={prefs.zoom}
                 lineHeight={1.9 + (prefs.lineSpacing - 1) * 0.55}
                 letterSpacing={0.01 + Math.max(0, prefs.lineSpacing - 1) * 0.01}
                 wordSpacing={prefs.wordSpacing}
                 onAyahPress={handleAyahPress}
-                activeAyah={tafsirAyah}
+                activeAyah={activeReadingAyah}
               />
             ))}
           </div>
         ) : (
           <div
-            className={`mushaf-turn ${mode === 'paper' ? 'mushaf-turn--wide' : 'mushaf-turn--column'}`}
+            className="mushaf-turn mushaf-turn--column"
             data-dir={turnDir}
             key={currentPage}
           >
@@ -706,13 +958,11 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
               page={currentPage}
               fontSize={effectiveFontSize}
               night={mode === 'night'}
-              paper={mode === 'paper'}
-              paperZoom={prefs.zoom}
               lineHeight={1.9 + (prefs.lineSpacing - 1) * 0.55}
               letterSpacing={0.01 + Math.max(0, prefs.lineSpacing - 1) * 0.01}
               wordSpacing={prefs.wordSpacing}
               onAyahPress={handleAyahPress}
-              activeAyah={tafsirAyah}
+              activeAyah={activeReadingAyah}
             />
           </div>
         )}
@@ -796,7 +1046,7 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
               </button>
             </form>
 
-            <div className="mushaf-grid mushaf-grid--page" ref={pageGridRef}>
+            <div className="mushaf-grid mushaf-grid--page">
               {pageNumbers.map((p) => (
                 <button
                   key={p}
@@ -822,6 +1072,11 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
                 aria-current={surahsOnPage.some((on) => on.id === s.id) ? 'true' : undefined}
                 onClick={() => goToPage(s.pageStart)}
               >
+                {/* The number is what makes the order visible at a glance; the
+                    surah's name already says which one it is out loud. */}
+                <span className="mushaf-cell__index" aria-hidden="true">
+                  {toArabicNumber(s.id)}
+                </span>
                 <span className="mushaf-cell__title">{s.name}</span>
                 <span className="mushaf-cell__sub">صفحة {toArabicNumber(s.pageStart)}</span>
               </button>
@@ -872,7 +1127,7 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
       >
         <section className="mushaf-section">
           <p className="mushaf-section__title">التنقّل</p>
-          <div className="mushaf-seg mushaf-seg--pair">
+          <div className="mushaf-seg">
             {ORIENTATIONS.map(({ id, label, Icon }) => (
               <button
                 key={id}
@@ -1004,6 +1259,85 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
         )}
       </Sheet>
 
+      {/* ── The pressed ayah: what it is needed for ───────────────────────── */}
+      {ayahChoice && (
+        <Sheet
+          open
+          title={`الآية ${toArabicNumber(ayahChoice.ayahNumber)} · ${getSurah(ayahChoice.surahId)?.name ?? ''}`}
+          onClose={closeAyahChoice}
+          panelRef={ayahPanelRef}
+        >
+          <div className="mushaf-seg">
+            <button className="mushaf-seg__item" onClick={() => setTafsirAyah(ayahChoice)}>
+              <BookOpen size={18} aria-hidden="true" />
+              <span>التفسير</span>
+            </button>
+            <button className="mushaf-seg__item" aria-pressed={voiceEngaged} onClick={openVoice}>
+              <Volume2 size={18} aria-hidden="true" />
+              <span>التلاوة</span>
+            </button>
+          </div>
+          <p className="mushaf-hint">{voiceHint}</p>
+
+          {voiceEngaged && (
+            <div className="mushaf-voice">
+              <label className="mushaf-voice__reciter">
+                <span>القارئ</span>
+                <select
+                  className="mushaf-select"
+                  value={reciterId}
+                  onChange={(event) => handleVoiceReciter(event.target.value)}
+                >
+                  {AUDIO_RECITERS.map((reciter) => (
+                    <option key={reciter.id} value={reciter.id}>
+                      {reciter.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="mushaf-tools">
+                <button
+                  className="mushaf-tool"
+                  onClick={replayVoice}
+                  disabled={voicePhase !== 'ready'}
+                >
+                  إعادة
+                </button>
+                <button
+                  className="mushaf-tool mushaf-tool--primary"
+                  onClick={openVoice}
+                  disabled={voicePrimaryDisabled}
+                >
+                  {voicePrimaryLabel}
+                </button>
+              </div>
+
+              {voicePhase === 'error' && voiceError && (
+                <p className="mushaf-hint" role="alert">
+                  {voiceError}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Outside the choice on purpose: whichever button is taken, the element
+              the recitation plays through already exists to be aimed at. Playing is
+              the element's own word, not the click's: a seek, a stall or a system
+              pause all move the transport without the code asking for it. The end
+              event is the cut's backstop — the last ayah of a file reaches it
+              before a final timeupdate can report that it stopped. */}
+          <audio
+            ref={voiceAudioRef}
+            preload="auto"
+            onPlay={() => setVoicePlaying(true)}
+            onPause={() => setVoicePlaying(false)}
+            onTimeUpdate={handleVoiceTime}
+            onEnded={finishVoice}
+          />
+        </Sheet>
+      )}
+
       {/* Rendered last so it stacks over the reader's own sheets. */}
       {tafsirAyah && (
         <TafsirBottomSheet
@@ -1021,8 +1355,6 @@ interface MushafLeafProps {
   page: number;
   fontSize: number;
   night: boolean;
-  paper: boolean;
-  paperZoom: number;
   lineHeight: number;
   letterSpacing: number;
   wordSpacing: number;
@@ -1038,7 +1370,7 @@ interface MushafLeafProps {
  */
 const MushafLeaf = memo(function MushafLeaf({ page, ...sheet }: MushafLeafProps) {
   return (
-    <div className={`mushaf-leaf ${sheet.paper ? 'mushaf-leaf--wide' : 'mushaf-leaf--column'}`} data-page={page}>
+    <div className="mushaf-leaf mushaf-leaf--column" data-page={page}>
       <MushafPage page={page} {...sheet} />
     </div>
   );

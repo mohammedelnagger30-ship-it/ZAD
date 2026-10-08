@@ -219,269 +219,6 @@ body {
   border-color: rgba(201, 168, 82, 0.18);
 }
 
-.mushaf-page--paper {
-  --paper: #f7f0dc;
-  --ink: #1f1508;
-  --frame: #7a5a0f;
-  --frame-soft: rgba(122, 90, 15, 0.3);
-  --wash: rgba(122, 90, 15, 0.06);
-
-  /*
-   * The sheet is sized in `em` and so is everything inside it.
-   *
-   * This is the whole trick behind a paper page that reads like print. The line breaks were
-   * measured against a column of `COLUMN_EM` em — 18.2em — so if the text column is exactly
-   * that wide, every measured line fits and justification only has a few percent of slack to
-   * absorb. Deriving the sheet's width from the font size instead of the font size from the
-   * sheet's width makes that true at any screen size and any zoom, with no measurement in
-   * JavaScript and nothing to get out of step on a different device.
-   *
-   *   18.2em text column  +  1.7em margins each side  =  21.6em sheet
-   *   15 lines × 1.86em leading                        =  27.9em text block
-   *   + 1.35em top margin + 2.55em bottom (folio)      =  31.8em tall
-   *
-   * 21.6 / 31.8 = 0.679, which is the shape of a printed Madani page.
-   *
-   * The font size is the smaller of "the widest a page should ever be" and "as wide as this
-   * screen", so the page fills a phone and stops growing on a desktop.
-   */
-  --sheet-em: 21.6;
-  --leading: 1.86;
-  font-size: calc(var(--paper-zoom, 1) * min(43rem, calc(100vw - 2rem)) / var(--sheet-em));
-  width: calc(var(--sheet-em) * 1em);
-  height: calc((var(--leading) * 15 + 3.9) * 1em);
-
-  box-sizing: border-box;
-  padding: 1.35em 1.7em 2.55em;
-  overflow: hidden;
-  border: 0;
-  border-radius: 0.08em;
-  background:
-    radial-gradient(ellipse at 30% 20%, rgba(255, 255, 255, 0.5) 0%, transparent 50%),
-    radial-gradient(ellipse at 70% 80%, rgba(122, 90, 15, 0.06) 0%, transparent 50%),
-    linear-gradient(135deg, #faf6e8 0%, var(--paper) 50%, #ebe4d0 100%);
-  box-shadow:
-    0 25px 50px -20px rgba(25, 15, 5, 0.4),
-    0 10px 20px rgba(25, 15, 5, 0.15),
-    inset 0 0 0 1px rgba(122, 90, 15, 0.12),
-    inset 0 0 0 2px rgba(255, 255, 255, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.6);
-}
-
-.mushaf-page--paper::before {
-  inset: 0.5em;
-  border: 1px solid var(--frame-soft);
-  border-radius: 0;
-}
-
-/* The illuminated double rule just inside the sheet edge. */
-.mushaf-page--paper .mushaf-frame {
-  inset: 0.62em;
-  border-width: 1px;
-  box-shadow:
-    inset 0 0 0 0.28em var(--paper),
-    inset 0 0 0 0.33em var(--frame-soft),
-    inset 0 0 0 0.38em rgba(122, 90, 15, 0.15);
-}
-
-.mushaf-page--paper .mushaf-frame::after {
-  inset: 0.22em;
-  border-color: rgba(122, 90, 15, 0.25);
-}
-
-.mushaf-page--paper .mushaf-corner {
-  width: 0.95em;
-  height: 0.95em;
-  padding: 0.04em;
-  color: var(--frame);
-  background: var(--paper);
-  filter: drop-shadow(0 1px 1px rgba(30, 20, 5, 0.15));
-}
-
-.mushaf-page--paper .mushaf-corner--tr { top: -0.48em; right: -0.48em; }
-.mushaf-page--paper .mushaf-corner--tl { top: -0.48em; left: -0.48em; }
-.mushaf-page--paper .mushaf-corner--br { bottom: -0.48em; right: -0.48em; }
-.mushaf-page--paper .mushaf-corner--bl { bottom: -0.48em; left: -0.48em; }
-
-.mushaf-paper-content {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-width: 0;
-}
-
-/*
- * Fifteen rows of a fixed leading, always — including on the fourteen-line pages, where the
- * generator gave up a line to keep a surah heading off the foot. Those pages get an empty
- * last row, which is what the printed page does too.
- */
-.mushaf-paper-lines {
-  display: grid;
-  grid-template-rows: repeat(15, calc(var(--leading) * 1em));
-  min-height: 0;
-  color: var(--ink);
-  font-family: 'Amiri Quran', 'Amiri', serif;
-  font-size: 1em;
-  text-shadow: 0 0.5px 0 rgba(255, 255, 255, 0.15);
-}
-
-.mushaf-paper-line {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  height: 100%;
-  line-height: 1;
-}
-
-.mushaf-paper-line--text {
-  justify-content: space-between;
-  text-align: justify;
-  text-justify: inter-word;
-  font-variant-ligatures: common-ligatures;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-/*
- * The last line of a surah stops where the text stops.
- *
- * Justifying it would stretch three words across the whole column, which is the clearest
- * possible sign that the page was not set by a typesetter. The printed mushaf never does it,
- * so neither does this.
- */
-.mushaf-paper-line--ragged {
-  justify-content: flex-start;
-  text-align: start;
-}
-
-/*
- * A surah heading: the name in a ruled cartouche, as on a printed page.
- *
- * Drawn with borders rather than an image so it stays crisp at any zoom and costs nothing to
- * download.
- */
-.mushaf-paper-line--heading {
-  justify-content: center;
-}
-
-.mushaf-paper-heading-box {
-  padding: 0.1em 0.9em;
-  border: 1px solid var(--frame-soft);
-  border-radius: 0.12em;
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.5),
-    0 1px 2px rgba(30, 20, 5, 0.08);
-  color: var(--frame);
-  font-size: 0.81em;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.3), transparent);
-}
-
-.mushaf-paper-line--basmala {
-  justify-content: center;
-  color: var(--frame);
-  font-size: 0.9em;
-  letter-spacing: 0;
-}
-
-.mushaf-paper-line--basmala > span + span::before {
-  content: ' ';
-}
-
-/*
- * One ayah, however many words of it are on this line.
- *
- * `box-decoration-break` matters here: an ayah that runs past the end of a line breaks its
- * own inline box, and without the clone the highlight and the tap target would be clipped at
- * the break instead of continuing on the next line.
- */
-.mushaf-paper-ayah {
-  border-radius: 0.1em;
-  cursor: pointer;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-}
-
-.mushaf-paper-ayah:focus-visible {
-  outline: 2px solid var(--frame);
-  outline-offset: 2px;
-}
-
-.mushaf-paper-ayah--active {
-  background: var(--wash);
-}
-
-/*
- * The ayah-end marker.
- *
- * A drawn ring with the ayah number inside, sized to the 1.15em the generator reserved for
- * it on the line. If this box were wider than that reservation the line it sits on would
- * overflow the column it was measured to fit, so the size is not free.
- */
-.mushaf-paper-ayah-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  /*
-   * Note the arithmetic: this box sets its own font-size to 0.5em, so *its* `em` is half the
-   * line's. The width below is therefore 1.9 × 0.5 = 0.95em of the line, and with the
-   * margins the marker occupies ~1.05em — inside the 1.15em the generator reserved for it.
-   * Growing it further would push the line past the column it was measured to fit, which the
-   * flow check cannot see and only the browser can.
-   */
-  width: 1.9em;
-  height: 1.9em;
-  margin-inline: 0.1em;
-  border: 1px solid var(--frame);
-  border-radius: 50%;
-  box-shadow:
-    inset 0 0 0 1px var(--frame-soft),
-    inset 0 0 0 2px var(--paper),
-    0 1px 2px rgba(30, 20, 5, 0.1);
-  color: var(--frame);
-  font-family: 'Amiri Quran', 'Amiri', serif;
-  font-size: 0.5em;
-  font-weight: 700;
-  line-height: 1;
-  vertical-align: middle;
-  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.3), transparent 50%);
-}
-
-/* Part, page and hizb along the foot, the way a printed mushaf carries them. */
-.mushaf-paper-folio {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 0.5em;
-  color: var(--frame);
-  font-family: 'Cairo', sans-serif;
-  font-size: 0.5em;
-  font-weight: 700;
-  white-space: nowrap;
-  text-shadow: 0 0.5px 0 rgba(255, 255, 255, 0.4);
-}
-
-.mushaf-paper-folio__page {
-  padding: 0.12em 0.55em;
-  border: 1px solid var(--frame-soft);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.2);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
-}
-
-.mushaf-paper-sajdah {
-  position: absolute;
-  inset-inline-end: -0.2em;
-  bottom: 4.2em;
-  color: var(--frame);
-  font-size: 0.9em;
-}
-
 /* A restrained triple rule gives the page a printed, illuminated-manuscript edge. */
 .mushaf-frame {
   position: absolute;
@@ -818,7 +555,7 @@ body {
 
    The reader is one design top to bottom: a bar above the page, a dock
    below it, and sheets that rise from the foot. Every colour comes from
-   a token the reading mode sets (day / paper / night), so the controls
+   a token the reading mode sets (day / night), so the controls
    and the page read as one object instead of a themed sheet sitting in
    an unrelated app bar. Nothing here uses Tailwind's `dark:` variants on
    purpose: the reading mode and the app theme are two different choices
@@ -861,19 +598,6 @@ body {
   --accent-soft: rgb(var(--primary-900));
   --chip: rgb(var(--primary-900));
   --chip-fg: rgb(var(--primary-200));
-}
-
-.mushaf-shell[data-mode='paper'] {
-  color-scheme: light;
-  --surface: #e9dfc4;
-  --panel: #f7f0dc;
-  --line: rgb(122 90 15 / 0.25);
-  --fg: #2a1e0b;
-  --fg-muted: #7b6845;
-  --accent: #7a5a0f;
-  --accent-soft: #efe6cc;
-  --chip: rgb(255 255 255 / 0.55);
-  --chip-fg: #4b3a17;
 }
 
 .mushaf-shell[data-mode='night'] {
@@ -989,29 +713,14 @@ body {
 }
 
 /*
- * The printed sheet is sized as `100vw - 2rem`, so it needs a narrower gutter than
- * the day sheet or it pushes a horizontal scrollbar onto a phone in paper mode.
- */
-.mushaf-shell[data-mode='paper'] .mushaf-scroll {
-  padding-inline: 0.5rem;
-}
-
-/*
- * Both ways of travelling lay the same sheet down: one column of type, or the printed
- * page at the width it was measured for. `--column` is the turned sheet, `--leaf` the
- * same sheet standing in the stack.
+ * Both ways of travelling lay the same sheet down: one column of type. The turn is the
+ * single sheet of horizontal mode, the leaf the same sheet standing in the stack.
  */
 .mushaf-turn--column,
 .mushaf-leaf--column {
   width: 100%;
   max-width: 42rem;
   margin-inline: auto;
-}
-
-.mushaf-turn--wide,
-.mushaf-leaf--wide {
-  margin-inline: auto;
-  overflow-x: auto;
 }
 
 /*
@@ -1415,6 +1124,18 @@ body {
   box-shadow: 0 0 0 1px rgb(0 0 0 / 0.12);
 }
 
+/* The surah's own number, parked in the corner so the ordered list can be read
+   as an order rather than as a wall of names. */
+.mushaf-cell__index {
+  position: absolute;
+  top: 0.3rem;
+  inset-inline-end: 0.45rem;
+  font-size: 0.6rem;
+  font-weight: 700;
+  opacity: 0.55;
+  font-variant-numeric: tabular-nums;
+}
+
 .mushaf-cell--card {
   flex-direction: column;
   gap: 0.1rem;
@@ -1455,9 +1176,13 @@ body {
   background: var(--line);
 }
 
+/*
+ * Every choice here has two answers — two ways of travelling, two ways of seeing the
+ * page — so a segment is a pair of buttons, never thirds of a row.
+ */
 .mushaf-seg {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.4rem;
 }
 
@@ -1487,17 +1212,49 @@ body {
   color: var(--on-accent);
 }
 
-/* The way of travelling has two answers, not three. */
-.mushaf-seg--pair {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
 /* What the chosen way of travelling does, so the pair above is not a guess. */
 .mushaf-hint {
   margin: 0.45rem 0 0;
   font-size: 0.72rem;
   line-height: 1.65;
   color: var(--fg-muted);
+}
+
+/* The ayah's voice, once «التلاوة» is taken: the reciter it is read in, and the
+   transport that carries one ayah — play or pause, and the replay that runs it
+   again. It sits under its own rule so the choice above stays the answer. */
+.mushaf-voice {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.mushaf-voice__reciter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--fg-muted);
+}
+
+.mushaf-voice__reciter > span {
+  flex: 0 0 auto;
+}
+
+.mushaf-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 2.4rem;
+  padding: 0 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 0.8rem;
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 0.82rem;
+  font-weight: 700;
 }
 
 .mushaf-fields {
