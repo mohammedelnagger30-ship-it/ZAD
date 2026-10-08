@@ -63,6 +63,8 @@ const LEAF_HEADROOM = 8;
 type MushafMode = 'day' | 'night';
 /** Which way the reader travels: down a stack of sheets, or across one sheet at a time. */
 type Orientation = 'vertical' | 'horizontal';
+/** What the voice carries when an ayah is asked about: that ayah, or the surah through it. */
+type VoiceScope = 'ayah' | 'surah';
 type SheetName = 'jump' | 'options';
 type JumpTarget = 'page' | 'surah' | 'juz' | 'hizb';
 
@@ -81,6 +83,8 @@ interface MushafPrefs {
   readingScale: number;
   lineSpacing: number;
   wordSpacing: number;
+  /** Kept here because a reader who listens to surahs keeps hearing surahs. */
+  scope: VoiceScope;
 }
 
 const DEFAULT_PREFS: MushafPrefs = {
@@ -90,6 +94,7 @@ const DEFAULT_PREFS: MushafPrefs = {
   readingScale: 1,
   lineSpacing: 1,
   wordSpacing: 0,
+  scope: 'ayah',
 };
 
 /**
@@ -129,6 +134,13 @@ function clampNumber(value: unknown, min: number, max: number, fallback: number)
   return Math.min(max, Math.max(min, n));
 }
 
+/** Nothing follows a surah's own last ayah, so the transport has nothing to offer there. */
+function isSurahEnd(choice: { surahId: number; ayahNumber: number } | null): boolean {
+  if (!choice) return false;
+  const surah = getSurah(choice.surahId);
+  return !!surah && choice.ayahNumber >= surah.ayahCount;
+}
+
 function loadPrefs(): MushafPrefs {
   try {
     const raw = localStorage.getItem(PREFS_KEY);
@@ -144,6 +156,8 @@ function loadPrefs(): MushafPrefs {
       readingScale: clampNumber(parsed.readingScale, 0.85, 1.35, DEFAULT_PREFS.readingScale),
       lineSpacing: clampNumber(parsed.lineSpacing, 0.9, 1.35, DEFAULT_PREFS.lineSpacing),
       wordSpacing: clampNumber(parsed.wordSpacing, 0, 0.3, DEFAULT_PREFS.wordSpacing),
+      // Saved before the option existed, so it opens the way it reads by default.
+      scope: parsed.scope === 'surah' ? 'surah' : 'ayah',
     };
   } catch {
     return DEFAULT_PREFS;
@@ -174,16 +188,15 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
   const [voicePlaying, setVoicePlaying] = useState(false);
   /** Set when this ayah has run to its end: «متابعة» then means the one after it. */
   const [voiceDone, setVoiceDone] = useState(false);
-  /**
-   * What the transport is driving: this one ayah, or the surah right through it.
-   * The ref keeps the promise for a file still on its way — the tap that asks for
-   * the whole surah arrives after the tap that asked for the file, and the load
-   * opened by the first must still start at the first ayah.
-   */
-  const [voiceScope, setVoiceScope] = useState<'ayah' | 'surah'>('ayah');
-  const voiceScopeRef = useRef<'ayah' | 'surah'>('ayah');
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const orientation = prefs.orientation;
+  /**
+   * What the transport carries: this one ayah, or the surah through it. It is a
+   * preference rather than a mood — a reader who came back for a whole surah is
+   * not asked again — so it lives with the rest of them, saved under the same key
+   * and read back the next time the mushaf opens.
+   */
+  const voiceScope = prefs.scope;
 
   /**
    * The window of sheets the vertical stack has in the DOM. Horizontal mode never
@@ -522,9 +535,8 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
       setVoicePlaying(false);
       setVoiceDone(false);
       setVoiceError(null);
-      // Each pressed ayah is asked about on its own terms again.
-      voiceScopeRef.current = 'ayah';
-      setVoiceScope('ayah');
+      // Each pressed ayah is asked about on its own terms again; the length it is
+      // heard in stays what the reader chose, because that is what they listen by.
     },
     [],
   );
@@ -588,8 +600,10 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
   const startVoice = useCallback(
     (reciter = reciterId, ayahNumber?: number) => {
       if (!ayahChoice) return;
-      // A whole surah opens at its first ayah; one ayah opens where it was asked for.
-      const ayah = ayahNumber ?? (voiceScopeRef.current === 'surah' ? 1 : ayahChoice.ayahNumber);
+      // The recitation opens at the ayah being asked about — where the reader is
+      // now, not back at the top — and the scope only says where it is to stop:
+      // at this ayah's end, or at the surah's.
+      const ayah = ayahNumber ?? ayahChoice.ayahNumber;
       const cached = voiceSourceRef.current;
       if (cached && cached.surahId === ayahChoice.surahId) {
         setVoicePhase('ready');
@@ -686,8 +700,9 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
   }, [ayahChoice, showAyah, playAyahFrom, startVoice, reciterId]);
 
   /**
-   * The whole surah, from its opening ayah: the sheet, the highlight and the page
-   * go back to the top, and from there the recitation carries itself on.
+   * The whole surah from its opening ayah — «من الأول», offered only once a
+   * whole-surah listen has run the full length of it. Getting there by hand is
+   * simply pressing its first ayah.
    */
   const startSurah = useCallback(() => {
     const choice = ayahChoice;
@@ -697,36 +712,39 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
   }, [ayahChoice, showAyah, startVoice, reciterId]);
 
   /**
-   * One ayah, or the whole surah — and taking the whole of it starts it at the top,
-   * which is the whole of what was asked for. A file still on its way is left to
-   * finish: it will open at the first ayah, the ref above having already said so.
+   * One ayah, or the whole of it. The choice says only where the recitation is to
+   * stop, so taking the whole surah carries on from the ayah the reader is on —
+   * where they left off, rather than jumping back to the top — and leaves alone
+   * whatever is already playing. It is kept: the reader need not choose again.
    */
   const handleVoiceScope = useCallback(
-    (next: 'ayah' | 'surah') => {
+    (next: VoiceScope) => {
       if (next === voiceScope) return;
-      voiceScopeRef.current = next;
-      setVoiceScope(next);
-      if (next !== 'surah' || voicePhase === 'loading') return;
-      startSurah();
+      updatePrefs({ scope: next });
     },
-    [voiceScope, voicePhase, startSurah],
+    [voiceScope, updatePrefs],
   );
 
   /**
-   * Play or pause while it runs; once the scope has run out, the same button takes
-   * the reader on — to the ayah after this one in a one-ayah listen, or back to the
-   * opening of a whole-surah one, which is why it reads «من الأول» there.
+   * Play or pause while it runs; once it has run out, the same button takes the
+   * reader on — to the ayah after this one, or, where a whole-surah listen has
+   * reached the end of its surah, back to the opening of it, which is why it
+   * reads «من الأول» there.
    */
   const toggleVoice = useCallback(() => {
     if (voicePlaying) {
       pauseVoice();
       return;
     }
-    if (voiceDone && voiceScope === 'surah') {
-      startSurah();
+    if (voiceDone && isSurahEnd(ayahChoice)) {
+      // The whole of it has been heard, and is offered again; a one-ayah listen
+      // standing here has nothing after it, and its button is disabled anyway.
+      if (voiceScope === 'surah') startSurah();
       return;
     }
     if (voiceDone) {
+      // In the surah's scope that step is simply the next one, and it keeps going
+      // from there to the end of the surah.
       playNextAyah();
       return;
     }
@@ -937,34 +955,33 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
   const effectiveFontSize = Math.round(settings.fontSize * prefs.zoom * prefs.readingScale);
   const mode = prefs.mode;
   const voiceReciterName = AUDIO_RECITERS.find((reciter) => reciter.id === reciterId)?.name ?? '';
-  const choiceSurah = ayahChoice ? getSurah(ayahChoice.surahId) : undefined;
   /** Nothing follows the surah's own last ayah, so the transport stops offering it. */
-  const atLastAyah = !!ayahChoice && !!choiceSurah && ayahChoice.ayahNumber >= choiceSurah.ayahCount;
+  const atLastAyah = isSurahEnd(ayahChoice);
   const voicePrimaryLabel =
     voicePhase === 'loading'
       ? 'جارٍ التجهيز…'
       : voicePlaying
         ? 'إيقاف مؤقت'
-        : voiceScope === 'surah' && voiceDone
-          ? 'من الأول'
-          : voiceDone && atLastAyah
-            ? 'آخر آية'
-            : voicePhase === 'ready'
-              ? 'متابعة'
-              : 'استماع';
-  // The last ayah stops a one-ayah listen; a whole-surah one ends by offering itself
-  // again, which is what «من الأول» is for.
+        : voiceDone && atLastAyah
+          ? voiceScope === 'surah'
+            ? 'من الأول'
+            : 'آخر آية'
+          : voicePhase === 'ready'
+            ? 'متابعة'
+            : 'استماع';
+  // A whole-surah listen that reached the end of its surah offers itself again,
+  // which is what «من الأول» is for; a one-ayah one has nothing after the last.
   const voicePrimaryDisabled =
     voicePhase === 'loading' || (voiceDone && atLastAyah && voiceScope === 'ayah');
   /** What the block is telling the reader: what is being listened to, and what happens when it runs out. */
   const voiceScopeHint =
-    voiceScope === 'surah'
-      ? voiceDone
-        ? 'انتهت السورة — «من الأول» تُشغّلها من أولها.'
-        : `تُتلى السورة كاملة بصوت ${voiceReciterName} — تتبع الصفحة مع التلاوة.`
-      : voiceDone && !atLastAyah
-        ? 'انتهت تلاوة الآية — «متابعة» تُشغّل التي تليها.'
-        : `تُتلى الآية بصوت ${voiceReciterName} — بدّل القارئ متى شئت.`;
+    voiceDone && voiceScope === 'surah' && atLastAyah
+      ? 'انتهت السورة — «من الأول» تُشغّلها من أولها.'
+      : voiceScope === 'surah'
+        ? `تستمر التلاوة من حيث وقفت حتى آخر السورة بصوت ${voiceReciterName} — تتبع الصفحة مع التلاوة.`
+        : voiceDone && !atLastAyah
+          ? 'انتهت تلاوة الآية — «متابعة» تُشغّل التي تليها.'
+          : `تُتلى الآية بصوت ${voiceReciterName} — بدّل القارئ متى شئت.`;
   const voiceHint = voiceEngaged
     ? voiceScopeHint
     : 'اختر ما تحتاجه لهذه الآية: تفسيرها، أو تلاوتها بالصوت الذي تفضله.';
