@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from 'react';
 import type { CSSProperties } from 'react';
-import { Search, Eye, EyeOff, ChevronLeft, ChevronRight, Type, BookOpen, Layers, BookText, Pause, Play, X } from 'lucide-react';
+import { Search, Eye, EyeOff, ChevronLeft, ChevronRight, Type, BookOpen, Layers, BookText, X } from 'lucide-react';
 import { Card, Button, Badge } from '@/components/ui';
 import { SURAHS, JUZ_INFO, TOTAL_QURAN_PAGES, getSurah, getAyahPage, getJuzForPage, toArabicNumber, type SurahMeta } from '@/data/surahs';
 import { getAyahs, hasFullText, type AyahText } from '@/data/quranText';
@@ -473,65 +473,78 @@ export function QuranScreen({ settings }: QuranScreenProps) {
           onReciterChange={changeReciter}
           onShowTafsir={(ayah) => setTafsirAyah({ surahId: selectedSurah.id, ayah })}
         >
-          {({ activeAyah, isPlaying, selectedAyah, selectAyah, playSelectedAyah }) => {
+          {({ activeAyah, selectedAyah, selectAyah }) => {
             // The printed page this reader is standing on: whichever ayah the recitation
             // holds, then whichever one is chosen, then where the surah opens. The margin
             // and the folio both name that one page — as they do on a leaf in the reader.
             const currentAyah = activeAyah || selectedAyah || 1;
             const currentPage = getAyahPage(selectedSurah, currentAyah);
-            const sajdahAyahs = SAJDAH_AYAHS.filter((s) => s.surahId === selectedSurah.id);
+            const sajdahAyahs = new Set(
+              SAJDAH_AYAHS.filter((s) => s.surahId === selectedSurah.id).map((s) => s.ayah),
+            );
+
+            // The reader runs its text as paragraphs and sets the sajdah marker between
+            // them, never inside one — a <p> may not nest. The surah view splits the same
+            // way, at the ayah that carries the prostration.
+            const blocks: { sajdah: boolean; ayahs: AyahText[] }[] = [];
+            for (const ayah of ayahs) {
+              const sajdah = sajdahAyahs.has(ayah.ayahNumber);
+              if (sajdah || blocks.length === 0) blocks.push({ sajdah, ayahs: [ayah] });
+              else blocks[blocks.length - 1].ayahs.push(ayah);
+            }
+
+            const renderAyah = (ayah: AyahText) => (
+              <AyahSpan
+                key={`${ayah.surahId}:${ayah.ayahNumber}`}
+                ayah={ayah.ayahNumber === 1 && separateBasmala ? { ...ayah, text: opening!.rest } : ayah}
+                isHifz={isHifz}
+                bookmarked={bookmarkedKeys.has(`${ayah.surahId}:${ayah.ayahNumber}`)}
+                hideText={hideText}
+                hideWordByWord={hideWordByWord}
+                selected={selectedAyah === ayah.ayahNumber}
+                activeAudio={activeAyah === ayah.ayahNumber}
+                onSelect={() => selectAyah(ayah.ayahNumber)}
+                onToggleBookmark={() => toggleBookmark(ayah.surahId, ayah.ayahNumber)}
+                onShowTafsir={() => setTafsirAyah({ surahId: ayah.surahId, ayah: ayah.ayahNumber })}
+              />
+            );
+
             return (
-              <div className="mushaf-page" style={{ '--fs': `${fontSize}px` } as CSSProperties}>
-                <MushafFrameDecoration />
-                <div className="mushaf-margin" aria-hidden="true">
-                  <span>الجزء {toArabicNumber(getJuzForPage(currentPage))}</span>
-                  <span>الحزب {toArabicNumber(getHizbForPage(currentPage))}</span>
-                </div>
-
-                <header className="mushaf-banner">
-                  <div className="mushaf-banner__name">سورة {selectedSurah.name}</div>
-                  <div className="mushaf-banner__meta">
-                    {selectedSurah.revelationType === 'meccan' ? 'مكية' : 'مدنية'} · {toArabicNumber(selectedSurah.ayahCount)} آية
+              /* The reader caps the sheet at 42rem and centres it in its scroll; this leaf
+                 takes the very same wrapper, so both screens set type on one sheet of one
+                 measure — same words per line, same page proportions. */
+              <div className="mushaf-leaf mushaf-leaf--column">
+                <div className="mushaf-page" style={{ '--fs': `${fontSize}px` } as CSSProperties}>
+                  <MushafFrameDecoration />
+                  <div className="mushaf-margin" aria-hidden="true">
+                    <span>الجزء {toArabicNumber(getJuzForPage(currentPage))}</span>
+                    <span>الحزب {toArabicNumber(getHizbForPage(currentPage))}</span>
                   </div>
-                </header>
 
-                {separateBasmala && (
-                  <p className="mushaf-basmala">
-                    <span className="mushaf-basmala__rule" aria-hidden="true" />
-                    {separateBasmala}
-                    <span className="mushaf-basmala__rule" aria-hidden="true" />
-                  </p>
-                )}
+                  <header className="mushaf-banner">
+                    <div className="mushaf-banner__name">سورة {selectedSurah.name}</div>
+                    <div className="mushaf-banner__meta">
+                      {selectedSurah.revelationType === 'meccan' ? 'مكية' : 'مدنية'} · {toArabicNumber(selectedSurah.ayahCount)} آية
+                    </div>
+                  </header>
 
-                <div className="mushaf-body" dir="rtl">
-                  {ayahs.map((ayah) => (
-                    <Fragment key={`${ayah.surahId}:${ayah.ayahNumber}`}>
-                      {sajdahAyahs.some((s) => s.ayah === ayah.ayahNumber) && (
-                        <p className="mushaf-sajdah">۩ سجدة</p>
-                      )}
-                      <AyahSpan
-                        ayah={{
-                          ...ayah,
-                          text: ayah.ayahNumber === 1 && separateBasmala ? opening!.rest : ayah.text,
-                        }}
-                        fontSize={fontSize}
-                        isHifz={isHifz}
-                        bookmarked={bookmarkedKeys.has(`${ayah.surahId}:${ayah.ayahNumber}`)}
-                        hideText={hideText}
-                        hideWordByWord={hideWordByWord}
-                        selected={selectedAyah === ayah.ayahNumber}
-                        activeAudio={activeAyah === ayah.ayahNumber}
-                        audioPlaying={isPlaying && activeAyah === ayah.ayahNumber}
-                        onSelect={() => selectAyah(ayah.ayahNumber)}
-                        onPlayAudio={playSelectedAyah}
-                        onToggleBookmark={() => toggleBookmark(ayah.surahId, ayah.ayahNumber)}
-                        onShowTafsir={() => setTafsirAyah({ surahId: ayah.surahId, ayah: ayah.ayahNumber })}
-                      />
+                  {separateBasmala && (
+                    <p className="mushaf-basmala">
+                      <span className="mushaf-basmala__rule" aria-hidden="true" />
+                      {separateBasmala}
+                      <span className="mushaf-basmala__rule" aria-hidden="true" />
+                    </p>
+                  )}
+
+                  {blocks.map((block, index) => (
+                    <Fragment key={`block-${index}`}>
+                      {block.sajdah && <p className="mushaf-sajdah">۩ سجدة</p>}
+                      <p className="mushaf-body">{block.ayahs.map(renderAyah)}</p>
                     </Fragment>
                   ))}
-                </div>
 
-                <div className="mushaf-folio">{toArabicNumber(currentPage)}</div>
+                  <div className="mushaf-folio">{toArabicNumber(currentPage)}</div>
+                </div>
               </div>
             );
           }}
@@ -606,38 +619,35 @@ export function QuranScreen({ settings }: QuranScreenProps) {
 
 interface AyahSpanProps {
   ayah: AyahText;
-  fontSize: number;
   isHifz: boolean;
   bookmarked: boolean;
   hideText: boolean;
   hideWordByWord: boolean;
   selected: boolean;
   activeAudio: boolean;
-  audioPlaying: boolean;
   onSelect: () => void;
-  onPlayAudio: () => void;
   onToggleBookmark: () => void;
   onShowTafsir: () => void;
 }
 
 /**
- * One ayah plus its number marker.
+ * One ayah plus its number marker, built the way the reader's page builds it: a plain
+ * text span with the medallion sitting straight against the ayah's last word. No button
+ * and no control wrapper comes between them, so the line never breaks in that gap — the
+ * number stays glued to its ayah instead of being stranded at the start of the next line.
  *
- * Tap = bookmark in hifz mode, tafsir otherwise. Long-press (touch) or right-click
+ * Tap selects the ayah (and keeps it in hifz mode). Long-press (touch) or right-click
  * always opens the tafsir, which is the only way to reach it in hifz mode.
  */
 function AyahSpan({
   ayah,
-  fontSize,
   isHifz,
   bookmarked,
   hideText,
   hideWordByWord,
   selected,
   activeAudio,
-  audioPlaying,
   onSelect,
-  onPlayAudio,
   onToggleBookmark,
   onShowTafsir,
 }: AyahSpanProps) {
@@ -673,20 +683,30 @@ function AyahSpan({
     if (isHifz) onToggleBookmark();
   };
 
+  // The reader paints an ayah's state straight onto the span, so a chosen or kept ayah
+  // keeps its wash under the pointer instead of losing it to the hover rule.
+  const stateStyle = selected
+    ? { background: 'var(--selected-wash)' }
+    : isHifz && bookmarked
+      ? { background: 'var(--bookmark-wash)' }
+      : undefined;
+
   return (
-    <span className="quran-surah-ayah">
-      <button
-        type="button"
+    <span>
+      <span
+        className={`mushaf-ayah${hideText ? ' no-select' : ''}`}
+        role="button"
+        tabIndex={0}
         aria-pressed={selected}
         aria-label={`تحديد الآية ${toArabicNumber(ayah.ayahNumber)}${activeAudio ? '، تُتلى الآن' : ''}`}
-        className={`quran-surah-ayah__text ${
-          selected
-            ? 'quran-surah-ayah__text--selected'
-            : isHifz && bookmarked
-              ? 'quran-surah-ayah__text--bookmarked'
-              : ''
-        } ${hideText ? 'no-select' : ''}`}
+        title="اضغط لتحديد الآية"
         onClick={handleClick}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            handleClick();
+          }
+        }}
         onTouchStart={startPress}
         onTouchEnd={cancelPress}
         onTouchMove={cancelPress}
@@ -696,7 +716,7 @@ function AyahSpan({
           cancelPress();
           onShowTafsir();
         }}
-        style={{ fontSize }}
+        style={stateStyle}
       >
         {hideText ? (
           <span className="bg-primary-200 dark:bg-primary-700 rounded px-2 select-none" style={{ opacity: 0 }}>
@@ -719,25 +739,9 @@ function AyahSpan({
         ) : (
           ayah.text
         )}
-      </button>
-      <span className="quran-surah-ayah__actions">
-        <span className={`mushaf-ayah-mark ${activeAudio ? 'mushaf-ayah-mark--active' : ''}`} aria-hidden="true">
-          {toArabicNumber(ayah.ayahNumber)}
-        </span>
-        {selected && (
-          <button
-            type="button"
-            aria-label={audioPlaying ? 'إيقاف تلاوة الآية مؤقتاً' : `استمع إلى الآية ${toArabicNumber(ayah.ayahNumber)}`}
-            title="استمع إلى الآية المحددة"
-            onClick={(event) => {
-              event.stopPropagation();
-              onPlayAudio();
-            }}
-            className="quran-surah-ayah__play"
-          >
-            {audioPlaying ? <Pause size={13} /> : <Play size={13} />}
-          </button>
-        )}
+      </span>
+      <span className={`mushaf-ayah-mark${activeAudio ? ' mushaf-ayah-mark--active' : ''}`} aria-hidden="true">
+        {toArabicNumber(ayah.ayahNumber)}
       </span>{' '}
     </span>
   );

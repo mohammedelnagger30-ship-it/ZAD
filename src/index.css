@@ -337,75 +337,11 @@ body {
   }
 }
 
-.quran-surah-ayah {
-  white-space: normal;
-}
-
-.quran-surah-ayah__text {
-  display: inline;
-  padding: 0 0.04em;
-  border: 0;
-  border-radius: 0.25rem;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  line-height: inherit;
-  text-align: inherit;
-  cursor: pointer;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-}
-
-.quran-surah-ayah__text:focus-visible {
+/* Focus ring for the ayah, in the page's own frame color — the reader's ayah is a
+   focusable span too, and both screens now share this rule. */
+.mushaf-ayah:focus-visible {
   outline: 2px solid var(--frame);
   outline-offset: 2px;
-}
-
-/* The same wash the reader's ayah takes on hover — minus the ayahs that already carry a
-   state of their own, so a chosen or kept ayah keeps it under the pointer. */
-.quran-surah-ayah__text:not(.quran-surah-ayah__text--selected):not(.quran-surah-ayah__text--bookmarked):hover {
-  background: var(--wash);
-}
-
-.quran-surah-ayah__text--selected {
-  background: var(--selected-wash);
-}
-
-.quran-surah-ayah__text--bookmarked {
-  background: var(--bookmark-wash);
-}
-
-.quran-surah-ayah__actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.12rem;
-  vertical-align: middle;
-  white-space: nowrap;
-}
-
-.quran-surah-ayah__play {
-  display: inline-flex;
-  width: 1.5rem;
-  height: 1.5rem;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--frame-soft);
-  border-radius: 9999px;
-  background: var(--wash);
-  color: var(--frame);
-  vertical-align: middle;
-}
-
-.quran-surah-ayah__play:focus-visible {
-  outline: 2px solid var(--frame);
-  outline-offset: 2px;
-}
-
-/* The marker struck out in the frame's own gold, with the sheet's ink on the disc —
-   white on night gold measured 2.2:1, the ink on the same gold measures 8.5:1. */
-.mushaf-ayah-mark--active {
-  color: var(--frame-on);
-  background: var(--frame);
 }
 
 .mushaf-ayah {
@@ -453,6 +389,13 @@ body {
   border: 1px solid var(--frame-soft);
   border-radius: 0.12rem;
   transform: rotate(45deg);
+}
+/* The medallion struck solid while its ayah holds the recitation: the frame's own gold
+   filled, with the sheet's ink on it — white on night gold measured 2.2:1, the ink on the
+   same gold measures 8.5:1. Placed after the base rule so the fill wins the tie. */
+.mushaf-ayah-mark--active {
+  color: var(--frame-on);
+  background: var(--frame);
 }
 
 /*
