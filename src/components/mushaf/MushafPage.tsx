@@ -26,6 +26,7 @@ export interface MushafPageProps {
   /** Resolved Quran font size in px; the reader's zoom is folded in before this point. */
   fontSize: number;
   night: boolean;
+  /** Reader default: its spacing formula at 100%. */
   lineHeight?: number;
   letterSpacing?: number;
   wordSpacing?: number;
@@ -65,7 +66,7 @@ export function MushafPage({
   page,
   fontSize,
   night,
-  lineHeight = 2.05,
+  lineHeight = 1.9,
   letterSpacing = 0.01,
   wordSpacing = 0,
   onAyahPress,

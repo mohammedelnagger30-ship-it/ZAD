@@ -161,7 +161,9 @@ body {
   --bookmark-wash: rgba(15, 23, 42, 0.07);
   --frame-on: #ffffff;
   --fs: 26px;
-  --lh: 2.05;
+  /* The reader's default line height (its spacing formula at 100%), so a page that
+     passes no spacing of its own — the surah view — typesets exactly as the reader. */
+  --lh: 1.9;
 
   position: relative;
   width: 100%;
@@ -312,7 +314,7 @@ body {
   z-index: 1;
   font-family: 'Amiri', 'Amiri Quran', serif;
   font-size: var(--fs);
-  line-height: var(--lh, 2.05);
+  line-height: var(--lh, 1.9);
   text-align: justify;
   text-align-last: center;
   text-justify: inter-word;
@@ -322,31 +324,17 @@ body {
   text-shadow: 0 0 0 rgba(0, 0, 0, 0.02);
 }
 
-.quran-surah-page {
-  padding-top: 2rem;
-  padding-bottom: 3rem;
-}
-
+/* The reader's page rules apply to every mushaf page — the surah view included — so the
+   two screens never drift apart. Only the narrow screen keeps its own tighter margins. */
 @media (max-width: 480px) {
-  .quran-surah-page {
+  .mushaf-page {
     padding: 1.8rem 1.35rem 3rem 2.2rem;
   }
 
-  .quran-surah-page .mushaf-margin {
+  .mushaf-margin {
     left: 0.65rem;
     width: 0.9rem;
   }
-}
-
-.quran-surah-page .mushaf-banner {
-  margin-bottom: 1rem;
-}
-
-.quran-surah-text {
-  line-height: 2.45;
-  word-spacing: 0.12em;
-  text-align: justify;
-  text-justify: inter-word;
 }
 
 .quran-surah-ayah {
@@ -371,6 +359,12 @@ body {
 .quran-surah-ayah__text:focus-visible {
   outline: 2px solid var(--frame);
   outline-offset: 2px;
+}
+
+/* The same wash the reader's ayah takes on hover — minus the ayahs that already carry a
+   state of their own, so a chosen or kept ayah keeps it under the pointer. */
+.quran-surah-ayah__text:not(.quran-surah-ayah__text--selected):not(.quran-surah-ayah__text--bookmarked):hover {
+  background: var(--wash);
 }
 
 .quran-surah-ayah__text--selected {
