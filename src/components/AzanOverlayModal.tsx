@@ -4,7 +4,8 @@ import type { Settings } from '@/db/database';
 import { getAdhanSound } from '@/data/adhanSounds';
 import { formatTime12h, getDateInTimeZone, getPrayerTimeZone } from '@/utils/prayerTimes';
 import { confirmPrayer, PRAYER_LABELS_AR, type PrayerKey } from '@/utils/prayerTracker';
-import { todayKey, formatArabicDate, getHijriDate } from '@/utils/dateUtils';
+import { formatDateKey, formatArabicDate, getHijriDate } from '@/utils/dateUtils';
+import { notificationId } from '@/utils/notifications';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 
@@ -119,8 +120,16 @@ export function AzanOverlayModal({
   };
 
   const handleConfirmPrayer = useCallback(async () => {
+    // A preview is a look at the page, never an answer: it must not write a record for
+    // a prayer whose time has not come (or any prayer at all).
+    if (isPreview) return;
     try {
-      await confirmPrayer(todayKey(), prayerKey, 'ontime');
+      // The record belongs to the prayer's own day in the *city's* timezone. The device
+      // clock can sit on either side of midnight while the overlay is open — a prayer
+      // near midnight, a late notification tap, a device far from the selected zone —
+      // and `todayKey()` (the device's day) would stamp the wrong date onto it.
+      const prayerDate = formatDateKey(getDateInTimeZone(prayerTime ?? new Date(), timeZone));
+      await confirmPrayer(prayerDate, prayerKey, 'ontime');
       setConfirmed(true);
       if (audioRef.current) {
         audioRef.current.pause();
@@ -132,7 +141,7 @@ export function AzanOverlayModal({
       console.error('Failed to confirm prayer:', err);
       onClose();
     }
-  }, [prayerKey, onClose]);
+  }, [isPreview, prayerKey, prayerTime, timeZone, onClose]);
 
   const handleSnooze = useCallback(async () => {
     setSnoozed(true);
@@ -146,7 +155,11 @@ export function AzanOverlayModal({
         await LocalNotifications.schedule({
           notifications: [
             {
-              id: Math.floor(Math.random() * 1000000),
+              // Reserved snooze range: recognisable, so the resume rebuild preserves it
+              // instead of cancelling it with everything else. A random id was both
+              // unknowable (every rebuild deleted the reminder) and free to collide
+              // with a prayer alert's id.
+              id: notificationId.snooze(),
               title: `تذكير صلاة ${displayName}`,
               body: `انقضت 10 دقائق على وقت صلاة ${displayName} — لا تنسَ الصلاة`,
               schedule: { at: snoozeTime },
@@ -330,6 +343,23 @@ export function AzanOverlayModal({
 
         {/* Action Buttons */}
         <div className="space-y-2.5">
+          {isPreview ? (
+            /*
+             * A preview never records and never schedules. The confirm button would
+             * stamp «في الموعد» onto a prayer whose time has not come (records are
+             * final), and snooze would arm a real reminder minutes from a test — so
+             * the only action on a previewed page is leaving it.
+             */
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 py-3 px-4 font-bold text-sm text-slate-200 transition hover:bg-slate-800"
+            >
+              <X size={18} />
+              إنهاء المعاينة
+            </button>
+          ) : (
+            <>
           {/* Confirm Prayer Done Button */}
           <button
             type="button"
@@ -367,6 +397,8 @@ export function AzanOverlayModal({
               أذكار الصلاة
             </button>
           </div>
+            </>
+          )}
         </div>
 
       </div>

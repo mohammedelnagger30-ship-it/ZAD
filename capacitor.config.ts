@@ -9,7 +9,10 @@ const config: CapacitorConfig = {
     LocalNotifications: {
       smallIcon: 'ic_notification',
       iconColor: '#1f734e',
-      sound: 'adhan.mp3',
+      // Default sound for notifications that do not pick one. Must be a file that
+      // actually exists (public/audio + android res/raw): `adhan.mp3` never shipped,
+      // so the default silently resolved to nothing.
+      sound: 'adhan_makkah_masjid.mp3',
     },
   },
 };

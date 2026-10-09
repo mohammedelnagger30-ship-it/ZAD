@@ -10,7 +10,14 @@ import {
   getPrayerTimeZone,
 } from '@/utils/prayerTimes';
 import { generateDailyTasks, getTodayTasks } from '@/utils/taskManager';
-import { genNotificationId, cancelAllNotifications, hasNotificationPermission } from '@/utils/notifications';
+import {
+  cancelAllNotifications,
+  canScheduleExactAlarms,
+  hasNotificationPermission,
+  notifyNotificationWarning,
+  notificationId,
+  preserveActiveSnooze,
+} from '@/utils/notifications';
 
 type DhikrReminderCategory = 'morning' | 'evening' | 'istighfar';
 
@@ -137,30 +144,53 @@ export async function createNotificationChannels(settings: Settings): Promise<vo
 /**
  * Rebuild every pending notification from the current settings.
  *
- * Safe to call repeatedly — it cancels everything first, so it doubles as the
- * reschedule-on-resume hook (Android drops pending alarms across reboots, and stale
- * rows would otherwise accumulate).
+ * Safe to call repeatedly — it swaps the whole queue in one cancel/schedule pair, so it
+ * doubles as the reschedule-on-resume hook (Android drops pending alarms across
+ * reboots, and stale rows would otherwise accumulate). The only notifications kept
+ * through the swap are active snoozes the user asked for. A failed swap restores the
+ * previous queue rather than leaving the adhan silent.
  */
 export async function rescheduleAllNotifications(): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
 
-  // Scheduling without the grant throws or silently no-ops on both platforms, and the
-  // failure was previously invisible because the whole body sat inside a fire-and-forget
-  // promise. Bail out early instead.
+  // Scheduling without the grant rejects the call (and would cancel-first for nothing),
+  // so bail out before touching the running queue.
   if (!(await hasNotificationPermission())) {
     console.info('Notification permission not granted — skipping reschedule');
     return;
   }
 
+  // Exact alarms are what makes the adhan sound at the prayer minute while the app is
+  // closed. When the permission is revoked the plugin's schedule() would pop the system
+  // «Alarms & reminders» page mid-resume — so leave the already-armed queue exactly as
+  // it is, tell the user (Settings shows the fix), and try again once it is granted.
+  if (!(await canScheduleExactAlarms())) {
+    console.warn('Exact-alarm permission denied — keeping the existing notification queue.');
+    notifyNotificationWarning('exact-alarm-denied');
+    return;
+  }
+
   const settings = await getSettings();
 
-  // Cancel all existing notifications first
-  await cancelAllNotifications();
+  // Rebuild in two phases:
+  //  1. Build — every fallible read (settings, tasks) and every notification object,
+  //     gathered into ONE batch. A failure here leaves the running queue untouched.
+  //  2. Swap — snapshot the queue, cancel it, schedule the batch. If the schedule call
+  //     rejects (notifications switched off between the check above and now, plugin
+  //     error), the snapshot is put back so a failed rebuild can never silence the
+  //     adhan: previously `cancelAll()` ran first and the swallowed error meant nothing
+  //     was re-armed until the next successful open.
+  const queue: LocalNotificationSchema[] = [];
 
-  // Ensure channels exist
-  await createNotificationChannels(settings);
+  // Channels are idempotent and independent of the queue; if this fails, the previously
+  // created channels (same ids) are still in place.
+  try {
+    await createNotificationChannels(settings);
+  } catch (err) {
+    console.error('Could not create notification channels:', err);
+  }
 
-  // 1. Schedule prayer notifications for the next PRAYER_NOTIFICATION_DAYS days.
+  // 1. Prayer notifications for the next PRAYER_NOTIFICATION_DAYS days.
   //
   // More than "today + tomorrow" is what keeps the adhan firing while the app stays
   // closed for a while: these alarms are the only thing that plays the adhan outside
@@ -169,9 +199,10 @@ export async function rescheduleAllNotifications(): Promise<void> {
     const timeZone = getPrayerTimeZone(settings.timeZone, settings.cityName);
     const firstDay = calendarDayInZone(new Date(), timeZone);
     const now = Date.now();
-    const notifications: LocalNotificationSchema[] = [];
 
-    let prayerIndex = 0;
+    // One slot number per prayer, shared by the prayer alert and its reminder: the two
+    // live in disjoint id ranges, while every prayer across the window gets its own.
+    let armSlot = 0;
     for (let dayOffset = 0; dayOffset < PRAYER_NOTIFICATION_DAYS; dayOffset += 1) {
       const dayPrayers = calculatePrayerTimesForDay(
         settings.latitude,
@@ -182,14 +213,12 @@ export async function rescheduleAllNotifications(): Promise<void> {
       );
 
       for (const prayer of dayPrayers.prayers) {
-        // `prayerIndex` keeps advancing across days while the date part of the id moves
-        // one day at a time, so the two never overlap (day k gets 7k..7k+5 of the sum).
-        const index = prayerIndex++;
+        const slot = armSlot++;
         if (prayer.name === 'sunrise') continue;
         if (prayer.time.getTime() <= now) continue;
 
-        notifications.push({
-          id: genNotificationId(10, prayer.time, index),
+        queue.push({
+          id: notificationId.prayer(slot),
           title: `حان وقت صلاة ${prayer.arabicName}`,
           body: `أدِّ صلاة ${prayer.arabicName} في وقتها`,
           schedule: { at: prayer.time, allowWhileIdle: true },
@@ -209,8 +238,8 @@ export async function rescheduleAllNotifications(): Promise<void> {
         if (settings.prePrayerReminder > 0) {
           const reminderTime = new Date(prayer.time.getTime() - settings.prePrayerReminder * 60000);
           if (reminderTime.getTime() > now) {
-            notifications.push({
-              id: genNotificationId(11, prayer.time, index),
+            queue.push({
+              id: notificationId.reminder(slot),
               title: `تذكير: صلاة ${prayer.arabicName} بعد ${settings.prePrayerReminder} دقيقة`,
               body: `استعد لصلاة ${prayer.arabicName}`,
               schedule: { at: reminderTime, allowWhileIdle: true },
@@ -221,10 +250,6 @@ export async function rescheduleAllNotifications(): Promise<void> {
           }
         }
       }
-    }
-
-    if (notifications.length > 0) {
-      await LocalNotifications.schedule({ notifications });
     }
   }
 
@@ -242,7 +267,6 @@ export async function rescheduleAllNotifications(): Promise<void> {
     } else {
       const duration = (endMinute - startMinute + 1440) % 1440;
       const now = new Date();
-      const notifications: LocalNotificationSchema[] = [];
       const previousMessageByCategory = new Map<DhikrReminderCategory, number>();
 
       if (duration > 0) {
@@ -266,8 +290,8 @@ export async function rescheduleAllNotifications(): Promise<void> {
               .filter((index) => index !== previousIndex);
             const messageIndex = available[Math.floor(Math.random() * available.length)];
             previousMessageByCategory.set(category, messageIndex);
-            notifications.push({
-              id: genNotificationId(40, at, dayOffset * 100 + slot),
+            queue.push({
+              id: notificationId.dhikr(dayOffset * 1000 + slot),
               title: reminder.title,
               body: reminder.messages[messageIndex],
               schedule: { at, allowWhileIdle: true },
@@ -278,17 +302,12 @@ export async function rescheduleAllNotifications(): Promise<void> {
           }
         }
       }
-
-      if (notifications.length > 0) {
-        await LocalNotifications.schedule({ notifications });
-      }
     }
   }
 
-  // 3. Schedule today's task notifications
+  // 3. Today's task notifications (hifz / review)
   await generateDailyTasks();
   const tasks = await getTodayTasks();
-  const taskNotifications: LocalNotificationSchema[] = [];
 
   for (const task of tasks) {
     if (task.status === 'done' || task.status === 'missed') continue;
@@ -298,37 +317,68 @@ export async function rescheduleAllNotifications(): Promise<void> {
     if (scheduledAt <= new Date()) continue;
 
     const typeText = task.type === 'hifz' ? 'الحفظ' : 'المراجعة';
-    taskNotifications.push({
-      id: genNotificationId(20 + (task.id || 0), scheduledAt),
+    queue.push({
+      id: notificationId.task(task.id ?? 0),
       title: `حان وقت ${typeText}`,
       body: `وقت ${typeText}: ${task.portion}`,
       schedule: { at: scheduledAt, allowWhileIdle: true },
       channelId: task.type === 'hifz' ? 'hifz' : 'review',
-      sound: settings.notificationSound ? 'notification.mp3' : undefined,
+      sound: settings.notificationSound ? 'notification.wav' : undefined,
       smallIcon: 'ic_notification',
       iconColor: '#1f734e',
     });
   }
 
-  if (taskNotifications.length > 0) {
-    await LocalNotifications.schedule({ notifications: taskNotifications });
-  }
-
-  // 4. Schedule hadith of the day (9:00 AM)
+  // 4. Hadith of the day (9:00 AM)
   const hadithTime = new Date();
   hadithTime.setHours(9, 0, 0, 0);
   hadithTime.setDate(hadithTime.getDate() + (hadithTime < new Date() ? 1 : 0));
   if (hadithTime > new Date()) {
-    await LocalNotifications.schedule({
-      notifications: [{
-        id: genNotificationId(30, hadithTime),
-        title: 'حديث اليوم',
-        body: 'اقرأ حديث اليوم المختار لك',
-        schedule: { at: hadithTime, allowWhileIdle: true },
-        channelId: 'hadith',
-        smallIcon: 'ic_notification',
-        iconColor: '#1f734e',
-      }],
+    queue.push({
+      id: notificationId.hadith(),
+      title: 'حديث اليوم',
+      body: 'اقرأ حديث اليوم المختار لك',
+      schedule: { at: hadithTime, allowWhileIdle: true },
+      channelId: 'hadith',
+      smallIcon: 'ic_notification',
+      iconColor: '#1f734e',
     });
+  }
+
+  // --- Swap phase: one cancel, one schedule, restore on failure. -------------
+  // The snapshot is taken first so a rejected schedule() can put the previous queue
+  // back instead of leaving nothing armed at all. Active snoozes (the adhan overlay's
+  // «تذكير بعد 10 دقائق») are deliberately kept through the cancel — every resume
+  // rebuilds the queue, and the old unconditional cancel-all silently deleted the
+  // reminder the user had just asked for.
+  let previousQueue: LocalNotificationSchema[] = [];
+  try {
+    previousQueue = (await LocalNotifications.getPending()).notifications;
+  } catch (err) {
+    console.warn('Could not snapshot the pending notification queue:', err);
+  }
+
+  try {
+    await cancelAllNotifications(preserveActiveSnooze);
+    if (queue.length > 0) {
+      const result = (await LocalNotifications.schedule({ notifications: queue })) as unknown as
+        { warning?: string } | void;
+      if (result && typeof result === 'object' && typeof result.warning === 'string' && result.warning) {
+        // The plugin downgraded the batch (exact-alarm permission vanished mid-call):
+        // alarms will fire, but possibly late in sleep mode.
+        console.warn('Notifications were scheduled inexact:', result.warning);
+        notifyNotificationWarning('scheduled-inexact');
+      }
+    }
+  } catch (err) {
+    console.error('Scheduling notifications failed — restoring the previous queue.', err);
+    notifyNotificationWarning('schedule-failed');
+    if (previousQueue.length > 0) {
+      try {
+        await LocalNotifications.schedule({ notifications: previousQueue });
+      } catch (restoreErr) {
+        console.error('Could not restore the previous notification queue.', restoreErr);
+      }
+    }
   }
 }

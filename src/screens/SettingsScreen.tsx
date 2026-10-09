@@ -28,7 +28,12 @@ import { TimeOptionButton } from '@/components/TimeOptionButton';
 import { CALC_METHODS, CALC_METHOD_NAMES_AR } from '@/utils/prayerTimes';
 import { ADHAN_SOUNDS, DEFAULT_ADHAN_SOUND_ID } from '@/data/adhanSounds';
 import { rescheduleAllNotifications } from '@/utils/notificationScheduler';
-import { requestNotificationPermission } from '@/utils/notifications';
+import {
+  canScheduleExactAlarms,
+  NOTIFICATION_WARNING_EVENT,
+  requestExactAlarms,
+  requestNotificationPermission,
+} from '@/utils/notifications';
 import { db, type Settings } from '@/db/database';
 import { COLOR_PALETTES, type ColorPalette } from '@/utils/colorThemes';
 import type { CloudSyncState } from '@/utils/cloudSync';
@@ -249,6 +254,34 @@ export function SettingsScreen({
   const [dhikrPermissionStatus, setDhikrPermissionStatus] = useState('');
   const [accountActionStatus, setAccountActionStatus] = useState('');
   const [accountActionBusy, setAccountActionBusy] = useState(false);
+
+  /**
+   * State of the exact-alarm permission that makes the adhan sound at the prayer
+   * minute while the app is closed.
+   *
+   * Checked once on mount and re-raised by the scheduler whenever a rebuild had to
+   * back off (see `NOTIFICATION_WARNING_EVENT`), so the fix — one tap into the system
+   * page — sits exactly where the sound settings are.
+   */
+  const [exactAlarmNotice, setExactAlarmNotice] = useState<'' | 'denied' | 'inexact' | 'failed'>('');
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    let alive = true;
+    void canScheduleExactAlarms().then((ok) => {
+      if (alive && !ok) setExactAlarmNotice('denied');
+    });
+    const onWarning = (event: Event) => {
+      const type = (event as CustomEvent).detail;
+      if (type === 'exact-alarm-denied') setExactAlarmNotice('denied');
+      else if (type === 'scheduled-inexact') setExactAlarmNotice('inexact');
+      else if (type === 'schedule-failed') setExactAlarmNotice('failed');
+    };
+    window.addEventListener(NOTIFICATION_WARNING_EVENT, onWarning);
+    return () => {
+      alive = false;
+      window.removeEventListener(NOTIFICATION_WARNING_EVENT, onWarning);
+    };
+  }, []);
 
   const {
     update: appUpdate,
@@ -520,6 +553,13 @@ export function SettingsScreen({
                 disabled={accountActionBusy}
                 onClick={async () => {
                   if (!onSignOut) return;
+                  // Signing out uploads what is on this device and then deletes the local
+                  // copy — a destructive step the button never mentioned. Say what will
+                  // happen and let the user decide before anything is cleared.
+                  const proceed = window.confirm(
+                    'سيتم رفع بياناتك إلى حسابك أولاً، ثم حذفها من هذا الجهاز بعد تسجيل الخروج. بياناتك تبقى محفوظة في حسابك وتعود عند تسجيل الدخول مجدداً. هل تريد المتابعة؟',
+                  );
+                  if (!proceed) return;
                   setAccountActionBusy(true);
                   setAccountActionStatus('');
                   try {
@@ -708,6 +748,32 @@ export function SettingsScreen({
       <section className="space-y-2">
         <SectionTitle icon={<Bell size={20} />} title="التنبيهات وصوت الأذان" />
         <Card className="border border-primary-200/80 dark:border-primary-800/80 shadow-md space-y-4">
+          {exactAlarmNotice !== '' && (
+            <div className="space-y-2 rounded-2xl border border-amber-300 bg-amber-50 p-3.5 dark:border-amber-700 dark:bg-amber-900/30">
+              <p className="text-xs font-semibold leading-relaxed text-amber-800 dark:text-amber-200">
+                {exactAlarmNotice === 'denied'
+                  ? 'تنبيهات الأذان الدقيقة موقوفة من إعدادات الجهاز — الأذان قد يتأخر دقائق أثناء السكون.'
+                  : exactAlarmNotice === 'inexact'
+                    ? 'شُغّلت تنبيهات هذا الدور بنظام تقريبي — الأذان قد يتأخر دقائق أثناء السكون.'
+                    : 'تعذّرت جدولة تنبيهات هذا الدور، وعادت التنبيهات السابقة إلى مكانها؛ ستُعاد المحاولة عند فتح التطبيق.'}
+              </p>
+              {exactAlarmNotice !== 'failed' && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={async () => {
+                    const granted = await requestExactAlarms();
+                    setExactAlarmNotice(granted ? '' : 'denied');
+                    if (granted) await rescheduleAllNotifications();
+                  }}
+                  className="font-semibold text-xs"
+                >
+                  فتح إعدادات تنبيهات الأذان الدقيقة
+                </Button>
+              )}
+            </div>
+          )}
+
           <ToggleRow
             label="أصوات تنبيهات المهام والحفظ"
             icon={<Volume2 size={18} className="text-primary-600 dark:text-gold-400" />}

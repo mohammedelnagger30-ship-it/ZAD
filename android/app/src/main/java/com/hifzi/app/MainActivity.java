@@ -8,7 +8,17 @@ import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
     private static final String TAG = "MainActivity";
-    private static final String ACTION_BOOT_COMPLETED = "android.intent.action.BOOT_COMPLETED";
+
+    /**
+     * Carried by the intent this app starts itself with after a reboot (see
+     * BootReceiver): the JS side re-arms the notification queue while the bridge
+     * loads, and the activity then closes itself instead of being left standing
+     * in front of the user.
+     */
+    public static final String ACTION_RESCHEDULE = "com.hifzi.app.action.RESCHEDULE";
+
+    /** False once the user launches the app themselves before the auto-close fires. */
+    private boolean bootReschedulePending = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -16,21 +26,31 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(AppUpdater.class);
         super.onCreate(savedInstanceState);
 
-        // Check if started from boot receiver
         Intent intent = getIntent();
-        if (intent != null && intent.getAction() != null) {
-            String action = intent.getAction();
-            if (action.equals(ACTION_BOOT_COMPLETED) ||
-                action.equals("android.intent.action.QUICKBOOT_POWERON") ||
-                action.equals("com.htc.intent.action.QUICKBOOT_POWERON")) {
-                Log.d(TAG, "App started from boot - will reschedule notifications and close");
-                // The Capacitor bridge will load and App.tsx will reschedule notifications
-                // We'll close the activity after a delay to avoid disturbing the user
-                getBridge().getWebView().postDelayed(() -> {
-                    Log.d(TAG, "Closing activity after boot notification reschedule");
-                    finish();
-                }, 5000); // 5 seconds to allow Capacitor to initialize and reschedule
-            }
+        if (intent != null && ACTION_RESCHEDULE.equals(intent.getAction())) {
+            Log.d(TAG, "Started to reschedule notifications after boot - closing when done");
+            bootReschedulePending = true;
+            // The relaunch is machinery, not a user action: no transition either side.
+            overridePendingTransition(0, 0);
+            getBridge().getWebView().postDelayed(() -> {
+                if (!bootReschedulePending) {
+                    return; // the user opened the app in the meantime
+                }
+                Log.d(TAG, "Closing activity after boot notification reschedule");
+                finish();
+                overridePendingTransition(0, 0);
+            }, 5000); // enough for the bridge to load and App.tsx to reschedule
+        }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        // singleTask: a manual launch while the boot close is pending reuses this
+        // instance with a fresh (action-less) intent. Cancel the pending close so the
+        // app is not shut down under the person using it.
+        if (intent == null || !ACTION_RESCHEDULE.equals(intent.getAction())) {
+            bootReschedulePending = false;
         }
     }
 }
