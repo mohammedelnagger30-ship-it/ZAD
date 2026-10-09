@@ -142,7 +142,18 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
 
   useEffect(() => {
     load();
-    const interval = setInterval(() => setNow(new Date()), 1000);
+    // The screen can stay open across midnight: the day list, week grid and stats must
+    // roll over with the clock instead of showing yesterday's answers until somebody
+    // reloads the page by hand.
+    let dayKey = todayKey();
+    const interval = setInterval(() => {
+      setNow(new Date());
+      const currentDayKey = todayKey();
+      if (currentDayKey !== dayKey) {
+        dayKey = currentDayKey;
+        void load();
+      }
+    }, 1000);
     return () => clearInterval(interval);
   }, [load]);
 
@@ -578,11 +589,19 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
             ).prayers.find((p) => p.name === sheet.prayer)!.time,
             timeZone,
           )}
-          status={
-            (grid.find((g) => g.date === sheet.date)?.status[sheet.prayer] ??
-              records[sheet.prayer] ??
-              null) as PrayerStatus | null
-          }
+          status={(() => {
+            // The grid row is authoritative for the day being edited, *including* when
+            // its status is null. The old `??` chain fell through to `records` — which
+            // only ever holds today's five prayers — every time the grid said
+            // "unrecorded", so yesterday's cell opened with today's answer and then
+            // disagreed with the sheet for the rest of the week.
+            const row = grid.find((g) => g.date === sheet.date);
+            if (row) return (row.status[sheet.prayer] ?? null) as PrayerStatus | null;
+            // Before the grid loads, only today's list can say anything at all.
+            return sheet.date === todayKey()
+              ? ((records[sheet.prayer] as PrayerStatus | null) ?? null)
+              : null;
+          })()}
           editable={canEditPrayerDate(sheet.date)}
           isHistorical={sheet.isHistorical}
           dateLabel={sheet.label}

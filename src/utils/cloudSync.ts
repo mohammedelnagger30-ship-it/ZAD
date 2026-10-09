@@ -167,6 +167,44 @@ async function fetchCloudRecords(userId: string): Promise<Map<string, CloudRecor
   return records;
 }
 
+/**
+ * Runs a local *repair* write without the mutation hooks reacting to it.
+ *
+ * Collapsing duplicate rows and stamping missing timestamps are schema repairs, not
+ * user edits: the 'updating' hook would otherwise bump syncModifiedAt to *now* (a
+ * fresh repair masquerading as a fresh edit) and schedule another sync round, and the
+ * 'deleting' hook would queue a tombstone for the very sync id the surviving row still
+ * uses — telling the server to delete the record we just kept.
+ */
+async function repairSilently<T>(operation: () => Promise<T>): Promise<T> {
+  const wasApplying = applyingCloudChanges;
+  applyingCloudChanges = true;
+  try {
+    return await operation();
+  } finally {
+    applyingCloudChanges = wasApplying;
+  }
+}
+
+/**
+ * Which of two rows sharing one sync id survives the repair.
+ *
+ * A real prayer answer beats an empty stub, the more recent confirmation beats an
+ * older one, and anything else resolves to the later insert (the larger auto-increment
+ * id), which is the order Dexie returns rows in anyway.
+ */
+function pickSyncRow(table: SyncTableName, a: SyncRow, b: SyncRow): SyncRow {
+  if (table === 'prayerRecords') {
+    const aBlank = a.status === null || a.status === undefined;
+    const bBlank = b.status === null || b.status === undefined;
+    if (aBlank !== bBlank) return aBlank ? b : a;
+    const aAt = typeof a.confirmedAt === 'number' ? a.confirmedAt : 0;
+    const bAt = typeof b.confirmedAt === 'number' ? b.confirmedAt : 0;
+    if (aAt !== bAt) return aAt > bAt ? a : b;
+  }
+  return (typeof b.id === 'number' ? b.id : 0) > (typeof a.id === 'number' ? a.id : 0) ? b : a;
+}
+
 async function getLocalRecords(): Promise<Map<string, { table: SyncTableName; row: SyncRow }>> {
   const local = new Map<string, { table: SyncTableName; row: SyncRow }>();
   const plansById = new Map<number, string>();
@@ -224,12 +262,41 @@ async function getLocalRecords(): Promise<Map<string, { table: SyncTableName; ro
         row.planSyncId = plansById.get(row.planId);
       }
       const recordId = syncIdFor(name, row);
+      let changed = false;
       if (row.syncId !== recordId) {
         row.syncId = recordId;
-        await db.table(name).put(row);
+        changed = true;
       }
+      // Rows written before sync existed carry no modification time. Pushed as-is
+      // they would reach the cloud stamped 1970, and every later conflict would
+      // resolve against that baseline instead of when the row actually changed.
+      // Stamp once, with the best evidence of when it really was written.
+      if (typeof row.syncModifiedAt !== 'number') {
+        row.syncModifiedAt = typeof row.confirmedAt === 'number'
+          ? row.confirmedAt
+          : typeof row.createdAt === 'number'
+            ? row.createdAt
+            : Date.now();
+        changed = true;
+      }
+      if (changed) await repairSilently(() => db.table(name).put(row));
+
       const key = `${name}:${recordId}`;
-      if (local.has(key)) throw new Error(`تكرار معرّف مزامنة محلي في ${name}.`);
+      const duplicate = local.get(key);
+      if (duplicate) {
+        // Two rows for one logical slot: a racing double-confirm from before writes
+        // were serialised (see prayerTracker's write chain). Repair the table instead
+        // of throwing — the old unconditional throw aborted the entire sync on every
+        // attempt, so one stray duplicate silenced cloud sync forever, and with no
+        // repair the next duplicate would bring the outage straight back.
+        const keeper = pickSyncRow(name, duplicate.row, row);
+        const loser = keeper === duplicate.row ? row : duplicate.row;
+        if (typeof loser.id === 'number') {
+          await repairSilently(() => db.table(name).delete(loser.id as number));
+        }
+        if (keeper !== duplicate.row) local.set(key, { table: name, row: keeper });
+        continue;
+      }
       local.set(key, { table: name, row });
     }
   }

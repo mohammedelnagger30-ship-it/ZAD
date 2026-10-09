@@ -42,21 +42,49 @@ export function assertPrayerRecordable(
 }
 
 /**
+ * Serialises every read-check-write sequence in this module.
+ *
+ * `confirmPrayer` looks for an existing row and then adds one — two calls racing
+ * (a double tap on «تمت») both read "no record" and both add, leaving two rows for
+ * the same day+prayer. Dexie's index on `[date+prayer]` is not unique, so nothing
+ * stopped them; the duplicate then threw inside cloud sync (`تكرار معرّف مزامنة
+ * محلي`) on every attempt, silently killing sync for that account. One promise
+ * chain, one writer at a time.
+ */
+let writeChain: Promise<unknown> = Promise.resolve();
+
+function serialize<T>(operation: () => Promise<T>): Promise<T> {
+  const run = writeChain.then(operation, operation);
+  // Keep the chain alive even when an operation rejects (assert throws).
+  writeChain = run.then(() => undefined, () => undefined);
+  return run;
+}
+
+/**
  * Records a prayer's answer. The write is final and immediate: only a slot
  * with no record yet can be saved, and it never expires into an edit window.
  */
-export async function confirmPrayer(
+export function confirmPrayer(
   date: string,
   prayer: string,
   status: PrayerStatus
 ): Promise<void> {
-  const existing = await getPrayerRecord(date, prayer);
-  assertPrayerRecordable(date, existing != null);
-  await db.prayerRecords.add({
-    date,
-    prayer,
-    status,
-    confirmedAt: Date.now(),
+  return serialize(async () => {
+    const existing = await getPrayerRecord(date, prayer);
+    assertPrayerRecordable(date, existing != null);
+    await db.prayerRecords.add({
+      date,
+      prayer,
+      status,
+      confirmedAt: Date.now(),
+      // Written here as well as by cloudSync's Dexie hooks: rows created while no
+      // account is signed in (the common case) reached the cloud with no sync
+      // timestamp at all, which conflicts resolve as 1970 — such a row loses every
+      // comparison against another device's real timestamp. The id keeps the row
+      // mapped to `date:prayer` even if a push happens before any hook runs.
+      syncId: `${date}:${prayer}`,
+      syncModifiedAt: Date.now(),
+    });
   });
 }
 
@@ -85,22 +113,26 @@ export function sunnahDoneMap(rows: SunnahRecord[]): Record<string, boolean> {
   return map;
 }
 
-export async function setSunnah(date: string, type: string, done: boolean): Promise<void> {
-  const existing = await getSunnahRecord(date, type);
-  if (existing) {
-    await db.sunnahRecords.update(existing.id!, { done });
-  } else {
-    await db.sunnahRecords.add({ date, type, done });
-  }
+export function setSunnah(date: string, type: string, done: boolean): Promise<void> {
+  return serialize(async () => {
+    const existing = await getSunnahRecord(date, type);
+    if (existing) {
+      await db.sunnahRecords.update(existing.id!, { done });
+    } else {
+      await db.sunnahRecords.add({ date, type, done, syncId: `${date}:${type}`, syncModifiedAt: Date.now() });
+    }
+  });
 }
 
-export async function toggleSunnah(date: string, type: string): Promise<void> {
-  const existing = await getSunnahRecord(date, type);
-  if (existing) {
-    await db.sunnahRecords.update(existing.id!, { done: !existing.done });
-  } else {
-    await db.sunnahRecords.add({ date, type, done: true });
-  }
+export function toggleSunnah(date: string, type: string): Promise<void> {
+  return serialize(async () => {
+    const existing = await getSunnahRecord(date, type);
+    if (existing) {
+      await db.sunnahRecords.update(existing.id!, { done: !existing.done });
+    } else {
+      await db.sunnahRecords.add({ date, type, done: true, syncId: `${date}:${type}`, syncModifiedAt: Date.now() });
+    }
+  });
 }
 
 export interface PrayerStats {
