@@ -6,6 +6,7 @@ import {
   Copy,
   BookOpen,
   Droplets,
+  Flower2,
   Heart,
   HeartHandshake,
   Home,
@@ -44,6 +45,7 @@ const ICONS: Record<string, typeof Sunrise> = {
   home: Home,
   plane: Plane,
   'heart-handshake': HeartHandshake,
+  'flower-2': Flower2,
 };
 
 interface AdhkarState {

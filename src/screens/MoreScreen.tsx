@@ -11,7 +11,7 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
     {
       screen: 'adhkar' as ScreenName,
       label: 'الأذكار اليومية',
-      description: 'أذكار الصباح والمساء والنوم وبعد الصلاة، مع أذكار الوضوء والمسجد والطعام والسفر',
+      description: 'أذكار الصباح والمساء والنوم وبعد الصلاة، مع أذكار الوضوء والمسجد والطعام والسفر والميت',
       icon: Heart,
       badge: 'مستحسنة',
       color: 'from-emerald-600 to-emerald-700',

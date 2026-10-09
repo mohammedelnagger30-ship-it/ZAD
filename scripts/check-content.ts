@@ -370,6 +370,7 @@ for (const [categoryId, expectedMinimum] of [
   ['food', 3],
   ['home', 2],
   ['travel', 3],
+  ['deceased', 7],
   ['general_duas', 8],
 ] as const) {
   const category = ADHKAR_CATEGORIES.find((item) => item.id === categoryId);
@@ -419,6 +420,13 @@ for (const [id, source] of [
   ['d6', '١٠٨٤'],
   ['d7', '١١٢١'],
   ['d8', '٤٨٥٩'],
+  ['v1', '٢٠٤٠'],
+  ['v2', '١٥٦٩'],
+  ['v3', '٢٠٣٩'],
+  ['v4', '٢٢٣٢'],
+  ['v5', '٣٢٠١'],
+  ['v6', '٥٣٦'],
+  ['v7', '٣٢٢١'],
 ] as const) {
   check(
     adhkarById.get(id)?.reference.includes(source),
@@ -428,6 +436,23 @@ for (const [id, source] of [
 check(
   ['quran-12-101', 'quran-23-29', 'quran-39-53', 'quran-40-60'].every((id) => adhkarById.has(id)),
   'the newest Quranic supplication passages are present',
+);
+check(
+  ADHKAR_CATEGORIES.some(
+    (category) =>
+      category.id === 'deceased' &&
+      category.title === 'أذكار الميت' &&
+      category.daily === false &&
+      category.icon === 'flower-2',
+  ),
+  'the deceased collection exists outside the daily counter with its own icon',
+);
+check(
+  adhkarById.get('v1')?.text.endsWith('لَنَا وَلَكُمْ') &&
+    adhkarById.get('v4')?.text.endsWith('أَوْ مِنْ عَذَابِ النَّارِ') &&
+    adhkarById.get('v5')?.text.endsWith('وَلاَ تُضِلَّنَا بَعْدَهُ') &&
+    adhkarById.get('v7')?.text.endsWith('الآنَ يُسْأَلُ'),
+  'the funeral supplications keep their complete closing words',
 );
 
 console.log('\n== mushaf basmala splitting ==');
