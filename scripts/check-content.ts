@@ -363,6 +363,72 @@ for (const [categoryId, expectedMinimum] of [
     `got ${category?.items.length ?? 0}`,
   );
 }
+for (const [categoryId, expectedMinimum] of [
+  ['morning', 17],
+  ['wudu', 2],
+  ['mosque', 2],
+  ['food', 3],
+  ['home', 2],
+  ['travel', 3],
+  ['general_duas', 8],
+] as const) {
+  const category = ADHKAR_CATEGORIES.find((item) => item.id === categoryId);
+  check(
+    (category?.items.length ?? 0) >= expectedMinimum,
+    `${categoryId}: has the expanded adhkar set`,
+    `got ${category?.items.length ?? 0}`,
+  );
+}
+check(
+  ADHKAR_CATEGORIES.filter((category) => category.daily !== false)
+    .map((category) => category.id)
+    .join(',') === 'morning,evening,after_prayer,sleep,wakeup',
+  'only the daily routine collections count toward the daily adhkar progress',
+);
+check(
+  ['m14', 'm15', 'e13', 'e14'].every((id) =>
+    adhkarById.get(id)?.count === 3 && adhkarById.get(id)?.reference.includes('٥٠٩٠')),
+  'morning and evening health adhkar keep the threefold count and their Abu Dawud source',
+);
+check(
+  adhkarById.get('m16')?.count === 100 &&
+    adhkarById.get('m16')?.reference.includes('٣٨١٥') &&
+    adhkarById.get('d4')?.count === 100 &&
+    adhkarById.get('d4')?.reference.includes('١٥١٦'),
+  'the hundredfold supplications keep their sourced repetition counts',
+);
+for (const [id, source] of [
+  ['m17', '٩٢٥'],
+  ['u1', '٥٥'],
+  ['u2', '٥٥'],
+  ['ms1', '١٦٥٢'],
+  ['ms2', '١٦٥٢'],
+  ['f1', '٣٧٦٧'],
+  ['f2', '٣٧٦٧'],
+  ['f3', '٤٠٢٣'],
+  ['h1', '٣٤٢٦'],
+  ['h2', '٣٨٨٤'],
+  ['t1', '٣٢٧٥'],
+  ['t2', '٣٠٨٥'],
+  ['t3', '٦٨٧٩'],
+  ['d1', '٦٩٠٣'],
+  ['d2', '٦٩٠٤'],
+  ['d3', '٢١٤٠'],
+  ['d4', '١٥١٦'],
+  ['d5', '٣٨٤٦'],
+  ['d6', '١٠٨٤'],
+  ['d7', '١١٢١'],
+  ['d8', '٤٨٥٩'],
+] as const) {
+  check(
+    adhkarById.get(id)?.reference.includes(source),
+    `${id}: cites its hadith source ${source}`,
+  );
+}
+check(
+  ['quran-12-101', 'quran-23-29', 'quran-39-53', 'quran-40-60'].every((id) => adhkarById.has(id)),
+  'the newest Quranic supplication passages are present',
+);
 
 console.log('\n== mushaf basmala splitting ==');
 

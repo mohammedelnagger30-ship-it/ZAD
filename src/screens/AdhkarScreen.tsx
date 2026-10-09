@@ -5,14 +5,20 @@ import {
   ChevronLeft,
   Copy,
   BookOpen,
+  Droplets,
   Heart,
+  HeartHandshake,
+  Home,
+  Landmark,
   Minus,
   Moon,
+  Plane,
   RotateCcw,
   Search,
   Sun,
   Sunrise,
   Sunset,
+  Utensils,
   Vibrate,
   X,
 } from 'lucide-react';
@@ -32,6 +38,12 @@ const ICONS: Record<string, typeof Sunrise> = {
   moon: Moon,
   sun: Sun,
   'book-open': BookOpen,
+  droplets: Droplets,
+  landmark: Landmark,
+  utensils: Utensils,
+  home: Home,
+  plane: Plane,
+  'heart-handshake': HeartHandshake,
 };
 
 interface AdhkarState {
@@ -151,7 +163,7 @@ export function AdhkarScreen() {
   }, [notice]);
 
   const allItems = useMemo(
-    () => ADHKAR_CATEGORIES.filter((category) => category.id !== 'quranic_duas').flatMap((category) => category.items),
+    () => ADHKAR_CATEGORIES.filter((category) => category.daily !== false).flatMap((category) => category.items),
     [],
   );
   const completedItems = allItems.filter((item) => (state.counts[item.id] ?? 0) >= item.count).length;
