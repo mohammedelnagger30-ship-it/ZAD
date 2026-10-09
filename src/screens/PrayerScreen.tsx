@@ -286,6 +286,7 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
         <div className="mb-4 rounded-2xl bg-primary-50 dark:bg-primary-900/30 p-4 border border-primary-100 dark:border-primary-800">
           <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
             تظهر السنة الراتبة بجوار فرضها: ركعتان قبل الفجر، وست للظهر (أربع قبلًا واثنتان بعدًا)، وركعتان بعد المغرب وركعتان بعد العشاء.
+            وكلها مقفولة حتى ميعاد صلاتها — تُسجَّل مع الصلاة لا قبلها.
           </p>
         </div>
         <div className="space-y-4">
@@ -367,6 +368,15 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
                     <p className="text-sm font-bold text-primary-700 dark:text-gold-400 mb-2">
                       سنن ونوافل مرتبطة بصلاة {prayer.arabicName}
                     </p>
+                    {/* A sunnah belongs to its prayer's time: before the adhan there is
+                        nothing to record yet, so the toggles stay shut with the reason
+                        shown rather than silently swallowing a tap. */}
+                    {!prayer.passed && (
+                      <p className="flex items-start gap-1.5 rounded-xl bg-gray-50 dark:bg-primary-800/30 px-3 py-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                        <Clock size={13} className="mt-0.5 shrink-0" />
+                        مقفولة لحد ميعاد صلاة {prayer.arabicName} — تُسجَّل مع صلاتها لا قبلها.
+                      </p>
+                    )}
                     {isAsr && (
                       <div className="rounded-2xl bg-primary-50 dark:bg-primary-900/30 px-4 py-3 border border-primary-100 dark:border-primary-800">
                         <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
@@ -374,35 +384,49 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
                         </p>
                       </div>
                     )}
-                    {attachedSunnahs.map((sunnah) => (
-                      <button
-                        key={sunnah.key}
-                        type="button"
-                        aria-pressed={!!sunnahRecords[sunnah.key]}
-                        onClick={() => void handleSunnahToggle(sunnah.key)}
-                        className={`flex w-full items-center justify-between gap-4 rounded-2xl px-4 py-3 text-right transition-all duration-300 ${
-                          sunnahRecords[sunnah.key]
-                            ? 'bg-success-50 text-success-700 dark:bg-success-900/20 dark:text-success-300 border-2 border-success-200 dark:border-success-800 shadow-sm'
-                            : 'bg-white text-gray-700 dark:bg-primary-900/40 dark:text-gray-200 border-2 border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600'
-                        }`}
-                      >
-                        <span className="flex-1">
-                          <span className="block text-sm font-bold">{sunnah.label}</span>
-                          {sunnah.note && (
-                            <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">
-                              {sunnah.note}
-                            </span>
-                          )}
-                        </span>
-                        <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
-                          sunnahRecords[sunnah.key]
-                            ? 'border-success-500 bg-success-500 shadow-md'
-                            : 'border-gray-300 dark:border-gray-600'
-                        }`}>
-                          {sunnahRecords[sunnah.key] && <Check size={14} className="text-white" />}
-                        </span>
-                      </button>
-                    ))}
+                    {attachedSunnahs.map((sunnah) => {
+                      const done = !!sunnahRecords[sunnah.key];
+                      const locked = !prayer.passed;
+                      return (
+                        <button
+                          key={sunnah.key}
+                          type="button"
+                          aria-pressed={done}
+                          disabled={locked}
+                          title={locked ? `تفتح بعد ميعاد صلاة ${prayer.arabicName}` : undefined}
+                          onClick={() => void handleSunnahToggle(sunnah.key)}
+                          className={`flex w-full items-center justify-between gap-4 rounded-2xl px-4 py-3 text-right transition-all duration-300 disabled:cursor-not-allowed ${
+                            done
+                              ? 'bg-success-50 text-success-700 dark:bg-success-900/20 dark:text-success-300 border-2 border-success-200 dark:border-success-800 shadow-sm'
+                              : locked
+                                ? 'bg-gray-50/70 text-gray-500 dark:bg-primary-900/20 dark:text-gray-400 border-2 border-dashed border-gray-200 dark:border-gray-700'
+                                : 'bg-white text-gray-700 dark:bg-primary-900/40 dark:text-gray-200 border-2 border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600'
+                          }`}
+                        >
+                          <span className="flex-1">
+                            <span className="block text-sm font-bold">{sunnah.label}</span>
+                            {sunnah.note && (
+                              <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">
+                                {sunnah.note}
+                              </span>
+                            )}
+                          </span>
+                          <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
+                            done
+                              ? 'border-success-500 bg-success-500 shadow-md'
+                              : locked
+                                ? 'border-dashed border-gray-300 dark:border-gray-600'
+                                : 'border-gray-300 dark:border-gray-600'
+                          }`}>
+                            {done ? (
+                              <Check size={14} className="text-white" />
+                            ) : locked ? (
+                              <Clock size={12} className="text-gray-400 dark:text-gray-500" />
+                            ) : null}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
