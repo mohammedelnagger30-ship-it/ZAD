@@ -21,12 +21,12 @@ interface PrayerWeekGridProps {
  *
  *  - A cell that had not come round yet is a faint dash, never a red cross, so
  *    "I did not pray" and "it is not time yet" cannot be confused.
- *  - Today and yesterday are editable; older days remain visible but read-only.
+ *  - Today and yesterday can be opened to record; older days stay read-only.
  *
  * The dots under each cell are that prayer's rawatib: filled = recorded,
  * hollow = not recorded yet — never a failure mark, the same honesty rule the
- * prayer itself follows. Pressing the cell opens the sheet where both the
- * prayer and its rawatib are recorded together.
+ * prayer itself follows. Pressing an openable cell shows that day's sheet: it
+ * saves the prayer when it has none and always carries its rawatib.
  */
 export function PrayerWeekGrid({ grid, onEdit }: PrayerWeekGridProps) {
   return (
@@ -120,7 +120,8 @@ function GridCell({
   const Icon = visual.icon;
   const stateLabel = status ? AR_STATE[status] : 'لم تسجّلها';
 
-  // Past days are editable so a forgotten confirmation can still be recorded.
+  // Today and yesterday open the sheet: recording a forgotten prayer, reading
+  // back a saved answer, and the rawatib either way.
   const editable = !!onEdit && canEditPrayerDate(day.date);
 
   // The dots under the icon are this prayer's rawatib; the label carries the same

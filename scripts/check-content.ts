@@ -36,7 +36,7 @@ import {
   type PrayerStatus,
 } from '../src/utils/prayerTracker';
 import { formatDateKey, addDays } from '../src/utils/dateUtils';
-import { canEditPrayerDate, prayerEditTimeRemaining, PRAYER_EDIT_WINDOW_MS } from '../src/utils/prayerTracker';
+import { canEditPrayerDate, assertPrayerRecordable } from '../src/utils/prayerTracker';
 import { getDailyQuranMessage, type DailyMessageStorage } from '../src/utils/dailyQuranMessage';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -235,17 +235,28 @@ const testToday = new Date(2026, 9, 4, 12);
 check(
   canEditPrayerDate(formatDateKey(testToday), testToday) &&
     canEditPrayerDate(formatDateKey(addDays(testToday, -1)), testToday),
-  'prayer entries for today and yesterday are editable',
+  'prayer slots for today and yesterday can be recorded',
 );
 check(
   !canEditPrayerDate(formatDateKey(addDays(testToday, -2)), testToday) &&
     !canEditPrayerDate(formatDateKey(addDays(testToday, 1)), testToday),
-  'prayer entries older than yesterday and future dates are not editable',
+  'prayer slots older than yesterday and future dates cannot be recorded',
 );
 check(
-  prayerEditTimeRemaining(1_000, 1_000 + PRAYER_EDIT_WINDOW_MS - 1) === 1 &&
-    prayerEditTimeRemaining(1_000, 1_000 + PRAYER_EDIT_WINDOW_MS) === 0,
-  'prayer edits lock exactly 10 seconds after confirmation',
+  ((): boolean => {
+    try {
+      assertPrayerRecordable(formatDateKey(testToday), false, testToday);
+    } catch {
+      return false;
+    }
+    try {
+      assertPrayerRecordable(formatDateKey(testToday), true, testToday);
+      return false;
+    } catch {
+      return true;
+    }
+  })(),
+  'a confirmed prayer can never be changed',
 );
 
 console.log('\n== adhkar and Quranic supplications ==');

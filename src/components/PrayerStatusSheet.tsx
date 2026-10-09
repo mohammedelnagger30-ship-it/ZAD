@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Check, Clock, X, RotateCcw, Calendar } from 'lucide-react';
+import { Check, Clock, X, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui';
 import {
   PRAYER_LABELS_AR,
-  prayerEditTimeRemaining,
   type PrayerKey,
   type PrayerStatus,
 } from '@/utils/prayerTracker';
@@ -14,12 +13,10 @@ interface PrayerStatusSheetProps {
   timeLabel?: string;
   status: PrayerStatus | null;
   onPick: (status: PrayerStatus) => void;
-  onClear: () => void;
   onClose: () => void;
-  /** True when the record being edited is for a day other than today. */
+  /** True when the record shown is for a day other than today. */
   isHistorical?: boolean;
   editable?: boolean;
-  confirmedAt?: number | null;
   dateLabel?: string;
   /**
    * The rawatib attached to this prayer for the day being edited. Omitted or
@@ -45,29 +42,24 @@ const OPTIONS: { status: PrayerStatus; label: string; icon: typeof Check; varian
  * reliably hits — and one of them was a grey ✕ sitting right next to a red ✕, so a
  * mistap was likely. Here every action is a full-width button with a text label, so
  * there is nothing to misread and nothing to miss.
+ *
+ * An answer is final: the tap saves the prayer at once, and from then on the
+ * sheet only shows the saved choice — no countdown, no undo, no correction.
  */
 export function PrayerStatusSheet({
   prayer,
   timeLabel,
   status,
   onPick,
-  onClear,
   onClose,
   isHistorical,
   editable = true,
-  confirmedAt,
   dateLabel,
   sunnahs = [],
   onToggleSunnah,
 }: PrayerStatusSheetProps) {
-  const [now, setNow] = useState(Date.now());
   const [actionError, setActionError] = useState('');
-  const [historicalEditStartedAt, setHistoricalEditStartedAt] = useState<number | null>(null);
-  const activeConfirmationTime = historicalEditStartedAt ?? confirmedAt ?? undefined;
-  const remaining = status ? prayerEditTimeRemaining(activeConfirmationTime, now) : 10_000;
-  const historicalCorrectionAvailable =
-    isHistorical && historicalEditStartedAt === null && remaining <= 0;
-  const canChange = editable && (!status || remaining > 0 || historicalCorrectionAvailable);
+  const canChange = editable && !status;
 
   // A sheet that cannot be dismissed with the keyboard traps focus on a phone with a
   // hardware keyboard, and it leaves the page scrollable behind it.
@@ -84,23 +76,11 @@ export function PrayerStatusSheet({
     };
   }, [onClose]);
 
-  useEffect(() => {
-    if (!status || prayerEditTimeRemaining(confirmedAt ?? undefined) <= 0) return;
-    const interval = window.setInterval(() => setNow(Date.now()), 100);
-    return () => window.clearInterval(interval);
-  }, [status, confirmedAt]);
-
-  const submit = async (action: () => void | Promise<void>, startsHistoricalWindow = false) => {
+  const pick = async (value: PrayerStatus) => {
     setActionError('');
-    const timestamp = startsHistoricalWindow && isHistorical ? Date.now() : null;
-    if (timestamp !== null) {
-      setHistoricalEditStartedAt(timestamp);
-      setNow(timestamp);
-    }
     try {
-      await action();
+      await onPick(value);
     } catch (error) {
-      if (timestamp !== null) setHistoricalEditStartedAt(null);
       setActionError(error instanceof Error ? error.message : 'تعذّر حفظ حالة الصلاة.');
     }
   };
@@ -151,24 +131,12 @@ export function PrayerStatusSheet({
             يمكنك تسجيل صلوات اليوم وأمس فقط. هذا اليوم محفوظ للعرض ولا يمكن تعديله.
           </p>
         )}
-        {editable && status && remaining > 0 && (
-          <div className="px-5 pb-3" aria-live="polite">
-            <p className="text-sm font-semibold text-primary-700 dark:text-gold-300">
-              يمكنك تعديل التأكيد لمدة {Math.ceil(remaining / 1000)} ثوانٍ
-            </p>
-            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-primary-800">
-              <div
-                className="h-full rounded-full bg-gold-500 transition-[width] duration-100"
-                style={{ width: `${(remaining / 10_000) * 100}%` }}
-              />
-            </div>
-          </div>
-        )}
-        {editable && status && remaining <= 0 && (
-          <p className="mx-5 mb-3 rounded-xl bg-warning-50 px-3 py-2 text-sm text-warning-800 dark:bg-warning-900/20 dark:text-warning-200">
-            {historicalCorrectionAvailable
-              ? 'يمكنك تصحيح تسجيل أمس. بعد التعديل تبدأ مهلة جديدة مدتها ١٠ ثوانٍ.'
-              : 'انتهت مهلة التعديل. لا يمكن تغيير هذا التأكيد بعد الآن.'}
+        {editable && status && (
+          <p
+            aria-live="polite"
+            className="mx-5 mb-3 rounded-xl bg-success-50 px-3 py-2 text-sm font-semibold text-success-700 dark:bg-success-900/20 dark:text-success-300"
+          >
+            تم التأكيد — هذا التسجيل محفوظ ولا يمكن تغييره.
           </p>
         )}
         {actionError && (
@@ -183,7 +151,7 @@ export function PrayerStatusSheet({
             return (
               <button
                 key={value}
-                onClick={() => void submit(() => onPick(value), isHistorical)}
+                onClick={() => void pick(value)}
                 aria-pressed={selected}
                 disabled={!canChange}
                 className={`w-full min-h-14 px-4 py-3 rounded-2xl border-2 flex items-center gap-3 text-right transition-smooth active:scale-[0.99] ${
@@ -206,9 +174,9 @@ export function PrayerStatusSheet({
           })}
         </div>
 
-        {/* The rawatib owed with this prayer, recorded for the same day. Kept out
-            of the 10-second edit window: a rawatib is its own record, and a locked
-            prayer confirmation must not lock the sunnah attached to it. */}
+        {/* The rawatib owed with this prayer, recorded for the same day. A rawatib
+            is its own record: saving the prayer locks its answer, never the
+            sunnah attached to it. */}
         {editable && onToggleSunnah && sunnahs.length > 0 && (
           <div className="px-5 pt-4">
             <p className="text-xs font-bold text-gray-500 dark:text-gray-400">
@@ -240,22 +208,6 @@ export function PrayerStatusSheet({
                 </button>
               ))}
             </div>
-          </div>
-        )}
-
-        {/* Undo. Always present once something is recorded, never a tiny icon. */}
-        {status && canChange && (
-          <div className="px-5 pt-3">
-            <Button
-              variant="secondary"
-              size="lg"
-              fullWidth
-              onClick={() => void submit(onClear, isHistorical)}
-              className="!text-error-600 dark:!text-error-400"
-            >
-              <RotateCcw size={18} />
-              تراجع — امسح التأكيد وابدأ من جديد
-            </Button>
           </div>
         )}
 

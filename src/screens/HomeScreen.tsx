@@ -15,7 +15,6 @@ import {
 import {
   getDayPrayerRecords,
   confirmPrayer,
-  clearPrayer,
   getDaySunnahRecords,
   setSunnah,
   RAWATIB_BY_PRAYER,
@@ -38,7 +37,6 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
   const [tasks, setTasks] = useState<DailyTask[]>([]);
   const [streak, setStreak] = useState(0);
   const [prayerRecords, setPrayerRecords] = useState<Record<string, PrayerStatus | null>>({});
-  const [prayerConfirmedAt, setPrayerConfirmedAt] = useState<Record<string, number | null>>({});
   const [sunnahRecords, setSunnahRecords] = useState<Record<string, boolean>>({});
   const [dailyQuranMessage, setDailyQuranMessage] = useState<DailyQuranMessage | null>(null);
   const [dailyQuranMessageError, setDailyQuranMessageError] = useState('');
@@ -56,13 +54,10 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
     setStreak(s);
     const records = await getDayPrayerRecords(todayKey());
     const map: Record<string, PrayerStatus | null> = {};
-    const confirmationTimes: Record<string, number | null> = {};
     records.forEach((r) => {
       map[r.prayer] = r.status;
-      confirmationTimes[r.prayer] = r.confirmedAt ?? null;
     });
     setPrayerRecords(map);
-    setPrayerConfirmedAt(confirmationTimes);
     setSunnahRecords(sunnahDoneMap(await getDaySunnahRecords(todayKey())));
   }, []);
 
@@ -163,13 +158,6 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
     if (!sheetPrayer) return;
     await confirmPrayer(todayKey(), sheetPrayer, status);
     await load();
-  };
-
-  const handlePrayerClear = async () => {
-    if (!sheetPrayer) return;
-    await clearPrayer(todayKey(), sheetPrayer);
-    await load();
-    setSheetPrayer(null);
   };
 
   /** Records one rawatib slot attached to the prayer the sheet is open for. */
@@ -410,12 +398,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
                     key={prayer.name}
                     onClick={() => setSheetPrayer(key)}
                     aria-label={`صلاة ${prayer.arabicName} — ${
-                      record
-                        ? (prayerConfirmedAt[prayer.name] != null &&
-                          Date.now() - prayerConfirmedAt[prayer.name]! < 10_000
-                          ? 'مسجّلة، اضغط لعرض مهلة التعديل'
-                          : 'مسجّلة، التعديل مقفول')
-                        : 'لم تسجّل بعد، اضغط للتأكيد'
+                      record ? 'مسجّلة، اضغط للعرض' : 'لم تسجّل بعد، اضغط للتأكيد'
                     }`}
                     className={`rounded-xl p-2.5 text-center transition-smooth active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:focus-visible:ring-gold-400 ${
                       record
@@ -441,14 +424,12 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
             prayerTimeZone,
           )}
           status={prayerRecords[sheetPrayer] ?? null}
-          confirmedAt={prayerConfirmedAt[sheetPrayer]}
           sunnahs={RAWATIB_BY_PRAYER[sheetPrayer].map((slot) => ({
             ...slot,
             done: !!sunnahRecords[slot.type],
           }))}
           onToggleSunnah={(type) => void handleSunnahToggle(type)}
           onPick={handlePrayerPick}
-          onClear={handlePrayerClear}
           onClose={() => setSheetPrayer(null)}
         />
       )}

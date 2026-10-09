@@ -15,7 +15,6 @@ import {
 import {
   getDayPrayerRecords,
   confirmPrayer,
-  clearPrayer,
   getDaySunnahRecords,
   setSunnah,
   getPrayerGrid,
@@ -76,7 +75,6 @@ const SUNNAH_TYPES: {
 
 export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
   const [records, setRecords] = useState<Record<string, string | null>>({});
-  const [confirmedAt, setConfirmedAt] = useState<Record<string, number | null>>({});
   const [sunnahRecords, setSunnahRecords] = useState<Record<string, boolean>>({});
   const [grid, setGrid] = useState<DayPrayerGrid[]>([]);
   const [stats, setStats] = useState<PrayerStats | null>(null);
@@ -101,13 +99,10 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
   const load = useCallback(async () => {
     const recs = await getDayPrayerRecords(todayKey());
     const map: Record<string, string | null> = {};
-    const times: Record<string, number | null> = {};
     recs.forEach((r) => {
       map[r.prayer] = r.status;
-      times[r.prayer] = r.confirmedAt ?? null;
     });
     setRecords(map);
-    setConfirmedAt(times);
 
     // `sunnahDoneMap` folds the legacy combined Dhuhr row, so today's list and
     // the week grid read older records identically.
@@ -140,13 +135,6 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
     if (!sheet) return;
     await confirmPrayer(sheet.date, sheet.prayer, status);
     await load();
-  };
-
-  const handleClear = async () => {
-    if (!sheet) return;
-    await clearPrayer(sheet.date, sheet.prayer);
-    await load();
-    setSheet(null);
   };
 
   const handleSunnahToggle = async (type: string) => {
@@ -323,7 +311,7 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
                     {confirmed === 'missed' && <Badge variant="error"><X size={12} /> لم صلَّ</Badge>}
                     {!confirmed && <Badge variant="neutral">لم تسجّلها</Badge>}
                     <span className="text-xs text-primary-600 dark:text-gold-400 font-medium">
-                      {confirmed ? 'اضغط للتغيير' : 'اضغط للتأكيد'}
+                      {confirmed ? 'اضغط للعرض' : 'اضغط للتأكيد'}
                     </span>
                   </span>
                 )}
@@ -343,12 +331,7 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
                   })
                 }
                 aria-label={`صلاة ${prayer.arabicName} — ${
-                  confirmed
-                    ? (confirmedAt[prayer.name] != null &&
-                      Date.now() - confirmedAt[prayer.name]! < 10_000
-                      ? 'مسجّلة، اضغط لعرض مهلة التعديل'
-                      : 'مسجّلة، التعديل مقفول')
-                    : 'لم تسجّل بعد، اضغط للتأكيد'
+                  confirmed ? 'مسجّلة، اضغط للعرض' : 'لم تسجّل بعد، اضغط للتأكيد'
                 }`}
                 className={`block w-full text-right p-5 rounded-3xl border-r-4 transition-all duration-300 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary-100 dark:focus-visible:ring-primary-900/50 ${
                   confirmed
@@ -489,7 +472,7 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
             />
             <div className="mt-4 rounded-2xl bg-primary-50 dark:bg-primary-900/30 p-4 border border-primary-100 dark:border-primary-800">
               <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
-                يمكنك تسجيل اليوم أو أمس فقط؛ الأيام الأقدم للعرض. بعد كل تأكيد لديك ١٠ ثوانٍ للتراجع أو التصحيح.
+                يمكنك تسجيل اليوم أو أمس فقط؛ الأيام الأقدم للعرض. والتأكيد يُحفظ فور الضغط ولا يمكن تغييره بعد ذلك.
                 النقاط الصغيرة أسفل كل خانة هي السنن الرواتب المرتبطة بها: ملوّنة تعني صُلّيت، وحافّة فارغة تعني
                 لم تُسجَّل بعد — اضغط الخانة عشان تسجلها مع صلاتها في نفس الخطوة.
               </p>
@@ -573,17 +556,12 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
               records[sheet.prayer] ??
               null) as PrayerStatus | null
           }
-          confirmedAt={
-            grid.find((g) => g.date === sheet.date)?.confirmedAt[sheet.prayer] ??
-            (sheet.date === todayKey() ? confirmedAt[sheet.prayer] : null)
-          }
           editable={canEditPrayerDate(sheet.date)}
           isHistorical={sheet.isHistorical}
           dateLabel={sheet.label}
           sunnahs={grid.find((g) => g.date === sheet.date)?.sunnah[sheet.prayer]}
           onToggleSunnah={(type) => void handleSheetSunnahToggle(type)}
           onPick={handlePick}
-          onClear={handleClear}
           onClose={() => setSheet(null)}
         />
       )}

@@ -15,59 +15,49 @@ export async function getDayPrayerRecords(date: string): Promise<PrayerRecord[]>
 
 export type PrayerStatus = 'ontime' | 'late' | 'missed';
 
-export const PRAYER_EDIT_WINDOW_MS = 10_000;
-
+/** A day's prayer slot can be written only for today or yesterday. */
 export function canEditPrayerDate(date: string, now = new Date()): boolean {
   const today = formatDateKey(now);
   const yesterday = formatDateKey(addDays(now, -1));
   return date === today || date === yesterday;
 }
 
-export function prayerEditTimeRemaining(confirmedAt: number | undefined, now = Date.now()): number {
-  if (confirmedAt == null) return 0;
-  return Math.max(0, PRAYER_EDIT_WINDOW_MS - (now - confirmedAt));
+/**
+ * The whole confirmation rule in one pure function so `check:content` can
+ * assert it without IndexedDB: the slot must be writable, and a prayer that
+ * already has a record is final. Pressing an answer saves it at once — there
+ * is no countdown, no undo, and no correction afterwards.
+ */
+export function assertPrayerRecordable(
+  date: string,
+  hasRecord: boolean,
+  now = new Date()
+): void {
+  if (!canEditPrayerDate(date, now)) {
+    throw new Error('يمكن تسجيل صلاة اليوم أو أمس فقط.');
+  }
+  if (hasRecord) {
+    throw new Error('تم تأكيد هذه الصلاة ولا يمكن تغييرها.');
+  }
 }
 
-async function assertPrayerCanChange(date: string, prayer: string): Promise<void> {
-  if (!canEditPrayerDate(date)) {
-    throw new Error('يمكن تسجيل أو تعديل صلاة اليوم أو أمس فقط.');
-  }
-  const existing = await getPrayerRecord(date, prayer);
-  const isToday = date === formatDateKey(new Date());
-  if (isToday && existing && prayerEditTimeRemaining(existing.confirmedAt) === 0) {
-    throw new Error('انتهت مهلة التعديل البالغة ١٠ ثوانٍ بعد تأكيد الصلاة.');
-  }
-}
-
+/**
+ * Records a prayer's answer. The write is final and immediate: only a slot
+ * with no record yet can be saved, and it never expires into an edit window.
+ */
 export async function confirmPrayer(
   date: string,
   prayer: string,
   status: PrayerStatus
 ): Promise<void> {
-  await assertPrayerCanChange(date, prayer);
   const existing = await getPrayerRecord(date, prayer);
-  if (existing) {
-    await db.prayerRecords.update(existing.id!, { status, confirmedAt: Date.now() });
-  } else {
-    await db.prayerRecords.add({
-      date,
-      prayer,
-      status,
-      confirmedAt: Date.now(),
-    });
-  }
-}
-
-/**
- * Undo a confirmation — used by the "تراجع" affordance so a mis-tap is recoverable.
- * Removes the row entirely rather than storing a null status.
- */
-export async function clearPrayer(date: string, prayer: string): Promise<void> {
-  await assertPrayerCanChange(date, prayer);
-  const existing = await getPrayerRecord(date, prayer);
-  if (existing?.id != null) {
-    await db.prayerRecords.delete(existing.id);
-  }
+  assertPrayerRecordable(date, existing != null);
+  await db.prayerRecords.add({
+    date,
+    prayer,
+    status,
+    confirmedAt: Date.now(),
+  });
 }
 
 export async function getSunnahRecord(date: string, type: string): Promise<SunnahRecord | undefined> {
@@ -243,13 +233,12 @@ export interface DayPrayerGrid {
    */
   due: Record<PrayerKey, boolean>;
   status: Record<PrayerKey, PrayerStatus | null>;
-  confirmedAt: Record<PrayerKey, number | null>;
   /**
    * The rawatib slots tied to each prayer that day, with their records.
    *
    * The grid records them per (day, prayer) rather than only for today, so a
-   * forgotten slot on yesterday can still be corrected from the same cell the
-   * prayer itself is corrected from.
+   * forgotten slot on yesterday can still be corrected from the same cell that
+   * shows its prayer.
    */
   sunnah: Record<PrayerKey, RawatibSlotState[]>;
 }
@@ -266,9 +255,6 @@ const allDue = (): Record<PrayerKey, boolean> =>
   ({ fajr: true, dhuhr: true, asr: true, maghrib: true, isha: true });
 
 const noStatus = (): Record<PrayerKey, PrayerStatus | null> =>
-  ({ fajr: null, dhuhr: null, asr: null, maghrib: null, isha: null });
-
-const noConfirmationTime = (): Record<PrayerKey, number | null> =>
   ({ fajr: null, dhuhr: null, asr: null, maghrib: null, isha: null });
 
 /**
@@ -334,11 +320,9 @@ export async function getPrayerGrid(location?: PrayerGridLocation): Promise<DayP
 
     const day = byDate.get(date);
     const status = noStatus();
-    const confirmedAt = noConfirmationTime();
     for (const key of FIVE_PRAYERS) {
       const record = day?.get(key);
       status[key] = record?.status ?? null;
-      confirmedAt[key] = record?.confirmedAt ?? null;
     }
 
     const sunnahDone = sunnahDoneMap(sunnahByDate.get(date) ?? []);
@@ -363,7 +347,6 @@ export async function getPrayerGrid(location?: PrayerGridLocation): Promise<DayP
       isPast,
       due,
       status,
-      confirmedAt,
       sunnah,
     });
   }
