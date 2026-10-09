@@ -106,6 +106,7 @@ export type ScreenName =
   | 'quran'
   | 'planner'
   | 'prayer'
+  | 'salah'
   | 'hadith'
   | 'library'
   | 'progress'
@@ -129,12 +130,12 @@ function getStoredNavigationState() {
       paramsByScreen?: Record<string, NavParams>;
     };
 
-    const screen = parsed.screen && ['home', 'quran', 'planner', 'prayer', 'hadith', 'library', 'progress', 'settings', 'more', 'adhkar', 'tasbih'].includes(parsed.screen)
+    const screen = parsed.screen && ['home', 'quran', 'planner', 'prayer', 'salah', 'hadith', 'library', 'progress', 'settings', 'more', 'adhkar', 'tasbih'].includes(parsed.screen)
       ? parsed.screen
       : 'home';
 
     const history = Array.isArray(parsed.history) && parsed.history.length > 0
-      ? parsed.history.filter((item): item is ScreenName => ['home', 'quran', 'planner', 'prayer', 'hadith', 'library', 'progress', 'settings', 'more', 'adhkar', 'tasbih'].includes(item))
+      ? parsed.history.filter((item): item is ScreenName => ['home', 'quran', 'planner', 'prayer', 'salah', 'hadith', 'library', 'progress', 'settings', 'more', 'adhkar', 'tasbih'].includes(item))
       : [screen];
 
     return {

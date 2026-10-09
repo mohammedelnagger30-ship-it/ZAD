@@ -23,6 +23,15 @@ import {
 } from '../src/data/contentCatalog';
 import { TOTAL_AYAHS, getAyah, getAyahs } from '../src/data/quranText';
 import { ADHKAR_CATEGORIES } from '../src/data/adhkar';
+import {
+  PRAYER_GUIDE_INTRO_QURAN,
+  PRAYER_GUIDE_LEAD,
+  PRAYER_GUIDE_MISTAKES,
+  PRAYER_GUIDE_MOVEMENTS,
+  PRAYER_GUIDE_MOVEMENTS_INTRO,
+  PRAYER_GUIDE_PILLARS,
+  PRAYER_GUIDE_SUNAN,
+} from '../src/data/prayerGuide';
 import { cleanHadithText } from '../src/utils/hadithService';
 import { toArabicNumber, getSurah } from '../src/data/surahs';
 import { getTotalPages } from '../src/data/mushafPages';
@@ -675,6 +684,131 @@ console.log('\n== prayer week grid ==');
     'the no-status literal covers every prayer key',
   );
 }
+
+console.log('\n== prayer guide ==');
+
+// The guide only earns its place if its shape never drifts silently: each section keeps
+// its documented size, every item is fully written, every citation is pinned to the exact
+// collection and number the excerpt was taken from, and the Quran quotes match the bundled
+// Tanzil text character for character. The hadith excerpts themselves were verified
+// verbatim against the local sunnah.com cache during the sourcing pass; this script
+// deliberately still needs no cache.
+const guideItems = [
+  PRAYER_GUIDE_INTRO_QURAN,
+  PRAYER_GUIDE_LEAD,
+  ...PRAYER_GUIDE_PILLARS,
+  PRAYER_GUIDE_MOVEMENTS_INTRO,
+  ...PRAYER_GUIDE_MOVEMENTS,
+  ...PRAYER_GUIDE_MISTAKES,
+  ...PRAYER_GUIDE_SUNAN,
+];
+const guideById = new Map(guideItems.map((item) => [item.id, item]));
+const guideQuotes = guideItems.filter((item) => 'title' in item);
+
+check(guideById.size === guideItems.length, 'every prayer-guide item has a unique id');
+check(PRAYER_GUIDE_PILLARS.length === 8, 'the guide covers eight pillars', `${PRAYER_GUIDE_PILLARS.length}`);
+check(
+  PRAYER_GUIDE_MOVEMENTS.length === 7,
+  'the guide illustrates the seven movement steps',
+  `${PRAYER_GUIDE_MOVEMENTS.length}`,
+);
+check(PRAYER_GUIDE_MISTAKES.length === 8, 'the guide lists eight common mistakes', `${PRAYER_GUIDE_MISTAKES.length}`);
+check(PRAYER_GUIDE_SUNAN.length === 10, 'the guide lists ten sunnah acts', `${PRAYER_GUIDE_SUNAN.length}`);
+check(
+  guideQuotes.every((item) => item.title.length > 0 && item.hint.length > 0 && item.text.length > 0),
+  'every guide card has a title, a hint and a quote',
+);
+check(
+  guideQuotes.every((item) => !item.text.includes('...') && !item.text.includes('…')),
+  'no guide quote is truncated',
+);
+check(
+  guideItems.every((item) =>
+    /^(صحيح البخاري|صحيح مسلم|سنن أبي داود|جامع الترمذي|سنن النسائي|سنن ابن ماجه|موطأ مالك|سورة) /.test(
+      item.source,
+    ),
+  ),
+  'every guide quote names its collection or surah',
+);
+check(
+  new Set(PRAYER_GUIDE_MOVEMENTS.map((step) => step.posture)).size === PRAYER_GUIDE_MOVEMENTS.length,
+  'each movement step carries its own illustration',
+);
+
+for (const [id, source] of [
+  ['intro-quran', 'سورة النساء ١٠٣'],
+  ['lead', 'صحيح البخاري ٦٣١'],
+  ['p1', 'صحيح البخاري ١'],
+  ['p2', 'سورة البقرة ٢٣٨'],
+  ['p3', 'صحيح البخاري ٧٥٦'],
+  ['p4', 'سنن أبي داود ٧٢٦'],
+  ['p5', 'صحيح البخاري ٨٠٩'],
+  ['p6', 'سنن النسائي ١١٦٣'],
+  ['p7', 'صحيح البخاري ٦٢٥١'],
+  ['p8', 'سنن أبي داود ٧٨٣'],
+  ['r-intro', 'صحيح البخاري ٦٢٥١'],
+  ['r1', 'صحيح مسلم ٨٦٥'],
+  ['r2', 'سنن أبي داود ٧٢٦'],
+  ['r3', 'صحيح مسلم ١١١٠'],
+  ['r4', 'سنن أبي داود ٨٧٤'],
+  ['r5', 'سنن أبي داود ٧٢٦'],
+  ['r6', 'سنن أبي داود ٧٨٣'],
+  ['r7', 'صحيح مسلم ١٣٠٩'],
+  ['e1', 'سنن النسائي ١٢٢١'],
+  ['e2', 'صحيح البخاري ٣٧٨'],
+  ['e3', 'سنن النسائي ١١٩٩'],
+  ['e4', 'جامع الترمذي ٣٧٠'],
+  ['e5', 'صحيح البخاري ١٣٥'],
+  ['e6', 'سورة الإسراء ١١٠'],
+  ['e7', 'صحيح البخاري ٤٠١'],
+  ['e8', 'موطأ مالك ١٩٧'],
+  ['s1', 'صحيح البخاري ٧٣٥'],
+  ['s2', 'صحيح مسلم ٨٩٦'],
+  ['s3', 'سنن النسائي ٧٩٤'],
+  ['s4', 'سنن النسائي ١٠٠٨'],
+  ['s5', 'سنن النسائي ١٠٠٨'],
+  ['s6', 'سنن ابن ماجه ٨٩٧'],
+  ['s7', 'صحيح البخاري ٦٢٤'],
+  ['s8', 'صحيح البخاري ٣٨٦'],
+  ['s9', 'جامع الترمذي ٣٣٩'],
+  ['s10', 'سنن النسائي ١١٦٣'],
+] as const) {
+  check(
+    guideById.get(id)?.source === source,
+    `${id}: cites exactly ${source}`,
+    guideById.get(id)?.source ?? 'missing item',
+  );
+}
+
+check(
+  PRAYER_GUIDE_INTRO_QURAN.text.length > 0 &&
+    (getAyah(4, 103)?.text ?? '').includes(PRAYER_GUIDE_INTRO_QURAN.text),
+  'the hero ayah is quoted verbatim from the bundled Quran text',
+);
+check(
+  guideById.get('p2')?.text === getAyah(2, 238)?.text,
+  'the standing pillar quotes its complete ayah from the bundled Quran text',
+);
+check(
+  (getAyah(17, 110)?.text ?? '').includes(guideById.get('e6')?.text ?? ''),
+  'the raising-the-voice mistake quotes its ayah verbatim from the bundled Quran text',
+);
+
+check(
+  ['e1', 'e4', 's9'].every((id) => guideById.get(id)?.grade === 'حديث حسن صحيح') &&
+    guideById.get('e3')?.grade === 'صحيح موقوف' &&
+    guideById.get('p6')?.grade === 'حديث صحيح' &&
+    guideById.get('s10')?.grade === 'حديث صحيح',
+  'the stated gradings match what the graders say',
+);
+check(
+  guideItems
+    .filter((item) => 'grade' in item && item.grade != null)
+    .map((item) => item.id)
+    .sort()
+    .join(',') === 'e1,e3,e4,p6,s10,s9',
+  'only the six items whose sources state a grading carry one',
+);
 
 console.log(`\n${checks - failures}/${checks} checks passed`);
 if (failures > 0) {

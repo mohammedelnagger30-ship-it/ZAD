@@ -1,4 +1,4 @@
-import { Calendar, BarChart3, Settings as SettingsIcon, ChevronLeft, Info, Shield, Heart, Repeat, Library, Sparkles } from 'lucide-react';
+import { Calendar, BarChart3, Settings as SettingsIcon, ChevronLeft, Info, Shield, Heart, Repeat, Library, Sparkles, BookOpen } from 'lucide-react';
 import { Card } from '@/components/ui';
 import type { ScreenName, NavParams } from '@/hooks/useApp';
 
@@ -23,6 +23,14 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
       icon: Repeat,
       badge: 'تفاعلي',
       color: 'from-amber-600 to-amber-700',
+    },
+    {
+      screen: 'salah' as ScreenName,
+      label: 'فقه الصلاة',
+      description: 'أركان الصلاة وحركاتها الصحيحة وأخطاؤها وسننها بأدلتها',
+      icon: BookOpen,
+      badge: 'دليل',
+      color: 'from-rose-700 to-rose-800',
     },
     {
       screen: 'library' as ScreenName,

@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Moon, Sunrise, MapPin, Compass, BarChart3, Sun, Sunset, Check, X, Clock, Sparkles } from 'lucide-react';
+import { Moon, Sunrise, MapPin, Compass, BarChart3, Sun, Sunset, Check, X, Clock, Sparkles, BookOpen, ChevronLeft } from 'lucide-react';
 import { Card, Button, Badge, SectionHeader, EmptyState } from '@/components/ui';
 import { PrayerStatusSheet } from '@/components/PrayerStatusSheet';
 import { PrayerWeekGrid } from '@/components/PrayerWeekGrid';
 import type { Settings } from '@/db/database';
+import type { NavParams, ScreenName } from '@/hooks/useApp';
 import {
   calculatePrayerTimes,
   formatTime12h,
@@ -33,6 +34,29 @@ import { todayKey, formatArabicDate, getHijriDate } from '@/utils/dateUtils';
 interface PrayerScreenProps {
   settings: Settings;
   onSaveSettings: (patch: Partial<Settings>) => void;
+  navigate: (screen: ScreenName, params?: NavParams) => void;
+}
+
+/** Entry point into فقه الصلاة — the pillars/movements/errors/sunnah guide. */
+function GuideBanner({ navigate }: Pick<PrayerScreenProps, 'navigate'>) {
+  return (
+    <button
+      type="button"
+      onClick={() => navigate('salah')}
+      className="group flex w-full items-center gap-3 rounded-2xl border border-gold-300/70 bg-gold-50/40 px-4 py-3.5 text-right shadow-sm transition-all hover:border-gold-400 hover:shadow-md dark:border-[#cfa95c]/40 dark:bg-[#cfa95c]/[0.05] dark:hover:border-[#cfa95c]/70"
+    >
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gold-500/15 text-gold-700 dark:bg-[#cfa95c]/15 dark:text-[#cfa95c]">
+        <BookOpen size={19} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-bold text-primary-900 dark:text-primary-50">فقه الصلاة</span>
+        <span className="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400">
+          أركانها وحركاتها الصحيحة وأخطاؤها وسننها بأدلتها
+        </span>
+      </span>
+      <ChevronLeft size={18} className="shrink-0 text-gray-400 transition-transform group-hover:-translate-x-1 dark:text-gray-500" />
+    </button>
+  );
 }
 
 /** Which (day, prayer) the status sheet is currently editing. */
@@ -73,7 +97,7 @@ const SUNNAH_TYPES: {
   { key: 'duha', label: 'صلاة الضحى', note: 'نافلة مستقلة' },
 ];
 
-export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
+export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScreenProps) {
   const [records, setRecords] = useState<Record<string, string | null>>({});
   const [sunnahRecords, setSunnahRecords] = useState<Record<string, boolean>>({});
   const [grid, setGrid] = useState<DayPrayerGrid[]>([]);
@@ -190,6 +214,7 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
     return (
       <div className="space-y-4 pb-4">
         <h1 className="text-2xl font-bold text-primary-800 dark:text-primary-100">مواقيت الصلاة</h1>
+        <GuideBanner navigate={navigate} />
         <EmptyState
           icon={<MapPin size={48} />}
           title="حدد موقعك"
@@ -219,6 +244,8 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
           {settings.cityName || 'الموقع'}
         </button>
       </div>
+
+      <GuideBanner navigate={navigate} />
 
       {/* Enhanced Next Prayer Highlight */}
       {nextPrayer && (
