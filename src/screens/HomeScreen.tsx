@@ -93,10 +93,13 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
     : null;
 
   const [hadith, setHadith] = useState(() => hadithOfDay());
+  // True while the default collection is being fetched on a fresh install. Sahih Muslim
+  // is ~8.3 MB, so the prompt card says what is happening instead of sitting still.
+  const [seedingHadith, setSeedingHadith] = useState(false);
 
   // "Hadith of the day" needs a collection on the device. On a fresh install none exists,
-  // so the Forty collection is fetched once — about 50 KB, small enough to be
-  // unremarkable — and the card then works offline from then on.
+  // so the default collection (صحيح مسلم) is fetched once — about 8.3 MB, saved for good —
+  // and the card then works offline from then on.
   //
   // The installed case has to *open* a collection, not merely find one on the device:
   // `hadithOfDay()` reads a synchronous in-memory snapshot that is empty on every fresh
@@ -109,17 +112,23 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
     void (async () => {
       try {
         const installed = await installedCollections();
-        // Prefer the Forty collection so the card is stable, otherwise take the first
+        // Prefer the default collection so the card is stable, otherwise take the first
         // installed id in a fixed order so the choice does not vary with store iteration.
         const id = installed.has(HADITH_OF_DAY_BOOK)
           ? HADITH_OF_DAY_BOOK
           : [...installed].sort()[0];
-        // `getHadithCollection` reads from IndexedDB when the file is already there, so
-        // this costs nothing offline and never re-downloads.
-        await getHadithCollection(id ?? HADITH_OF_DAY_BOOK);
+        if (!id && !cancelled) setSeedingHadith(true);
+        try {
+          // `getHadithCollection` reads from IndexedDB when the file is already there, so
+          // this costs nothing offline and never re-downloads.
+          await getHadithCollection(id ?? HADITH_OF_DAY_BOOK);
+        } finally {
+          if (!cancelled) setSeedingHadith(false);
+        }
         if (!cancelled) setHadith(hadithOfDay());
       } catch {
         // Offline or blocked: the card renders its own prompt.
+        if (!cancelled) setSeedingHadith(false);
       }
     })();
     return () => {
@@ -476,10 +485,14 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
               <Sparkles size={20} className="text-gold-500 flex-shrink-0 mt-1" />
               <div className="flex-1">
                 <p className="text-sm leading-relaxed text-primary-800 dark:text-primary-100">
-                  حمّل كتاب حديث لتظهر هنا أحاديث اليوم من فضلك.
+                  {seedingHadith
+                    ? 'جارٍ تحميل صحيح مسلم — قد يطول قليلاً على شبكة بطيئة.'
+                    : 'حمّل كتاب حديث لتظهر هنا أحاديث اليوم من فضلك.'}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                  يبدأ بالأربعون النووية — ٥٠ كيلوبايت فقط
+                  {seedingHadith
+                    ? '٧٣٦٠ حديثاً · ٨.٣ ميجابايت · يُحفظ على جهازك مرة واحدة'
+                    : 'يبدأ بصحيح مسلم — أساس المكتبة، ٨.٣ ميجابايت مرة واحدة'}
                 </p>
               </div>
             </div>

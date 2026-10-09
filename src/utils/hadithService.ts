@@ -21,7 +21,7 @@ import {
   isQuotaError,
   type DownloadProgress,
 } from './contentStore';
-import { getHadithBook, HADITH_BOOKS } from '@/data/contentCatalog';
+import { getHadithBook, HADITH_BOOKS, HADITH_OF_DAY_BOOK } from '@/data/contentCatalog';
 import { normalizeGrade, type HadithGrade } from '@/data/hadithCollections';
 import { arabicQueryTerms, normalizeArabic } from './arabic';
 
@@ -197,7 +197,7 @@ export interface SearchHit {
 }
 
 /**
- * Searches every downloaded collection, most recently downloaded first.
+ * Searches every downloaded collection, the default collection first.
  *
  * An empty query returns the first page of everything rather than everything, so a caller
  * that forgets to handle it cannot pull 36,000 rows into the DOM.
@@ -214,9 +214,15 @@ export async function searchInstalledHadiths(
   const limit = Math.max(0, options.limit ?? 100);
   if (limit === 0) return [];
   const ids = await installedCollections();
+  // Catalogue order, lifted so the base collection leads: with several books on the
+  // device, صحيح مسلم should reach the first page before a smaller booklet does.
+  const order = HADITH_BOOKS.filter((book) => ids.has(book.id)).map((book) => book.id);
   const wanted = options.collectionId
     ? [...ids].filter((id) => id === options.collectionId)
-    : HADITH_BOOKS.filter((book) => ids.has(book.id)).map((book) => book.id);
+    : [
+        ...order.filter((id) => id === HADITH_OF_DAY_BOOK),
+        ...order.filter((id) => id !== HADITH_OF_DAY_BOOK),
+      ];
 
   // Keep only folded text in the long-lived search index; full collection records stay LRU-cached.
   const collections = new Map<string, HadithCollection>();
@@ -296,11 +302,19 @@ const snapshotRecords = new Map<string, HadithRecord>();
 function addToSnapshot(collection: HadithCollection): void {
   snapshot.add(collection.id);
   for (const hadith of collection.hadiths) {
+    // Delete first: re-opening a collection must move its records to the *newest* end
+    // (Map keeps an existing key's original position), so eviction always sacrifices the
+    // books nobody has touched lately and the default book is refreshed on every open.
+    snapshotRecords.delete(hadith.id);
     snapshotRecords.set(hadith.id, hadith);
   }
-  // Bound the snapshot: 36,000 records is more than any synchronous caller needs, and
-  // unbounded growth here would duplicate every collection the user ever opened.
-  while (snapshotRecords.size > 4000) {
+  // Bound the snapshot so it cannot grow into every collection the user ever opened —
+  // but keep the bound above the largest single book (صحيح البخاري, 7580 hadiths): the
+  // default collection is 7360 records, and if the cap sliced it in half, "hadith of the
+  // day" would pick from a pool whose size depends on browsing history and the daily
+  // card would change between launches. One whole book always fits, so the pool is
+  // complete whenever the default book has been opened.
+  while (snapshotRecords.size > 8000) {
     const oldest = snapshotRecords.keys().next();
     if (oldest.done) break;
     snapshotRecords.delete(oldest.value);
@@ -334,6 +348,10 @@ export async function getHadithCollection(
   const hit = memoryCache.get(id);
   if (hit) {
     touchCache(id, hit);
+    // Refresh the snapshot too, not just the LRU: the home card reads the snapshot
+    // synchronously, and without this re-opening the default book would leave its records
+    // wherever older browsing had pushed them — half-evicted, so the daily pick drifted.
+    addToSnapshot(hit);
     return hit;
   }
 
@@ -393,15 +411,20 @@ export function clearHadithMemory(): void {
 /**
  * Picks a hadith for today from a pool, deterministically by day of year.
  *
- * Graded-sahih entries are preferred: a "hadith of the day" that is weak or fabricated
- * would be misleading, so an ungraded pool is only used when nothing has been graded.
+ * The default collection leads whenever it is on the device: the home card is the site's
+ * daily voice, and that voice is صحيح مسلم — not whichever book happened to be parsed
+ * most recently. Within the pool, graded-sahih entries are preferred: a "hadith of the
+ * day" that is weak or fabricated would be misleading, so an ungraded pool is only used
+ * when nothing has been graded.
  */
 function hadithOfDayFrom(hadiths: HadithRecord[]): HadithRecord | null {
   if (hadiths.length === 0) return null;
   const dayOfYear = Math.floor(
     (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000,
   );
-  const sahih = hadiths.filter((h) => h.grades.includes('sahih'));
-  const pool = sahih.length > 0 ? sahih : hadiths;
+  const base = hadiths.filter((h) => h.collectionId === HADITH_OF_DAY_BOOK);
+  const candidates = base.length > 0 ? base : hadiths;
+  const sahih = candidates.filter((h) => h.grades.includes('sahih'));
+  const pool = sahih.length > 0 ? sahih : candidates;
   return pool[dayOfYear % pool.length];
 }

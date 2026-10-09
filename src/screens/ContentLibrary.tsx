@@ -14,6 +14,7 @@ import { Card, Badge } from '@/components/ui';
 import {
   formatBytes,
   HADITH_BOOKS,
+  HADITH_OF_DAY_BOOK,
   TAFSIR_EDITIONS,
   type HadithBook,
   type TafsirEdition,
@@ -361,7 +362,12 @@ export function ContentLibrary({ showTitle = true }: { showTitle?: boolean } = {
           </h2>
         </div>
 
-        {HADITH_BOOKS.map((book) => {
+        {/* The default collection leads the list; everything else keeps its catalogue
+            order (cheapest download first) behind it. */}
+        {[
+          ...HADITH_BOOKS.filter((b) => b.id === HADITH_OF_DAY_BOOK),
+          ...HADITH_BOOKS.filter((b) => b.id !== HADITH_OF_DAY_BOOK),
+        ].map((book) => {
           const status = hadithStatus.find((s) => s.bookId === book.id);
           const running = progress[book.id];
           const error = errors[book.id];
@@ -391,6 +397,9 @@ export function ContentLibrary({ showTitle = true }: { showTitle?: boolean } = {
                     <h3 className="font-bold text-primary-800 dark:text-primary-100 text-base">
                       {book.titleAr}
                     </h3>
+                    {book.id === HADITH_OF_DAY_BOOK && (
+                      <Badge variant="gold">الافتراضي</Badge>
+                    )}
                     {isInstalled && <Badge variant="success">محفوظ</Badge>}
                   </div>
                   <p className="text-xs text-gray-500 dark:text-gray-400">{book.authorAr}</p>

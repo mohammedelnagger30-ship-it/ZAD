@@ -191,13 +191,14 @@ ${hadithRows
 export const DEFAULT_TAFSIR_ID = 'muyassar';
 
 /**
- * The collection "hadith of the day" reads from.
+ * The collection "hadith of the day" reads from — and the base of the library.
  *
  * It is fetched once on first run so the home card works offline immediately, and it is
- * the collection the card falls back to whenever nothing else is installed. Forty hadiths
- * is the smallest real book in the catalogue, so this stays cheap.
+ * the collection the card falls back to whenever nothing else is installed. Sahih Muslim
+ * is a full canonical collection rather than a booklet, so the daily card, the offline
+ * fallback and a fresh install all start from the same book.
  */
-export const HADITH_OF_DAY_BOOK = 'arbaeen_nawawi';
+export const HADITH_OF_DAY_BOOK = 'sahih_muslim';
 
 export function getTafsirEdition(id: string): TafsirEdition | undefined {
   return TAFSIR_EDITIONS.find((e) => e.id === id);

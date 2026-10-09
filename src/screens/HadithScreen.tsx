@@ -10,7 +10,7 @@ import {
   type HadithCollection,
   type HadithRecord,
 } from '@/data/hadiths';
-import { HADITH_BOOKS, getHadithBook } from '@/data/contentCatalog';
+import { HADITH_BOOKS, HADITH_OF_DAY_BOOK, getHadithBook } from '@/data/contentCatalog';
 import type { HadithGrade } from '@/data/hadithCollections';
 import { toArabicNumber } from '@/data/surahs';
 import { db } from '@/db/database';
@@ -621,7 +621,10 @@ export function HadithScreen({ params }: HadithScreenProps) {
             active={collectionFilter === 'all'}
             onClick={() => setCollectionFilter('all')}
           />
-          {HADITH_BOOKS.filter((b) => installed.includes(b.id)).map((book) => (
+          {/* The default collection's chip leads; the rest follow catalogue order. */}
+          {HADITH_BOOKS.filter((b) => installed.includes(b.id) && b.id === HADITH_OF_DAY_BOOK)
+            .concat(HADITH_BOOKS.filter((b) => installed.includes(b.id) && b.id !== HADITH_OF_DAY_BOOK))
+            .map((book) => (
             <FilterChip
               key={book.id}
               label={book.titleAr}
