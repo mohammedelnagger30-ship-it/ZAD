@@ -16,6 +16,10 @@ import {
   getDayPrayerRecords,
   confirmPrayer,
   clearPrayer,
+  getDaySunnahRecords,
+  setSunnah,
+  RAWATIB_BY_PRAYER,
+  sunnahDoneMap,
   type PrayerKey,
   type PrayerStatus,
 } from '@/utils/prayerTracker';
@@ -35,6 +39,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
   const [streak, setStreak] = useState(0);
   const [prayerRecords, setPrayerRecords] = useState<Record<string, PrayerStatus | null>>({});
   const [prayerConfirmedAt, setPrayerConfirmedAt] = useState<Record<string, number | null>>({});
+  const [sunnahRecords, setSunnahRecords] = useState<Record<string, boolean>>({});
   const [dailyQuranMessage, setDailyQuranMessage] = useState<DailyQuranMessage | null>(null);
   const [dailyQuranMessageError, setDailyQuranMessageError] = useState('');
   // Drives the "time until next prayer" countdown. Stored as a timestamp (not a bare
@@ -58,6 +63,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
     });
     setPrayerRecords(map);
     setPrayerConfirmedAt(confirmationTimes);
+    setSunnahRecords(sunnahDoneMap(await getDaySunnahRecords(todayKey())));
   }, []);
 
   useEffect(() => {
@@ -155,6 +161,13 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
     await clearPrayer(todayKey(), sheetPrayer);
     await load();
     setSheetPrayer(null);
+  };
+
+  /** Records one rawatib slot attached to the prayer the sheet is open for. */
+  const handleSunnahToggle = async (type: string) => {
+    if (!sheetPrayer) return;
+    await setSunnah(todayKey(), type, !sunnahRecords[type]);
+    await load();
   };
 
   const pendingTasks = tasks.filter((t) => t.status === 'pending' || t.status === 'snoozed');
@@ -420,6 +433,11 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
           )}
           status={prayerRecords[sheetPrayer] ?? null}
           confirmedAt={prayerConfirmedAt[sheetPrayer]}
+          sunnahs={RAWATIB_BY_PRAYER[sheetPrayer].map((slot) => ({
+            ...slot,
+            done: !!sunnahRecords[slot.type],
+          }))}
+          onToggleSunnah={(type) => void handleSunnahToggle(type)}
           onPick={handlePrayerPick}
           onClear={handlePrayerClear}
           onClose={() => setSheetPrayer(null)}

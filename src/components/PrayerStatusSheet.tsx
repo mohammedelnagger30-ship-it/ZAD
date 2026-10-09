@@ -21,6 +21,14 @@ interface PrayerStatusSheetProps {
   editable?: boolean;
   confirmedAt?: number | null;
   dateLabel?: string;
+  /**
+   * The rawatib attached to this prayer for the day being edited. Omitted or
+   * empty = no rawatib context (e.g. العصر, which has none), and the section is
+   * not rendered at all.
+   */
+  sunnahs?: { type: string; label: string; done: boolean }[];
+  /** Records one rawatib slot for the same day as the sheet. */
+  onToggleSunnah?: (type: string) => void;
 }
 
 const OPTIONS: { status: PrayerStatus; label: string; icon: typeof Check; variant: 'success' | 'warning' | 'error'; active: string }[] = [
@@ -49,6 +57,8 @@ export function PrayerStatusSheet({
   editable = true,
   confirmedAt,
   dateLabel,
+  sunnahs = [],
+  onToggleSunnah,
 }: PrayerStatusSheetProps) {
   const [now, setNow] = useState(Date.now());
   const [actionError, setActionError] = useState('');
@@ -106,7 +116,7 @@ export function PrayerStatusSheet({
         role="dialog"
         aria-modal="true"
         aria-label={`تأكيد صلاة ${PRAYER_LABELS_AR[prayer]}`}
-        className="w-full max-w-md bg-white dark:bg-primary-900 rounded-t-3xl sm:rounded-3xl shadow-2xl animate-slide-up"
+        className="w-full max-w-md max-h-[90vh] overflow-y-auto overscroll-contain bg-white dark:bg-primary-900 rounded-t-3xl sm:rounded-3xl shadow-2xl animate-slide-up"
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-3 p-5 pb-3">
@@ -195,6 +205,43 @@ export function PrayerStatusSheet({
             );
           })}
         </div>
+
+        {/* The rawatib owed with this prayer, recorded for the same day. Kept out
+            of the 10-second edit window: a rawatib is its own record, and a locked
+            prayer confirmation must not lock the sunnah attached to it. */}
+        {editable && onToggleSunnah && sunnahs.length > 0 && (
+          <div className="px-5 pt-4">
+            <p className="text-xs font-bold text-gray-500 dark:text-gray-400">
+              السنن الرواتب المرتبطة بصلاة {PRAYER_LABELS_AR[prayer]}
+            </p>
+            <div className="mt-2 space-y-2">
+              {sunnahs.map((sunnah) => (
+                <button
+                  key={sunnah.type}
+                  type="button"
+                  onClick={() => onToggleSunnah(sunnah.type)}
+                  aria-pressed={sunnah.done}
+                  className={`flex w-full items-center justify-between gap-3 rounded-2xl px-4 py-3 text-right transition-all active:scale-[0.99] ${
+                    sunnah.done
+                      ? 'bg-success-50 text-success-700 dark:bg-success-900/20 dark:text-success-300 border-2 border-success-200 dark:border-success-800'
+                      : 'bg-gray-50 text-gray-700 dark:bg-primary-800/40 dark:text-gray-200 border-2 border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600'
+                  }`}
+                >
+                  <span className="flex-1 text-sm font-bold">{sunnah.label}</span>
+                  <span
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
+                      sunnah.done
+                        ? 'border-success-500 bg-success-500 shadow-md'
+                        : 'border-gray-300 dark:border-gray-600'
+                    }`}
+                  >
+                    {sunnah.done && <Check size={14} className="text-white" />}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Undo. Always present once something is recorded, never a tiny icon. */}
         {status && canChange && (

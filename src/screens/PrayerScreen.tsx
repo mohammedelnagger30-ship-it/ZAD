@@ -21,6 +21,8 @@ import {
   getPrayerGrid,
   summariseGrid,
   PRAYER_LABELS_AR,
+  RAWATIB_BY_PRAYER,
+  sunnahDoneMap,
   type PrayerKey,
   type PrayerStatus,
   canEditPrayerDate,
@@ -46,17 +48,28 @@ const PRAYER_ICONS: Record<string, typeof Moon> = {
   fajr: Sunrise, sunrise: Sun, dhuhr: Sun, asr: Sun, maghrib: Sunset, isha: Moon,
 };
 
+/**
+ * Every sunnah this screen offers.
+ *
+ * The rawatib are built from the single definition in `prayerTracker`, so the
+ * day list, the week grid and the status sheet can never disagree about which
+ * slot belongs to which prayer. The two independent voluntary prayers are
+ * appended because they are attached to no fard prayer.
+ */
 const SUNNAH_TYPES: {
   key: string;
   label: string;
   prayer?: PrayerKey;
   note?: string;
 }[] = [
-  { key: 'rawatib_fajr', prayer: 'fajr', label: 'ركعتان قبل الفجر', note: 'من السنن الرواتب المؤكدة' },
-  { key: 'rawatib_dhuhr_before', prayer: 'dhuhr', label: 'أربع ركعات قبل الظهر', note: 'سنة راتبة' },
-  { key: 'rawatib_dhuhr_after', prayer: 'dhuhr', label: 'ركعتان بعد الظهر', note: 'سنة راتبة' },
-  { key: 'rawatib_maghrib', prayer: 'maghrib', label: 'ركعتان بعد المغرب', note: 'سنة راتبة' },
-  { key: 'rawatib_isha', prayer: 'isha', label: 'ركعتان بعد العشاء', note: 'سنة راتبة' },
+  ...Object.entries(RAWATIB_BY_PRAYER).flatMap(([prayer, slots]) =>
+    slots.map((slot) => ({
+      key: slot.type,
+      prayer: prayer as PrayerKey,
+      label: slot.label,
+      note: prayer === 'fajr' ? 'من السنن الرواتب المؤكدة' : 'سنة راتبة',
+    })),
+  ),
   { key: 'witr', prayer: 'isha', label: 'صلاة الوتر', note: 'نافلة بعد العشاء' },
   { key: 'duha', label: 'صلاة الضحى', note: 'نافلة مستقلة' },
 ];
@@ -96,15 +109,9 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
     setRecords(map);
     setConfirmedAt(times);
 
-    const sunnahRows = await getDaySunnahRecords(todayKey());
-    const sunnahMap: Record<string, boolean> = Object.fromEntries(
-      sunnahRows.map((row) => [row.type, row.done]),
-    );
-    // Preserve the older combined Dhuhr checkbox until the user records each rak'ah group.
-    if (sunnahMap.rawatib_dhuhr !== undefined) {
-      sunnahMap.rawatib_dhuhr_before ??= sunnahMap.rawatib_dhuhr;
-      sunnahMap.rawatib_dhuhr_after ??= sunnahMap.rawatib_dhuhr;
-    }
+    // `sunnahDoneMap` folds the legacy combined Dhuhr row, so today's list and
+    // the week grid read older records identically.
+    const sunnahMap = sunnahDoneMap(await getDaySunnahRecords(todayKey()));
     setSunnahRecords(sunnahMap);
 
     // The grid doubles as the weekly stats source, so the two can never disagree.
@@ -144,6 +151,16 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
 
   const handleSunnahToggle = async (type: string) => {
     await setSunnah(todayKey(), type, !sunnahRecords[type]);
+    await load();
+  };
+
+  /** Records one rawatib slot for whichever day the status sheet is editing. */
+  const handleSheetSunnahToggle = async (type: string) => {
+    if (!sheet) return;
+    const slot = grid
+      .find((g) => g.date === sheet.date)
+      ?.sunnah[sheet.prayer].find((s) => s.type === type);
+    await setSunnah(sheet.date, type, !slot?.done);
     await load();
   };
 
@@ -449,6 +466,8 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
             <div className="mt-4 rounded-2xl bg-primary-50 dark:bg-primary-900/30 p-4 border border-primary-100 dark:border-primary-800">
               <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
                 يمكنك تسجيل اليوم أو أمس فقط؛ الأيام الأقدم للعرض. بعد كل تأكيد لديك ١٠ ثوانٍ للتراجع أو التصحيح.
+                النقاط الصغيرة أسفل كل خانة هي السنن الرواتب المرتبطة بها: ملوّنة تعني صُلّيت، وحافّة فارغة تعني
+                لم تُسجَّل بعد — اضغط الخانة عشان تسجلها مع صلاتها في نفس الخطوة.
               </p>
             </div>
           </Card>
@@ -537,6 +556,8 @@ export function PrayerScreen({ settings, onSaveSettings }: PrayerScreenProps) {
           editable={canEditPrayerDate(sheet.date)}
           isHistorical={sheet.isHistorical}
           dateLabel={sheet.label}
+          sunnahs={grid.find((g) => g.date === sheet.date)?.sunnah[sheet.prayer]}
+          onToggleSunnah={(type) => void handleSheetSunnahToggle(type)}
           onPick={handlePick}
           onClear={handleClear}
           onClose={() => setSheet(null)}

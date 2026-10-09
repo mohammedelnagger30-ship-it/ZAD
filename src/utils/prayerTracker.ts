@@ -79,6 +79,22 @@ export async function getDaySunnahRecords(date: string): Promise<SunnahRecord[]>
   return db.sunnahRecords.where('date').equals(date).toArray();
 }
 
+/**
+ * `type -> done` for one date's rows.
+ *
+ * The older single `rawatib_dhuhr` row is folded into its two halves so days
+ * recorded before the split still read as done, and every surface (day list,
+ * week grid, status sheet) agrees on that reading.
+ */
+export function sunnahDoneMap(rows: SunnahRecord[]): Record<string, boolean> {
+  const map: Record<string, boolean> = Object.fromEntries(rows.map((r) => [r.type, r.done]));
+  if (map.rawatib_dhuhr !== undefined) {
+    map.rawatib_dhuhr_before ??= map.rawatib_dhuhr;
+    map.rawatib_dhuhr_after ??= map.rawatib_dhuhr;
+  }
+  return map;
+}
+
 export async function setSunnah(date: string, type: string, done: boolean): Promise<void> {
   const existing = await getSunnahRecord(date, type);
   if (existing) {
@@ -182,6 +198,34 @@ export const PRAYER_LABELS_AR: Record<PrayerKey, string> = {
   isha: 'العشاء',
 };
 
+export interface RawatibSlot {
+  /** Row key in `sunnahRecords`. */
+  type: string;
+  label: string;
+}
+
+export interface RawatibSlotState extends RawatibSlot {
+  done: boolean;
+}
+
+/**
+ * The sunnah al-rawatib attached to each fard prayer, in prayer order.
+ *
+ * One definition shared by the day list, the week grid and the status sheet, so
+ * a slot can never appear under one surface and be missing from another.
+ * `asr` is deliberately empty: it has no rawatib agreed upon by the schools.
+ */
+export const RAWATIB_BY_PRAYER: Record<PrayerKey, RawatibSlot[]> = {
+  fajr: [{ type: 'rawatib_fajr', label: 'ركعتان قبل الفجر' }],
+  dhuhr: [
+    { type: 'rawatib_dhuhr_before', label: 'أربع ركعات قبل الظهر' },
+    { type: 'rawatib_dhuhr_after', label: 'ركعتان بعد الظهر' },
+  ],
+  asr: [],
+  maghrib: [{ type: 'rawatib_maghrib', label: 'ركعتان بعد المغرب' }],
+  isha: [{ type: 'rawatib_isha', label: 'ركعتان بعد العشاء' }],
+};
+
 export interface DayPrayerGrid {
   /** `YYYY-MM-DD` */
   date: string;
@@ -200,6 +244,14 @@ export interface DayPrayerGrid {
   due: Record<PrayerKey, boolean>;
   status: Record<PrayerKey, PrayerStatus | null>;
   confirmedAt: Record<PrayerKey, number | null>;
+  /**
+   * The rawatib slots tied to each prayer that day, with their records.
+   *
+   * The grid records them per (day, prayer) rather than only for today, so a
+   * forgotten slot on yesterday can still be corrected from the same cell the
+   * prayer itself is corrected from.
+   */
+  sunnah: Record<PrayerKey, RawatibSlotState[]>;
 }
 
 export interface PrayerGridLocation {
@@ -242,6 +294,18 @@ export async function getPrayerGrid(location?: PrayerGridLocation): Promise<DayP
     day.set(r.prayer, r);
   }
 
+  // Same single-query pattern for the rawatib rows of the whole week.
+  const sunnahRows = await db.sunnahRecords.where('date').anyOf(dates).toArray();
+  const sunnahByDate = new Map<string, SunnahRecord[]>();
+  for (const r of sunnahRows) {
+    let day = sunnahByDate.get(r.date);
+    if (!day) {
+      day = [];
+      sunnahByDate.set(r.date, day);
+    }
+    day.push(r);
+  }
+
   // Today's `due` needs the actual prayer times, so compute them once outside the loop.
   let todayDue: Record<PrayerKey, boolean> | null = null;
   if (location) {
@@ -277,6 +341,15 @@ export async function getPrayerGrid(location?: PrayerGridLocation): Promise<DayP
       confirmedAt[key] = record?.confirmedAt ?? null;
     }
 
+    const sunnahDone = sunnahDoneMap(sunnahByDate.get(date) ?? []);
+    const sunnah = noRawatib();
+    for (const key of FIVE_PRAYERS) {
+      sunnah[key] = RAWATIB_BY_PRAYER[key].map((slot) => ({
+        ...slot,
+        done: !!sunnahDone[slot.type],
+      }));
+    }
+
     let due: Record<PrayerKey, boolean>;
     if (isPast) due = allDue();
     else if (isToday && todayDue) due = todayDue;
@@ -291,6 +364,7 @@ export async function getPrayerGrid(location?: PrayerGridLocation): Promise<DayP
       due,
       status,
       confirmedAt,
+      sunnah,
     });
   }
   return grid;
@@ -298,6 +372,10 @@ export async function getPrayerGrid(location?: PrayerGridLocation): Promise<DayP
 
 function noDue(): Record<PrayerKey, boolean> {
   return { fajr: false, dhuhr: false, asr: false, maghrib: false, isha: false };
+}
+
+function noRawatib(): Record<PrayerKey, RawatibSlotState[]> {
+  return { fajr: [], dhuhr: [], asr: [], maghrib: [], isha: [] };
 }
 
 /** `4` -> `٤`. Local-only, so it must not use `toLocaleString` with an arbitrary locale. */

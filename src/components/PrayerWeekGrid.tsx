@@ -22,6 +22,11 @@ interface PrayerWeekGridProps {
  *  - A cell that had not come round yet is a faint dash, never a red cross, so
  *    "I did not pray" and "it is not time yet" cannot be confused.
  *  - Today and yesterday are editable; older days remain visible but read-only.
+ *
+ * The dots under each cell are that prayer's rawatib: filled = recorded,
+ * hollow = not recorded yet — never a failure mark, the same honesty rule the
+ * prayer itself follows. Pressing the cell opens the sheet where both the
+ * prayer and its rawatib are recorded together.
  */
 export function PrayerWeekGrid({ grid, onEdit }: PrayerWeekGridProps) {
   return (
@@ -96,6 +101,7 @@ function GridCell({
   const status = day.status[prayer];
   const due = day.due[prayer];
   const name = PRAYER_LABELS_AR[prayer];
+  const slots = day.sunnah[prayer];
 
   // Not time yet — nothing is owed, so this must not read as a failure.
   if (!due && !status) {
@@ -116,16 +122,46 @@ function GridCell({
 
   // Past days are editable so a forgotten confirmation can still be recorded.
   const editable = !!onEdit && canEditPrayerDate(day.date);
-  const label = `${name} — ${stateLabel}`;
+
+  // The dots under the icon are this prayer's rawatib; the label carries the same
+  // fact for anyone reading the cell with a screen reader or a hover tooltip.
+  const doneCount = slots.filter((slot) => slot.done).length;
+  const rawatibLabel =
+    slots.length === 0
+      ? ''
+      : doneCount === 0
+        ? '، السنة الراتبة لم تُسجَّل'
+        : doneCount === slots.length
+          ? '، السنة الراتبة صُلّيت'
+          : `، ${doneCount} من ${slots.length} رواتب مسجّلة`;
+  const label = `${name} — ${stateLabel}${rawatibLabel}`;
+
+  const dots =
+    slots.length > 0 ? (
+      <span className="flex gap-1" aria-hidden="true">
+        {slots.map((slot) => (
+          <span
+            key={slot.type}
+            title={slot.label}
+            className={`h-1.5 w-1.5 rounded-full ${
+              slot.done
+                ? 'bg-success-600 dark:bg-success-400'
+                : 'border border-gray-400 dark:border-gray-500'
+            }`}
+          />
+        ))}
+      </span>
+    ) : null;
 
   if (!editable) {
     return (
       <span
-        className={`h-11 rounded-lg flex items-center justify-center ${visual.cell}`}
+        className={`h-11 rounded-lg flex flex-col items-center justify-center gap-1 ${visual.cell}`}
         aria-label={label}
         title={label}
       >
         <Icon size={16} className={visual.iconClass} />
+        {dots}
       </span>
     );
   }
@@ -135,9 +171,10 @@ function GridCell({
       onClick={() => onEdit(day.date, prayer, status, `${day.isToday ? 'اليوم' : day.dayName} ${day.dayNumber}`)}
       aria-label={label}
       title={label}
-      className={`h-11 rounded-lg flex items-center justify-center ${visual.cell} ring-offset-1 hover:ring-2 hover:ring-primary-300 dark:hover:ring-primary-500 transition-shadow active:scale-95`}
+      className={`h-11 rounded-lg flex flex-col items-center justify-center gap-1 ${visual.cell} ring-offset-1 hover:ring-2 hover:ring-primary-300 dark:hover:ring-primary-500 transition-shadow active:scale-95`}
     >
       <Icon size={16} className={visual.iconClass} />
+      {dots}
     </button>
   );
 }
@@ -179,16 +216,18 @@ const VISUALS: Record<
 
 function Legend() {
   const items: { label: string; cls: string }[] = [
-    { label: 'في وقتها', cls: 'bg-success-100 dark:bg-success-900/40' },
-    { label: 'قضاء', cls: 'bg-warning-100 dark:bg-warning-900/40' },
-    { label: 'ما صليتهاش', cls: 'bg-error-100 dark:bg-error-900/40' },
-    { label: 'لم تسجّلها', cls: 'bg-gray-100 dark:bg-primary-800/40 border border-dashed border-gray-300 dark:border-primary-600' },
+    { label: 'في وقتها', cls: 'rounded bg-success-100 dark:bg-success-900/40' },
+    { label: 'قضاء', cls: 'rounded bg-warning-100 dark:bg-warning-900/40' },
+    { label: 'ما صليتهاش', cls: 'rounded bg-error-100 dark:bg-error-900/40' },
+    { label: 'لم تسجّلها', cls: 'rounded bg-gray-100 dark:bg-primary-800/40 border border-dashed border-gray-300 dark:border-primary-600' },
+    { label: 'راتبة مسجّلة', cls: 'rounded-full bg-success-600 dark:bg-success-400' },
+    { label: 'راتبة لم تُسجَّل', cls: 'rounded-full bg-transparent border border-gray-400 dark:border-gray-500' },
   ];
   return (
     <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3 pt-2.5 border-t border-primary-100 dark:border-primary-800/50">
       {items.map((i) => (
         <span key={i.label} className="inline-flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
-          <span className={`w-3.5 h-3.5 rounded ${i.cls}`} />
+          <span className={`w-3.5 h-3.5 shrink-0 ${i.cls}`} />
           {i.label}
         </span>
       ))}
