@@ -14,6 +14,8 @@ interface MushafHeaderProps {
   updatePrefs: (patch: Partial<MushafPrefs>) => void;
   sheet: SheetName | null;
   setSheet: (sheet: SheetName | null) => void;
+  // Optional progress information string to display reading progress
+  progressInfo?: string;
 }
 
 export function MushafHeader({
