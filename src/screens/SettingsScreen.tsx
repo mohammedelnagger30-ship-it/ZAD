@@ -8,7 +8,6 @@ import {
   MapPin,
   Type,
   Download,
-  Upload,
   Settings as SettingsIcon,
   Info,
   Check,
@@ -20,12 +19,13 @@ import {
   Square,
   Sparkles,
   ShieldCheck,
-  Database,
   Calendar,
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Card, Button } from '@/components/ui';
 import { TimeOptionButton } from '@/components/TimeOptionButton';
+import { BackupSection } from '@/components/settings/BackupSection';
+import { SectionTitle } from '@/components/settings/SectionTitle';
 import { CALC_METHODS, CALC_METHOD_NAMES_AR } from '@/utils/prayerTimes';
 import { ADHAN_SOUNDS, DEFAULT_ADHAN_SOUND_ID } from '@/data/adhanSounds';
 import { rescheduleAllNotifications } from '@/utils/notificationScheduler';
@@ -35,12 +35,10 @@ import {
   requestExactAlarms,
   requestNotificationPermission,
 } from '@/utils/notifications';
-import { db, type Settings } from '@/db/database';
+import { type Settings } from '@/db/database';
 import { COLOR_PALETTES, type ColorPalette } from '@/utils/colorThemes';
 import type { CloudSyncState } from '@/utils/cloudSync';
 import { useAppUpdate } from '@/hooks/useAppUpdate';
-import { ADHKAR_CATEGORIES } from '@/data/adhkar';
-import { TOTAL_QURAN_PAGES } from '@/data/surahs';
 
 interface SettingsScreenProps {
   settings: Settings;
@@ -55,198 +53,6 @@ interface SettingsScreenProps {
   onSignOut?: () => Promise<void>;
 }
 
-const BACKUP_TABLES = [
-  'settings',
-  'plans',
-  'tasks',
-  'bookmarks',
-  'pageBookmarks',
-  'prayerRecords',
-  'sunnahRecords',
-  'hifzProgress',
-  'hadithFavorites',
-  'khatmah',
-] as const;
-
-const IGNORED_BACKUP_KEYS = ['_exportDate', 'streaks'];
-type BackupTable = (typeof BACKUP_TABLES)[number];
-const ADHKAR_STATE_KEY = 'hifzi-adhkar-state';
-
-function isValidAdhkarBackup(value: unknown): value is {
-  day: string;
-  counts: Record<string, number>;
-  favorites: string[];
-  fontSize: number;
-  haptics: boolean;
-} {
-  if (!isRecord(value) || typeof value.day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value.day)) return false;
-  if (!isRecord(value.counts) || !Array.isArray(value.favorites)) return false;
-  const adhkar = ADHKAR_CATEGORIES.flatMap((category) => category.items);
-  const countsValid = Object.entries(value.counts).every(([id, count]) => {
-    const item = adhkar.find((dhikr) => dhikr.id === id);
-    return !!item && typeof count === 'number' && Number.isInteger(count) && count >= 0 && count <= item.count;
-  });
-  return (
-    countsValid &&
-    value.favorites.every((id) => typeof id === 'string' && adhkar.some((item) => item.id === id)) &&
-    typeof value.fontSize === 'number' &&
-    Number.isFinite(value.fontSize) &&
-    value.fontSize >= 18 &&
-    value.fontSize <= 32 &&
-    typeof value.haptics === 'boolean'
-  );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
-}
-
-function isValidBackupRow(table: BackupTable, value: unknown): value is Record<string, unknown> {
-  if (!isRecord(value)) return false;
-  if (value.id !== undefined && (!Number.isInteger(value.id) || (value.id as number) < 1)) return false;
-
-  switch (table) {
-    case 'settings':
-      return (
-        Object.keys(value).some((key) =>
-          [
-            'theme',
-            'colorPalette',
-            'fontSize',
-            'notificationSound',
-            'adhanSound',
-            'adhanVoiceId',
-            'randomDhikrEnabled',
-            'randomDhikrCategory',
-            'randomDhikrIntervalMinutes',
-            'randomDhikrStartTime',
-            'randomDhikrEndTime',
-            'snoozeMinutes',
-            'prePrayerReminder',
-            'calcMethod',
-            'asrMadhab',
-            'locationMethod',
-            'timeZone',
-            'hijriAdjustment',
-          ].includes(key)
-        ) &&
-        (value.theme === undefined || ['light', 'dark', 'system'].includes(value.theme as string)) &&
-        (value.colorPalette === undefined || ['emerald', 'ocean', 'plum', 'sand'].includes(value.colorPalette as string)) &&
-        (value.fontSize === undefined || isFiniteNumber(value.fontSize)) &&
-        (value.notificationSound === undefined || typeof value.notificationSound === 'boolean') &&
-        (value.adhanSound === undefined || typeof value.adhanSound === 'boolean') &&
-        (value.adhanVoiceId === undefined || typeof value.adhanVoiceId === 'string') &&
-        (value.randomDhikrEnabled === undefined || typeof value.randomDhikrEnabled === 'boolean') &&
-        (value.randomDhikrCategory === undefined ||
-          ['varied', 'morning', 'evening', 'istighfar'].includes(value.randomDhikrCategory as string)) &&
-        (value.randomDhikrIntervalMinutes === undefined || isFiniteNumber(value.randomDhikrIntervalMinutes)) &&
-        (value.randomDhikrStartTime === undefined || isValidTime(value.randomDhikrStartTime)) &&
-        (value.randomDhikrEndTime === undefined || isValidTime(value.randomDhikrEndTime)) &&
-        (value.snoozeMinutes === undefined || isFiniteNumber(value.snoozeMinutes)) &&
-        (value.prePrayerReminder === undefined || isFiniteNumber(value.prePrayerReminder)) &&
-        (value.calcMethod === undefined || typeof value.calcMethod === 'string') &&
-        (value.asrMadhab === undefined || ['standard', 'hanafi'].includes(value.asrMadhab as string)) &&
-        (value.locationMethod === undefined || ['manual', 'auto'].includes(value.locationMethod as string)) &&
-        (value.latitude === undefined || isFiniteNumber(value.latitude)) &&
-        (value.longitude === undefined || isFiniteNumber(value.longitude)) &&
-        (value.cityName === undefined || typeof value.cityName === 'string') &&
-        (value.timeZone === undefined || typeof value.timeZone === 'string') &&
-        (value.hijriAdjustment === undefined || [-1, 0, 1].includes(value.hijriAdjustment as number))
-      );
-    case 'plans':
-      return (
-        typeof value.name === 'string' &&
-        ['hifz', 'muraja'].includes(value.type as string) &&
-        typeof value.portion === 'string' &&
-        Array.isArray(value.daysOfWeek) &&
-        value.daysOfWeek.every((day) => Number.isInteger(day) && (day as number) >= 0 && (day as number) <= 6) &&
-        isValidTime(value.time) &&
-        isFiniteNumber(value.createdAt) &&
-        typeof value.active === 'boolean' &&
-        (value.portionSequence === undefined ||
-          (Array.isArray(value.portionSequence) && value.portionSequence.every((item) => typeof item === 'string'))) &&
-        (value.progressionId === undefined || typeof value.progressionId === 'string')
-      );
-    case 'tasks':
-      return (
-        Number.isInteger(value.planId) &&
-        (value.planId as number) > 0 &&
-        isDateKey(value.date) &&
-        ['hifz', 'muraja'].includes(value.type as string) &&
-        typeof value.portion === 'string' &&
-        isValidTime(value.scheduledTime) &&
-        ['pending', 'done', 'missed', 'snoozed'].includes(value.status as string) &&
-        isFiniteNumber(value.createdAt) &&
-        (value.snoozedUntil === undefined || isFiniteNumber(value.snoozedUntil)) &&
-        (value.status !== 'snoozed' || isFiniteNumber(value.snoozedUntil)) &&
-        (value.confirmedAt === undefined || isFiniteNumber(value.confirmedAt)) &&
-        (value.strength === undefined || ['weak', 'medium', 'strong'].includes(value.strength as string))
-      );
-    case 'bookmarks':
-      return (
-        Number.isInteger(value.surahId) &&
-        (value.surahId as number) >= 1 &&
-        (value.surahId as number) <= 114 &&
-        Number.isInteger(value.ayahNumber) &&
-        (value.ayahNumber as number) >= 1 &&
-        isFiniteNumber(value.createdAt) &&
-        (value.note === undefined || typeof value.note === 'string')
-      );
-    case 'pageBookmarks':
-      return (
-        Number.isInteger(value.page) &&
-        (value.page as number) >= 1 &&
-        (value.page as number) <= TOTAL_QURAN_PAGES &&
-        isFiniteNumber(value.createdAt)
-      );
-    case 'prayerRecords':
-      return (
-        isDateKey(value.date) &&
-        ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'].includes(value.prayer as string) &&
-        (value.status === null || ['ontime', 'late', 'missed'].includes(value.status as string)) &&
-        (value.confirmedAt === undefined || isFiniteNumber(value.confirmedAt))
-      );
-    case 'sunnahRecords':
-      return isDateKey(value.date) && typeof value.type === 'string' && typeof value.done === 'boolean';
-    case 'hifzProgress':
-      return (
-        Number.isInteger(value.surahId) &&
-        (value.surahId as number) >= 1 &&
-        (value.surahId as number) <= 114 &&
-        Number.isInteger(value.ayahStart) &&
-        (value.ayahStart as number) >= 1 &&
-        Number.isInteger(value.ayahEnd) &&
-        (value.ayahEnd as number) >= (value.ayahStart as number) &&
-        ['memorized', 'reviewing', 'strong', 'weak'].includes(value.status as string) &&
-        isFiniteNumber(value.ratedAt)
-      );
-    case 'hadithFavorites':
-      return typeof value.hadithId === 'string' && typeof value.collection === 'string' && isFiniteNumber(value.createdAt);
-    case 'khatmah':
-      return (
-        isDateKey(value.startDate) &&
-        (value.targetDate === null || value.targetDate === undefined || isDateKey(value.targetDate)) &&
-        isFiniteNumber(value.currentPage) &&
-        (value.currentPage as number) >= 0 &&
-        isFiniteNumber(value.updatedAt)
-      );
-  }
-}
-
-function isValidTime(value: unknown): boolean {
-  return typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
-}
-
-function isDateKey(value: unknown): boolean {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(`${value}T00:00:00Z`);
-  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
-}
-
 export function SettingsScreen({
   settings,
   onSaveSettings,
@@ -259,7 +65,6 @@ export function SettingsScreen({
   onSyncNow,
   onSignOut,
 }: SettingsScreenProps) {
-  const [exportStatus, setExportStatus] = useState('');
   const [adhanPreviewStatus, setAdhanPreviewStatus] = useState('');
   const [previewingAdhanId, setPreviewingAdhanId] = useState<string | null>(null);
   const adhanAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -393,92 +198,6 @@ export function SettingsScreen({
         error instanceof Error ? `تعذّر تفعيل التذكيرات: ${error.message}` : 'تعذّر تفعيل التذكيرات.'
       );
     }
-  }, []);
-
-  const handleExport = useCallback(async () => {
-    try {
-      const data: Record<string, unknown> = {
-        _exportDate: new Date().toISOString(),
-      };
-      data.settings = [await db.settings.get(1)];
-      data.plans = await db.plans.toArray();
-      data.tasks = await db.tasks.toArray();
-      data.bookmarks = await db.bookmarks.toArray();
-      data.pageBookmarks = await db.pageBookmarks.toArray();
-      data.prayerRecords = await db.prayerRecords.toArray();
-      data.sunnahRecords = await db.sunnahRecords.toArray();
-      data.hifzProgress = await db.hifzProgress.toArray();
-      data.hadithFavorites = await db.hadithFavorites.toArray();
-      data.khatmah = await db.khatmah.toArray();
-      const adhkarState = localStorage.getItem(ADHKAR_STATE_KEY);
-      if (adhkarState) data.adhkar = JSON.parse(adhkarState) as unknown;
-
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `hifzi-backup-${new Date().toISOString().split('T')[0]}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      setExportStatus('تم التصدير بنجاح');
-      setTimeout(() => setExportStatus(''), 3000);
-    } catch {
-      setExportStatus('فشل التصدير');
-    }
-  }, []);
-
-  const handleImport = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const data = JSON.parse(e.target?.result as string);
-        if (!data || typeof data !== 'object' || typeof data._exportDate !== 'string' || Number.isNaN(Date.parse(data._exportDate))) {
-          setExportStatus('فشل الاستيراد - الملف ليس نسخة احتياطية صالحة');
-          return;
-        }
-        for (const key of Object.keys(data)) {
-          if (IGNORED_BACKUP_KEYS.includes(key)) continue;
-          if (key === 'adhkar') {
-            if (!isValidAdhkarBackup(data.adhkar)) {
-              setExportStatus('فشل الاستيراد - بيانات الأذكار في النسخة غير صالحة');
-              return;
-            }
-            continue;
-          }
-          if (!BACKUP_TABLES.includes(key as BackupTable)) {
-            setExportStatus('فشل الاستيراد - بنية الملف غير صحيحة');
-            return;
-          }
-          if (!Array.isArray(data[key]) || !(data[key] as unknown[]).every((row) => isValidBackupRow(key as BackupTable, row))) {
-            setExportStatus('فشل الاستيراد - بنية الملف غير صحيحة');
-            return;
-          }
-        }
-        await db.transaction(
-          'rw',
-          BACKUP_TABLES.map((key) => db.table(key)),
-          async () => {
-            for (const key of BACKUP_TABLES) {
-              if (!Object.prototype.hasOwnProperty.call(data, key)) continue;
-              const table = db.table(key);
-              await table.clear();
-              await table.bulkPut(data[key] as Record<string, unknown>[]);
-            }
-          }
-        );
-        if (data.adhkar !== undefined) {
-          localStorage.setItem(ADHKAR_STATE_KEY, JSON.stringify(data.adhkar));
-        }
-        setExportStatus('تم الاستيراد بنجاح. جارٍ إعادة التشغيل...');
-        setTimeout(() => window.location.reload(), 1500);
-      } catch {
-        setExportStatus('فشل الاستيراد - ملف غير صالح');
-      }
-    };
-    reader.onerror = () => setExportStatus('فشل الاستيراد - تعذّرت قراءة الملف');
-    reader.readAsText(file);
   }, []);
 
   const triggerAzanOverlayPreview = () => {
@@ -1063,32 +782,7 @@ export function SettingsScreen({
         </Card>
       </section>
 
-      {/* Backup & Restore */}
-      <section className="space-y-2">
-        <SectionTitle icon={<Database size={20} />} title="النسخ الاحتياطي واستعادة البيانات" />
-        <Card className="border border-primary-200/80 dark:border-primary-800/80 shadow-md space-y-3">
-          <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
-            يمكنك حفظ نسخة احتياطية من جميع بياناتك (خطط الحفظ، الورد اليومي، الفواصل، وإعدادات الصلاة) واستعادتها في أي وقت.
-          </p>
-
-          <div className="grid grid-cols-2 gap-2.5">
-            <Button variant="secondary" size="sm" onClick={handleExport} className="font-bold text-xs">
-              <Download size={16} /> تصدير نسخة (JSON)
-            </Button>
-            <label className="block">
-              <input type="file" accept=".json" onChange={handleImport} className="hidden" />
-              <span className="flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold bg-primary-100 dark:bg-primary-800 text-primary-800 dark:text-primary-100 rounded-xl cursor-pointer hover:bg-primary-200 dark:hover:bg-primary-700 transition-all border border-primary-200 dark:border-primary-700 h-9">
-                <Upload size={16} /> استيراد نسخة
-              </span>
-            </label>
-          </div>
-          {exportStatus && (
-            <p className="text-xs text-center font-bold text-primary-700 dark:text-gold-300">
-              {exportStatus}
-            </p>
-          )}
-        </Card>
-      </section>
+      <BackupSection />
 
       {/* About Application */}
       <section className="space-y-2">
@@ -1104,18 +798,6 @@ export function SettingsScreen({
     </div>
   );
 }
-
-function SectionTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
-  return (
-    <h2 className="text-sm font-bold text-primary-900 dark:text-primary-100 flex items-center gap-2 px-1">
-      <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-primary-100 text-primary-700 dark:bg-primary-800 dark:text-gold-400">
-        {icon}
-      </span>
-      {title}
-    </h2>
-  );
-}
-
 function ToggleRow({
   label,
   icon,
