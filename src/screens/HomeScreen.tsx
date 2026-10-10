@@ -201,7 +201,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
             </div>
             <div className="text-left">
               <p className="text-xs text-primary-200">{formatArabicDate(today)}</p>
-              <p className="text-xs text-gold-300 mt-0.5">{getHijriDate(today)}</p>
+              <p className="text-xs text-gold-300 mt-0.5">{getHijriDate(today, settings.hijriAdjustment)}</p>
             </div>
           </div>
 

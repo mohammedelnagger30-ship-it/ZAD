@@ -6,6 +6,7 @@ import {
   getDaysInMonth,
   isSameDay,
   addDays,
+  getHijriDate,
 } from '../dateUtils';
 
 describe('dateUtils', () => {
@@ -128,5 +129,25 @@ describe('dateUtils', () => {
       addDays(date, 10);
       expect(date.getTime()).toBe(original);
     });
+  });
+});
+
+describe('getHijriDate ±1 correction', () => {
+  const day = new Date(2026, 9, 10, 12, 0, 0); // local noon — safely inside one day
+
+  it('formats a Hijri date, defaulting to no correction', () => {
+    const base = getHijriDate(day);
+    expect(base).not.toBe('');
+    expect(getHijriDate(day, 0)).toBe(base);
+  });
+
+  it('+1 shows the neighbour day ahead, -1 the day behind', () => {
+    expect(getHijriDate(day, 1)).toBe(getHijriDate(addDays(day, 1)));
+    expect(getHijriDate(day, -1)).toBe(getHijriDate(addDays(day, -1)));
+  });
+
+  it('the correction actually changes the displayed date', () => {
+    expect(getHijriDate(day, 1)).not.toBe(getHijriDate(day));
+    expect(getHijriDate(day, -1)).not.toBe(getHijriDate(day));
   });
 });

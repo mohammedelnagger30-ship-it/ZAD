@@ -24,13 +24,21 @@ export function formatArabicDate(date: Date): string {
   return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
 }
 
-export function getHijriDate(date: Date): string {
+/**
+ * The Hijri date for `date`, optionally corrected by whole days.
+ *
+ * Moon-sighting calendars can disagree by a day, so surfaces offer a manual
+ * ±1 correction: the offset shifts the instant handed to the calendar, which
+ * is exactly "show tomorrow's / yesterday's Hijri date".
+ */
+export function getHijriDate(date: Date, adjustmentDays = 0): string {
   try {
+    const adjusted = adjustmentDays === 0 ? date : addDays(date, adjustmentDays);
     const hijri = new Intl.DateTimeFormat('ar-SA-u-ca-islamic', {
       day: 'numeric',
       month: 'long',
       year: 'numeric',
-    }).format(date);
+    }).format(adjusted);
     return hijri;
   } catch {
     return '';

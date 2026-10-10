@@ -21,6 +21,7 @@ import {
   Sparkles,
   ShieldCheck,
   Database,
+  Calendar,
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Card, Button } from '@/components/ui';
@@ -990,6 +991,37 @@ export function SettingsScreen({
         </Card>
       </section>
 
+      {/* Hijri Date Correction */}
+      <section className="space-y-2">
+        <SectionTitle icon={<Calendar size={20} />} title="التاريخ الهجري" />
+        <Card className="border border-primary-200/80 dark:border-primary-800/80 shadow-md">
+          <div className="flex items-center justify-between gap-3 py-1">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">تصحيح عرض التاريخ</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                إن كان تاريخك الهجري يختلف بيوم، اضبطه هنا ليُطبَّق على تاريخ اليوم في كل الشاشات.
+              </p>
+            </div>
+            <div className="flex shrink-0 gap-1">
+              {[-1, 0, 1].map((delta) => (
+                <button
+                  key={delta}
+                  onClick={() => onSaveSettings({ hijriAdjustment: delta })}
+                  aria-pressed={(settings.hijriAdjustment ?? 0) === delta}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    (settings.hijriAdjustment ?? 0) === delta
+                      ? 'bg-primary-600 text-white shadow-sm'
+                      : 'bg-gray-50 dark:bg-primary-800/30 text-gray-600 dark:text-gray-300'
+                  }`}
+                >
+                  {delta === 0 ? 'الأصل' : delta > 0 ? '+١' : '−١'}
+                </button>
+              ))}
+            </div>
+          </div>
+        </Card>
+      </section>
+
       {/* Font Size Settings */}
       <section className="space-y-2">
         <SectionTitle icon={<Type size={20} />} title="حجم خط القرآن الكريم" />
@@ -1050,7 +1082,7 @@ export function SettingsScreen({
       <section className="space-y-2">
         <SectionTitle icon={<Info size={20} />} title="عن التطبيق" />
         <Card className="border border-primary-200/80 dark:border-primary-800/80 shadow-md space-y-2 text-xs text-gray-600 dark:text-gray-300">
-          <p className="font-bold text-sm text-primary-900 dark:text-primary-50">Sakinah — رفيق القرآن والعبادة اليومية</p>
+          <p className="font-bold text-sm text-primary-900 dark:text-primary-50">قُرّة — رفيق القرآن والعبادة اليومية</p>
           <p>يعمل بالكامل بدون إنترنت بحفظ كامل لجميع بياناتك محلياً على جهازك.</p>
           <p className="pt-2 text-[11px] text-gray-400 dark:text-gray-500 border-t border-primary-100 dark:border-primary-800/50">
             الإصدار 1.0.6 • جميع الحقوق محفوظة

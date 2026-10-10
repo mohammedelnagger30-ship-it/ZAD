@@ -247,7 +247,7 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
         <div>
           <h1 className="text-3xl font-bold text-primary-800 dark:text-primary-100">مواقيت الصلاة</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            {formatArabicDate(today)} — {getHijriDate(today)}
+            {formatArabicDate(today)} — {getHijriDate(today, settings.hijriAdjustment)}
           </p>
         </div>
         <button

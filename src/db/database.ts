@@ -126,6 +126,8 @@ export interface Settings {
   longitude?: number;
   cityName?: string;
   timeZone?: string;
+  /** -1 | 0 | 1 — manual correction when the displayed Hijri date is off by a day. */
+  hijriAdjustment?: number;
   locationMethod: 'manual' | 'auto';
 }
 

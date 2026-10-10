@@ -262,7 +262,7 @@ export function AzanOverlayModal({
             <span>•</span>
             <span>{formatArabicDate(today)}</span>
             <span>•</span>
-            <span>{getHijriDate(today)}</span>
+            <span>{getHijriDate(today, settings.hijriAdjustment)}</span>
           </div>
         </div>
 
