@@ -1,20 +1,24 @@
 import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from 'react';
 import type { CSSProperties } from 'react';
-import { Search, Eye, EyeOff, ChevronLeft, ChevronRight, Type, BookOpen, Layers, BookText, X, Volume2 } from 'lucide-react';
-import { Card, Button } from '@/components/ui';
+import { Search, BookOpen, BookText, Layers, X } from 'lucide-react';
 import { SURAHS, JUZ_INFO, TOTAL_QURAN_PAGES, getSurah, getAyahPage, getJuzForPage, toArabicNumber, type SurahMeta } from '@/data/surahs';
 import { getAyahs, hasFullText, type AyahText } from '@/data/quranText';
 import { getHizbForPage, SAJDAH_AYAHS } from '@/data/mushafPages';
 import { db, type Bookmark as BookmarkType, type Settings } from '@/db/database';
 import { TafsirBottomSheet } from '@/components/TafsirBottomSheet';
 import { AudioRecitationPlayer } from '@/components/AudioRecitationPlayer';
-import { Sheet } from '@/components/mushaf/Sheet';
 import { loadPreferredReciter, savePreferredReciter } from '@/data/audioReciters';
 import { MushafReader } from '@/screens/MushafReader';
 import { MushafFrameDecoration } from '@/components/mushaf/MushafPage';
 import { KhatmahCard } from '@/components/khatmah/KhatmahCard';
 import { AyahSpan } from '@/components/quran/AyahSpan';
 import { SurahListItem, PageBrowser } from '@/components/quran/QuranBrowse';
+import { AyahSearchPanel } from '@/components/quran/AyahSearchPanel';
+import { JuzGrid } from '@/components/quran/JuzGrid';
+import { ReaderHeader } from '@/components/quran/ReaderHeader';
+import { HifzControls } from '@/components/quran/HifzControls';
+import { ReaderChoiceSheet } from '@/components/quran/ReaderChoiceSheet';
+import { ReaderNavigation } from '@/components/quran/ReaderNavigation';
 import { splitBasmala } from '@/utils/basmala';
 import { searchAyahs } from '@/utils/ayahSearch';
 
@@ -389,117 +393,16 @@ export function QuranScreen({ settings }: QuranScreenProps) {
           </>
         )}
 
-        {browseMode === 'ayah' && (
-          <>
-            {/* Search inside the ayah text */}
-            <div className="relative group">
-              <div className="absolute inset-0 rounded-3xl bg-linear-to-r from-primary-500 to-primary-600 opacity-0 group-focus-within:opacity-100 transition-opacity duration-300 blur-lg" />
-              <Search size={20} className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-primary-500 dark:text-primary-300 transition-colors group-focus-within:text-primary-600" />
-              <input
-                type="text"
-                value={ayahQuery}
-                onChange={(e) => setAyahQuery(e.target.value)}
-                placeholder="ابحث في نص القرآن الكريم..."
-                aria-label="ابحث في الآيات"
-                className="relative min-h-14 w-full rounded-3xl border-2 border-primary-200 bg-white py-3.5 pl-12 pr-12 text-base text-primary-800 shadow-lg outline-hidden transition-all duration-300 focus:border-primary-500 focus:ring-4 focus:ring-primary-100/70 placeholder:text-gray-400 dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-100 dark:focus:ring-primary-900/60"
+            {browseMode === 'ayah' && (
+              <AyahSearchPanel
+                ayahQuery={ayahQuery}
+                setAyahQuery={setAyahQuery}
+                ayahSearch={ayahSearch}
+                openAyahFromSearch={openAyahFromSearch}
               />
-              {ayahQuery && (
-                <button
-                  onClick={() => setAyahQuery('')}
-                  aria-label="مسح البحث"
-                  className="absolute left-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-2xl text-gray-400 transition-all hover:bg-primary-100 hover:text-primary-700 dark:hover:bg-primary-800 dark:hover:text-primary-100"
-                >
-                  <X size={18} />
-                </button>
-              )}
-            </div>
-
-            {!ayahQuery.trim() ? (
-              <div className="rounded-3xl border-2 border-dashed border-primary-300 bg-linear-to-br from-white/50 to-primary-50/50 px-6 py-12 text-center shadow-inner dark:border-primary-800 dark:from-primary-950/50 dark:to-primary-900/50">
-                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-100 dark:bg-primary-800">
-                  <Search size={32} className="text-primary-400 dark:text-primary-500" />
-                </div>
-                <p className="text-lg font-bold text-primary-800 dark:text-primary-100">ابحث عن آية بكلمات تذكرها</p>
-                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                  لا يهم التشكيل ولا ترتيب الكلمات ولا اختلاف كتابة الحروف — اكتب ما تتذكره وسيطابقه البحث مع النص.
-                </p>
-              </div>
-            ) : ayahSearch.results.length === 0 ? (
-              <div className="rounded-3xl border-2 border-dashed border-primary-300 bg-linear-to-br from-white/50 to-primary-50/50 px-6 py-12 text-center shadow-inner dark:border-primary-800 dark:from-primary-950/50 dark:to-primary-900/50">
-                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-100 dark:bg-primary-800">
-                  <Search size={32} className="text-primary-400 dark:text-primary-500" />
-                </div>
-                <p className="text-lg font-bold text-primary-800 dark:text-primary-100">لا توجد آية مطابقة</p>
-                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">جرّب كلمات أقصر أو صيغة أخرى</p>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center justify-end">
-                  <div className="flex items-center gap-2 rounded-2xl bg-primary-100/80 px-4 py-2 dark:bg-primary-900/40">
-                    <span className="text-xs text-gray-600 dark:text-gray-400">النتائج:</span>
-                    <span className="text-sm font-bold text-primary-700 dark:text-primary-200">
-                      {toArabicNumber(ayahSearch.total)}
-                    </span>
-                    {ayahSearch.total > ayahSearch.results.length && (
-                      <span className="text-[10px] text-gray-500 dark:text-gray-400">
-                        (أول {toArabicNumber(ayahSearch.results.length)})
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  {ayahSearch.results.map((result) => (
-                    <button
-                      key={`${result.surahId}:${result.ayahNumber}`}
-                      type="button"
-                      onClick={() => openAyahFromSearch(result.surahId, result.ayahNumber)}
-                      className="group w-full rounded-3xl border-2 border-primary-100 bg-white p-5 text-right shadow-xs transition-all hover:-translate-y-0.5 hover:border-primary-300 hover:shadow-md dark:border-primary-800/60 dark:bg-primary-900/30 dark:hover:border-primary-700"
-                    >
-                      <p className="quran-text text-lg text-primary-900 dark:text-primary-50" dir="rtl">
-                        {result.text}
-                      </p>
-                      <p className="mt-3 flex items-center justify-between text-xs text-primary-600 dark:text-primary-300">
-                        <span>
-                          سورة {result.surahName} — الآية {toArabicNumber(result.ayahNumber)}
-                        </span>
-                        <span className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                          افتح في القارئ <ChevronLeft size={14} />
-                        </span>
-                      </p>
-                    </button>
-                  ))}
-                </div>
-              </>
             )}
-          </>
-        )}
 
-        {browseMode === 'juz' && (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {JUZ_INFO.map((juz) => (
-              <Card
-                key={juz.id}
-                onClick={() => openJuz(juz.id)}
-                className="p-4! hover:border-primary-400 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer group"
-              >
-                <div className="flex flex-col items-center gap-3 text-center">
-                  <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-linear-to-br from-primary-100 to-primary-200 dark:from-primary-800 dark:to-primary-900 shadow-md group-hover:scale-110 transition-transform">
-                    <span className="text-xl font-bold text-primary-700 dark:text-gold-400">
-                      {toArabicNumber(juz.id)}
-                    </span>
-                    <div className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full bg-gold-400 shadow-xs" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-bold text-primary-800 dark:text-primary-100 mb-1">{juz.name}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      صفحة {toArabicNumber(juz.startPage)}-{toArabicNumber(juz.endPage)}
-                    </p>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
+            {browseMode === 'juz' && <JuzGrid openJuz={openJuz} />}
 
         {browseMode === 'page' && <PageBrowser onSelectPage={openPage} />}
       </div>
@@ -518,94 +421,20 @@ export function QuranScreen({ settings }: QuranScreenProps) {
     return (
       <>
       <div className="space-y-4 pb-4">
-        {/* Header */}
-        <div className="flex items-center justify-between sticky top-0 z-30 bg-surface-light dark:bg-surface-dark/95 backdrop-blur-lg py-2 -mx-4 px-4 border-b border-primary-100 dark:border-primary-800/30">
-          <button onClick={() => setViewMode('list')} className="flex items-center gap-1 text-primary-600 dark:text-gold-400">
-            <ChevronRight size={20} />
-            <span className="text-sm">رجوع</span>
-          </button>
-          <div className="text-center">
-            <h2 className="text-lg font-bold text-primary-800 dark:text-primary-100">مصحف Sakinah</h2>
-            {isHifz && <p className="text-xs text-gold-600 dark:text-gold-400">وضع الحفظ</p>}
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setFontSize((s) => Math.max(18, s - 2))}
-              className="w-8 h-8 rounded-lg bg-primary-100 dark:bg-primary-800 flex items-center justify-center text-primary-700 dark:text-primary-200"
-              title="تصغير الخط"
-            >
-              <Type size={16} />
-              <span className="text-xs mr-0.5">-</span>
-            </button>
-            <button
-              onClick={() => setFontSize((s) => Math.min(48, s + 2))}
-              className="w-8 h-8 rounded-lg bg-primary-100 dark:bg-primary-800 flex items-center justify-center text-primary-700 dark:text-primary-200"
-              title="تكبير الخط"
-            >
-              <Type size={16} />
-              <span className="text-xs mr-0.5">+</span>
-            </button>
-          </div>
-        </div>
+        <ReaderHeader setViewMode={setViewMode} isHifz={isHifz} setFontSize={setFontSize} />
 
-        {/* Hifz mode controls */}
-        {isHifz && (
-          <Card className="bg-gold-50 dark:bg-gold-900/20 border-gold-200 dark:border-gold-800/40">
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Layers size={18} className="text-gold-600 dark:text-gold-400" />
-                <p className="text-sm font-semibold text-gold-800 dark:text-gold-300">خيارات الحفظ</p>
-              </div>
-
-              {/* Ayah range selection */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-600 dark:text-gray-300">من آية:</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={selectedSurah.ayahCount}
-                  value={fromAyah}
-                  onChange={(e) => setFromAyah(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-16 bg-white dark:bg-primary-900/60 border border-gold-200 dark:border-gold-800 rounded-lg py-1 px-2 text-sm text-center"
-                />
-                <span className="text-xs text-gray-600 dark:text-gray-300">إلى:</span>
-                <input
-                  type="number"
-                  min={fromAyah}
-                  max={selectedSurah.ayahCount}
-                  value={toAyah ?? selectedSurah.ayahCount}
-                  onChange={(e) => setToAyah(parseInt(e.target.value) || selectedSurah.ayahCount)}
-                  className="w-16 bg-white dark:bg-primary-900/60 border border-gold-200 dark:border-gold-800 rounded-lg py-1 px-2 text-sm text-center"
-                />
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setHideText(!hideText)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-smooth ${
-                    hideText
-                      ? 'bg-gold-500 text-white'
-                      : 'bg-white dark:bg-primary-900/60 text-gray-600 dark:text-gray-300 border border-gold-200 dark:border-gold-800'
-                  }`}
-                >
-                  {hideText ? <EyeOff size={16} /> : <Eye size={16} />}
-                  {hideText ? 'إظهار النص' : 'إخفاء النص'}
-                </button>
-                <button
-                  onClick={() => setHideWordByWord(!hideWordByWord)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-smooth ${
-                    hideWordByWord
-                      ? 'bg-gold-500 text-white'
-                      : 'bg-white dark:bg-primary-900/60 text-gray-600 dark:text-gray-300 border border-gold-200 dark:border-gold-800'
-                  }`}
-                >
-                  {hideWordByWord ? <EyeOff size={16} /> : <Eye size={16} />}
-                  إخفاء كلمة بكلمة
-                </button>
-              </div>
-            </div>
-          </Card>
-        )}
+        <HifzControls
+          isHifz={isHifz}
+          selectedSurah={selectedSurah}
+          fromAyah={fromAyah}
+          setFromAyah={setFromAyah}
+          toAyah={toAyah}
+          setToAyah={setToAyah}
+          hideText={hideText}
+          setHideText={setHideText}
+          hideWordByWord={hideWordByWord}
+          setHideWordByWord={setHideWordByWord}
+        />
 
         <AudioRecitationPlayer
           key={selectedSurah.id}
@@ -690,77 +519,20 @@ export function QuranScreen({ settings }: QuranScreenProps) {
                   </div>
                 </div>
 
-                {/* The reader's own question, put to this screen's ayahs: which is it
-                    wanted for — its meaning, or its voice? Same sheet, same pair of
-                    answers, same line of hint underneath them.
-
-                    The host is `display: contents` because this screen sets its
-                    vertical rhythm with `space-y`, which gives every later sibling a
-                    full step of margin — and a fixed sheet caught in that rhythm would
-                    hang a step below the bottom of the screen. The wrapper keeps the
-                    sheet out of the rhythm without taking it out of this screen's tree,
-                    where the tafsir still renders after it and so still wins the tie. */}
-                <div className="contents">
-                  {ayahChoice !== null && (
-                    <Sheet
-                      open
-                      title={`الآية ${toArabicNumber(ayahChoice)} · ${selectedSurah.name}`}
-                      onClose={() => setAyahChoice(null)}
-                      panelRef={ayahChoicePanelRef}
-                    >
-                      <div className="mushaf-seg">
-                        <button
-                          className="mushaf-seg__item"
-                          onClick={() => setTafsirAyah({ surahId: selectedSurah.id, ayah: ayahChoice })}
-                        >
-                          <BookOpen size={18} aria-hidden="true" />
-                          <span>التفسير</span>
-                        </button>
-                        <button
-                          className="mushaf-seg__item"
-                          onClick={() => {
-                            playAyah(ayahChoice);
-                            setAyahChoice(null);
-                          }}
-                        >
-                          <Volume2 size={18} aria-hidden="true" />
-                          <span>التلاوة</span>
-                        </button>
-                      </div>
-                      <p className="mushaf-hint">اختر ما تحتاجه لهذه الآية: تفسيرها، أو تلاوتها بالصوت الذي تفضله.</p>
-                    </Sheet>
-                  )}
-                </div>
+                <ReaderChoiceSheet
+                  ayahChoice={ayahChoice}
+                  setAyahChoice={setAyahChoice}
+                  selectedSurah={selectedSurah}
+                  setTafsirAyah={setTafsirAyah}
+                  playAyah={playAyah}
+                  ayahChoicePanelRef={ayahChoicePanelRef}
+                />
               </>
             );
           }}
         </AudioRecitationPlayer>
 
-        {/* Navigation */}
-        <div className="flex items-center justify-between">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              const prevSurah = SURAHS.find((s) => s.id === selectedSurah.id - 1);
-              if (prevSurah) openSurah(prevSurah);
-            }}
-            disabled={selectedSurah.id === 1}
-          >
-            <ChevronRight size={16} /> السورة السابقة
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              const nextSurah = SURAHS.find((s) => s.id === selectedSurah.id + 1);
-              if (nextSurah) openSurah(nextSurah);
-            }}
-            disabled={selectedSurah.id === 114}
-          >
-            السورة التالية <ChevronLeft size={16} />
-          </Button>
-        </div>
+        <ReaderNavigation selectedSurah={selectedSurah} openSurah={openSurah} />
 
         {!hasFullText(selectedSurah.id) && (
           <p className="text-xs text-center text-gray-400 dark:text-gray-500 leading-relaxed">
@@ -802,3 +574,4 @@ export function QuranScreen({ settings }: QuranScreenProps) {
 
   return null;
 }
+
