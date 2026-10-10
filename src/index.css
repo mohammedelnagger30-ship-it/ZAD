@@ -5,9 +5,144 @@
  * The font request now lives in index.html behind a media="print" swap, so text paints
  * immediately in the system Arabic fallback and upgrades when the webfonts arrive.
  */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+/*
+ * Tailwind v4 ships a CSS-first config: the old tailwind.config.js became the
+ * @theme block below, and class-based dark mode needs an explicit variant.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * v3's preflight painted every uncolored border gray-200; v4 switched the
+ * default to currentColor. The ~150 call sites that rely on the old look are
+ * restored by this base rule — utilities still beat base, so every explicit
+ * border-* color keeps winning.
+ */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop {
+    border-color: #e5e7eb;
+  }
+}
+
+/*
+ * `inline` matters: the primary/surface tokens wrap CSS variables that the
+ * palette switcher and html.dark redefine at runtime — inlining puts the
+ * var() reference into each utility so the cascade resolves it per element.
+ * Opacity modifiers (e.g. bg-primary-600/10) work through color-mix in v4,
+ * so the v3 <alpha-value> placeholder is gone.
+ */
+@theme inline {
+  --font-quran: 'Amiri', 'Amiri Quran', serif;
+  --font-ui: 'Cairo', 'Tajawal', sans-serif;
+  --font-display: 'Cairo', sans-serif;
+
+  --color-primary-50: rgb(var(--primary-50));
+  --color-primary-100: rgb(var(--primary-100));
+  --color-primary-200: rgb(var(--primary-200));
+  --color-primary-300: rgb(var(--primary-300));
+  --color-primary-400: rgb(var(--primary-400));
+  --color-primary-500: rgb(var(--primary-500));
+  --color-primary-600: rgb(var(--primary-600));
+  --color-primary-700: rgb(var(--primary-700));
+  --color-primary-800: rgb(var(--primary-800));
+  --color-primary-900: rgb(var(--primary-900));
+  --color-primary-950: rgb(var(--primary-950));
+
+  --color-gold-50: #fefce8;
+  --color-gold-100: #fdf8c4;
+  --color-gold-200: #fbef8d;
+  --color-gold-300: #f9e055;
+  --color-gold-400: #f0c83a;
+  --color-gold-500: #d4a017;
+  --color-gold-600: #b07d12;
+  --color-gold-700: #8c5d14;
+  --color-gold-800: #744a17;
+  --color-gold-900: #623e17;
+  --color-gold-950: #3a2308;
+
+  --color-accent-50: #fef7ee;
+  --color-accent-100: #fdedd6;
+  --color-accent-200: #fad7ac;
+  --color-accent-300: #f6ba77;
+  --color-accent-400: #f1923f;
+  --color-accent-500: #ed761e;
+  --color-accent-600: #de5d16;
+  --color-accent-700: #b84414;
+  --color-accent-800: #933718;
+  --color-accent-900: #762f17;
+
+  --color-success-50: #f0fdf4;
+  --color-success-100: #dcfce7;
+  --color-success-200: #bbf7d0;
+  --color-success-300: #86efac;
+  --color-success-400: #4ade80;
+  --color-success-500: #22c55e;
+  --color-success-600: #16a34a;
+  --color-success-700: #15803d;
+  --color-success-800: #166534;
+  --color-success-900: #14532d;
+
+  --color-warning-50: #fffbeb;
+  --color-warning-100: #fef3c7;
+  --color-warning-200: #fde68a;
+  --color-warning-300: #fcd34d;
+  --color-warning-400: #fbbf24;
+  --color-warning-500: #f59e0b;
+  --color-warning-600: #d97706;
+  --color-warning-700: #b45309;
+  --color-warning-800: #92400e;
+  --color-warning-900: #78350f;
+
+  --color-error-50: #fef2f2;
+  --color-error-100: #fee2e2;
+  --color-error-200: #fecaca;
+  --color-error-300: #fca5a5;
+  --color-error-400: #f87171;
+  --color-error-500: #ef4444;
+  --color-error-600: #dc2626;
+  --color-error-700: #b91c1c;
+  --color-error-800: #991b1b;
+  --color-error-900: #7f1d1d;
+
+  --color-surface-light: rgb(var(--surface-light));
+  --color-surface-dark: rgb(var(--surface-dark));
+
+  --animate-fade-in: fadeIn 0.3s ease-out;
+  --animate-slide-up: slideUp 0.4s ease-out;
+  --animate-slide-down: slideDown 0.4s ease-out;
+  --animate-scale-in: scaleIn 0.2s ease-out;
+  --animate-pulse-soft: pulseSoft 2s ease-in-out infinite;
+  --animate-shimmer: shimmer 2s linear infinite;
+
+  @keyframes fadeIn {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+  }
+  @keyframes slideUp {
+    0% { transform: translateY(10px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+  @keyframes slideDown {
+    0% { transform: translateY(-10px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+  @keyframes scaleIn {
+    0% { transform: scale(0.95); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  @keyframes pulseSoft {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+}
 
 @font-face {
   font-family: 'Amiri Quran';

@@ -206,7 +206,7 @@ export function AzanOverlayModal({
       <div className="pointer-events-none absolute bottom-10 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-amber-500/15 blur-3xl" />
 
       {/* Main Container Card */}
-      <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-emerald-500/30 bg-gradient-to-b from-slate-900 via-emerald-950/90 to-slate-900 p-6 text-white shadow-2xl ring-1 ring-white/10 my-auto">
+      <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-emerald-500/30 bg-linear-to-b from-slate-900 via-emerald-950/90 to-slate-900 p-6 text-white shadow-2xl ring-1 ring-white/10 my-auto">
         
         {/* Top Header Bar */}
         <div className="flex items-center justify-between pb-4 border-b border-emerald-500/20">
@@ -232,14 +232,14 @@ export function AzanOverlayModal({
 
         {/* Center Visual Circle & Sound Wave */}
         <div className="my-6 text-center">
-          <div className="relative mx-auto flex h-28 w-28 items-center justify-center rounded-full bg-gradient-to-tr from-emerald-700 to-amber-500 p-1 shadow-lg shadow-emerald-900/50">
+          <div className="relative mx-auto flex h-28 w-28 items-center justify-center rounded-full bg-linear-to-tr from-emerald-700 to-amber-500 p-1 shadow-lg shadow-emerald-900/50">
             {isPlaying && (
               <>
                 <div className="absolute inset-0 animate-ping rounded-full bg-emerald-500/30 duration-1000" />
                 <div className="absolute -inset-2 animate-pulse rounded-full border border-amber-400/40" />
               </>
             )}
-            <div className="flex h-full w-full items-center justify-center rounded-full bg-slate-950/80 backdrop-blur-sm">
+            <div className="flex h-full w-full items-center justify-center rounded-full bg-slate-950/80 backdrop-blur-xs">
               <Sparkles size={44} className="text-amber-300 animate-pulse" />
             </div>
           </div>
@@ -268,7 +268,7 @@ export function AzanOverlayModal({
 
         {/* Audio Player Controls */}
         {settings.adhanSound && (
-          <div className="mb-6 rounded-2xl border border-emerald-500/20 bg-slate-900/60 p-3.5 backdrop-blur-sm">
+          <div className="mb-6 rounded-2xl border border-emerald-500/20 bg-slate-900/60 p-3.5 backdrop-blur-xs">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 overflow-hidden">
                 <button

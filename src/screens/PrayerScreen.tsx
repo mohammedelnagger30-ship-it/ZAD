@@ -43,7 +43,7 @@ function GuideBanner({ navigate }: Pick<PrayerScreenProps, 'navigate'>) {
     <button
       type="button"
       onClick={() => navigate('salah')}
-      className="group flex w-full items-center gap-3 rounded-2xl border border-gold-300/70 bg-gold-50/40 px-4 py-3.5 text-right shadow-sm transition-all hover:border-gold-400 hover:shadow-md dark:border-[#cfa95c]/40 dark:bg-[#cfa95c]/[0.05] dark:hover:border-[#cfa95c]/70"
+      className="group flex w-full items-center gap-3 rounded-2xl border border-gold-300/70 bg-gold-50/40 px-4 py-3.5 text-right shadow-xs transition-all hover:border-gold-400 hover:shadow-md dark:border-[#cfa95c]/40 dark:bg-[#cfa95c]/[0.05] dark:hover:border-[#cfa95c]/70"
     >
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gold-500/15 text-gold-700 dark:bg-[#cfa95c]/15 dark:text-[#cfa95c]">
         <BookOpen size={19} />
@@ -263,7 +263,7 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
 
       {/* Enhanced Next Prayer Highlight */}
       {nextPrayer && (
-        <div className="relative isolate overflow-hidden rounded-[2rem] bg-gradient-to-br from-primary-600 via-primary-700 to-primary-900 p-6 text-white shadow-2xl dark:from-primary-700 dark:via-primary-800 dark:to-primary-950">
+        <div className="relative isolate overflow-hidden rounded-[2rem] bg-linear-to-br from-primary-600 via-primary-700 to-primary-900 p-6 text-white shadow-2xl dark:from-primary-700 dark:via-primary-800 dark:to-primary-950">
           {/* Decorative patterns */}
           <div className="pointer-events-none absolute -right-20 -top-20 -z-10 h-64 w-64 rounded-full border-4 border-white/5" />
           <div className="pointer-events-none absolute -right-10 top-10 -z-10 h-40 w-40 rounded-full border-4 border-white/5" />
@@ -272,7 +272,7 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
 
           <div className="relative flex items-center justify-between gap-6">
             <div className="flex-1">
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 backdrop-blur-sm">
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 backdrop-blur-xs">
                 <span className="h-2 w-2 rounded-full bg-gold-400 animate-pulse" />
                 <p className="text-xs font-semibold text-white/90">الصلاة القادمة</p>
               </div>
@@ -293,13 +293,13 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
                     })
                   );
                 }}
-                className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-gold-400/20 hover:bg-gold-400/30 px-4 py-2.5 text-sm font-bold text-gold-300 backdrop-blur-sm transition-all hover:scale-105 border border-gold-400/30 shadow-lg"
+                className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-gold-400/20 hover:bg-gold-400/30 px-4 py-2.5 text-sm font-bold text-gold-300 backdrop-blur-xs transition-all hover:scale-105 border border-gold-400/30 shadow-lg"
               >
                 <Sparkles size={16} />
                 عرض صفحة الأذان
               </button>
             </div>
-            <div className="flex flex-col items-center justify-center rounded-3xl bg-white/10 backdrop-blur-sm px-6 py-4 border border-white/20 shadow-xl">
+            <div className="flex flex-col items-center justify-center rounded-3xl bg-white/10 backdrop-blur-xs px-6 py-4 border border-white/20 shadow-xl">
               <p className="text-5xl font-bold text-gold-300 sm:text-6xl">
                 {formatTime12h(nextPrayer.time, timeZone)}
               </p>
@@ -335,7 +335,7 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
                     : 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50'
                 }`}>
                   <Icon size={24} className={prayer.passed ? 'text-primary-600 dark:text-gold-400' : 'text-gray-400'} />
-                  {prayer.passed && <div className="absolute -bottom-1 -right-1 h-2.5 w-2.5 rounded-full bg-gold-400 shadow-sm" />}
+                  {prayer.passed && <div className="absolute -bottom-1 -right-1 h-2.5 w-2.5 rounded-full bg-gold-400 shadow-xs" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-lg font-bold text-primary-800 dark:text-primary-100">{prayer.arabicName}</p>
@@ -360,7 +360,7 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
             );
 
             const prayerCard = !answerable ? (
-              <Card className="!p-5">{row}</Card>
+              <Card className="p-5!">{row}</Card>
             ) : (
               <button
                 onClick={() =>
@@ -460,10 +460,10 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
       </div>
 
       {/* Enhanced Qibla Direction */}
-      <Card className="!p-5 flex items-center gap-5 hover:shadow-lg transition-shadow">
-        <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl bg-gradient-to-br from-gold-100 to-gold-200 dark:from-gold-900/30 dark:to-gold-900/50 shadow-md">
+      <Card className="p-5! flex items-center gap-5 hover:shadow-lg transition-shadow">
+        <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl bg-linear-to-br from-gold-100 to-gold-200 dark:from-gold-900/30 dark:to-gold-900/50 shadow-md">
           <Compass size={32} className="text-gold-600 dark:text-gold-400" />
-          <div className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full bg-gold-400 shadow-sm" />
+          <div className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full bg-gold-400 shadow-xs" />
         </div>
         <div className="flex-1">
           <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">اتجاه القبلة</p>
@@ -476,7 +476,7 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
       {/* Enhanced Independent Voluntary Prayers */}
       <div>
         <SectionHeader title="نوافل مستقلة" icon={<Sun size={20} />} />
-        <Card noPadding className="!p-4">
+        <Card noPadding className="p-4!">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {SUNNAH_TYPES.filter((sunnah) => !sunnah.prayer).map((sunnah) => (
               <button
@@ -504,7 +504,7 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
       {grid.length > 0 && (
         <div>
           <SectionHeader title="صلوات الأسبوع" icon={<BarChart3 size={20} />} />
-          <Card className="!p-5">
+          <Card className="p-5!">
             <PrayerWeekGrid
               grid={grid}
               onEdit={(date, prayer, _status, label) =>
@@ -526,21 +526,21 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
       {stats && (
         <div>
           <SectionHeader title="ملخص الأسبوع" icon={<BarChart3 size={20} />} />
-          <Card className="!p-6">
+          <Card className="p-6!">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">نسبة الالتزام</p>
                 <p className="text-4xl font-bold text-primary-700 dark:text-gold-400 mt-1">{stats.percentage}%</p>
               </div>
               <div className="h-20 w-20 rounded-full border-4 border-primary-200 dark:border-primary-800 flex items-center justify-center">
-                <div className="h-16 w-16 rounded-full bg-gradient-to-br from-primary-500 to-gold-400 flex items-center justify-center">
+                <div className="h-16 w-16 rounded-full bg-linear-to-br from-primary-500 to-gold-400 flex items-center justify-center">
                   <span className="text-white font-bold text-lg">{stats.percentage}%</span>
                 </div>
               </div>
             </div>
             <div className="w-full h-4 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden shadow-inner">
               <div
-                className="h-full bg-gradient-to-r from-primary-500 via-primary-600 to-gold-400 rounded-full transition-all duration-700 ease-out shadow-lg"
+                className="h-full bg-linear-to-r from-primary-500 via-primary-600 to-gold-400 rounded-full transition-all duration-700 ease-out shadow-lg"
                 style={{ width: `${stats.percentage}%` }}
               />
             </div>
@@ -624,7 +624,7 @@ function LocationPicker({ onPick, onAuto }: { onPick: (lat: number, lng: number,
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center" onClick={(e) => e.target === e.currentTarget && null}>
-      <Card className="w-full max-w-md max-h-[80vh] flex flex-col animate-slide-up !p-0" noPadding>
+      <Card className="w-full max-w-md max-h-[80vh] flex flex-col animate-slide-up p-0!" noPadding>
         <div className="p-4 border-b border-primary-100 dark:border-primary-800">
           <h2 className="text-lg font-bold text-primary-800 dark:text-primary-100 mb-3">اختر موقعك</h2>
           <Button variant="secondary" size="sm" onClick={onAuto} className="mb-2">

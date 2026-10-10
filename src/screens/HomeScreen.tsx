@@ -190,7 +190,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
   return (
     <div className="space-y-5 pb-4">
       {/* Header with greeting */}
-      <div className="bg-gradient-to-bl from-primary-700 to-primary-900 dark:from-primary-800 dark:to-primary-950 rounded-3xl p-5 text-white relative overflow-hidden">
+      <div className="bg-linear-to-bl from-primary-700 to-primary-900 dark:from-primary-800 dark:to-primary-950 rounded-3xl p-5 text-white relative overflow-hidden">
         <div className="absolute top-0 left-0 w-32 h-32 bg-gold-400/10 rounded-full -translate-x-16 -translate-y-16" />
         <div className="absolute bottom-0 left-0 w-24 h-24 bg-gold-400/5 rounded-full translate-x-12 translate-y-12" />
         <div className="relative">
@@ -207,7 +207,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
 
           {/* Next prayer card */}
           {nextPrayer && (
-            <div className="mt-4 bg-white/10 rounded-2xl p-3 backdrop-blur-sm">
+            <div className="mt-4 bg-white/10 rounded-2xl p-3 backdrop-blur-xs">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Sunrise size={20} className="text-gold-300" />
@@ -231,9 +231,9 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
         <button
           type="button"
           onClick={() => navigate('quran')}
-          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-sm hover:border-primary-400 transition-all hover:scale-[1.02] active:scale-95"
+          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 transition-all hover:scale-[1.02] active:scale-95"
         >
-          <div className="h-10 w-10 rounded-xl bg-primary-100 dark:bg-primary-800 text-primary-700 dark:text-gold-400 flex items-center justify-center mb-1.5 shadow-sm">
+          <div className="h-10 w-10 rounded-xl bg-primary-100 dark:bg-primary-800 text-primary-700 dark:text-gold-400 flex items-center justify-center mb-1.5 shadow-xs">
             <BookOpen size={20} />
           </div>
           <span className="text-xs font-bold text-primary-900 dark:text-primary-100">المصحف</span>
@@ -242,9 +242,9 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
         <button
           type="button"
           onClick={() => navigate('prayer')}
-          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-sm hover:border-primary-400 transition-all hover:scale-[1.02] active:scale-95"
+          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 transition-all hover:scale-[1.02] active:scale-95"
         >
-          <div className="h-10 w-10 rounded-xl bg-primary-100 dark:bg-primary-800 text-primary-700 dark:text-gold-400 flex items-center justify-center mb-1.5 shadow-sm">
+          <div className="h-10 w-10 rounded-xl bg-primary-100 dark:bg-primary-800 text-primary-700 dark:text-gold-400 flex items-center justify-center mb-1.5 shadow-xs">
             <Moon size={20} />
           </div>
           <span className="text-xs font-bold text-primary-900 dark:text-primary-100">الصلاة</span>
@@ -253,9 +253,9 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
         <button
           type="button"
           onClick={() => navigate('adhkar')}
-          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-sm hover:border-primary-400 transition-all hover:scale-[1.02] active:scale-95"
+          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 transition-all hover:scale-[1.02] active:scale-95"
         >
-          <div className="h-10 w-10 rounded-xl bg-primary-100 dark:bg-primary-800 text-primary-700 dark:text-gold-400 flex items-center justify-center mb-1.5 shadow-sm">
+          <div className="h-10 w-10 rounded-xl bg-primary-100 dark:bg-primary-800 text-primary-700 dark:text-gold-400 flex items-center justify-center mb-1.5 shadow-xs">
             <Heart size={20} />
           </div>
           <span className="text-xs font-bold text-primary-900 dark:text-primary-100">الأذكار</span>
@@ -264,16 +264,16 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
         <button
           type="button"
           onClick={() => navigate('tasbih')}
-          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-sm hover:border-primary-400 transition-all hover:scale-[1.02] active:scale-95"
+          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 transition-all hover:scale-[1.02] active:scale-95"
         >
-          <div className="h-10 w-10 rounded-xl bg-primary-100 dark:bg-primary-800 text-primary-700 dark:text-gold-400 flex items-center justify-center mb-1.5 shadow-sm">
+          <div className="h-10 w-10 rounded-xl bg-primary-100 dark:bg-primary-800 text-primary-700 dark:text-gold-400 flex items-center justify-center mb-1.5 shadow-xs">
             <Repeat size={20} />
           </div>
           <span className="text-xs font-bold text-primary-900 dark:text-primary-100">المسبحة</span>
         </button>
       </div>
 
-      <Card className="border-gold-200 bg-gradient-to-bl from-gold-50 to-white dark:border-gold-800/50 dark:from-gold-900/20 dark:to-primary-900/50">
+      <Card className="border-gold-200 bg-linear-to-bl from-gold-50 to-white dark:border-gold-800/50 dark:from-gold-900/20 dark:to-primary-900/50">
         <div className="flex items-center gap-2 text-primary-700 dark:text-gold-300">
           <Sparkles size={18} />
           <h2 className="font-bold">رسالة اليوم من القرآن</h2>
@@ -299,17 +299,17 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
 
       {/* Streak + quick stats */}
       <div className="grid grid-cols-3 gap-3">
-        <Card className="flex flex-col items-center text-center !p-3">
+        <Card className="flex flex-col items-center text-center p-3!">
           <Flame size={24} className={streak > 0 ? 'text-accent-500' : 'text-gray-300 dark:text-gray-600'} />
           <p className="text-2xl font-bold text-primary-700 dark:text-primary-200 mt-1">{streak}</p>
           <p className="text-xs text-gray-500 dark:text-gray-400">أيام متتالية</p>
         </Card>
-        <Card className="flex flex-col items-center text-center !p-3">
+        <Card className="flex flex-col items-center text-center p-3!">
           <Check size={24} className="text-success-500" />
           <p className="text-2xl font-bold text-primary-700 dark:text-primary-200 mt-1">{doneTasks.length}</p>
           <p className="text-xs text-gray-500 dark:text-gray-400">مهام مكتملة</p>
         </Card>
-        <Card className="flex flex-col items-center text-center !p-3">
+        <Card className="flex flex-col items-center text-center p-3!">
           <Clock size={24} className="text-warning-500" />
           <p className="text-2xl font-bold text-primary-700 dark:text-primary-200 mt-1">{pendingTasks.length}</p>
           <p className="text-xs text-gray-500 dark:text-gray-400">مهام معلقة</p>
@@ -466,7 +466,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
         {hadith ? (
           <Card onClick={() => navigate('hadith', { hadithId: hadith.id })}>
             <div className="flex items-start gap-3">
-              <Sparkles size={20} className="text-gold-500 flex-shrink-0 mt-1" />
+              <Sparkles size={20} className="text-gold-500 shrink-0 mt-1" />
               <div className="flex-1">
                 <p className="text-sm leading-relaxed text-primary-800 dark:text-primary-100 line-clamp-3 quran-text whitespace-pre-line">
                   {hadith.text}
@@ -480,7 +480,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
         ) : (
           <Card onClick={() => navigate('hadith')}>
             <div className="flex items-start gap-3">
-              <Sparkles size={20} className="text-gold-500 flex-shrink-0 mt-1" />
+              <Sparkles size={20} className="text-gold-500 shrink-0 mt-1" />
               <div className="flex-1">
                 <p className="text-sm leading-relaxed text-primary-800 dark:text-primary-100">
                   {seedingHadith

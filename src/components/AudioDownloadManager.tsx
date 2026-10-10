@@ -92,7 +92,7 @@ export function AudioDownloadManager() {
               value={reciterId}
               onChange={(event) => changeReciter(event.target.value)}
               disabled={progress !== null}
-              className="w-full rounded-xl border border-primary-200 bg-white px-3 py-2.5 text-sm text-primary-800 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
+              className="w-full rounded-xl border border-primary-200 bg-white px-3 py-2.5 text-sm text-primary-800 focus:outline-hidden focus:ring-2 focus:ring-primary-500 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
             >
               {AUDIO_RECITERS.map((reciter) => (
                 <option key={reciter.id} value={reciter.id}>{reciter.name}</option>
@@ -105,7 +105,7 @@ export function AudioDownloadManager() {
               value={surahId}
               onChange={(event) => setSurahId(Number(event.target.value))}
               disabled={progress !== null}
-              className="w-full rounded-xl border border-primary-200 bg-white px-3 py-2.5 text-sm text-primary-800 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
+              className="w-full rounded-xl border border-primary-200 bg-white px-3 py-2.5 text-sm text-primary-800 focus:outline-hidden focus:ring-2 focus:ring-primary-500 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
             >
               {SURAHS.map((surah) => (
                 <option key={surah.id} value={surah.id}>سورة {surah.name} — {toArabicNumber(surah.ayahCount)} آية</option>

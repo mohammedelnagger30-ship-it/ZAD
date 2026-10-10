@@ -87,7 +87,7 @@ function PillarCard({ item, index }: { item: PrayerGuideItem; index: number }) {
   return (
     <Card className="shadow-md">
       <div className="flex items-center gap-3">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-600 text-sm font-bold text-white shadow-sm dark:bg-primary-700">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-600 text-sm font-bold text-white shadow-xs dark:bg-primary-700">
           {toArabicNumber(index + 1)}
         </span>
         <div className="min-w-0">
@@ -199,7 +199,7 @@ export function PrayerGuideScreen({ navigate }: PrayerGuideScreenProps) {
       </button>
 
       {/* Hero */}
-      <section className="relative isolate overflow-hidden rounded-[2rem] bg-gradient-to-br from-primary-600 via-primary-700 to-primary-900 p-6 text-white shadow-2xl dark:from-primary-900 dark:via-primary-950 dark:to-primary-950">
+      <section className="relative isolate overflow-hidden rounded-[2rem] bg-linear-to-br from-primary-600 via-primary-700 to-primary-900 p-6 text-white shadow-2xl dark:from-primary-900 dark:via-primary-950 dark:to-primary-950">
         <div className="pointer-events-none absolute -right-20 -top-20 -z-10 h-64 w-64 rounded-full border-4 border-white/5" />
         <div className="pointer-events-none absolute -left-16 top-16 -z-10 h-40 w-40 rounded-full border-4 border-white/5" />
         <div className="pointer-events-none absolute bottom-0 left-1/3 -z-10 h-44 w-44 rounded-full border-4 border-white/5" />
@@ -226,7 +226,7 @@ export function PrayerGuideScreen({ navigate }: PrayerGuideScreenProps) {
       {/* Section chips */}
       <nav
         aria-label="أقسام الصفحة"
-        className="sticky top-0 z-20 -mx-4 flex gap-2 overflow-x-auto border-b border-primary-100/80 bg-white/90 px-4 py-2.5 backdrop-blur-sm dark:border-primary-800/70 dark:bg-primary-950/90"
+        className="sticky top-0 z-20 -mx-4 flex gap-2 overflow-x-auto border-b border-primary-100/80 bg-white/90 px-4 py-2.5 backdrop-blur-xs dark:border-primary-800/70 dark:bg-primary-950/90"
       >
         {SECTIONS.map((section) => (
           <button
@@ -266,7 +266,7 @@ export function PrayerGuideScreen({ navigate }: PrayerGuideScreenProps) {
         />
         <Card className="border-gold-200 bg-gold-50/40 dark:border-[#cfa95c]/40 dark:bg-[#cfa95c]/[0.05]">
           <div className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gold-500 text-white shadow-sm">
+            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gold-500 text-white shadow-xs">
               <BookOpen size={16} />
             </span>
             <div className="min-w-0">

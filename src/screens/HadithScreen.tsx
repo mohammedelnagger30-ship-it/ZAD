@@ -387,7 +387,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
                   placeholder="ابحث بعنوان الباب (بلغة المصدر)"
                   aria-label="البحث في أبواب الكتاب"
                   dir="auto"
-                  className="w-full rounded-xl border border-primary-100 bg-white py-2.5 pr-10 pl-3 text-sm text-primary-800 placeholder:text-gray-400 focus:border-primary-400 focus:outline-none dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-100"
+                  className="w-full rounded-xl border border-primary-100 bg-white py-2.5 pr-10 pl-3 text-sm text-primary-800 placeholder:text-gray-400 focus:border-primary-400 focus:outline-hidden dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-100"
                 />
               </div>
               <div className="space-y-2">
@@ -574,7 +574,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="ابحث في الكتب المحفوظة على جهازك..."
-          className="w-full bg-white dark:bg-primary-900/40 border border-primary-100 dark:border-primary-800 rounded-xl py-2.5 pr-10 pl-10 text-sm text-primary-800 dark:text-primary-100 placeholder:text-gray-400 focus:outline-none focus:border-primary-400"
+          className="w-full bg-white dark:bg-primary-900/40 border border-primary-100 dark:border-primary-800 rounded-xl py-2.5 pr-10 pl-10 text-sm text-primary-800 dark:text-primary-100 placeholder:text-gray-400 focus:outline-hidden focus:border-primary-400"
         />
         {query && (
           <button

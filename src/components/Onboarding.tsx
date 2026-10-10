@@ -127,7 +127,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   const current = steps[step];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-primary-50 to-surface-light dark:from-primary-950 dark:to-surface-dark flex items-center justify-center p-6">
+    <div className="min-h-screen bg-linear-to-b from-primary-50 to-surface-light dark:from-primary-950 dark:to-surface-dark flex items-center justify-center p-6">
       <div className="max-w-md w-full">
         <div className="bg-white dark:bg-primary-900 rounded-3xl p-8 shadow-xl animate-scale-in">
           <div className="flex flex-col items-center text-center">

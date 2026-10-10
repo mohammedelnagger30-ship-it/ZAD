@@ -274,7 +274,7 @@ export function QuranScreen({ settings }: QuranScreenProps) {
     return (
       <div className="space-y-6 pb-6">
         {/* Enhanced Hero Section */}
-        <section className="relative isolate overflow-hidden rounded-[2rem] bg-gradient-to-br from-primary-600 via-primary-700 to-primary-900 px-6 py-6 text-white shadow-2xl sm:px-8 sm:py-8">
+        <section className="relative isolate overflow-hidden rounded-[2rem] bg-linear-to-br from-primary-600 via-primary-700 to-primary-900 px-6 py-6 text-white shadow-2xl sm:px-8 sm:py-8">
           {/* Decorative patterns */}
           <div className="pointer-events-none absolute -right-20 -top-20 -z-10 h-64 w-64 rounded-full border-4 border-white/5" />
           <div className="pointer-events-none absolute -right-10 top-10 -z-10 h-40 w-40 rounded-full border-4 border-white/5" />
@@ -283,11 +283,11 @@ export function QuranScreen({ settings }: QuranScreenProps) {
 
           <div className="relative flex items-start justify-between gap-6">
             <div className="flex-1">
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 backdrop-blur-sm">
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 backdrop-blur-xs">
                 <span className="h-2 w-2 rounded-full bg-gold-400 animate-pulse" />
                 <p className="text-xs font-semibold tracking-wide text-white/90">نور وهدى للقلوب</p>
               </div>
-              <h1 className="text-3xl font-bold leading-tight sm:text-4xl lg:text-5xl bg-gradient-to-r from-white to-white/80 bg-clip-text">
+              <h1 className="text-3xl font-bold leading-tight sm:text-4xl lg:text-5xl bg-linear-to-r from-white to-white/80 bg-clip-text">
                 القرآن الكريم
               </h1>
               <p className="mt-3 max-w-md text-base leading-relaxed text-white/80 sm:text-lg">
@@ -303,21 +303,21 @@ export function QuranScreen({ settings }: QuranScreenProps) {
           <div className="relative mt-6 flex flex-wrap items-center gap-3">
             <button
               onClick={() => setViewMode('mushaf')}
-              className="group inline-flex min-h-12 items-center gap-2.5 rounded-2xl bg-white px-5 py-3 text-base font-bold text-primary-800 shadow-lg transition-all hover:scale-105 hover:bg-primary-50 hover:shadow-xl focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/50"
+              className="group inline-flex min-h-12 items-center gap-2.5 rounded-2xl bg-white px-5 py-3 text-base font-bold text-primary-800 shadow-lg transition-all hover:scale-105 hover:bg-primary-50 hover:shadow-xl focus-visible:outline-hidden focus-visible:ring-4 focus-visible:ring-white/50"
             >
               <BookText size={20} className="group-hover:scale-110 transition-transform" />
               {mushafPage > 1 ? `متابعة القراءة · الصفحة ${toArabicNumber(mushafPage)}` : 'افتح المصحف'}
             </button>
             <div className="flex items-center gap-2">
-              <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-2.5 backdrop-blur-sm">
+              <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-2.5 backdrop-blur-xs">
                 <p className="text-xs text-white/70">السور</p>
                 <p className="text-lg font-bold">{toArabicNumber(SURAHS.length)}</p>
               </div>
-              <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-2.5 backdrop-blur-sm">
+              <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-2.5 backdrop-blur-xs">
                 <p className="text-xs text-white/70">الأجزاء</p>
                 <p className="text-lg font-bold">{toArabicNumber(JUZ_INFO.length)}</p>
               </div>
-              <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-2.5 backdrop-blur-sm">
+              <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-2.5 backdrop-blur-xs">
                 <p className="text-xs text-white/70">الصفحات</p>
                 <p className="text-lg font-bold">{toArabicNumber(TOTAL_QURAN_PAGES)}</p>
               </div>
@@ -357,7 +357,7 @@ export function QuranScreen({ settings }: QuranScreenProps) {
                 <div className="flex items-center gap-3">
                   <div className="h-2 flex-1 overflow-hidden rounded-full bg-primary-100 dark:bg-primary-800/50">
                     <div
-                      className="h-full rounded-full bg-gradient-to-r from-primary-500 to-primary-600 transition-all"
+                      className="h-full rounded-full bg-linear-to-r from-primary-500 to-primary-600 transition-all"
                       style={{ width: `${khatmahStatus.percent}%` }}
                     />
                   </div>
@@ -479,7 +479,7 @@ export function QuranScreen({ settings }: QuranScreenProps) {
           <>
             {/* Enhanced Search */}
             <div className="relative group">
-              <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-primary-500 to-primary-600 opacity-0 group-focus-within:opacity-100 transition-opacity duration-300 blur-lg" />
+              <div className="absolute inset-0 rounded-3xl bg-linear-to-r from-primary-500 to-primary-600 opacity-0 group-focus-within:opacity-100 transition-opacity duration-300 blur-lg" />
               <Search size={20} className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-primary-500 dark:text-primary-300 transition-colors group-focus-within:text-primary-600" />
               <input
                 type="text"
@@ -487,7 +487,7 @@ export function QuranScreen({ settings }: QuranScreenProps) {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="ابحث باسم السورة أو رقمها..."
                 aria-label="ابحث عن سورة"
-                className="relative min-h-14 w-full rounded-3xl border-2 border-primary-200 bg-white py-3.5 pl-12 pr-12 text-base text-primary-800 shadow-lg outline-none transition-all duration-300 focus:border-primary-500 focus:ring-4 focus:ring-primary-100/70 placeholder:text-gray-400 dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-100 dark:focus:ring-primary-900/60"
+                className="relative min-h-14 w-full rounded-3xl border-2 border-primary-200 bg-white py-3.5 pl-12 pr-12 text-base text-primary-800 shadow-lg outline-hidden transition-all duration-300 focus:border-primary-500 focus:ring-4 focus:ring-primary-100/70 placeholder:text-gray-400 dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-100 dark:focus:ring-primary-900/60"
               />
               {searchQuery && (
                 <button
@@ -542,7 +542,7 @@ export function QuranScreen({ settings }: QuranScreenProps) {
                 ))}
               </div>
             ) : (
-              <div className="rounded-3xl border-2 border-dashed border-primary-300 bg-gradient-to-br from-white/50 to-primary-50/50 px-6 py-12 text-center shadow-inner dark:border-primary-800 dark:from-primary-950/50 dark:to-primary-900/50">
+              <div className="rounded-3xl border-2 border-dashed border-primary-300 bg-linear-to-br from-white/50 to-primary-50/50 px-6 py-12 text-center shadow-inner dark:border-primary-800 dark:from-primary-950/50 dark:to-primary-900/50">
                 <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-100 dark:bg-primary-800">
                   <Search size={32} className="text-primary-400 dark:text-primary-500" />
                 </div>
@@ -557,7 +557,7 @@ export function QuranScreen({ settings }: QuranScreenProps) {
           <>
             {/* Search inside the ayah text */}
             <div className="relative group">
-              <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-primary-500 to-primary-600 opacity-0 group-focus-within:opacity-100 transition-opacity duration-300 blur-lg" />
+              <div className="absolute inset-0 rounded-3xl bg-linear-to-r from-primary-500 to-primary-600 opacity-0 group-focus-within:opacity-100 transition-opacity duration-300 blur-lg" />
               <Search size={20} className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-primary-500 dark:text-primary-300 transition-colors group-focus-within:text-primary-600" />
               <input
                 type="text"
@@ -565,7 +565,7 @@ export function QuranScreen({ settings }: QuranScreenProps) {
                 onChange={(e) => setAyahQuery(e.target.value)}
                 placeholder="ابحث في نص القرآن الكريم..."
                 aria-label="ابحث في الآيات"
-                className="relative min-h-14 w-full rounded-3xl border-2 border-primary-200 bg-white py-3.5 pl-12 pr-12 text-base text-primary-800 shadow-lg outline-none transition-all duration-300 focus:border-primary-500 focus:ring-4 focus:ring-primary-100/70 placeholder:text-gray-400 dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-100 dark:focus:ring-primary-900/60"
+                className="relative min-h-14 w-full rounded-3xl border-2 border-primary-200 bg-white py-3.5 pl-12 pr-12 text-base text-primary-800 shadow-lg outline-hidden transition-all duration-300 focus:border-primary-500 focus:ring-4 focus:ring-primary-100/70 placeholder:text-gray-400 dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-100 dark:focus:ring-primary-900/60"
               />
               {ayahQuery && (
                 <button
@@ -579,7 +579,7 @@ export function QuranScreen({ settings }: QuranScreenProps) {
             </div>
 
             {!ayahQuery.trim() ? (
-              <div className="rounded-3xl border-2 border-dashed border-primary-300 bg-gradient-to-br from-white/50 to-primary-50/50 px-6 py-12 text-center shadow-inner dark:border-primary-800 dark:from-primary-950/50 dark:to-primary-900/50">
+              <div className="rounded-3xl border-2 border-dashed border-primary-300 bg-linear-to-br from-white/50 to-primary-50/50 px-6 py-12 text-center shadow-inner dark:border-primary-800 dark:from-primary-950/50 dark:to-primary-900/50">
                 <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-100 dark:bg-primary-800">
                   <Search size={32} className="text-primary-400 dark:text-primary-500" />
                 </div>
@@ -589,7 +589,7 @@ export function QuranScreen({ settings }: QuranScreenProps) {
                 </p>
               </div>
             ) : ayahSearch.results.length === 0 ? (
-              <div className="rounded-3xl border-2 border-dashed border-primary-300 bg-gradient-to-br from-white/50 to-primary-50/50 px-6 py-12 text-center shadow-inner dark:border-primary-800 dark:from-primary-950/50 dark:to-primary-900/50">
+              <div className="rounded-3xl border-2 border-dashed border-primary-300 bg-linear-to-br from-white/50 to-primary-50/50 px-6 py-12 text-center shadow-inner dark:border-primary-800 dark:from-primary-950/50 dark:to-primary-900/50">
                 <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-100 dark:bg-primary-800">
                   <Search size={32} className="text-primary-400 dark:text-primary-500" />
                 </div>
@@ -617,7 +617,7 @@ export function QuranScreen({ settings }: QuranScreenProps) {
                       key={`${result.surahId}:${result.ayahNumber}`}
                       type="button"
                       onClick={() => openAyahFromSearch(result.surahId, result.ayahNumber)}
-                      className="group w-full rounded-3xl border-2 border-primary-100 bg-white p-5 text-right shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary-300 hover:shadow-md dark:border-primary-800/60 dark:bg-primary-900/30 dark:hover:border-primary-700"
+                      className="group w-full rounded-3xl border-2 border-primary-100 bg-white p-5 text-right shadow-xs transition-all hover:-translate-y-0.5 hover:border-primary-300 hover:shadow-md dark:border-primary-800/60 dark:bg-primary-900/30 dark:hover:border-primary-700"
                     >
                       <p className="quran-text text-lg text-primary-900 dark:text-primary-50" dir="rtl">
                         {result.text}
@@ -644,14 +644,14 @@ export function QuranScreen({ settings }: QuranScreenProps) {
               <Card
                 key={juz.id}
                 onClick={() => openJuz(juz.id)}
-                className="!p-4 hover:border-primary-400 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer group"
+                className="p-4! hover:border-primary-400 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer group"
               >
                 <div className="flex flex-col items-center gap-3 text-center">
-                  <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-100 to-primary-200 dark:from-primary-800 dark:to-primary-900 shadow-md group-hover:scale-110 transition-transform">
+                  <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-linear-to-br from-primary-100 to-primary-200 dark:from-primary-800 dark:to-primary-900 shadow-md group-hover:scale-110 transition-transform">
                     <span className="text-xl font-bold text-primary-700 dark:text-gold-400">
                       {toArabicNumber(juz.id)}
                     </span>
-                    <div className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full bg-gold-400 shadow-sm" />
+                    <div className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full bg-gold-400 shadow-xs" />
                   </div>
                   <div className="flex-1">
                     <p className="text-sm font-bold text-primary-800 dark:text-primary-100 mb-1">{juz.name}</p>
@@ -1063,7 +1063,7 @@ function AyahSpan({
   const word = (value: string, index: number) => (
     <span
       key={index}
-      className="inline-block hover:bg-gold-100 dark:hover:bg-gold-900/30 rounded cursor-pointer mx-0.5"
+      className="inline-block hover:bg-gold-100 dark:hover:bg-gold-900/30 rounded-sm cursor-pointer mx-0.5"
       onClick={(e) => {
         e.stopPropagation();
         const el = e.currentTarget;
@@ -1106,13 +1106,13 @@ function AyahSpan({
             {/* The mask hides the words, not their shape: the bar stays visible so the
                 memoriser still sees where each line runs, and can still tap it. */}
             {head && (
-              <span className="bg-primary-200 dark:bg-primary-700 rounded px-2 select-none" style={{ color: 'transparent' }}>
+              <span className="bg-primary-200 dark:bg-primary-700 rounded-sm px-2 select-none" style={{ color: 'transparent' }}>
                 {head}
                 {' '}
               </span>
             )}
             <span className="mushaf-ayah-tail">
-              <span className="bg-primary-200 dark:bg-primary-700 rounded px-2 select-none" style={{ color: 'transparent' }}>
+              <span className="bg-primary-200 dark:bg-primary-700 rounded-sm px-2 select-none" style={{ color: 'transparent' }}>
                 {tailWord}
               </span>
               {mark}
@@ -1143,17 +1143,17 @@ function AyahSpan({
 // Surah list item - Enhanced
 function SurahListItem({ surah, onOpen, onHifz }: { surah: SurahMeta; onOpen: () => void; onHifz: () => void }) {
   return (
-    <Card className="!p-4 transition-all duration-300 hover:-translate-y-1 hover:border-primary-400 hover:shadow-xl sm:!p-5 group">
+    <Card className="p-4! transition-all duration-300 hover:-translate-y-1 hover:border-primary-400 hover:shadow-xl sm:p-5! group">
       <div className="flex items-center gap-4">
         <button
           onClick={onOpen}
-          className="flex min-w-0 flex-1 items-center gap-4 rounded-2xl text-right outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:focus-visible:ring-gold-400 transition-colors hover:bg-primary-50/50 dark:hover:bg-primary-900/30 -mx-2 px-2 py-2"
+          className="flex min-w-0 flex-1 items-center gap-4 rounded-2xl text-right outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500 dark:focus-visible:ring-gold-400 transition-colors hover:bg-primary-50/50 dark:hover:bg-primary-900/30 -mx-2 px-2 py-2"
         >
-          <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border-2 border-primary-200 bg-gradient-to-br from-primary-50 to-primary-100 shadow-md dark:border-primary-700 dark:from-primary-800/80 dark:to-primary-900 group-hover:scale-110 transition-transform">
+          <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border-2 border-primary-200 bg-linear-to-br from-primary-50 to-primary-100 shadow-md dark:border-primary-700 dark:from-primary-800/80 dark:to-primary-900 group-hover:scale-110 transition-transform">
             <span className="text-lg font-bold text-primary-700 dark:text-gold-400">
               {toArabicNumber(surah.id)}
             </span>
-            <div className="absolute -bottom-1 -right-1 h-2.5 w-2.5 rounded-full bg-gold-400 shadow-sm" />
+            <div className="absolute -bottom-1 -right-1 h-2.5 w-2.5 rounded-full bg-gold-400 shadow-xs" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 mb-1">
@@ -1181,7 +1181,7 @@ function SurahListItem({ surah, onOpen, onHifz }: { surah: SurahMeta; onOpen: ()
         <button
           onClick={onHifz}
           aria-label={`بدء الحفظ في سورة ${surah.name}`}
-          className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-2xl border-2 border-gold-200 bg-gradient-to-br from-gold-50 to-gold-100 px-3 text-sm font-bold text-gold-700 shadow-md transition-all duration-300 hover:scale-105 hover:border-gold-400 hover:shadow-lg dark:border-gold-800/60 dark:from-gold-900/25 dark:to-gold-900/40 dark:text-gold-300 dark:hover:border-gold-600"
+          className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-2xl border-2 border-gold-200 bg-linear-to-br from-gold-50 to-gold-100 px-3 text-sm font-bold text-gold-700 shadow-md transition-all duration-300 hover:scale-105 hover:border-gold-400 hover:shadow-lg dark:border-gold-800/60 dark:from-gold-900/25 dark:to-gold-900/40 dark:text-gold-300 dark:hover:border-gold-600"
           title={`وضع الحفظ - ${surah.name}`}
         >
           <Layers size={16} />

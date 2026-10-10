@@ -93,7 +93,7 @@ export function ProgressScreen() {
       </div>
 
       {/* Streak hero */}
-      <div className="bg-gradient-to-bl from-accent-500 to-accent-700 rounded-3xl p-5 text-white relative overflow-hidden">
+      <div className="bg-linear-to-bl from-accent-500 to-accent-700 rounded-3xl p-5 text-white relative overflow-hidden">
         <div className="absolute top-0 left-0 w-32 h-32 bg-white/10 rounded-full -translate-x-16 -translate-y-16" />
         <div className="relative flex items-center gap-4">
           <Flame size={48} className="text-white" />
@@ -131,7 +131,7 @@ export function ProgressScreen() {
           </div>
         </div>
         <div className="w-full h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-          <div className="h-full bg-gradient-to-l from-primary-500 to-gold-400 rounded-full transition-all duration-500" style={{ width: `${memorizationPercent}%` }} />
+          <div className="h-full bg-linear-to-l from-primary-500 to-gold-400 rounded-full transition-all duration-500" style={{ width: `${memorizationPercent}%` }} />
         </div>
       </Card>
 
@@ -175,11 +175,11 @@ export function ProgressScreen() {
         <div className="flex items-center gap-3 mt-3 text-xs text-gray-500 dark:text-gray-400">
           <span>أقل</span>
           <div className="flex gap-1">
-            <div className="w-3 h-3 rounded bg-gray-100 dark:bg-gray-800" />
-            <div className="w-3 h-3 rounded bg-error-100 dark:bg-error-900/30" />
-            <div className="w-3 h-3 rounded bg-warning-200 dark:bg-warning-800/50" />
-            <div className="w-3 h-3 rounded bg-primary-300 dark:bg-primary-700" />
-            <div className="w-3 h-3 rounded bg-primary-500" />
+            <div className="w-3 h-3 rounded-sm bg-gray-100 dark:bg-gray-800" />
+            <div className="w-3 h-3 rounded-sm bg-error-100 dark:bg-error-900/30" />
+            <div className="w-3 h-3 rounded-sm bg-warning-200 dark:bg-warning-800/50" />
+            <div className="w-3 h-3 rounded-sm bg-primary-300 dark:bg-primary-700" />
+            <div className="w-3 h-3 rounded-sm bg-primary-500" />
           </div>
           <span>أكثر</span>
         </div>
@@ -240,7 +240,7 @@ export function ProgressScreen() {
           <div className="grid grid-cols-3 gap-3">
             {badges.map((badge, i) => (
               <div key={i} className="flex flex-col items-center text-center animate-scale-in">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-bl from-gold-400 to-gold-600 flex items-center justify-center mb-1">
+                <div className="w-14 h-14 rounded-2xl bg-linear-to-bl from-gold-400 to-gold-600 flex items-center justify-center mb-1">
                   <Award size={24} className="text-white" />
                 </div>
                 <p className="text-xs font-medium text-primary-700 dark:text-primary-200">{badge}</p>

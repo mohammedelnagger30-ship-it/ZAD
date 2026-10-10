@@ -154,7 +154,7 @@ export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenPro
         </div>
 
         {/* Brand Logo & Header */}
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-primary-700 to-primary-600 text-gold-300 shadow-lg shadow-primary-900/30">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-linear-to-tr from-primary-700 to-primary-600 text-gold-300 shadow-lg shadow-primary-900/30">
           <BookOpen size={28} />
         </div>
         <h1 className="text-center text-2xl font-bold text-primary-900 dark:text-primary-50">Sakinah</h1>
@@ -174,7 +174,7 @@ export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenPro
                 required
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                className="w-full bg-transparent py-2.5 text-sm text-primary-900 outline-none placeholder:text-gray-400 dark:text-primary-50"
+                className="w-full bg-transparent py-2.5 text-sm text-primary-900 outline-hidden placeholder:text-gray-400 dark:text-primary-50"
                 placeholder="example@domain.com"
                 dir="ltr"
               />
@@ -192,7 +192,7 @@ export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenPro
                 required
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                className="w-full bg-transparent py-2.5 text-sm text-primary-900 outline-none placeholder:text-gray-400 dark:text-primary-50"
+                className="w-full bg-transparent py-2.5 text-sm text-primary-900 outline-hidden placeholder:text-gray-400 dark:text-primary-50"
                 placeholder="••••••••"
                 dir="ltr"
               />
@@ -203,7 +203,7 @@ export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenPro
           <button
             type="submit"
             disabled={busy}
-            className="w-full rounded-xl bg-gradient-to-r from-primary-700 to-primary-600 py-3 font-bold text-white shadow-lg shadow-primary-950/20 transition-all hover:from-primary-600 hover:to-primary-500 active:scale-[0.99] disabled:opacity-60 text-sm"
+            className="w-full rounded-xl bg-linear-to-r from-primary-700 to-primary-600 py-3 font-bold text-white shadow-lg shadow-primary-950/20 transition-all hover:from-primary-600 hover:to-primary-500 active:scale-[0.99] disabled:opacity-60 text-sm"
           >
             {busy ? (
               <span className="inline-flex items-center justify-center gap-2">

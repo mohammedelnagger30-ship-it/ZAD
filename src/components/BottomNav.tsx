@@ -76,9 +76,9 @@ export function BottomNav({ current, onNavigate }: BottomNavProps) {
     </nav>
     <nav
       aria-label="التنقل الرئيسي"
-      className="fixed inset-y-0 right-0 z-50 hidden w-[5.25rem] flex-col items-center border-l border-primary-100/80 bg-white/90 py-5 shadow-sm backdrop-blur-xl dark:border-primary-800/50 dark:bg-primary-950/90 md:flex"
+      className="fixed inset-y-0 right-0 z-50 hidden w-[5.25rem] flex-col items-center border-l border-primary-100/80 bg-white/90 py-5 shadow-xs backdrop-blur-xl dark:border-primary-800/50 dark:bg-primary-950/90 md:flex"
     >
-      <div className="mb-8 flex h-11 w-11 items-center justify-center rounded-2xl bg-primary-100 text-primary-700 shadow-sm dark:bg-primary-800 dark:text-gold-400" aria-hidden="true">
+      <div className="mb-8 flex h-11 w-11 items-center justify-center rounded-2xl bg-primary-100 text-primary-700 shadow-xs dark:bg-primary-800 dark:text-gold-400" aria-hidden="true">
         <BookOpen size={23} />
       </div>
       <div className="flex w-full flex-col items-center gap-2 px-2">

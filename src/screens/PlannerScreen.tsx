@@ -163,7 +163,7 @@ export function PlannerScreen() {
 
   return (
     <div className="space-y-4 pb-4">
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-bl from-primary-700 via-primary-800 to-primary-950 p-5 text-white shadow-lg">
+      <section className="relative overflow-hidden rounded-3xl bg-linear-to-bl from-primary-700 via-primary-800 to-primary-950 p-5 text-white shadow-lg">
         <div className="pointer-events-none absolute -left-8 -top-10 h-40 w-40 rounded-full border border-white/10" />
         <div className="relative flex items-start justify-between gap-3">
           <div>
@@ -180,7 +180,7 @@ export function PlannerScreen() {
         </div>
       </section>
 
-      <div className="flex gap-1.5 rounded-2xl border border-primary-100/80 bg-white/75 p-1.5 shadow-sm dark:border-primary-800/60 dark:bg-primary-950/45">
+      <div className="flex gap-1.5 rounded-2xl border border-primary-100/80 bg-white/75 p-1.5 shadow-xs dark:border-primary-800/60 dark:bg-primary-950/45">
         {([
           { tab: 'plans' as const, label: 'خططي', icon: Calendar },
           { tab: 'surahs' as const, label: 'سجل السور', icon: BookOpenCheck },
@@ -245,7 +245,7 @@ export function PlannerScreen() {
               onChange={(event) => setSurahSearch(event.target.value)}
               aria-label="ابحث في سجل السور"
               placeholder="ابحث باسم السورة أو رقمها..."
-              className="min-h-12 w-full rounded-2xl border border-primary-100 bg-white py-3 pl-4 pr-11 text-sm text-primary-800 shadow-sm outline-none transition focus:border-primary-400 focus:ring-4 focus:ring-primary-100/70 placeholder:text-gray-400 dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-100 dark:focus:ring-primary-900/60"
+              className="min-h-12 w-full rounded-2xl border border-primary-100 bg-white py-3 pl-4 pr-11 text-sm text-primary-800 shadow-xs outline-hidden transition focus:border-primary-400 focus:ring-4 focus:ring-primary-100/70 placeholder:text-gray-400 dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-100 dark:focus:ring-primary-900/60"
             />
           </div>
           <div className="flex gap-1 overflow-x-auto rounded-xl bg-primary-50/80 p-1 dark:bg-primary-900/35">
@@ -320,7 +320,7 @@ export function PlannerScreen() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="suggest-plan-title"
-            className="flex max-h-full w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-primary-100 bg-white shadow-sm animate-scale-in dark:border-primary-800 dark:bg-primary-900"
+            className="flex max-h-full w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-primary-100 bg-white shadow-xs animate-scale-in dark:border-primary-800 dark:bg-primary-900"
           >
             <div className="flex items-center justify-between p-4 border-b border-primary-100 dark:border-primary-800">
               <h2 id="suggest-plan-title" className="text-lg font-bold text-primary-800 dark:text-primary-100">اقتراح خطة</h2>
@@ -361,7 +361,7 @@ export function PlannerScreen() {
                 value={goalText}
                 onChange={(e) => setGoalText(e.target.value)}
                 placeholder="مثال: حفظ سورة الملك"
-                className="min-h-20 w-full rounded-xl border border-primary-100 bg-gray-50 p-3 text-sm text-primary-800 focus:outline-none focus:border-primary-400 dark:border-primary-800 dark:bg-primary-800/30 dark:text-primary-100"
+                className="min-h-20 w-full rounded-xl border border-primary-100 bg-gray-50 p-3 text-sm text-primary-800 focus:outline-hidden focus:border-primary-400 dark:border-primary-800 dark:bg-primary-800/30 dark:text-primary-100"
               />
               {goalSuggestion && (
                 <div className="bg-gold-50 dark:bg-gold-900/20 rounded-xl p-3">
@@ -401,7 +401,7 @@ export function PlannerScreen() {
 
 function ProgressStat({ value, label }: { value: number; label: string }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/10 px-2 py-2.5 text-center backdrop-blur-sm">
+    <div className="rounded-xl border border-white/10 bg-white/10 px-2 py-2.5 text-center backdrop-blur-xs">
       <p className="text-xl font-bold">{toArabicNumber(value)}</p>
       <p className="mt-0.5 text-[10px] leading-4 text-white/75 sm:text-xs">{label}</p>
     </div>
@@ -434,7 +434,7 @@ function SurahProgressCard({
   const StatusIcon = status.icon;
 
   return (
-    <Card className="!p-3 transition-all hover:border-primary-300 hover:shadow-md">
+    <Card className="p-3! transition-all hover:border-primary-300 hover:shadow-md">
       <div className="flex items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary-200 bg-primary-50 text-sm font-bold text-primary-700 dark:border-primary-700 dark:bg-primary-800 dark:text-gold-300">
           {toArabicNumber(surahId)}
@@ -466,7 +466,7 @@ function SurahProgressCard({
           aria-valuemax={ayahCount}
           aria-valuenow={summary.memorizedAyahs}
         >
-          <div className="h-full rounded-full bg-gradient-to-l from-primary-500 to-gold-400 transition-all" style={{ width: `${percentage}%` }} />
+          <div className="h-full rounded-full bg-linear-to-l from-primary-500 to-gold-400 transition-all" style={{ width: `${percentage}%` }} />
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className={`inline-flex items-center gap-1 text-xs ${summary.hasReview ? 'text-primary-700 dark:text-primary-200' : 'text-gray-400 dark:text-gray-500'}`}>
@@ -603,7 +603,7 @@ function CreatePlanModal({ onClose, onSave }: { onClose: () => void; onSave: (pl
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="مثال: حفظ جزء عمّ"
-            className="w-full bg-gray-50 dark:bg-primary-800/30 border border-primary-100 dark:border-primary-800 rounded-xl py-2.5 px-3 text-sm text-primary-800 dark:text-primary-100 focus:outline-none focus:border-primary-400"
+            className="w-full bg-gray-50 dark:bg-primary-800/30 border border-primary-100 dark:border-primary-800 rounded-xl py-2.5 px-3 text-sm text-primary-800 dark:text-primary-100 focus:outline-hidden focus:border-primary-400"
           />
         </div>
 

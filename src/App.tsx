@@ -487,7 +487,7 @@ function AppContent({
   if (settingsError) {
     return (
       <div className="min-h-screen bg-surface-light dark:bg-surface-dark flex items-center justify-center px-4" dir="rtl">
-        <div role="alert" className="w-full max-w-md rounded-2xl border border-error-200 bg-white p-6 text-center shadow-sm dark:border-error-800 dark:bg-primary-900">
+        <div role="alert" className="w-full max-w-md rounded-2xl border border-error-200 bg-white p-6 text-center shadow-xs dark:border-error-800 dark:bg-primary-900">
           <h1 className="text-lg font-bold text-error-700 dark:text-error-300">تعذّر تحميل إعدادات التطبيق</h1>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
             تحقق من مساحة التخزين ثم أعد المحاولة. {settingsError}
@@ -495,7 +495,7 @@ function AppContent({
           <button
             type="button"
             onClick={() => { void reloadSettings(); }}
-            className="mt-4 rounded-xl bg-primary-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+            className="mt-4 rounded-xl bg-primary-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-800 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
           >
             إعادة المحاولة
           </button>

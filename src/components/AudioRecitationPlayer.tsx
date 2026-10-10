@@ -365,7 +365,7 @@ export function AudioRecitationPlayer({
             <select
               value={reciterId}
               onChange={(event) => onReciterChange(event.target.value)}
-              className="w-full rounded-xl border border-primary-200 bg-white px-3 py-2.5 text-sm text-primary-800 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
+              className="w-full rounded-xl border border-primary-200 bg-white px-3 py-2.5 text-sm text-primary-800 focus:outline-hidden focus:ring-2 focus:ring-primary-500 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
             >
               {AUDIO_RECITERS.map((reciter) => (
                 <option key={reciter.id} value={reciter.id}>
@@ -379,7 +379,7 @@ export function AudioRecitationPlayer({
             <select
               value={playbackRate}
               onChange={(event) => updatePlaybackRate(Number(event.target.value))}
-              className="w-full rounded-xl border border-primary-200 bg-white px-3 py-2.5 text-sm text-primary-800 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
+              className="w-full rounded-xl border border-primary-200 bg-white px-3 py-2.5 text-sm text-primary-800 focus:outline-hidden focus:ring-2 focus:ring-primary-500 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
             >
               <option value={0.75}>بطيئة — ٠٫٧٥×</option>
               <option value={1}>عادية — ١×</option>
@@ -391,7 +391,7 @@ export function AudioRecitationPlayer({
             <button
               onClick={() => void toggleSurah()}
               disabled={sourceLoading}
-              className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500"
             >
               {isPlaying ? <Pause size={18} /> : <Play size={18} />}
               {sourceLoading

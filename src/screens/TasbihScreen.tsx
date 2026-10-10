@@ -277,7 +277,7 @@ export function TasbihScreen() {
             }`}
           >
             {/* Ambient Background Glow */}
-            <div className="absolute -inset-4 rounded-full bg-gradient-to-tr from-primary-600/20 via-amber-500/20 to-primary-600/10 blur-2xl opacity-80 group-hover:opacity-100 transition-opacity" />
+            <div className="absolute -inset-4 rounded-full bg-linear-to-tr from-primary-600/20 via-amber-500/20 to-primary-600/10 blur-2xl opacity-80 group-hover:opacity-100 transition-opacity" />
 
             {/* SVG Ring Progress Art */}
             <svg width="270" height="270" viewBox="0 0 270 270" className="relative z-10 drop-shadow-xl">
@@ -372,7 +372,7 @@ export function TasbihScreen() {
       </div>
 
       {/* Stats Dashboard Card */}
-      <Card className="border border-primary-200/80 dark:border-primary-800/80 shadow-md bg-white/90 dark:bg-primary-950/80 backdrop-blur-sm">
+      <Card className="border border-primary-200/80 dark:border-primary-800/80 shadow-md bg-white/90 dark:bg-primary-950/80 backdrop-blur-xs">
         <div className="grid grid-cols-3 gap-2 text-center divide-x divide-x-reverse divide-primary-100 dark:divide-primary-800/60">
           <div className="px-2">
             <div className="flex items-center justify-center gap-1 text-amber-500 mb-1">

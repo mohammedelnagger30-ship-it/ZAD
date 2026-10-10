@@ -816,7 +816,7 @@ export function SettingsScreen({
                         : DEFAULT_ADHAN_SOUND_ID
                     }
                     onChange={(e) => onSaveSettings({ adhanVoiceId: e.target.value })}
-                    className="w-full bg-white dark:bg-primary-900 border border-primary-200 dark:border-primary-700 rounded-xl py-2.5 px-3 text-sm text-primary-900 dark:text-primary-100 font-semibold focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="w-full bg-white dark:bg-primary-900 border border-primary-200 dark:border-primary-700 rounded-xl py-2.5 px-3 text-sm text-primary-900 dark:text-primary-100 font-semibold focus:outline-hidden focus:ring-2 focus:ring-primary-500"
                   >
                     {ADHAN_SOUNDS.map((sound) => (
                       <option key={sound.id} value={sound.id}>
@@ -838,7 +838,7 @@ export function SettingsScreen({
                     variant="primary"
                     size="sm"
                     onClick={triggerAzanOverlayPreview}
-                    className="font-bold text-xs bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950"
+                    className="font-bold text-xs bg-linear-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950"
                   >
                     <Sparkles size={15} /> معاينة صفحة الأذان
                   </Button>
@@ -952,7 +952,7 @@ export function SettingsScreen({
             <select
               value={settings.calcMethod}
               onChange={(e) => onSaveSettings({ calcMethod: e.target.value })}
-              className="w-full bg-gray-50 dark:bg-primary-900/50 border border-primary-200 dark:border-primary-700 rounded-xl py-2.5 px-3 text-sm text-primary-900 dark:text-primary-100 font-semibold focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full bg-gray-50 dark:bg-primary-900/50 border border-primary-200 dark:border-primary-700 rounded-xl py-2.5 px-3 text-sm text-primary-900 dark:text-primary-100 font-semibold focus:outline-hidden focus:ring-2 focus:ring-primary-500"
             >
               {CALC_METHODS.map((m) => (
                 <option key={m} value={m}>

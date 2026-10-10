@@ -289,7 +289,7 @@ export function AdhkarScreen() {
             onChange={(event) => setQuery(event.target.value)}
             placeholder="ابحث في أذكار هذه الفئة..."
             aria-label="البحث في الأذكار"
-            className="w-full rounded-xl border border-primary-100 bg-white py-2.5 pr-10 pl-10 text-sm text-primary-800 placeholder:text-gray-400 focus:border-primary-400 focus:outline-none dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-100"
+            className="w-full rounded-xl border border-primary-100 bg-white py-2.5 pr-10 pl-10 text-sm text-primary-800 placeholder:text-gray-400 focus:border-primary-400 focus:outline-hidden dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-100"
           />
           {query && (
             <button onClick={() => setQuery('')} aria-label="مسح البحث" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
@@ -352,7 +352,7 @@ export function AdhkarScreen() {
         </Card>
       )}
 
-      <Card className="overflow-hidden border-primary-700 bg-gradient-to-bl from-primary-700 to-primary-950 text-white dark:border-primary-800">
+      <Card className="overflow-hidden border-primary-700 bg-linear-to-bl from-primary-700 to-primary-950 text-white dark:border-primary-800">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm text-primary-100">إنجاز الأذكار اليومية</p>
@@ -380,7 +380,7 @@ export function AdhkarScreen() {
           onChange={(event) => setQuery(event.target.value)}
           placeholder="ابحث في نص الذكر أو المرجع..."
           aria-label="البحث في كل الأذكار"
-          className="w-full rounded-xl border border-primary-100 bg-white py-2.5 pr-10 pl-10 text-sm text-primary-800 placeholder:text-gray-400 focus:border-primary-400 focus:outline-none dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-100"
+          className="w-full rounded-xl border border-primary-100 bg-white py-2.5 pr-10 pl-10 text-sm text-primary-800 placeholder:text-gray-400 focus:border-primary-400 focus:outline-hidden dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-100"
         />
         {query && (
           <button onClick={() => setQuery('')} aria-label="مسح البحث" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
@@ -496,7 +496,7 @@ function CategoryProgress({
   const progress = completed / category.items.length;
   const isComplete = completed === category.items.length;
   return (
-    <Card className="overflow-hidden border-primary-700 bg-gradient-to-bl from-primary-700 to-primary-950 text-white dark:border-primary-800">
+    <Card className="overflow-hidden border-primary-700 bg-linear-to-bl from-primary-700 to-primary-950 text-white dark:border-primary-800">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">{category.title}</h1>
