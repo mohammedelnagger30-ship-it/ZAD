@@ -23,14 +23,16 @@ function Test-Icon {
         "FAIL $Name is $($bmp.Width)x$($bmp.Height), expected ${ExpectW}x${ExpectH}"; $script:fail++
     }
 
-    # Classify every pixel: green field, gold mark, or neither.
+    # Classify every pixel: green field, ivory/gold accent, or neither.
     $green = 0; $gold = 0; $other = 0
     $bmpNew = New-Object System.Drawing.Bitmap($bmp)
     for ($y = 0; $y -lt $bmpNew.Height; $y += 2) {
         for ($x = 0; $x -lt $bmpNew.Width; $x += 2) {
             $c = $bmpNew.GetPixel($x, $y)
             if ($c.R -lt 70 -and $c.G -lt 120 -and $c.B -lt 100) { $green++ }
-            elseif ($c.R -gt 150 -and $c.G -gt 120 -and $c.B -lt 150) { $gold++ }
+            # Warm ivory accent: the arch, crescent and pages. Warm because R
+            # clearly leads B; the cream background stays out by its high blue.
+            elseif ($c.R -gt 230 -and $c.G -gt 210 -and $c.B -lt 230 -and ($c.R - $c.B) -ge 18) { $gold++ }
             else { $other++ }
         }
     }

@@ -1,10 +1,11 @@
 # Regenerates the PWA icon set from code so the binary assets are reproducible.
 #   powershell -ExecutionPolicy Bypass -File scripts\make-icons.ps1
 #
-# The mark is a closed Mushaf: dark-green cover, gold double frame, central
-# medallion, spine bands and cream page edges. Geometry lives in a 512x512
-# coordinate space and mirrors public\icon.svg exactly, so the SVG favicon and
-# every generated PNG stay pixel-comparable.
+# The mark is the Qurra artwork: an ogee arch over a mosque silhouette, crescent
+# moon and an open Mushaf on a rehl, inside its deep-green squircle. The source
+# artwork lives at scripts\assets\icon-source.png; it is cropped to the squircle
+# and set into the app's rounded-square frame (112/512 radius) on the artwork's
+# own cream field, so every generated icon uses the program's border.
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 
@@ -12,27 +13,26 @@ $root = Split-Path -Parent $PSScriptRoot
 $outDir = Join-Path $root 'public\icons'
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
+# Source artwork (committed) and the squircle bounds inside it.
+$SrcPath = Join-Path $root 'scripts\assets\icon-source.png'
+$SrcX = 167
+$SrcY = 147
+$SrcW = 963
+$SrcH = 963
+
+# Frame geometry, on the same 512 grid the old mark used.
+$FrameInset = 0      # 0 = the squircle fills the tile edge to edge, like the
+                     # big global apps; the cream corners are the program's
+                     # rounded-square border showing through.
+$FrameRadius = 112   # the app's rounded-square radius (22% of 512)
+
 # Palette (kept in sync with public\icon.svg).
-# "Sakinah" calm scheme: white/gray field, soft cover, champagne ornament.
-# Low chroma + gentle contrast = serene; every accent still lands in the ranges
-# scripts\check-icons.ps1 classifies as green field / gold mark.
-$BgTop     = [System.Drawing.Color]::FromArgb(255, 245, 245, 245)   # #F5F5F5
-$BgMid     = [System.Drawing.Color]::FromArgb(255, 232, 232, 232)     # #E8E8E8
-$BgBottom  = [System.Drawing.Color]::FromArgb(255, 220, 220, 220)     # #DCDCDC
-$CoverTop  = [System.Drawing.Color]::FromArgb(255, 46, 111, 95)    # #2E6F5F
-$CoverMid  = [System.Drawing.Color]::FromArgb(255, 36, 90, 75)     # #245A4B
-$CoverBot  = [System.Drawing.Color]::FromArgb(255, 26, 69, 59)     # #1A453B
-$SpineTop  = [System.Drawing.Color]::FromArgb(255, 25, 66, 56)     # #194238
-$SpineBot  = [System.Drawing.Color]::FromArgb(255, 16, 49, 42)     # #10312A
-$GoldLight = [System.Drawing.Color]::FromArgb(255, 239, 228, 184)  # #EFE4B8
-$Gold      = [System.Drawing.Color]::FromArgb(255, 201, 174, 116)  # #C9AE74
-$GoldDark  = [System.Drawing.Color]::FromArgb(255, 158, 132, 80)   # #9E8450
-$GoldSoft  = [System.Drawing.Color]::FromArgb(255, 217, 200, 140)  # #D9C88C
-$PagesTop  = [System.Drawing.Color]::FromArgb(255, 233, 226, 210)  # #E9E2D2
-$PagesBot  = [System.Drawing.Color]::FromArgb(255, 246, 241, 229)  # #F6F1E5
-$PageLine  = [System.Drawing.Color]::FromArgb(190, 201, 191, 169)  # #C9BFA9 @75%
-$Ink       = [System.Drawing.Color]::FromArgb(255, 14, 51, 44)     # #0E332C
-$Shadow    = [System.Drawing.Color]::FromArgb(255, 5, 19, 15)      # #05130F
+$Cream     = [System.Drawing.Color]::FromArgb(255, 252, 249, 244)   # #FCF9F4
+$CreamEnd  = [System.Drawing.Color]::FromArgb(255, 243, 238, 228)   # #F3EEE4
+$Ink       = [System.Drawing.Color]::FromArgb(255, 23, 69, 58)      # #17453A
+$Gold      = [System.Drawing.Color]::FromArgb(255, 201, 174, 116)   # #C9AE74
+$Muted     = [System.Drawing.Color]::FromArgb(255, 107, 127, 118)   # #6B7F76
+$ShadowRGB = @(13, 48, 42)                                          # artwork green
 
 function Add-RoundedRect {
     param(
@@ -45,18 +45,6 @@ function Add-RoundedRect {
     $Path.AddArc([float]($X + $W - $d), [float]$Y, $d, $d, 270, 90)
     $Path.AddArc([float]($X + $W - $d), [float]($Y + $H - $d), $d, $d, 0, 90)
     $Path.AddArc([float]$X, [float]($Y + $H - $d), $d, $d, 90, 90)
-    $Path.CloseFigure()
-}
-
-function Add-Diamond {
-    param(
-        [System.Drawing.Drawing2D.GraphicsPath]$Path,
-        [double]$Cx, [double]$Cy, [double]$Half
-    )
-    $Path.StartFigure()
-    $Path.AddLine([float]$Cx, [float]($Cy - $Half), [float]($Cx + $Half), [float]$Cy)
-    $Path.AddLine([float]($Cx + $Half), [float]$Cy, [float]$Cx, [float]($Cy + $Half))
-    $Path.AddLine([float]$Cx, [float]($Cy + $Half), [float]($Cx - $Half), [float]$Cy)
     $Path.CloseFigure()
 }
 
@@ -79,14 +67,9 @@ function New-GradientBrush {
     return $brush
 }
 
-function New-GoldBrush {
-    param([double]$X, [double]$Y, [double]$W, [double]$H)
-    return New-GradientBrush -X $X -Y $Y -W $W -H $H -Colors @($GoldLight, $Gold, $GoldDark)
-}
-
-# Draws the Mushaf mark in a 512x512 space, scaled to $Size.
+# Draws the framed artwork in a 512x512 space, scaled to $Size.
 function New-Mark {
-    param([int]$Size, [double]$Scale = 1.0)
+    param([int]$Size)
 
     $bmp = New-Object System.Drawing.Bitmap($Size, $Size)
     $bmp.SetResolution(96, 96)
@@ -94,134 +77,50 @@ function New-Mark {
     $g.SmoothingMode     = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
     $g.PixelOffsetMode   = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
-    $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
 
-    $k = ($Size / 512.0) * $Scale
-    $g.ScaleTransform([float]$k, [float]$k)
+    $k = $Size / 512.0
+    $inset = [int][Math]::Round($FrameInset * $k)
+    $inner = $Size - 2 * $inset
 
-    # Background: rounded deep-green field.
-    $bgPath = New-Object System.Drawing.Drawing2D.GraphicsPath
-    Add-RoundedRect -Path $bgPath -X 0 -Y 0 -W 512 -H 512 -R 112
-    $g.FillPath((New-GradientBrush -X 0 -Y 0 -W 512 -H 512 -Colors @($BgTop, $BgMid, $BgBottom)), $bgPath)
+    # Cream field — the program's background colour behind the frame. Solid so
+    # the mark composites seamlessly onto the og-image's cream background.
+    $g.FillRectangle((New-Object System.Drawing.SolidBrush($Cream)), 0, 0, $Size, $Size)
 
-    # Sparkles (kept faint — they should whisper, not sparkle).
-    $sparkle = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(150, 239, 228, 184))
-    foreach ($s in @(
-        @(78.0, 74.0, 8.0, 150),
-        @(436.0, 80.0, 6.0, 122),
-        @(76.0, 438.0, 6.5, 122),
-        @(438.0, 442.0, 8.0, 142)
-    )) {
-        $sparkle.Color = [System.Drawing.Color]::FromArgb([int]$s[3], 239, 228, 184)
-        $r = [float]$s[2]
-        $g.FillEllipse($sparkle, [float]([double]$s[0] - $r), [float]([double]$s[1] - $r), [float](2 * $r), [float](2 * $r))
+    # Soft contact shadow under the squircle (fades to nothing at the path edge).
+    # Only meaningful when the mark is inset from the icon edge.
+    if ($FrameInset -gt 0) {
+        $pad = [Math]::Max(4, [int]($Size / 80.0))
+        $shPath = New-Object System.Drawing.Drawing2D.GraphicsPath
+        Add-RoundedRect -Path $shPath -X $inset -Y $inset -W ($inner + 2 * $pad) -H ($inner + $pad) -R ($inner * 0.30)
+        $shBrush = New-Object System.Drawing.Drawing2D.PathGradientBrush($shPath)
+        $shBrush.CenterColor = [System.Drawing.Color]::FromArgb(150, $ShadowRGB[0], $ShadowRGB[1], $ShadowRGB[2])
+        $edge = New-Object 'System.Drawing.Color[]' $shPath.PointCount
+        for ($i = 0; $i -lt $shPath.PointCount; $i++) { $edge[$i] = [System.Drawing.Color]::FromArgb(0, $ShadowRGB[0], $ShadowRGB[1], $ShadowRGB[2]) }
+        $shBrush.SurroundColors = $edge
+        $g.FillPath($shBrush, $shPath)
     }
 
-    # Soft ground shadow.
-    $shadowPath = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $shadowPath.AddEllipse([float]116, [float]414, [float]280, [float]32)
-    $shadowBrush = New-Object System.Drawing.Drawing2D.PathGradientBrush($shadowPath)
-    $shadowBrush.CenterColor = [System.Drawing.Color]::FromArgb(112, 5, 19, 15)
-    $edge = New-Object 'System.Drawing.Color[]' $shadowPath.PointCount
-    for ($i = 0; $i -lt $shadowPath.PointCount; $i++) { $edge[$i] = [System.Drawing.Color]::FromArgb(0, 5, 19, 15) }
-    $shadowBrush.SurroundColors = $edge
-    $g.FillPath($shadowBrush, $shadowPath)
-
-    # Cast shadow just behind the book (right/bottom rim).
-    $castPath = New-Object System.Drawing.Drawing2D.GraphicsPath
-    Add-RoundedRect -Path $castPath -X 134 -Y 112 -W 252 -H 312 -R 16
-    $g.FillPath((New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(68, 5, 19, 15))), $castPath)
-
-    # Page block: cream, peeking out on the fore-edge and the bottom.
-    $pagesPath = New-Object System.Drawing.Drawing2D.GraphicsPath
-    Add-RoundedRect -Path $pagesPath -X 142 -Y 114 -W 240 -H 300 -R 12
-    $g.FillPath((New-GradientBrush -X 142 -Y 114 -W 240 -H 300 -Colors @($PagesTop, $PagesBot)), $pagesPath)
-
-    $pagePen = New-Object System.Drawing.Pen($PageLine, [float]1.4)
-    $g.DrawLine($pagePen, [float]375, [float]122, [float]375, [float]406)
-    $g.DrawLine($pagePen, [float]379, [float]122, [float]379, [float]406)
-    $g.DrawLine($pagePen, [float]150, [float]407, [float]374, [float]407)
-    $g.DrawLine($pagePen, [float]150, [float]411, [float]374, [float]411)
-
-    # Cover.
-    $coverPath = New-Object System.Drawing.Drawing2D.GraphicsPath
-    Add-RoundedRect -Path $coverPath -X 130 -Y 102 -W 240 -H 300 -R 16
-    $g.FillPath((New-GradientBrush -X 130 -Y 102 -W 240 -H 300 -Colors @($CoverTop, $CoverMid, $CoverBot)), $coverPath)
-
-    # Spine (rounded on the left only) + gold headbands.
-    $spinePath = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $spinePath.StartFigure()
-    $spinePath.AddLine([float]146, [float]102, [float]166, [float]102)
-    $spinePath.AddLine([float]166, [float]102, [float]166, [float]402)
-    $spinePath.AddLine([float]166, [float]402, [float]146, [float]402)
-    $spinePath.AddArc([float]130, [float]370, [float]32, [float]32, 90, 90)
-    $spinePath.AddLine([float]130, [float]386, [float]130, [float]118)
-    $spinePath.AddArc([float]130, [float]102, [float]32, [float]32, 180, 90)
-    $spinePath.CloseFigure()
-    $g.FillPath((New-GradientBrush -X 130 -Y 102 -W 36 -H 300 -Colors @($SpineTop, $SpineBot) -Mode ([System.Drawing.Drawing2D.LinearGradientMode]::Horizontal)), $spinePath)
-
-    # NOTE: never name a local after a palette colour ($Gold, $Ink, ...) — PowerShell
-    # scopes are case-insensitive and dynamically resolved, so the palette entry
-    # would resolve to this local for any function called below this point.
-    $bandBrush = New-GoldBrush -X 130 -Y 102 -W 240 -H 300
-    $g.FillRectangle($bandBrush, [float]130, [float]134, [float]36, [float]9)
-    $g.FillRectangle($bandBrush, [float]130, [float]361, [float]36, [float]9)
-
-    # Gold double frame.
-    $framePath = New-Object System.Drawing.Drawing2D.GraphicsPath
-    Add-RoundedRect -Path $framePath -X 180 -Y 134 -W 176 -H 236 -R 14
-    $g.DrawPath((New-Object System.Drawing.Pen((New-GoldBrush -X 180 -Y 134 -W 176 -H 236), [float]5)), $framePath)
-
-    $innerPath = New-Object System.Drawing.Drawing2D.GraphicsPath
-    Add-RoundedRect -Path $innerPath -X 191 -Y 145 -W 154 -H 214 -R 10
-    $g.DrawPath((New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(191, 201, 174, 116), [float]1.8)), $innerPath)
-
-    # Corner ornaments.
-    foreach ($c in @(@(180.0, 134.0), @(356.0, 134.0), @(180.0, 370.0), @(356.0, 370.0))) {
-        $dPath = New-Object System.Drawing.Drawing2D.GraphicsPath
-        Add-Diamond -Path $dPath -Cx $c[0] -Cy $c[1] -Half 9
-        $g.FillPath((New-GoldBrush -X ($c[0] - 9) -Y ($c[1] - 9) -W 18 -H 18), $dPath)
-    }
-
-    # Flourish rules + lozenges.
-    $rulePen = New-Object System.Drawing.Pen((New-GoldBrush -X 214 -Y 179 -W 108 -H 14), [float]2.6)
-    $rulePen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $rulePen.EndCap   = [System.Drawing.Drawing2D.LineCap]::Round
-    foreach ($y in @(186.0, 318.0)) {
-        $g.DrawLine($rulePen, [float]214, [float]$y, [float]250, [float]$y)
-        $g.DrawLine($rulePen, [float]286, [float]$y, [float]322, [float]$y)
-        $lozenge = New-Object System.Drawing.Drawing2D.GraphicsPath
-        Add-Diamond -Path $lozenge -Cx 268 -Cy $y -Half 7
-        $g.FillPath((New-GoldBrush -X 261 -Y ($y - 7) -W 14 -H 14), $lozenge)
-    }
-
-    # Central medallion: dark disc, gold rings, 8-point star.
-    $g.FillEllipse((New-Object System.Drawing.SolidBrush($Ink)), [float]228, [float]212, [float]80, [float]80)
-    $g.DrawEllipse((New-Object System.Drawing.Pen((New-GoldBrush -X 228 -Y 212 -W 80 -H 80), [float]5)), [float]228, [float]212, [float]80, [float]80)
-    $g.DrawEllipse((New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(204, 201, 174, 116), [float]1.8)), [float]238, [float]222, [float]60, [float]60)
-
-    $starPath = New-Object System.Drawing.Drawing2D.GraphicsPath
-    Add-RoundedRect -Path $starPath -X 250 -Y 234 -W 36 -H 36 -R 3
-    $g.FillPath((New-GoldBrush -X 250 -Y 234 -W 36 -H 36), $starPath)
-
-    $savedState = $g.Save()
-    $g.TranslateTransform([float]268, [float]252)
-    $g.RotateTransform([float]45)
-    $starRotated = New-Object System.Drawing.Drawing2D.GraphicsPath
-    Add-RoundedRect -Path $starRotated -X -18 -Y -18 -W 36 -H 36 -R 3
-    $g.FillPath((New-GoldBrush -X -18 -Y -18 -W 36 -H 36), $starRotated)
-    $g.Restore($savedState)
-
-    $g.FillEllipse((New-Object System.Drawing.SolidBrush($Ink)), [float]257, [float]241, [float]22, [float]22)
-    $g.FillEllipse((New-Object System.Drawing.SolidBrush($GoldSoft)), [float]262.5, [float]246.5, [float]11, [float]11)
+    # The artwork, cropped to its squircle and set into the frame.
+    $srcRect = New-Object System.Drawing.Rectangle($SrcX, $SrcY, $SrcW, $SrcH)
+    $dstRect = New-Object System.Drawing.Rectangle($inset, $inset, $inner, $inner)
+    $g.DrawImage((Get-SourceImage), $dstRect, $srcRect, [System.Drawing.GraphicsUnit]::Pixel)
 
     $g.Dispose()
     return $bmp
 }
 
+$script:SourceImage = $null
+function Get-SourceImage {
+    if ($null -eq $script:SourceImage) {
+        if (-not (Test-Path $SrcPath)) { throw "missing source artwork: $SrcPath" }
+        $script:SourceImage = [System.Drawing.Image]::FromFile($SrcPath)
+    }
+    return $script:SourceImage
+}
+
 function Save-Icon {
     param([int]$Size, [string]$Name)
-    $bmp = New-Mark -Size $Size -Scale 1.0
+    $bmp = New-Mark -Size $Size
     $path = Join-Path $outDir $Name
     $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
     $bmp.Dispose()
@@ -237,31 +136,28 @@ function Save-OgImage {
     $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
 
     $rect = New-Object System.Drawing.RectangleF(0, 0, $w, $h)
-    $grad = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
-        $rect, $BgTop, $BgBottom, [System.Drawing.Drawing2D.LinearGradientMode]::Vertical)
-    $g.FillRectangle($grad, $rect)
+    $g.FillRectangle((New-Object System.Drawing.SolidBrush($Cream)), $rect)
 
-    $mark = New-Mark -Size 380 -Scale 1.0
-    $g.DrawImage($mark, 60, ($h - 380) / 2, 380, 380)
+    $markSize = 440
+    $mark = New-Mark -Size $markSize
+    $g.DrawImage($mark, 70, [int](($h - $markSize) / 2), $markSize, $markSize)
     $mark.Dispose()
 
     # TextRenderer (GDI/Uniscribe) shapes text correctly; Graphics.DrawString does not.
-    $white = [System.Drawing.Color]::FromArgb(255, 242, 247, 244)
-    $muted = [System.Drawing.Color]::FromArgb(215, 215, 203, 178)
     $titleFont = New-Object System.Drawing.Font('Segoe UI', 92, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
-    $subFont   = New-Object System.Drawing.Font('Segoe UI', 34, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
+    $subFont   = New-Object System.Drawing.Font('Segoe UI', 32, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
 
     [System.Windows.Forms.TextRenderer]::DrawText(
-        $g, 'Sakinah',
-        $titleFont, (New-Object System.Drawing.Point(494, 196)), $white,
+        $g, 'Qurra',
+        $titleFont, (New-Object System.Drawing.Point(576, 188)), $Ink,
         [System.Windows.Forms.TextFormatFlags]::NoPadding)
 
-    $rulePen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(255, 201, 174, 116), [float]5)
-    $g.DrawLine($rulePen, 496, 330, 920, 330)
+    $rulePen = New-Object System.Drawing.Pen($Gold, [float]5)
+    $g.DrawLine($rulePen, 578, 326, 1010, 326)
 
     [System.Windows.Forms.TextRenderer]::DrawText(
         $g, 'Quran, prayer & daily worship', $subFont,
-        (New-Object System.Drawing.Point(496, 362)), $muted,
+        (New-Object System.Drawing.Point(578, 360)), $Muted,
         [System.Windows.Forms.TextFormatFlags]::NoPadding -bor [System.Windows.Forms.TextFormatFlags]::NoPrefix)
 
     $g.Dispose()
@@ -305,10 +201,64 @@ function Save-AndroidLauncherIcons {
     }
 }
 
+# Adaptive icon: cream background layer + the same framed artwork as a bitmap
+# foreground. The foreground's cream corners are exactly the background colour,
+# so every launcher mask (circle, squircle, rounded square) stays seamless.
+function Save-AndroidAdaptiveLayers {
+    $androidResDir = Join-Path $root 'android\app\src\main\res'
+
+    $fgDir = Join-Path $androidResDir 'drawable-nodpi'
+    New-Item -ItemType Directory -Force -Path $fgDir | Out-Null
+    $fg = New-Mark -Size 432
+    $fgPath = Join-Path $fgDir 'ic_launcher_foreground.png'
+    $fg.Save($fgPath, [System.Drawing.Imaging.ImageFormat]::Png)
+    $fg.Dispose()
+    "  android\drawable-nodpi\ic_launcher_foreground.png ($((Get-Item $fgPath).Length) bytes)"
+
+    # The vector foregrounds drawn the old Mushaf mark; the bitmap replaces both.
+    foreach ($rel in @('drawable\ic_launcher_foreground.xml', 'drawable-v24\ic_launcher_foreground.xml')) {
+        $p = Join-Path $androidResDir $rel
+        if (Test-Path $p) { Remove-Item $p -Force; "  removed android\$rel" }
+    }
+
+    # Background layer colour = the artwork's cream field.
+    $bgPath = Join-Path $androidResDir 'values\ic_launcher_background.xml'
+    $bgXml = @"
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#FCF9F4</color>
+</resources>
+"@
+    # UTF-8 without BOM (aapt2 chokes on a leading BOM in resource XML).
+    [System.IO.File]::WriteAllText($bgPath, $bgXml, (New-Object System.Text.UTF8Encoding($false)))
+    "  android\values\ic_launcher_background.xml (#FCF9F4)"
+}
+
 Add-Type -AssemblyName System.Windows.Forms
+
+# public\icon.svg: the same artwork, embedded as a PNG so the favicon and the
+# in-app logo are pixel-identical to the launcher icon (no drift between the
+# vector and raster marks).
+function Save-SvgIcon {
+    $pngPath = Join-Path $outDir 'icon-192.png'
+    $b64 = [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($pngPath))
+    $svg = @"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>قُرّة Qurra</title>
+  <image href="data:image/png;base64,$b64" x="0" y="0" width="512" height="512"/>
+</svg>
+"@
+    $svgPath = Join-Path $root 'public\icon.svg'
+    [System.IO.File]::WriteAllText($svgPath, $svg, (New-Object System.Text.UTF8Encoding($false)))
+    "  icon.svg ($((Get-Item $svgPath).Length) bytes)"
+}
+
 "Writing icons to public\icons\"
 Save-Icon -Size 512 -Name 'icon-512.png'
 Save-Icon -Size 192 -Name 'icon-192.png'
+Save-SvgIcon
 Save-AndroidLauncherIcons
+Save-AndroidAdaptiveLayers
 Save-OgImage
+if ($script:SourceImage) { $script:SourceImage.Dispose() }
 'done'
