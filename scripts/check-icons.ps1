@@ -1,13 +1,16 @@
 Add-Type -AssemblyName System.Drawing
 
-# Verifies the generated icons: real PNGs, correct square dimensions, and an actual
-# two-tone image (dark-green field + gold mark) rather than a blank or all-black square.
+# Verifies the generated icons: real PNGs, correct dimensions, and a genuine
+# two-tone image rather than a blank or all-black square. The app icons fill the
+# frame with the mark, so they must be mostly green field; the og-image is the
+# calm light field by design (mark on the left, title on the right), so what is
+# required there is the mark itself — a green presence, not a green background.
 $root = Split-Path -Parent $PSScriptRoot
 $outDir = Join-Path $root 'public\icons'
 
 $fail = 0
 function Test-Icon {
-    param([string]$Name, [int]$ExpectW, [int]$ExpectH, [double]$MinGoldPct = 1)
+    param([string]$Name, [int]$ExpectW, [int]$ExpectH, [double]$MinGoldPct = 1, [double]$MinGreenPct = 20)
 
     $path = Join-Path $outDir $Name
     if (-not (Test-Path $path)) { "FAIL $Name missing"; $script:fail++; return }
@@ -38,14 +41,14 @@ function Test-Icon {
     $greenPct = [math]::Round(100 * $green / $total, 2)
 
     if ($goldPct -lt $MinGoldPct) { "FAIL $Name has almost no gold mark ($goldPct%)"; $script:fail++ }
-    if ($greenPct -lt 20) { "FAIL $Name background is not the green field ($greenPct%)"; $script:fail++ }
+    if ($greenPct -lt $MinGreenPct) { "FAIL $Name lacks its green mark/field ($greenPct%)"; $script:fail++ }
 
-    $ok = if ($goldPct -ge $MinGoldPct -and $greenPct -ge 20) { 'ok  ' } else { 'FAIL' }
+    $ok = if ($goldPct -ge $MinGoldPct -and $greenPct -ge $MinGreenPct) { 'ok  ' } else { 'FAIL' }
     "$ok $Name ${ExpectW}x${ExpectH}  green=$greenPct%  gold=$goldPct%"
 }
 
 Test-Icon 'icon-512.png' 512 512
 Test-Icon 'icon-192.png' 192 192
-Test-Icon 'og-image.png' 1200 630 0.5
+Test-Icon 'og-image.png' 1200 630 0.5 3
 
 if ($fail -eq 0) { "`nICON CHECKS PASSED" } else { "`n$fail ICON CHECK(S) FAILED"; exit 1 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Moon, Sunrise, MapPin, Compass, BarChart3, Sun, Sunset, Check, X, Clock, Sparkles, BookOpen, ChevronLeft } from 'lucide-react';
 import { Card, Button, Badge, SectionHeader, EmptyState } from '@/components/ui';
 import { PrayerStatusSheet } from '@/components/PrayerStatusSheet';
@@ -7,6 +7,7 @@ import type { Settings } from '@/db/database';
 import type { NavParams, ScreenName } from '@/hooks/useApp';
 import {
   calculatePrayerTimes,
+  calendarDayInZone,
   formatTime12h,
   getTimeUntil,
   getNextPrayer,
@@ -157,14 +158,42 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
     return () => clearInterval(interval);
   }, [load]);
 
+  // The midnight rollover above re-runs `load()`; this pair only re-runs on the
+  // settings changing. adhan's answer for a calendar day never changes while the
+  // day lasts, and the countdown tick re-renders this screen every second — so
+  // the calculation is pinned to the city's day, and the next prayer to the set
+  // of prayers that have already passed.
   const timeZone = getPrayerTimeZone(settings.timeZone, settings.cityName);
-  const prayerResult = settings.latitude != null && settings.longitude != null
-    ? calculatePrayerTimes(settings.latitude, settings.longitude, now, settings.calcMethod, settings.asrMadhab, timeZone)
-    : null;
-
-  const nextPrayer = settings.latitude != null && settings.longitude != null
-    ? getNextPrayer(settings.latitude, settings.longitude, settings.calcMethod, settings.asrMadhab, timeZone)
-    : null;
+  const hasLocation = settings.latitude != null && settings.longitude != null;
+  const cityDayKey = useMemo(() => {
+    if (!hasLocation) return null;
+    const day = calendarDayInZone(now, timeZone);
+    return `${day.year}-${day.month}-${day.day}`;
+  }, [hasLocation, now, timeZone]);
+  const prayerResult = useMemo(
+    () =>
+      hasLocation && cityDayKey
+        ? calculatePrayerTimes(settings.latitude!, settings.longitude!, now, settings.calcMethod, settings.asrMadhab, timeZone)
+        : null,
+    // `now` is named here only through cityDayKey — the instant inside the day
+    // cannot change the day's times.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hasLocation, cityDayKey, settings.latitude, settings.longitude, settings.calcMethod, settings.asrMadhab, timeZone],
+  );
+  const passedSignature = prayerResult
+    ? prayerResult.prayers
+        .filter((prayer) => prayer.passed)
+        .map((prayer) => prayer.name)
+        .join(',')
+    : '';
+  const nextPrayer = useMemo(
+    () =>
+      hasLocation
+        ? getNextPrayer(settings.latitude!, settings.longitude!, settings.calcMethod, settings.asrMadhab, timeZone)
+        : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hasLocation, cityDayKey, passedSignature, settings.latitude, settings.longitude, settings.calcMethod, settings.asrMadhab, timeZone],
+  );
 
   const handlePick = async (status: PrayerStatus) => {
     if (!sheet) return;

@@ -185,14 +185,31 @@ export interface CalendarDay {
   day: number;
 }
 
-/** Which calendar day `date` falls on *in* `timeZone` — the city's day, not the device's. */
+/**
+ * Which calendar day `date` falls on *in* `timeZone` — the city's day, not the device's.
+ *
+ * The formatter is cached per zone: the countdown re-renders its screen every
+ * second, and constructing an `Intl.DateTimeFormat` per call is far too dear for
+ * something whose answer changes once a day.
+ */
+const zoneFormatterCache = new Map<string, Intl.DateTimeFormat>();
+
+function zoneDayFormatter(timeZone: string): Intl.DateTimeFormat {
+  let formatter = zoneFormatterCache.get(timeZone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+    });
+    zoneFormatterCache.set(timeZone, formatter);
+  }
+  return formatter;
+}
+
 export function calendarDayInZone(date: Date, timeZone: string): CalendarDay {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-  }).formatToParts(date);
+  const parts = zoneDayFormatter(timeZone).formatToParts(date);
   const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
   return {
     year: Number(values.year),

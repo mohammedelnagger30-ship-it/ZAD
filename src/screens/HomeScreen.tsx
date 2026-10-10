@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Check, X, Clock, Flame, BookOpen, Moon, Sunrise, BookText, ChevronLeft, Sparkles, Calendar, Heart, Repeat } from 'lucide-react';
 import { Card, Button, Badge, SectionHeader, EmptyState, type BadgeProps } from '@/components/ui';
 import { PrayerStatusSheet } from '@/components/PrayerStatusSheet';
@@ -7,6 +7,7 @@ import { getTodayTasks, confirmTask, snoozeTask, unsnoozeTask, describePortion, 
 import { rescheduleAllNotifications } from '@/utils/notificationScheduler';
 import {
   calculatePrayerTimes,
+  calendarDayInZone,
   formatTime12h,
   getTimeUntil,
   getNextPrayer,
@@ -23,7 +24,10 @@ import {
   type PrayerStatus,
 } from '@/utils/prayerTracker';
 import { todayKey, formatArabicDate, getHijriDate, getDayName } from '@/utils/dateUtils';
-import { getDailyQuranMessage, type DailyQuranMessage } from '@/utils/dailyQuranMessage';
+// The daily message reaches into the whole Quran text (a random ayah), so the
+// module is imported on demand in the effect below — a static import here would
+// put the full text chunk on the app's very first screen.
+import type { DailyQuranMessage } from '@/utils/dailyQuranMessage';
 import { getHadithCollection, hadithOfDay, installedCollections, HADITH_OF_DAY_BOOK } from '@/data/hadiths';
 import { toArabicNumber } from '@/data/surahs';
 import type { ScreenName, NavParams } from '@/hooks/useApp';
@@ -67,25 +71,65 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
     return () => clearInterval(interval);
   }, [load]);
 
+  // The message is one per local day, so the work (and the whole-Quran chunk it
+  // pulls in) is keyed to the day — not to the every-second countdown tick. The
+  // card already says it is loading while the chunk arrives.
+  const messageDayKey = todayKey();
   useEffect(() => {
-    try {
-      setDailyQuranMessage(getDailyQuranMessage(now));
-      setDailyQuranMessageError('');
-    } catch (error) {
-      setDailyQuranMessage(null);
-      setDailyQuranMessageError(error instanceof Error ? error.message : 'تعذّر تحميل رسالة القرآن اليومية.');
-    }
-  }, [now]);
+    let alive = true;
+    void (async () => {
+      try {
+        const { getDailyQuranMessage } = await import('@/utils/dailyQuranMessage');
+        if (!alive) return;
+        setDailyQuranMessage(getDailyQuranMessage(new Date()));
+        setDailyQuranMessageError('');
+      } catch (error) {
+        if (!alive) return;
+        setDailyQuranMessage(null);
+        setDailyQuranMessageError(error instanceof Error ? error.message : 'تعذّر تحميل رسالة القرآن اليومية.');
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [messageDayKey]);
 
-  // Calculate prayer times
+  // Prayer times for a calendar day never change while the day lasts, but the
+  // countdown tick re-renders this screen every second — so the calculation is
+  // pinned to the city's day and recomputed only when the day turns or the
+  // location/method settings change. The next prayer is pinned likewise: it can
+  // only move when a prayer passes, the day turns, or the settings change.
   const prayerTimeZone = getPrayerTimeZone(settings.timeZone, settings.cityName);
-  const prayerResult = settings.latitude != null && settings.longitude != null
-    ? calculatePrayerTimes(settings.latitude, settings.longitude, now, settings.calcMethod, settings.asrMadhab, prayerTimeZone)
-    : null;
-
-  const nextPrayer = settings.latitude != null && settings.longitude != null
-    ? getNextPrayer(settings.latitude, settings.longitude, settings.calcMethod, settings.asrMadhab, prayerTimeZone)
-    : null;
+  const hasLocation = settings.latitude != null && settings.longitude != null;
+  const cityDayKey = useMemo(() => {
+    if (!hasLocation) return null;
+    const day = calendarDayInZone(now, prayerTimeZone);
+    return `${day.year}-${day.month}-${day.day}`;
+  }, [hasLocation, now, prayerTimeZone]);
+  const prayerResult = useMemo(
+    () =>
+      hasLocation && cityDayKey
+        ? calculatePrayerTimes(settings.latitude!, settings.longitude!, now, settings.calcMethod, settings.asrMadhab, prayerTimeZone)
+        : null,
+    // `now` is named here only through cityDayKey — the instant inside the day
+    // cannot change the day's times.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hasLocation, cityDayKey, settings.latitude, settings.longitude, settings.calcMethod, settings.asrMadhab, prayerTimeZone],
+  );
+  const passedSignature = prayerResult
+    ? prayerResult.prayers
+        .filter((prayer) => prayer.passed)
+        .map((prayer) => prayer.name)
+        .join(',')
+    : '';
+  const nextPrayer = useMemo(
+    () =>
+      hasLocation
+        ? getNextPrayer(settings.latitude!, settings.longitude!, settings.calcMethod, settings.asrMadhab, prayerTimeZone)
+        : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hasLocation, cityDayKey, passedSignature, settings.latitude, settings.longitude, settings.calcMethod, settings.asrMadhab, prayerTimeZone],
+  );
 
   const [hadith, setHadith] = useState(() => hadithOfDay());
   // True while the default collection is being fetched on a fresh install. Sahih Muslim
