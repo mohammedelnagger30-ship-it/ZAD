@@ -65,6 +65,7 @@ const BACKUP_TABLES = [
   'sunnahRecords',
   'hifzProgress',
   'hadithFavorites',
+  'khatmah',
 ] as const;
 
 const IGNORED_BACKUP_KEYS = ['_exportDate', 'streaks'];
@@ -130,6 +131,7 @@ function isValidBackupRow(table: BackupTable, value: unknown): value is Record<s
             'asrMadhab',
             'locationMethod',
             'timeZone',
+            'hijriAdjustment',
           ].includes(key)
         ) &&
         (value.theme === undefined || ['light', 'dark', 'system'].includes(value.theme as string)) &&
@@ -152,7 +154,8 @@ function isValidBackupRow(table: BackupTable, value: unknown): value is Record<s
         (value.latitude === undefined || isFiniteNumber(value.latitude)) &&
         (value.longitude === undefined || isFiniteNumber(value.longitude)) &&
         (value.cityName === undefined || typeof value.cityName === 'string') &&
-        (value.timeZone === undefined || typeof value.timeZone === 'string')
+        (value.timeZone === undefined || typeof value.timeZone === 'string') &&
+        (value.hijriAdjustment === undefined || [-1, 0, 1].includes(value.hijriAdjustment as number))
       );
     case 'plans':
       return (
@@ -223,6 +226,14 @@ function isValidBackupRow(table: BackupTable, value: unknown): value is Record<s
       );
     case 'hadithFavorites':
       return typeof value.hadithId === 'string' && typeof value.collection === 'string' && isFiniteNumber(value.createdAt);
+    case 'khatmah':
+      return (
+        isDateKey(value.startDate) &&
+        (value.targetDate === null || value.targetDate === undefined || isDateKey(value.targetDate)) &&
+        isFiniteNumber(value.currentPage) &&
+        (value.currentPage as number) >= 0 &&
+        isFiniteNumber(value.updatedAt)
+      );
   }
 }
 
@@ -398,6 +409,7 @@ export function SettingsScreen({
       data.sunnahRecords = await db.sunnahRecords.toArray();
       data.hifzProgress = await db.hifzProgress.toArray();
       data.hadithFavorites = await db.hadithFavorites.toArray();
+      data.khatmah = await db.khatmah.toArray();
       const adhkarState = localStorage.getItem(ADHKAR_STATE_KEY);
       if (adhkarState) data.adhkar = JSON.parse(adhkarState) as unknown;
 

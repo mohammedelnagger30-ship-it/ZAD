@@ -137,6 +137,19 @@ export interface DayStreak {
   partial: boolean;
 }
 
+/** One Quran-completion (khatmah) plan: a start, an optional target date, and page progress. */
+export interface KhatmahPlan {
+  id?: number;
+  /** ISO date (YYYY-MM-DD) the plan started. */
+  startDate: string;
+  /** ISO date the user aims to finish by — null for an open-ended plan. */
+  targetDate: string | null;
+  /** Last completed mushaf page in mushaf-flow order (1-based, 0 = nothing yet). */
+  currentPage: number;
+  /** Epoch ms of the last change. */
+  updatedAt: number;
+}
+
 // ---- Database ----
 
 export class HifziDB extends Dexie {
@@ -149,6 +162,7 @@ export class HifziDB extends Dexie {
   hifzProgress!: Table<HifzProgress, number>;
   hadithFavorites!: Table<HadithFavorite, number>;
   settings!: Table<Settings, number>;
+  khatmah!: Table<KhatmahPlan, number>;
 
   constructor() {
     super('hifzi-db');
@@ -226,6 +240,13 @@ export class HifziDB extends Dexie {
           })));
         }
       });
+
+    // v5: khatmah — a Quran-completion plan tracked by page progress. Kept
+    // deliberately out of the v4 syncable set: it is a local reading plan, not
+    // a cross-device record (syncing it later can reuse the same upgrade path).
+    this.version(5).stores({
+      khatmah: '++id, updatedAt',
+    });
   }
 }
 
