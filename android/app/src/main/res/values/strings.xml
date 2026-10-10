@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Sakinah</string>
-    <string name="title_activity_main">Sakinah</string>
+    <string name="app_name">قُرّة</string>
+    <string name="title_activity_main">قُرّة</string>
     <string name="package_name">com.hifzi.app</string>
     <string name="custom_url_scheme">com.hifzi.app</string>
 </resources>

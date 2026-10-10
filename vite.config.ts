@@ -19,9 +19,9 @@ export default defineConfig(({ mode }) => {
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg', 'icons/*.png'],
       manifest: {
-        name: 'Sakinah',
-        short_name: 'Sakinah',
-        description: 'Sakinah — Quran, prayer & daily worship',
+        name: 'قُرّة',
+        short_name: 'قُرّة',
+        description: 'قُرّة — القرآن والصلاة والعبادة اليومية',
         dir: 'rtl',
         lang: 'ar',
         theme_color: '#1f734e',

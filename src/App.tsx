@@ -476,7 +476,7 @@ function AppContent({
       <div className="min-h-screen bg-surface-light dark:bg-surface-dark flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 mx-auto mb-4 overflow-hidden rounded-2xl shadow-lg animate-pulse-soft">
-            <img src="/icon.svg" alt="Sakinah" className="h-full w-full" />
+            <img src="/icon.svg" alt="قُرّة" className="h-full w-full" />
           </div>
           <p className="text-primary-600 dark:text-primary-300 text-sm">جارٍ التحميل...</p>
         </div>

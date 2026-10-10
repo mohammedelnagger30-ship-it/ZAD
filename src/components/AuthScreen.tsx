@@ -157,7 +157,7 @@ export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenPro
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-linear-to-tr from-primary-700 to-primary-600 text-gold-300 shadow-lg shadow-primary-900/30">
           <BookOpen size={28} />
         </div>
-        <h1 className="text-center text-2xl font-bold text-primary-900 dark:text-primary-50">Sakinah</h1>
+        <h1 className="text-center text-2xl font-bold text-primary-900 dark:text-primary-50">قُرّة</h1>
         <p className="mt-1.5 text-center text-xs text-primary-700/80 dark:text-primary-300 leading-relaxed">
           سجّل الدخول لمزامنة بياناتك وسورك وحفظك بأمان بين جميع أجهزتك.
         </p>

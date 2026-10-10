@@ -134,7 +134,7 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
               <Info size={20} />
             </div>
             <div>
-              <p className="text-xs font-bold text-primary-900 dark:text-primary-100 mb-1">عن Sakinah</p>
+              <p className="text-xs font-bold text-primary-900 dark:text-primary-100 mb-1">عن قُرّة</p>
               <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
                 رفيقك اليومي لتلاوة وتدبر وحفظ القرآن الكريم وإتمام الأذكار والصلوات بدون إنترنت.
               </p>
