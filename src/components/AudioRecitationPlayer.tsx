@@ -39,14 +39,21 @@ export function AudioRecitationPlayer({
   const sourceUrlRef = useRef<string | null>(null);
   const currentTimingRef = useRef<VerseTiming | null>(null);
 
+  // The prepared audio lives in a ref, not state: playback is driven from event
+  // handlers whose closures would otherwise still see the old (not-yet-loaded)
+  // value on the very first press after loading finishes.
+  const sourceRef = useRef<SurahAudioSource | null>(null);
+  const loadInFlightRef = useRef<Promise<SurahAudioSource | null> | null>(null);
+  const loadControllerRef = useRef<AbortController | null>(null);
+
   const [activeAyah, setActiveAyah] = useState<number | null>(null);
   const [selectedAyah, setSelectedAyah] = useState<number | null>(1);
   const [repeatCount, setRepeatCount] = useState(3);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [source, setSource] = useState<SurahAudioSource | null>(null);
-  const [sourceLoading, setSourceLoading] = useState(true);
+  // Nothing is being fetched until sound is actually asked for.
+  const [sourceLoading, setSourceLoading] = useState(false);
 
   // Stop playback completely
   const stop = useCallback(() => {
@@ -68,14 +75,67 @@ export function AudioRecitationPlayer({
     setSelectedAyah(ayah);
   }, []);
 
+  /**
+   * Fetch the surah's recitation on first request.
+   *
+   * The old version loaded it the moment a surah was opened: every opened surah
+   * downloaded the whole recitation, and offline that landed a red
+   * «تعذّر تجهيز التلاوة» banner on a reader who had only come to read. Deferred,
+   * the fetch happens behind «جار تجهيز التلاوة...» and a failure can only appear
+   * after the person pressed play themselves.
+   */
+  const ensureSource = useCallback((): Promise<SurahAudioSource | null> => {
+    if (sourceRef.current) return Promise.resolve(sourceRef.current);
+    if (loadInFlightRef.current) return loadInFlightRef.current;
+
+    const controller = new AbortController();
+    loadControllerRef.current = controller;
+    setSourceLoading(true);
+
+    const load = (async (): Promise<SurahAudioSource | null> => {
+      try {
+        const nextSource = await loadSurahAudio(reciterId, surah.id, controller.signal);
+        if (controller.signal.aborted || loadControllerRef.current !== controller) {
+          // The surah or reciter changed while this fetch was running.
+          if (nextSource.blob) URL.revokeObjectURL(nextSource.url);
+          return null;
+        }
+        if (sourceUrlRef.current?.startsWith('blob:')) {
+          URL.revokeObjectURL(sourceUrlRef.current);
+        }
+        sourceUrlRef.current = nextSource.blob ? nextSource.url : null;
+        sourceRef.current = nextSource;
+        setError(null);
+        return nextSource;
+      } catch (cause: unknown) {
+        if (!(cause instanceof Error && cause.name === 'AbortError')) {
+          setError(cause instanceof Error ? cause.message : 'تعذّر تجهيز التلاوة');
+        }
+        return null;
+      } finally {
+        // Only the load that still owns the slot may release it: a reciter/surah
+        // change aborts this controller and starts the next load, whose slot this
+        // stale finally must not clear.
+        if (loadControllerRef.current === controller) {
+          loadControllerRef.current = null;
+          loadInFlightRef.current = null;
+          setSourceLoading(false);
+        }
+      }
+    })();
+
+    loadInFlightRef.current = load;
+    return load;
+  }, [reciterId, surah.id]);
+
   // Core function to start or seek playback to a specific Ayah
   const playAyah = useCallback(
     (ayah: number, continuous = false) => {
-      if (!source) return;
+      const prepared = sourceRef.current;
       const audio = audioRef.current;
-      if (!audio) return;
+      if (!prepared || !audio) return;
 
-      const timing = source.verseTimings.find((item) => item.ayah === ayah);
+      const timing = prepared.verseTimings.find((item) => item.ayah === ayah);
       if (!timing) {
         setError(`توقيت الآية ${ayah} غير متاح`);
         return;
@@ -96,8 +156,8 @@ export function AudioRecitationPlayer({
       }
 
       // Ensure audio source URL is set
-      if (audio.src !== source.url) {
-        audio.src = source.url;
+      if (audio.src !== prepared.url) {
+        audio.src = prepared.url;
       }
 
       audio.currentTime = timing.startMs / 1000;
@@ -113,10 +173,20 @@ export function AudioRecitationPlayer({
           setError(cause instanceof Error ? cause.message : 'تعذّر تشغيل التلاوة');
         });
     },
-    [source, playbackRate]
+    [playbackRate]
   );
 
-  const startSelectedAyah = useCallback(() => {
+  /** Prepare the audio if needed, then hand over to `playAyah`; null aborts silently. */
+  const playAyahEnsured = useCallback(
+    async (ayah: number, continuous = false): Promise<void> => {
+      const prepared = await ensureSource();
+      if (!prepared) return;
+      playAyah(ayah, continuous);
+    },
+    [ensureSource, playAyah]
+  );
+
+  const startSelectedAyah = useCallback(async () => {
     if (selectedAyah === null) return;
     const audio = audioRef.current;
     if (!audio) return;
@@ -127,21 +197,25 @@ export function AudioRecitationPlayer({
       return;
     }
 
+    const prepared = await ensureSource();
+    if (!prepared) return;
     repeatRemainingRef.current = repeatCount;
     playAyah(selectedAyah, false);
-  }, [playAyah, repeatCount, selectedAyah, isPlaying]);
+  }, [ensureSource, playAyah, repeatCount, selectedAyah, isPlaying]);
 
   const updateRepeatCount = (count: number) => {
     setRepeatCount(count);
     repeatRemainingRef.current = count;
   };
 
-  const replayAyah = useCallback(() => {
+  const replayAyah = useCallback(async () => {
     const ayah = activeAyahRef.current ?? selectedAyah;
     if (ayah === null) return;
+    const prepared = await ensureSource();
+    if (!prepared) return;
     repeatRemainingRef.current = repeatCount;
     playAyah(ayah, false);
-  }, [playAyah, repeatCount, selectedAyah]);
+  }, [ensureSource, playAyah, repeatCount, selectedAyah]);
 
   const updatePlaybackRate = (rate: number) => {
     setPlaybackRate(rate);
@@ -150,63 +224,50 @@ export function AudioRecitationPlayer({
     }
   };
 
-  // Load Surah Audio file & verse metadata
+  // Leaving a surah/reciter stops playback, forgets its prepared audio and aborts
+  // any fetch still running for it; the object URL goes with the change.
   useEffect(() => {
-    const controller = new AbortController();
-    let active = true;
-
+    loadControllerRef.current?.abort();
+    loadControllerRef.current = null;
+    loadInFlightRef.current = null;
+    sourceRef.current = null;
     stop();
-    setSource(null);
-    setSourceLoading(true);
     setError(null);
-
-    void loadSurahAudio(reciterId, surah.id, controller.signal)
-      .then((nextSource) => {
-        if (active) {
-          if (sourceUrlRef.current?.startsWith('blob:')) {
-            URL.revokeObjectURL(sourceUrlRef.current);
-          }
-          sourceUrlRef.current = nextSource.blob ? nextSource.url : null;
-          setSource(nextSource);
-        } else if (nextSource.blob) {
-          URL.revokeObjectURL(nextSource.url);
-        }
-      })
-      .catch((cause: unknown) => {
-        if (active && !(cause instanceof Error && cause.name === 'AbortError')) {
-          setError(cause instanceof Error ? cause.message : 'تعذّر تجهيز التلاوة');
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setSourceLoading(false);
-        }
-      });
+    setSourceLoading(false);
 
     return () => {
-      active = false;
-      controller.abort();
+      loadControllerRef.current?.abort();
+      loadControllerRef.current = null;
+      loadInFlightRef.current = null;
+      sourceRef.current = null;
+      stop();
+      if (sourceUrlRef.current?.startsWith('blob:')) {
+        URL.revokeObjectURL(sourceUrlRef.current);
+      }
+      sourceUrlRef.current = null;
     };
   }, [reciterId, surah.id, stop]);
 
-  // Clean up object URLs on unmount
+  // Clean up object URLs on unmount (the effect above covers surah changes; this
+  // covers the component itself being removed while the source is idle).
   useEffect(() => () => {
-    audioRef.current?.pause();
-    if (sourceUrlRef.current) {
+    if (sourceUrlRef.current?.startsWith('blob:')) {
       URL.revokeObjectURL(sourceUrlRef.current);
     }
+    sourceUrlRef.current = null;
   }, []);
 
   // Seamless real-time timeupdate handler
   const handleTimeUpdate = () => {
+    const prepared = sourceRef.current;
     const audio = audioRef.current;
-    if (!audio || !source) return;
+    if (!audio || !prepared) return;
 
     const currentMs = audio.currentTime * 1000;
 
     // 1. Continuous Surah Playback mode (Seamless stream, no pauses between verses!)
     if (continuousRef.current) {
-      const currentVerse = source.verseTimings.find(
+      const currentVerse = prepared.verseTimings.find(
         (v) => currentMs >= v.startMs && currentMs < v.endMs
       );
 
@@ -217,17 +278,22 @@ export function AudioRecitationPlayer({
       }
 
       // Check if we've reached the end of the last verse
-      const lastVerse = source.verseTimings[source.verseTimings.length - 1];
+      const lastVerse = prepared.verseTimings[prepared.verseTimings.length - 1];
       if (currentMs >= lastVerse.endMs) {
         stop();
       }
       return;
     }
 
-    // 2. Single Ayah repeat mode
+    // 2. Single Ayah repeat mode.
+    //
+    // `repeatRemainingRef` counts the plays left; 0 is the «مستمر» option and means
+    // "no end in sight" — loop the ayah until stopped. The old `> 1` treated 0 as
+    // "no plays left", so «مستمر» played exactly once and stopped at the verse end.
     if (verseEndRef.current !== null && audio.currentTime >= verseEndRef.current) {
-      if (repeatRemainingRef.current > 1) {
-        repeatRemainingRef.current -= 1;
+      const remaining = repeatRemainingRef.current;
+      if (remaining === 0 || remaining > 1) {
+        if (remaining > 1) repeatRemainingRef.current = remaining - 1;
         if (currentTimingRef.current) {
           audio.currentTime = currentTimingRef.current.startMs / 1000;
         }
@@ -238,43 +304,52 @@ export function AudioRecitationPlayer({
   };
 
   const handleEnded = () => {
+    const prepared = sourceRef.current;
     // Only stop if we're not in continuous mode or if we've truly reached the end
     // In continuous mode, the audio should play until the end of the surah
     if (!continuousRef.current) {
       stop();
-    } else {
+    } else if (prepared) {
       // In continuous mode, stop playback only if we've reached the last verse
-      if (source && activeAyahRef.current === source.verseTimings[source.verseTimings.length - 1].ayah) {
+      if (activeAyahRef.current === prepared.verseTimings[prepared.verseTimings.length - 1].ayah) {
         stop();
       } else {
         // If playback ended unexpectedly in continuous mode, try to continue
         // This handles cases where the audio file might have buffering issues
         const nextAyah = activeAyahRef.current ? activeAyahRef.current + 1 : 1;
-        if (source && nextAyah <= source.verseTimings.length) {
+        if (nextAyah <= prepared.verseTimings.length) {
           playAyah(nextAyah, true);
         } else {
           stop();
         }
       }
+    } else {
+      stop();
     }
   };
 
-  const toggleSurah = () => {
+  const toggleSurah = async () => {
     const audio = audioRef.current;
-    if (!audio || !source) return;
+    if (!audio) return;
 
     if (isPlaying) {
       audio.pause();
       setIsPlaying(false);
-    } else if (activeAyah !== null && continuousRef.current) {
+      return;
+    }
+
+    if (activeAyahRef.current !== null && continuousRef.current) {
       audio
         .play()
         .then(() => setIsPlaying(true))
         .catch(() => setIsPlaying(false));
-    } else {
-      repeatRemainingRef.current = 1;
-      playAyah(selectedAyah || 1, true);
+      return;
     }
+
+    const prepared = await ensureSource();
+    if (!prepared) return;
+    repeatRemainingRef.current = 1;
+    playAyah(selectedAyah || 1, true);
   };
 
   return (
@@ -314,7 +389,7 @@ export function AudioRecitationPlayer({
           </label>
           <div className="flex items-center gap-2">
             <button
-              onClick={toggleSurah}
+              onClick={() => void toggleSurah()}
               disabled={sourceLoading}
               className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
             >
@@ -344,7 +419,7 @@ export function AudioRecitationPlayer({
                 {isPlaying ? 'تُتلى الآن' : 'متوقف مؤقتاً'} — الآية {toArabicNumber(activeAyah)}
               </p>
               <button
-                onClick={replayAyah}
+                onClick={() => void replayAyah()}
                 disabled={sourceLoading}
                 className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-primary-700 hover:bg-primary-100 disabled:opacity-50 dark:text-gold-300 dark:hover:bg-primary-800"
               >
@@ -391,7 +466,7 @@ export function AudioRecitationPlayer({
                 </button>
               ))}
               <button
-                onClick={startSelectedAyah}
+                onClick={() => void startSelectedAyah()}
                 disabled={selectedAyah === null || sourceLoading}
                 className="mr-auto inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-xs font-semibold text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -414,10 +489,11 @@ export function AudioRecitationPlayer({
         onEnded={handleEnded}
         onTimeUpdate={handleTimeUpdate}
         onError={() => {
-          if (continuousRef.current && isPlaying) {
+          const prepared = sourceRef.current;
+          if (continuousRef.current && isPlaying && prepared) {
             // Try to recover from errors in continuous mode
             const nextAyah = activeAyahRef.current ? activeAyahRef.current + 1 : 1;
-            if (source && nextAyah <= source.verseTimings.length) {
+            if (nextAyah <= prepared.verseTimings.length) {
               playAyah(nextAyah, true);
             } else {
               stop();
@@ -425,7 +501,14 @@ export function AudioRecitationPlayer({
           }
         }}
       />
-      {children({ activeAyah, isPlaying, selectedAyah, selectAyah, playSelectedAyah: startSelectedAyah, playAyah })}
+      {children({
+        activeAyah,
+        isPlaying,
+        selectedAyah,
+        selectAyah,
+        playSelectedAyah: () => void startSelectedAyah(),
+        playAyah: (ayah: number) => void playAyahEnsured(ayah),
+      })}
     </>
   );
 }

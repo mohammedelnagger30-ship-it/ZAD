@@ -24,26 +24,56 @@ type RevelationFilter = 'all' | 'meccan' | 'medinan';
 
 const QURAN_READER_STORAGE_KEY = 'zad:quran-reader-state';
 
+const READER_VIEW_MODES: ViewMode[] = ['list', 'reader', 'hifz', 'mushaf'];
+
+/**
+ * Reads the last-opened reading position.
+ *
+ * Whatever comes out of storage is treated as untrusted: a viewMode outside the
+ * known set used to reach the render switch with no matching branch, and a reader
+ * view whose surahId no longer resolved fell into `return null` — a blank screen
+ * that repeated on every open, with no button to get back. Anything that does not
+ * fit simply degrades to the surah list instead.
+ */
 function loadSavedReaderState() {
   try {
     const raw = localStorage.getItem(QURAN_READER_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as {
-      viewMode?: ViewMode;
-      surahId?: number;
-      fromAyah?: number;
-      toAyah?: number | null;
-      mushafPage?: number;
+      viewMode?: unknown;
+      surahId?: unknown;
+      fromAyah?: unknown;
+      toAyah?: unknown;
+      mushafPage?: unknown;
     };
 
-    const surah = parsed.surahId ? getSurah(parsed.surahId) : null;
-    return {
-      viewMode: parsed.viewMode ?? 'list',
-      surah,
-      fromAyah: parsed.fromAyah ?? 1,
-      toAyah: parsed.toAyah ?? null,
-      mushafPage: parsed.mushafPage ?? 1,
-    };
+    const isInt = (value: unknown): value is number =>
+      typeof value === 'number' && Number.isInteger(value);
+
+    const viewMode =
+      typeof parsed.viewMode === 'string' && READER_VIEW_MODES.includes(parsed.viewMode as ViewMode)
+        ? (parsed.viewMode as ViewMode)
+        : 'list';
+    const surah = isInt(parsed.surahId) ? getSurah(parsed.surahId) : null;
+
+    // A memorising/reading view without a resolvable surah is unreadable — back to the list.
+    const resolvedViewMode =
+      (viewMode === 'reader' || viewMode === 'hifz') && !surah ? 'list' : viewMode;
+
+    const fromAyah =
+      surah && isInt(parsed.fromAyah) && parsed.fromAyah >= 1 && parsed.fromAyah <= surah.ayahCount
+        ? parsed.fromAyah
+        : 1;
+    const toAyah =
+      surah && isInt(parsed.toAyah) && parsed.toAyah >= fromAyah && parsed.toAyah <= surah.ayahCount
+        ? parsed.toAyah
+        : null;
+    const mushafPage =
+      isInt(parsed.mushafPage) && parsed.mushafPage >= 1 && parsed.mushafPage <= TOTAL_QURAN_PAGES
+        ? parsed.mushafPage
+        : 1;
+
+    return { viewMode: resolvedViewMode, surah, fromAyah, toAyah, mushafPage };
   } catch {
     return null;
   }
@@ -802,14 +832,16 @@ function AyahSpan({
       >
         {hideText ? (
           <>
+            {/* The mask hides the words, not their shape: the bar stays visible so the
+                memoriser still sees where each line runs, and can still tap it. */}
             {head && (
-              <span className="bg-primary-200 dark:bg-primary-700 rounded px-2 select-none" style={{ opacity: 0 }}>
+              <span className="bg-primary-200 dark:bg-primary-700 rounded px-2 select-none" style={{ color: 'transparent' }}>
                 {head}
                 {' '}
               </span>
             )}
             <span className="mushaf-ayah-tail">
-              <span className="bg-primary-200 dark:bg-primary-700 rounded px-2 select-none" style={{ opacity: 0 }}>
+              <span className="bg-primary-200 dark:bg-primary-700 rounded px-2 select-none" style={{ color: 'transparent' }}>
                 {tailWord}
               </span>
               {mark}

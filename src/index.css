@@ -340,11 +340,16 @@ body {
  * Justification is what separates a mushaf page from a wall of ragged text: the browser
  * pushes the slack of every full line into the inter-word gaps, so the block is flush on
  * both edges. Only the last line stays ragged, which is what a printed page does too.
+ *
+ * The font order is part of the line-breaking contract: word widths in the flow table
+ * (build/word-widths.json) were shaped by the bundled AmiriQuran ttf, so that face has
+ * to be the one that renders — leading with the Google "Amiri" broke the match whenever
+ * the webfont arrived, and every measured break drifted.
  */
 .mushaf-body {
   position: relative;
   z-index: 1;
-  font-family: 'Amiri', 'Amiri Quran', serif;
+  font-family: 'Amiri Quran', 'Amiri', serif;
   font-size: var(--fs);
   line-height: var(--lh, 1.9);
   text-align: justify;

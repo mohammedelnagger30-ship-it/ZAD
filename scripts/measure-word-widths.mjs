@@ -15,14 +15,69 @@
  * Run with: node scripts/measure-word-widths.mjs   (writes build/word-widths.json)
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { chromium } = require(
-  'C:\\Users\\ALMASRIA STORES\\.vscode\\extensions\\danielsanmedium.dscodegpt-3.24.76\\standalone\\node_modules\\patchright',
-);
+
+const DRIVER_NAMES = ['patchright', 'playwright', 'playwright-core', 'puppeteer'];
+
+/**
+ * Finds the Chromium driver. A project install wins; failing that, the editor
+ * extension stores in the home directory are scanned by name. This used to be a
+ * hard-coded path into one machine's VS Code extensions, which broke the script
+ * for anyone else — and for that machine after the first extension update.
+ */
+function loadChromium() {
+  for (const name of DRIVER_NAMES) {
+    try {
+      const lib = require(name);
+      return lib.chromium ?? lib;
+    } catch {
+      /* not installed here */
+    }
+  }
+
+  const stores = ['.vscode', '.vscode-insiders', '.vscode-oss', '.cursor', '.vscode-server'];
+  for (const store of stores) {
+    const storeDir = join(homedir(), store, 'extensions');
+    if (!existsSync(storeDir)) continue;
+    let extensions;
+    try {
+      extensions = readdirSync(storeDir);
+    } catch {
+      continue;
+    }
+    for (const extension of extensions) {
+      const extDir = join(storeDir, extension);
+      // Extensions bundle dependencies either at their root or inside a build
+      // subfolder (…/standalone/node_modules), so both spots are probed.
+      const nodeModulesDirs = [join(extDir, 'node_modules')];
+      try {
+        for (const sub of readdirSync(extDir, { withFileTypes: true })) {
+          if (sub.isDirectory()) nodeModulesDirs.push(join(extDir, sub.name, 'node_modules'));
+        }
+      } catch {
+        /* unreadable extension, skip */
+      }
+      for (const nmDir of nodeModulesDirs) {
+        for (const name of DRIVER_NAMES) {
+          const candidate = join(nmDir, name);
+          if (!existsSync(candidate)) continue;
+          try {
+            const lib = require(candidate);
+            return lib.chromium ?? lib;
+          } catch {
+            /* broken install, keep looking */
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
 
 const ROOT = process.cwd();
 const FONT_PATH = join(ROOT, 'public', 'fonts', 'AmiriQuran-Regular.ttf');
@@ -50,6 +105,13 @@ async function main() {
   const quranText = readFileSync(QURAN_PATH, 'utf8');
   console.log(`font   ${(fontBase64.length / 1024).toFixed(0)} KiB base64`);
   console.log(`text   ${(quranText.length / 1024).toFixed(0)} KiB`);
+
+  const chromium = loadChromium();
+  if (!chromium) {
+    fail(
+      'no Chromium driver found — install one with: npm i -D playwright && npx playwright install chromium',
+    );
+  }
 
   const browser = await chromium.launch({
     headless: true,
