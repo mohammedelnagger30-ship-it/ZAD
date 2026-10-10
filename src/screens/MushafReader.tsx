@@ -5,8 +5,6 @@ import {
   BookOpen,
   List,
   Moon,
-  MoveHorizontal,
-  MoveVertical,
   SlidersHorizontal,
   Sun,
   Volume2,
@@ -14,20 +12,38 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
 import { MushafPage } from '@/components/mushaf/MushafPage';
 import { Sheet } from '@/components/mushaf/Sheet';
+import { JumpSheet } from '@/components/mushaf/JumpSheet';
+import { OptionsSheet } from '@/components/mushaf/OptionsSheet';
+import {
+  ZOOM_STEP,
+  ZOOM_MIN,
+  ZOOM_MAX,
+  PAGE_KEYBOARD_STEP,
+  SWIPE_DISTANCE,
+  PREFS_KEY,
+  LEAF_PRELOAD,
+  LEAF_CHUNK,
+  LEAF_WINDOW,
+  LEAF_HEADROOM,
+  clampNumber,
+  isSurahEnd,
+  loadPrefs,
+  type MushafPrefs,
+  type Orientation,
+  type VoiceScope,
+  type JumpTarget,
+} from '@/components/mushaf/readerConfig';
 import { TafsirBottomSheet } from '@/components/TafsirBottomSheet';
 import {
-  SURAHS,
-  JUZ_INFO,
   getSurah,
   getAyahPage,
   getJuzForPage,
   getSurahsForPage,
   toArabicNumber,
 } from '@/data/surahs';
-import { getTotalPages, HIZB_INFO, getHizbForPage } from '@/data/mushafPages';
+import { getTotalPages, getHizbForPage } from '@/data/mushafPages';
 import { loadPreferredReciter, savePreferredReciter, AUDIO_RECITERS } from '@/data/audioReciters';
 import { loadSurahAudio, type SurahAudioSource, type VerseTiming } from '@/utils/quranAudio';
 import { db, type Settings } from '@/db/database';
@@ -40,129 +56,8 @@ interface MushafReaderProps {
   onPageChange?: (page: number) => void;
 }
 
-const ZOOM_STEP = 0.1;
-const ZOOM_MIN = 0.8;
-const ZOOM_MAX = 2;
-/** Pages are the smallest useful jump target; below this the text stops being readable. */
-const PAGE_KEYBOARD_STEP = 10;
-const SWIPE_DISTANCE = 50;
-const PREFS_KEY = 'zad:mushaf-prefs';
-
-/**
- * The vertical stack never holds the whole mushaf: 602 sheets of set type are far too
- * many to mount. It keeps a sliding window instead — LEAF_PRELOAD sheets to open on,
- * LEAF_CHUNK sheets added at a time when the reader runs out, and never more than
- * LEAF_WINDOW at once, so the tail is trimmed as the head grows.
- */
-const LEAF_PRELOAD = 8;
-const LEAF_CHUNK = 6;
-const LEAF_WINDOW = 40;
-/** Within this many pixels of the head the stack pre-loads, so it never dead-ends. */
-const LEAF_HEADROOM = 8;
-
-type MushafMode = 'day' | 'night';
-/** Which way the reader travels: down a stack of sheets, or across one sheet at a time. */
-type Orientation = 'vertical' | 'horizontal';
-/** What the voice carries when an ayah is asked about: that ayah, or the surah through it. */
-type VoiceScope = 'ayah' | 'surah';
+/** Which of the reader's own sheets is up, if any. */
 type SheetName = 'jump' | 'options';
-type JumpTarget = 'page' | 'surah' | 'juz' | 'hizb';
-
-/**
- * How the reader looks, kept in one object on purpose.
- *
- * Night, zoom and spacing used to live in five independent pieces of
- * state, so the shell could end up half themed — chrome in one mode, page in
- * another — and every change was lost on close. One object, one writer, one
- * key in localStorage.
- */
-interface MushafPrefs {
-  mode: MushafMode;
-  orientation: Orientation;
-  zoom: number;
-  readingScale: number;
-  lineSpacing: number;
-  wordSpacing: number;
-  /** Kept here because a reader who listens to surahs keeps hearing surahs. */
-  scope: VoiceScope;
-}
-
-const DEFAULT_PREFS: MushafPrefs = {
-  mode: 'day',
-  orientation: 'vertical',
-  zoom: 1,
-  readingScale: 1,
-  lineSpacing: 1,
-  wordSpacing: 0,
-  scope: 'ayah',
-};
-
-/**
- * The ways into the mushaf, ordered by how a reader reaches for them: the surah by
- * name first — the list is the front door — then the parts, then a page number
- * typed by someone who already knows it.
- */
-const JUMP_TABS: { id: JumpTarget; label: string }[] = [
-  { id: 'surah', label: 'سورة' },
-  { id: 'juz', label: 'جزء' },
-  { id: 'hizb', label: 'حزب' },
-  { id: 'page', label: 'صفحة' },
-];
-
-const MODES: { id: MushafMode; label: string; Icon: LucideIcon }[] = [
-  { id: 'day', label: 'نهاري', Icon: Sun },
-  { id: 'night', label: 'ليلي', Icon: Moon },
-];
-
-const ORIENTATIONS: { id: Orientation; label: string; hint: string; Icon: LucideIcon }[] = [
-  {
-    id: 'vertical',
-    label: 'بالطول',
-    hint: 'التنقّل الافتراضي: تنزل بالصفحة تحتها فتأتي التي بعدها، بلا أزرار.',
-    Icon: MoveVertical,
-  },
-  {
-    id: 'horizontal',
-    label: 'بالعرض',
-    hint: 'ورقة واحدة أمامك: اسحب يميناً أو يساراً لقلبها، أو استخدم أسهم لوحة المفاتيح.',
-    Icon: MoveHorizontal,
-  },
-];
-
-function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
-  const n = typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-  return Math.min(max, Math.max(min, n));
-}
-
-/** Nothing follows a surah's own last ayah, so the transport has nothing to offer there. */
-function isSurahEnd(choice: { surahId: number; ayahNumber: number } | null): boolean {
-  if (!choice) return false;
-  const surah = getSurah(choice.surahId);
-  return !!surah && choice.ayahNumber >= surah.ayahCount;
-}
-
-function loadPrefs(): MushafPrefs {
-  try {
-    const raw = localStorage.getItem(PREFS_KEY);
-    if (!raw) return DEFAULT_PREFS;
-    const parsed = JSON.parse(raw) as Partial<MushafPrefs>;
-    return {
-      // Anything saved before the paper mode was dropped, or by a later build,
-      // opens as the default day sheet rather than on a mode nothing draws.
-      mode: parsed.mode === 'night' ? 'night' : 'day',
-      // Saved before the option existed, so it opens the way it reads by default.
-      orientation: parsed.orientation === 'horizontal' ? 'horizontal' : 'vertical',
-      zoom: clampNumber(parsed.zoom, ZOOM_MIN, ZOOM_MAX, DEFAULT_PREFS.zoom),
-      readingScale: clampNumber(parsed.readingScale, 0.85, 1.35, DEFAULT_PREFS.readingScale),
-      lineSpacing: clampNumber(parsed.lineSpacing, 0.9, 1.35, DEFAULT_PREFS.lineSpacing),
-      wordSpacing: clampNumber(parsed.wordSpacing, 0, 0.3, DEFAULT_PREFS.wordSpacing),
-      // Saved before the option existed, so it opens the way it reads by default.
-      scope: parsed.scope === 'surah' ? 'surah' : 'ayah',
-    };
-  } catch {
-    return DEFAULT_PREFS;
-  }
-}
 
 export function MushafReader({ settings, initialPage = 1, onClose, onPageChange }: MushafReaderProps) {
   const totalPages = getTotalPages();
@@ -938,7 +833,6 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
   const surahsOnPage = useMemo(() => getSurahsForPage(currentPage), [currentPage]);
   const currentJuz = useMemo(() => getJuzForPage(currentPage), [currentPage]);
   const currentHizb = useMemo(() => getHizbForPage(currentPage), [currentPage]);
-  const pageNumbers = useMemo(() => Array.from({ length: totalPages }, (_, i) => i + 1), [totalPages]);
 
   const isBookmarked = bookmarkedPages.has(currentPage);
   const zoomPercent = Math.round(prefs.zoom * 100);
@@ -977,7 +871,6 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
     : 'اختر ما تحتاجه لهذه الآية: تفسيرها، أو تلاوتها بالصوت الذي تفضله.';
   /** The ayah under discussion, held on the page while either of its sheets is open. */
   const activeReadingAyah = tafsirAyah ?? ayahChoice;
-  const activeOrientation = ORIENTATIONS.find((o) => o.id === orientation) ?? ORIENTATIONS[0];
 
   // Bring what the reader is already on into view when the jump sheet opens: the
   // surah carrying this page in the list, or the page in the grid. Both mark
@@ -1124,223 +1017,32 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
       </footer>
 
       {/* ── Jump sheet ─────────────────────────────────────────────────── */}
-      <Sheet
+      <JumpSheet
         open={sheet === 'jump'}
-        title="انتقال إلى"
         onClose={() => setSheet(null)}
         panelRef={sheetPanelRef}
-      >
-        <div className="mushaf-tabs" role="tablist" aria-label="طريقة الانتقال">
-          {JUMP_TABS.map((tab) => (
-            <button
-              key={tab.id}
-              role="tab"
-              className="mushaf-tab"
-              aria-selected={jumpTarget === tab.id}
-              onClick={() => setJumpTarget(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        jumpTarget={jumpTarget}
+        setJumpTarget={setJumpTarget}
+        pageField={pageField}
+        setPageField={setPageField}
+        totalPages={totalPages}
+        currentPage={currentPage}
+        goToPage={goToPage}
+        bookmarkedPages={bookmarkedPages}
+        surahsOnPage={surahsOnPage}
+        currentJuz={currentJuz}
+        currentHizb={currentHizb}
+      />
 
-        {jumpTarget === 'page' && (
-          <>
-            <form
-              className="mushaf-jumpbar"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const value = Number(pageField);
-                if (value >= 1 && value <= totalPages) goToPage(value);
-              }}
-            >
-              <input
-                className="mushaf-input"
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={totalPages}
-                value={pageField}
-                onChange={(event) => setPageField(event.target.value)}
-                placeholder={`رقم الصفحة من ${toArabicNumber(totalPages)}`}
-                aria-label="رقم الصفحة"
-              />
-              <button className="mushaf-tool" type="submit">
-                اذهب
-              </button>
-            </form>
-
-            <div className="mushaf-grid mushaf-grid--page">
-              {pageNumbers.map((p) => (
-                <button
-                  key={p}
-                  className="mushaf-cell"
-                  aria-label={`الصفحة ${toArabicNumber(p)}`}
-                  aria-current={p === currentPage ? 'true' : undefined}
-                  onClick={() => goToPage(p)}
-                >
-                  {toArabicNumber(p)}
-                  {bookmarkedPages.has(p) && <span className="mushaf-cell__dot" aria-hidden="true" />}
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-
-        {jumpTarget === 'surah' && (
-          <div className="mushaf-grid mushaf-grid--card">
-            {SURAHS.map((s) => (
-              <button
-                key={s.id}
-                className="mushaf-cell mushaf-cell--card"
-                aria-current={surahsOnPage.some((on) => on.id === s.id) ? 'true' : undefined}
-                onClick={() => goToPage(s.pageStart)}
-              >
-                {/* The number is what makes the order visible at a glance; the
-                    surah's name already says which one it is out loud. */}
-                <span className="mushaf-cell__index" aria-hidden="true">
-                  {toArabicNumber(s.id)}
-                </span>
-                <span className="mushaf-cell__title">{s.name}</span>
-                <span className="mushaf-cell__sub">صفحة {toArabicNumber(s.pageStart)}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {jumpTarget === 'juz' && (
-          <div className="mushaf-grid mushaf-grid--card">
-            {JUZ_INFO.map((j) => (
-              <button
-                key={j.id}
-                className="mushaf-cell mushaf-cell--card"
-                aria-current={j.id === currentJuz ? 'true' : undefined}
-                onClick={() => goToPage(j.startPage)}
-              >
-                <span className="mushaf-cell__title">{j.name}</span>
-                <span className="mushaf-cell__sub">صفحة {toArabicNumber(j.startPage)}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {jumpTarget === 'hizb' && (
-          <div className="mushaf-grid mushaf-grid--card">
-            {HIZB_INFO.map((h) => (
-              <button
-                key={h.id}
-                className="mushaf-cell mushaf-cell--card"
-                aria-current={h.id === currentHizb ? 'true' : undefined}
-                onClick={() => goToPage(h.startPage)}
-              >
-                <span className="mushaf-cell__title">{h.name}</span>
-                <span className="mushaf-cell__sub">صفحة {toArabicNumber(h.startPage)}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </Sheet>
-
-      {/* ── Reading options sheet ──────────────────────────────────────── */}
-      <Sheet
+      {/* ── Reading options sheet ─────────────────────────────────────────────── */}
+      <OptionsSheet
         open={sheet === 'options'}
-        title="خيارات القراءة"
         onClose={() => setSheet(null)}
         panelRef={sheetPanelRef}
-        darkSurface={mode === 'night'}
-      >
-        <section className="mushaf-section">
-          <p className="mushaf-section__title">التنقّل</p>
-          <div className="mushaf-seg">
-            {ORIENTATIONS.map(({ id, label, Icon }) => (
-              <button
-                key={id}
-                className="mushaf-seg__item"
-                aria-pressed={orientation === id}
-                onClick={() => setOrientation(id)}
-              >
-                <Icon size={18} aria-hidden="true" />
-                <span>{label}</span>
-              </button>
-            ))}
-          </div>
-          <p className="mushaf-hint">{activeOrientation.hint}</p>
-        </section>
-
-        <section className="mushaf-section">
-          <p className="mushaf-section__title">المظهر</p>
-          <div className="mushaf-seg">
-            {MODES.map(({ id, label, Icon }) => (
-              <button
-                key={id}
-                className="mushaf-seg__item"
-                aria-pressed={mode === id}
-                onClick={() => updatePrefs({ mode: id })}
-              >
-                <Icon size={18} aria-hidden="true" />
-                <span>{label}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="mushaf-section">
-          <p className="mushaf-section__title">القراءة</p>
-          <div className="mushaf-fields">
-            <label className="mushaf-field">
-              <span className="mushaf-field__label">
-                حجم الخط
-                <span className="mushaf-field__value">{toArabicNumber(Math.round(prefs.readingScale * 100))}%</span>
-              </span>
-              <input
-                className="mushaf-range"
-                type="range"
-                min={0.85}
-                max={1.35}
-                step={0.05}
-                value={prefs.readingScale}
-                onChange={(event) => updatePrefs({ readingScale: Number(event.target.value) })}
-              />
-            </label>
-
-            <label className="mushaf-field">
-              <span className="mushaf-field__label">
-                تباعد السطور
-                <span className="mushaf-field__value">{toArabicNumber(Math.round(prefs.lineSpacing * 100))}%</span>
-              </span>
-              <input
-                className="mushaf-range"
-                type="range"
-                min={0.9}
-                max={1.35}
-                step={0.05}
-                value={prefs.lineSpacing}
-                onChange={(event) => updatePrefs({ lineSpacing: Number(event.target.value) })}
-              />
-            </label>
-
-            <label className="mushaf-field">
-              <span className="mushaf-field__label">
-                مسافة الكلمات
-                <span className="mushaf-field__value">{toArabicNumber(Math.round(prefs.wordSpacing * 100))}%</span>
-              </span>
-              <input
-                className="mushaf-range"
-                type="range"
-                min={0}
-                max={0.3}
-                step={0.02}
-                value={prefs.wordSpacing}
-                onChange={(event) => updatePrefs({ wordSpacing: Number(event.target.value) })}
-              />
-            </label>
-          </div>
-
-          <button className="mushaf-reset" onClick={() => updatePrefs(DEFAULT_PREFS)}>
-            إعادة الضبط
-          </button>
-        </section>
-      </Sheet>
+        prefs={prefs}
+        updatePrefs={updatePrefs}
+        onOrientationChange={setOrientation}
+      />
 
       {/* ── The pressed ayah: what it is needed for ───────────────────────── */}
       {ayahChoice && (
