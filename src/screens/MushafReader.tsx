@@ -1,21 +1,11 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { TouchEvent as ReactTouchEvent, WheelEvent as ReactWheelEvent } from 'react';
-import {
-  Bookmark,
-  BookOpen,
-  List,
-  Moon,
-  SlidersHorizontal,
-  Sun,
-  Volume2,
-  X,
-  ZoomIn,
-  ZoomOut,
-} from 'lucide-react';
 import { MushafPage } from '@/components/mushaf/MushafPage';
-import { Sheet } from '@/components/mushaf/Sheet';
 import { JumpSheet } from '@/components/mushaf/JumpSheet';
 import { OptionsSheet } from '@/components/mushaf/OptionsSheet';
+import { MushafHeader } from '@/components/mushaf/MushafHeader';
+import { MushafDock } from '@/components/mushaf/MushafDock';
+import { AyahVoiceSheet } from '@/components/mushaf/AyahVoiceSheet';
 import {
   ZOOM_STEP,
   ZOOM_MIN,
@@ -34,6 +24,7 @@ import {
   type Orientation,
   type VoiceScope,
   type JumpTarget,
+  type SheetName,
 } from '@/components/mushaf/readerConfig';
 import { TafsirBottomSheet } from '@/components/TafsirBottomSheet';
 import {
@@ -41,7 +32,6 @@ import {
   getAyahPage,
   getJuzForPage,
   getSurahsForPage,
-  toArabicNumber,
 } from '@/data/surahs';
 import { getTotalPages, getHizbForPage } from '@/data/mushafPages';
 import { loadPreferredReciter, savePreferredReciter, AUDIO_RECITERS } from '@/data/audioReciters';
@@ -56,8 +46,6 @@ interface MushafReaderProps {
   onPageChange?: (page: number) => void;
 }
 
-/** Which of the reader's own sheets is up, if any. */
-type SheetName = 'jump' | 'options';
 
 export function MushafReader({ settings, initialPage = 1, onClose, onPageChange }: MushafReaderProps) {
   const totalPages = getTotalPages();
@@ -895,48 +883,19 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
 
   return (
     <div className="mushaf-shell" data-mode={mode}>
-      {/* ── Above the page: who you are reading ─────────────────────────── */}
-      <header className="mushaf-topbar">
-        <button className="mushaf-iconbtn" onClick={onClose} aria-label="إغلاق المصحف">
-          <X size={20} />
-        </button>
-
-        <div className="mushaf-heading">
-          <p className="mushaf-heading__title">
-            {surahsOnPage.length > 0 ? surahsOnPage.map((s) => s.name).join(' · ') : `الجزء ${toArabicNumber(currentJuz)}`}
-          </p>
-          <p className="mushaf-heading__meta">
-            الجزء {toArabicNumber(currentJuz)} · الحزب {toArabicNumber(currentHizb)}
-          </p>
-        </div>
-
-        <div className="mushaf-actions">
-          <button
-            className="mushaf-iconbtn mushaf-iconbtn--gold"
-            onClick={() => toggleBookmark(currentPage)}
-            aria-label={isBookmarked ? 'إزالة العلامة من هذه الصفحة' : 'حفظ هذه الصفحة'}
-            aria-pressed={isBookmarked}
-          >
-            <Bookmark size={17} className={isBookmarked ? 'fill-current' : ''} />
-          </button>
-          <button
-            className="mushaf-iconbtn"
-            onClick={() => updatePrefs({ mode: mode === 'night' ? 'day' : 'night' })}
-            aria-label={mode === 'night' ? 'الوضع النهاري' : 'الوضع الليلي'}
-            aria-pressed={mode === 'night'}
-          >
-            {mode === 'night' ? <Sun size={17} /> : <Moon size={17} />}
-          </button>
-          <button
-            className="mushaf-iconbtn"
-            onClick={() => setSheet(sheet === 'options' ? null : 'options')}
-            aria-label="خيارات القراءة"
-            aria-expanded={sheet === 'options'}
-          >
-            <SlidersHorizontal size={17} />
-          </button>
-        </div>
-      </header>
+      <MushafHeader
+        onClose={onClose}
+        surahsOnPage={surahsOnPage}
+        currentJuz={currentJuz}
+        currentHizb={currentHizb}
+        currentPage={currentPage}
+        isBookmarked={isBookmarked}
+        toggleBookmark={toggleBookmark}
+        mode={mode}
+        updatePrefs={updatePrefs}
+        sheet={sheet}
+        setSheet={setSheet}
+      />
 
       {/* ── The page ───────────────────────────────────────────────────── */}
       <div
@@ -985,36 +944,17 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
         )}
       </div>
 
-      {/* ── Below the page: where you are going ────────────────────────── */}
-      <footer className="mushaf-dock">
-        <div className="mushaf-progress" aria-hidden="true">
-          <span style={{ width: `${Math.max(1.5, (currentPage / totalPages) * 100)}%` }} />
-        </div>
-
-        <div className="mushaf-tools">
-          <button className="mushaf-tool" onClick={openJumpSheet} aria-expanded={sheet === 'jump'}>
-            <List size={15} aria-hidden="true" /> انتقال إلى
-          </button>
-
-          <div className="mushaf-zoom">
-            <button onClick={zoomOut} disabled={prefs.zoom <= ZOOM_MIN} aria-label="تصغير الصفحة">
-              <ZoomOut size={15} />
-            </button>
-            <span className="mushaf-zoom__value">{toArabicNumber(zoomPercent)}%</span>
-            <button onClick={zoomIn} disabled={prefs.zoom >= ZOOM_MAX} aria-label="تكبير الصفحة">
-              <ZoomIn size={15} />
-            </button>
-          </div>
-
-          <button
-            className="mushaf-tool"
-            onClick={() => setSheet(sheet === 'options' ? null : 'options')}
-            aria-expanded={sheet === 'options'}
-          >
-            <SlidersHorizontal size={15} aria-hidden="true" /> خيارات القراءة
-          </button>
-        </div>
-      </footer>
+      <MushafDock
+        currentPage={currentPage}
+        totalPages={totalPages}
+        openJumpSheet={openJumpSheet}
+        sheet={sheet}
+        setSheet={setSheet}
+        zoomOut={zoomOut}
+        zoomIn={zoomIn}
+        zoomPercent={zoomPercent}
+        prefs={prefs}
+      />
 
       {/* ── Jump sheet ─────────────────────────────────────────────────── */}
       <JumpSheet
@@ -1044,101 +984,28 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
         onOrientationChange={setOrientation}
       />
 
-      {/* ── The pressed ayah: what it is needed for ───────────────────────── */}
-      {ayahChoice && (
-        <Sheet
-          open
-          title={`الآية ${toArabicNumber(ayahChoice.ayahNumber)} · ${getSurah(ayahChoice.surahId)?.name ?? ''}`}
-          onClose={closeAyahChoice}
-          panelRef={ayahPanelRef}
-        >
-          <div className="mushaf-seg">
-            <button className="mushaf-seg__item" onClick={() => setTafsirAyah(ayahChoice)}>
-              <BookOpen size={18} aria-hidden="true" />
-              <span>التفسير</span>
-            </button>
-            <button className="mushaf-seg__item" aria-pressed={voiceEngaged} onClick={openVoice}>
-              <Volume2 size={18} aria-hidden="true" />
-              <span>التلاوة</span>
-            </button>
-          </div>
-          <p className="mushaf-hint">{voiceHint}</p>
-
-          {voiceEngaged && (
-            <div className="mushaf-voice">
-              <div className="mushaf-seg" role="group" aria-label="نطاق التلاوة">
-                <button
-                  className="mushaf-seg__item"
-                  aria-pressed={voiceScope === 'ayah'}
-                  onClick={() => handleVoiceScope('ayah')}
-                >
-                  <span>الآية</span>
-                </button>
-                <button
-                  className="mushaf-seg__item"
-                  aria-pressed={voiceScope === 'surah'}
-                  onClick={() => handleVoiceScope('surah')}
-                >
-                  <span>السورة</span>
-                </button>
-              </div>
-
-              <label className="mushaf-voice__reciter">
-                <span>القارئ</span>
-                <select
-                  className="mushaf-select"
-                  value={reciterId}
-                  onChange={(event) => handleVoiceReciter(event.target.value)}
-                >
-                  {AUDIO_RECITERS.map((reciter) => (
-                    <option key={reciter.id} value={reciter.id}>
-                      {reciter.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <div className="mushaf-tools">
-                <button
-                  className="mushaf-tool"
-                  onClick={replayVoice}
-                  disabled={voicePhase !== 'ready'}
-                >
-                  إعادة
-                </button>
-                <button
-                  className="mushaf-tool mushaf-tool--primary"
-                  onClick={openVoice}
-                  disabled={voicePrimaryDisabled}
-                >
-                  {voicePrimaryLabel}
-                </button>
-              </div>
-
-              {voicePhase === 'error' && voiceError && (
-                <p className="mushaf-hint" role="alert">
-                  {voiceError}
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Outside the choice on purpose: whichever button is taken, the element
-              the recitation plays through already exists to be aimed at. Playing is
-              the element's own word, not the click's: a seek, a stall or a system
-              pause all move the transport without the code asking for it. The end
-              event is the cut's backstop — the last ayah of a file reaches it
-              before a final timeupdate can report that it stopped. */}
-          <audio
-            ref={voiceAudioRef}
-            preload="auto"
-            onPlay={() => setVoicePlaying(true)}
-            onPause={() => setVoicePlaying(false)}
-            onTimeUpdate={handleVoiceTime}
-            onEnded={finishVoice}
-          />
-        </Sheet>
-      )}
+      <AyahVoiceSheet
+        ayahChoice={ayahChoice}
+        closeAyahChoice={closeAyahChoice}
+        ayahPanelRef={ayahPanelRef}
+        setTafsirAyah={setTafsirAyah}
+        openVoice={openVoice}
+        voiceEngaged={voiceEngaged}
+        voiceHint={voiceHint}
+        voiceScope={voiceScope}
+        handleVoiceScope={handleVoiceScope}
+        reciterId={reciterId}
+        handleVoiceReciter={handleVoiceReciter}
+        replayVoice={replayVoice}
+        voicePhase={voicePhase}
+        voicePrimaryDisabled={voicePrimaryDisabled}
+        voicePrimaryLabel={voicePrimaryLabel}
+        voiceError={voiceError}
+        voiceAudioRef={voiceAudioRef}
+        setVoicePlaying={setVoicePlaying}
+        handleVoiceTime={handleVoiceTime}
+        finishVoice={finishVoice}
+      />
 
       {/* Rendered last so it stacks over the reader's own sheets. */}
       {tafsirAyah && (
@@ -1177,4 +1044,5 @@ const MushafLeaf = memo(function MushafLeaf({ page, ...sheet }: MushafLeafProps)
     </div>
   );
 });
+
 

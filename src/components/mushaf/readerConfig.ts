@@ -35,6 +35,8 @@ export type Orientation = 'vertical' | 'horizontal';
 /** What the voice carries when an ayah is asked about: that ayah, or the surah through it. */
 export type VoiceScope = 'ayah' | 'surah';
 export type JumpTarget = 'page' | 'surah' | 'juz' | 'hizb';
+/** Which of the reader's own sheets is up, if any. */
+export type SheetName = 'jump' | 'options';
 
 /**
  * How the reader looks, kept in one object on purpose.
