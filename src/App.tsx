@@ -183,9 +183,38 @@ function AppUpdateNotice() {
   );
 }
 
+/**
+ * The "use without an account" passage. Signing in is the only part of this app
+ * that needs the network, so the gate may not be the only way in — otherwise a
+ * first-time user offline would be locked out of an app that works entirely on
+ * device. The choice is remembered across launches, yields the moment a real
+ * session appears, and a deliberate sign-out clears it so the gate returns.
+ */
+const OFFLINE_USAGE_KEY = 'zad:offline-usage';
+
+function readOfflineUsage(): boolean {
+  try {
+    return localStorage.getItem(OFFLINE_USAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
 function Application() {
   const [session, setSession] = useState<Session | null>(null);
   const [authChecked, setAuthChecked] = useState(!isSupabaseConfigured);
+  const [offlineUsage, setOfflineUsage] = useState(readOfflineUsage);
+
+  useEffect(() => {
+    if (session) {
+      try {
+        localStorage.removeItem(OFFLINE_USAGE_KEY);
+      } catch {
+        // Best-effort: a storage that refuses must not keep anything hidden.
+      }
+      setOfflineUsage(false);
+    }
+  }, [session]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -210,11 +239,23 @@ function Application() {
   if (isSupabaseConfigured && !authChecked) {
     return <AppContent accountEmail={undefined} onSignOut={undefined} syncState={null} onSyncNow={undefined} />;
   }
-  if (isSupabaseConfigured && !session) {
-    return <AuthScreen onAuthenticated={() => {}} />;
-  }
   if (isSupabaseConfigured && session) {
     return <AuthenticatedApp key={session.user.id} session={session} />;
+  }
+  if (isSupabaseConfigured && !offlineUsage) {
+    return (
+      <AuthScreen
+        onAuthenticated={() => {}}
+        onContinueOffline={() => {
+          try {
+            localStorage.setItem(OFFLINE_USAGE_KEY, 'true');
+          } catch {
+            // Even without storage the passage still works for this session.
+          }
+          setOfflineUsage(true);
+        }}
+      />
+    );
   }
   return <AppContent accountEmail={undefined} onSignOut={undefined} syncState={null} onSyncNow={undefined} />;
 }

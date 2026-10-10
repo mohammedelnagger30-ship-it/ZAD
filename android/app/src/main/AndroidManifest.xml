@@ -53,6 +53,10 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" android:minSdkVersion="30" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- The WebView's own geolocation prompt (PrayerScreen «موقعي الحالي») resolves
+         through these host permissions; without them the callback always errors. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- Lets the in-app updater hand the downloaded APK to the system installer. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Allows the app to receive boot completed broadcasts to reschedule notifications -->

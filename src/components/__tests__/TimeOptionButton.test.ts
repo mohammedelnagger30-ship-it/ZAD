@@ -2,6 +2,8 @@
  * @jest-environment jsdom
  */
 
+import { jest } from '@jest/globals';
+
 // Simple render test for TimeOptionButton component
 describe('TimeOptionButton', () => {
   beforeEach(() => {

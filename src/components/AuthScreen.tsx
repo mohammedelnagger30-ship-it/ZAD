@@ -6,9 +6,11 @@ import { COLOR_PALETTES, type ColorPalette } from '@/utils/colorThemes';
 
 interface AuthScreenProps {
   onAuthenticated: () => void;
+  /** The on-device passage: use the app without an account, and without the network. */
+  onContinueOffline: () => void;
 }
 
-export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
+export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenProps) {
   const { themeMode, changeTheme, colorPalette, changeColorPalette } = useTheme();
   const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
   const [email, setEmail] = useState('');
@@ -250,6 +252,23 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         >
           {mode === 'sign-up' ? 'لديك حساب بالفعل؟ سجّل الدخول' : 'مستخدم جديد؟ أنشئ حسابًا سحابياً'}
         </button>
+
+        {/* The account is an extra, not the door: the app is offline-first, and
+            signing in is the one thing here that needs the network. Anyone without
+            it — or simply without wanting an account — walks straight in, and the
+            choice is remembered so this gate does not return on every launch. */}
+        <div className="mt-6 border-t border-primary-100 pt-4 dark:border-primary-900">
+          <button
+            type="button"
+            onClick={onContinueOffline}
+            className="w-full rounded-xl border border-primary-200 bg-primary-50/60 py-2.5 text-xs font-semibold text-primary-800 transition hover:bg-primary-100 dark:border-primary-700 dark:bg-primary-900/50 dark:text-primary-200 dark:hover:bg-primary-900"
+          >
+            المتابعة بدون حساب
+          </button>
+          <p className="mt-2 text-center text-[11px] leading-relaxed text-primary-700/70 dark:text-primary-300/70">
+            كل بياناتك تبقى على هذا الجهاز، ويمكنك إنشاء حساب لاحقًا لمزامنتها بين أجهزتك.
+          </p>
+        </div>
       </section>
     </main>
   );

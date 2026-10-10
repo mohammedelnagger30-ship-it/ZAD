@@ -5,6 +5,7 @@
  * Async functions that interact with Dexie DB would require
  * mocking the database (see jest.config.js for setup).
  */
+import { jest } from '@jest/globals';
 import { describePortion } from '../taskManager';
 
 // Mock the surahs module

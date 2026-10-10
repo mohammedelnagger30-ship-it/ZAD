@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    /* The tests get the real Jest globals; the app build keeps whatever
+       tsconfig.app.json picks up on its own. */
+    "types": ["jest", "vite/client"],
+    "esModuleInterop": true
+  }
+}

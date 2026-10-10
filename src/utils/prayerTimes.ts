@@ -2,6 +2,7 @@ import {
   Coordinates,
   CalculationMethod,
   CalculationParameters,
+  HighLatitudeRule,
   PrayerTimes,
   Qibla,
   Madhab,
@@ -36,6 +37,42 @@ export function getCalcMethod(method: string): CalculationParameters {
     case 'Tehran': return CalculationMethod.Tehran();
     default: return CalculationMethod.Egyptian();
   }
+}
+
+/**
+ * The app's own default position — the same one DEFAULT_SETTINGS ships with — kept
+ * here so a missing or corrupt coordinate never reaches adhan. `undefined` (a
+ * partially saved settings row) or `NaN` used to flow straight into the prayer
+ * calculation, where every time came out as an Invalid Date.
+ */
+const FALLBACK_LATITUDE = 30.0444;
+const FALLBACK_LONGITUDE = 31.2357;
+
+function finiteCoordinate(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+/**
+ * Every time on this day that adhan could actually compute.
+ *
+ * Past the polar circles the sun can stay above (or below) the working angles for
+ * the whole day, and adhan then returns nothing at all for fajr, sunrise, maghrib
+ * or isha — not a wrong time, an absent one. Those entries are dropped rather than
+ * passed on: an Invalid Date downstream is not harmless. `NaN` sails through the
+ * azan scheduler's window comparisons (`lateBy < 0 || lateBy > CATCH_UP_MS` is
+ * false for NaN), so a day of missing times used to be able to fire the adhan out
+ * of nowhere.
+ */
+function finitePrayerTimes(pt: PrayerTimes): { name: string; arabicName: string; time: Date }[] {
+  const all = [
+    { name: 'fajr', arabicName: 'الفجر', time: pt.fajr },
+    { name: 'sunrise', arabicName: 'الشروق', time: pt.sunrise },
+    { name: 'dhuhr', arabicName: 'الظهر', time: pt.dhuhr },
+    { name: 'asr', arabicName: 'العصر', time: pt.asr },
+    { name: 'maghrib', arabicName: 'المغرب', time: pt.maghrib },
+    { name: 'isha', arabicName: 'العشاء', time: pt.isha },
+  ];
+  return all.filter((prayer) => Number.isFinite(prayer.time.getTime()));
 }
 
 /**
@@ -78,25 +115,23 @@ export function calculatePrayerTimesForDay(
   calcMethod: string,
   asrMadhab: 'standard' | 'hanafi',
 ): PrayerTimesResult {
-  const coords = new Coordinates(latitude, longitude);
+  const coords = new Coordinates(
+    finiteCoordinate(latitude, FALLBACK_LATITUDE),
+    finiteCoordinate(longitude, FALLBACK_LONGITUDE),
+  );
   const params = getCalcMethod(calcMethod);
   params.madhab = asrMadhab === 'hanafi' ? Madhab.Hanafi : Madhab.Shafi;
+  // Named rather than left to the library's default, so the far-north behaviour is
+  // pinned here: a night that never darkens to the fajr angle is reckoned from the
+  // middle of the night, which is adhan's own recommendation.
+  params.highLatitudeRule = HighLatitudeRule.MiddleOfTheNight;
 
   const prayerDate = calendarDayToDate(day);
   const pt = new PrayerTimes(coords, prayerDate, params);
   const qiblaDirection = Qibla(coords);
 
   const now = Date.now();
-  const prayerTimes: { name: string; arabicName: string; time: Date }[] = [
-    { name: 'fajr', arabicName: 'الفجر', time: pt.fajr },
-    { name: 'sunrise', arabicName: 'الشروق', time: pt.sunrise },
-    { name: 'dhuhr', arabicName: 'الظهر', time: pt.dhuhr },
-    { name: 'asr', arabicName: 'العصر', time: pt.asr },
-    { name: 'maghrib', arabicName: 'المغرب', time: pt.maghrib },
-    { name: 'isha', arabicName: 'العشاء', time: pt.isha },
-  ];
-
-  const prayers: PrayerTimeInfo[] = prayerTimes.map((prayer) => ({
+  const prayers: PrayerTimeInfo[] = finitePrayerTimes(pt).map((prayer) => ({
     ...prayer,
     passed: prayer.time.getTime() < now,
   }));
@@ -125,7 +160,7 @@ export function getNextPrayer(
     calcMethod,
     asrMadhab,
   );
-  return tomorrowTimes.prayers.find((p) => p.name !== 'sunrise') ?? tomorrowTimes.prayers[0];
+  return tomorrowTimes.prayers.find((p) => p.name !== 'sunrise') ?? tomorrowTimes.prayers[0] ?? null;
 }
 
 export function getPrayerTimeZone(timeZone?: string, cityName?: string): string {
