@@ -1,21 +1,22 @@
 import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from 'react';
 import type { CSSProperties } from 'react';
 import { Search, Eye, EyeOff, ChevronLeft, ChevronRight, Type, BookOpen, Layers, BookText, X, Volume2 } from 'lucide-react';
-import { Card, Button, Badge } from '@/components/ui';
+import { Card, Button } from '@/components/ui';
 import { SURAHS, JUZ_INFO, TOTAL_QURAN_PAGES, getSurah, getAyahPage, getJuzForPage, toArabicNumber, type SurahMeta } from '@/data/surahs';
 import { getAyahs, hasFullText, type AyahText } from '@/data/quranText';
 import { getHizbForPage, SAJDAH_AYAHS } from '@/data/mushafPages';
-import { db, type Bookmark as BookmarkType, type Settings, type KhatmahPlan } from '@/db/database';
+import { db, type Bookmark as BookmarkType, type Settings } from '@/db/database';
 import { TafsirBottomSheet } from '@/components/TafsirBottomSheet';
 import { AudioRecitationPlayer } from '@/components/AudioRecitationPlayer';
 import { Sheet } from '@/components/mushaf/Sheet';
 import { loadPreferredReciter, savePreferredReciter } from '@/data/audioReciters';
 import { MushafReader } from '@/screens/MushafReader';
 import { MushafFrameDecoration } from '@/components/mushaf/MushafPage';
+import { KhatmahCard } from '@/components/khatmah/KhatmahCard';
+import { AyahSpan } from '@/components/quran/AyahSpan';
+import { SurahListItem, PageBrowser } from '@/components/quran/QuranBrowse';
 import { splitBasmala } from '@/utils/basmala';
 import { searchAyahs } from '@/utils/ayahSearch';
-import { todayKey } from '@/utils/dateUtils';
-import { clearKhatmah, createKhatmahPlan, describeKhatmah, loadKhatmah, saveKhatmah } from '@/utils/khatmah';
 
 interface QuranScreenProps {
   settings: Settings;
@@ -102,8 +103,6 @@ export function QuranScreen({ settings }: QuranScreenProps) {
   const ayahChoicePanelRef = useRef<HTMLDivElement>(null);
   const [mushafPage, setMushafPage] = useState(savedState?.mushafPage ?? 1);
   const [reciterId, setReciterId] = useState(loadPreferredReciter);
-  const [khatmah, setKhatmah] = useState<KhatmahPlan | null>(null);
-  const [khatmahPickerOpen, setKhatmahPickerOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -128,52 +127,6 @@ export function QuranScreen({ settings }: QuranScreenProps) {
   useEffect(() => {
     loadBookmarks();
   }, [loadBookmarks]);
-
-  // The khatmah plan loads once; the card mutates it through saveKhatmah.
-  useEffect(() => {
-    let cancelled = false;
-    loadKhatmah()
-      .then((plan) => {
-        if (!cancelled) setKhatmah(plan);
-      })
-      .catch(() => {
-        // A database failure must not take the Quran screen down with it — the
-        // card falls back to the start CTA and the next mount retries the load.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const khatmahStatus = useMemo(
-    () => (khatmah ? describeKhatmah(khatmah, todayKey()) : null),
-    [khatmah]
-  );
-
-  const startKhatmah = useCallback(async (targetDays: number | null) => {
-    const plan = await saveKhatmah(createKhatmahPlan(todayKey(), targetDays));
-    setKhatmah(plan);
-    setKhatmahPickerOpen(false);
-  }, []);
-
-  const advanceKhatmah = useCallback(
-    async (delta: number) => {
-      if (!khatmah) return;
-      const plan = await saveKhatmah({
-        ...khatmah,
-        currentPage: Math.min(Math.max(khatmah.currentPage + delta, 0), TOTAL_QURAN_PAGES),
-        updatedAt: Date.now(),
-      });
-      setKhatmah(plan);
-    },
-    [khatmah]
-  );
-
-  const finishKhatmah = useCallback(async () => {
-    await clearKhatmah();
-    setKhatmah(null);
-    setKhatmahPickerOpen(false);
-  }, []);
 
   const bookmarkedKeys = useMemo(
     () => new Set(bookmarks.map((b) => `${b.surahId}:${b.ayahNumber}`)),
@@ -325,126 +278,9 @@ export function QuranScreen({ settings }: QuranScreenProps) {
           </div>
         </section>
 
+
         {/* Khatmah (Quran completion) plan */}
-        <section>
-          <Card className="space-y-3 border border-primary-200/80 shadow-md dark:border-primary-800/80">
-            {khatmah && khatmahStatus && !khatmahStatus.finished ? (
-              <>
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-bold text-primary-900 dark:text-primary-100">ختمة القرآن</p>
-                  <Button variant="ghost" size="sm" onClick={() => { void finishKhatmah(); }}>
-                    إنهاء
-                  </Button>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="rounded-2xl bg-primary-50/70 py-2 dark:bg-primary-900/30">
-                    <p className="text-lg font-bold text-primary-800 dark:text-gold-400">{toArabicNumber(khatmahStatus.completed)}</p>
-                    <p className="text-[10px] text-gray-500 dark:text-gray-400">صفحة مقروءة</p>
-                  </div>
-                  <div className="rounded-2xl bg-primary-50/70 py-2 dark:bg-primary-900/30">
-                    <p className="text-lg font-bold text-primary-800 dark:text-gold-400">{toArabicNumber(khatmahStatus.remaining)}</p>
-                    <p className="text-[10px] text-gray-500 dark:text-gray-400">صفحة متبقية</p>
-                  </div>
-                  <div className="rounded-2xl bg-primary-50/70 py-2 dark:bg-primary-900/30">
-                    <p className="text-lg font-bold text-primary-800 dark:text-gold-400">
-                      {khatmahStatus.pagesPerDay !== null ? toArabicNumber(khatmahStatus.pagesPerDay) : '—'}
-                    </p>
-                    <p className="text-[10px] text-gray-500 dark:text-gray-400">صفحة اليوم</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-primary-100 dark:bg-primary-800/50">
-                    <div
-                      className="h-full rounded-full bg-linear-to-r from-primary-500 to-primary-600 transition-all"
-                      style={{ width: `${khatmahStatus.percent}%` }}
-                    />
-                  </div>
-                  <span className="text-xs font-bold text-primary-700 dark:text-primary-200">
-                    {toArabicNumber(khatmahStatus.percent)}٪
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                    {khatmah.targetDate
-                      ? khatmahStatus.daysLeft !== null && khatmahStatus.daysLeft > 0
-                        ? `باقٍ ${toArabicNumber(khatmahStatus.daysLeft)} يومًا على هدف ${khatmah.targetDate}`
-                        : 'تجاوز هدف الوقت'
-                      : 'بلا هدف وقت'}
-                  </p>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => { void advanceKhatmah(-1); }}
-                      aria-label="إنقاص صفحة من التقدّم"
-                      className="flex h-8 w-8 items-center justify-center rounded-xl border border-primary-200 text-sm font-bold text-primary-700 transition-colors hover:bg-primary-50 dark:border-primary-700 dark:text-primary-200 dark:hover:bg-primary-800/40"
-                    >
-                      −
-                    </button>
-                    <span className="min-w-[7.5rem] text-center text-xs font-bold text-primary-800 dark:text-primary-100">
-                      حتى صفحة {toArabicNumber(khatmahStatus.completed)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => { void advanceKhatmah(1); }}
-                      aria-label="زيادة صفحة في التقدّم"
-                      className="flex h-8 w-8 items-center justify-center rounded-xl border border-primary-200 text-sm font-bold text-primary-700 transition-colors hover:bg-primary-50 dark:border-primary-700 dark:text-primary-200 dark:hover:bg-primary-800/40"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-              </>
-            ) : khatmah && khatmahStatus ? (
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-primary-900 dark:text-primary-100">تمّت الختمة</p>
-                  <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">قرأت جميع صفحات المصحف.</p>
-                </div>
-                <Button
-                  variant="gold"
-                  size="sm"
-                  onClick={() => {
-                    void finishKhatmah().then(() => setKhatmahPickerOpen(true));
-                  }}
-                >
-                  ختمة جديدة
-                </Button>
-              </div>
-            ) : (
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-primary-900 dark:text-primary-100">ختمة القرآن</p>
-                  <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                    خطة بهدف وتقدّم يومي بالصفحات.
-                  </p>
-                </div>
-                <Button
-                  variant={khatmahPickerOpen ? 'secondary' : 'primary'}
-                  size="sm"
-                  onClick={() => setKhatmahPickerOpen((open) => !open)}
-                >
-                  {khatmahPickerOpen ? 'لاحقًا' : 'ابدأ خطة'}
-                </Button>
-              </div>
-            )}
-            {khatmahPickerOpen && !khatmah && (
-              <div className="flex flex-wrap gap-2 border-t border-primary-100 pt-3 dark:border-primary-800/60">
-                {[30, 60, 90].map((days) => (
-                  <Button key={days} variant="secondary" size="sm" onClick={() => { void startKhatmah(days); }}>
-                    {days} يومًا
-                  </Button>
-                ))}
-                <Button variant="ghost" size="sm" onClick={() => { void startKhatmah(null); }}>
-                  بلا هدف وقت
-                </Button>
-              </div>
-            )}
-          </Card>
-        </section>
-
+        <KhatmahCard />
         {/* Enhanced Browse Mode Tabs */}
         <div className="sticky top-0 z-40 rounded-3xl border-2 border-primary-200/80 bg-white/95 p-1.5 shadow-xl backdrop-blur-lg dark:border-primary-800/60 dark:bg-primary-950/90">
           <div className="grid grid-cols-4 gap-1.5">
@@ -965,246 +801,4 @@ export function QuranScreen({ settings }: QuranScreenProps) {
   }
 
   return null;
-}
-
-interface AyahSpanProps {
-  ayah: AyahText;
-  isHifz: boolean;
-  bookmarked: boolean;
-  hideText: boolean;
-  hideWordByWord: boolean;
-  selected: boolean;
-  activeAudio: boolean;
-  onSelect: () => void;
-  onToggleBookmark: () => void;
-  onShowTafsir: () => void;
-  /** Which of the ayah is wanted: open the reader's «التفسير / التلاوة» question. */
-  onShowChoice: () => void;
-}
-
-/**
- * One ayah plus its number marker, built the way the reader's page builds it: a plain
- * text span with the medallion sitting straight against the ayah's last word. No button
- * and no control wrapper comes between them, so the line never breaks in that gap — the
- * number stays glued to its ayah instead of being stranded at the start of the next line.
- *
- * Tap selects the ayah and then asks which of it is wanted — its meaning or its
- * voice, the reader's own question put to this screen; in hifz mode pressing a line
- * marks it instead. Long-press (touch) or right-click always opens the tafsir
- * directly, which is the shortest way to it in hifz mode.
- */
-function AyahSpan({
-  ayah,
-  isHifz,
-  bookmarked,
-  hideText,
-  hideWordByWord,
-  selected,
-  activeAudio,
-  onSelect,
-  onToggleBookmark,
-  onShowTafsir,
-  onShowChoice,
-}: AyahSpanProps) {
-  const timerRef = useRef<number | null>(null);
-  const longPressFiredRef = useRef(false);
-
-  const cancelPress = useCallback(() => {
-    if (timerRef.current !== null) {
-      window.clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-  }, []);
-
-  // Never leave a timer running after the ayah unmounts.
-  useEffect(() => cancelPress, [cancelPress]);
-
-  const startPress = () => {
-    longPressFiredRef.current = false;
-    cancelPress();
-    timerRef.current = window.setTimeout(() => {
-      longPressFiredRef.current = true;
-      onShowTafsir();
-    }, 500);
-  };
-
-  const handleClick = () => {
-    cancelPress();
-    if (longPressFiredRef.current) {
-      longPressFiredRef.current = false;
-      return;
-    }
-    onSelect();
-    // A pressed ayah asks its question — its meaning or its voice — everywhere
-    // except memorising, where pressing a line is how it is marked.
-    if (isHifz) onToggleBookmark();
-    else onShowChoice();
-  };
-
-  // The reader paints an ayah's state straight onto the span, so a chosen or kept ayah
-  // keeps its wash under the pointer instead of losing it to the hover rule.
-  const stateStyle = selected
-    ? { background: 'var(--selected-wash)' }
-    : isHifz && bookmarked
-      ? { background: 'var(--bookmark-wash)' }
-      : undefined;
-
-  // The last word carries the medallion inside one unbreakable tail, so the two are cut
-  // from the line together — the number is never left standing at the head of a line,
-  // where in Arabic reading order it reads as belonging to the verse that follows.
-  const words = ayah.text.split(' ');
-  const head = words.slice(0, -1).join(' ');
-  const tailWord = words[words.length - 1];
-  const mark = (
-    <span className={`mushaf-ayah-mark${activeAudio ? ' mushaf-ayah-mark--active' : ''}`} aria-hidden="true">
-      {toArabicNumber(ayah.ayahNumber)}
-    </span>
-  );
-  const word = (value: string, index: number) => (
-    <span
-      key={index}
-      className="inline-block hover:bg-gold-100 dark:hover:bg-gold-900/30 rounded-sm cursor-pointer mx-0.5"
-      onClick={(e) => {
-        e.stopPropagation();
-        const el = e.currentTarget;
-        el.style.opacity = el.style.opacity === '0' ? '1' : '0';
-      }}
-    >
-      {value}
-    </span>
-  );
-
-  return (
-    <span>
-      <span
-        className={`mushaf-ayah${hideText ? ' no-select' : ''}`}
-        role="button"
-        tabIndex={0}
-        aria-pressed={selected}
-        aria-label={`تحديد الآية ${toArabicNumber(ayah.ayahNumber)}${activeAudio ? '، تُتلى الآن' : ''}`}
-        title="اضغط لتحديد الآية"
-        onClick={handleClick}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            handleClick();
-          }
-        }}
-        onTouchStart={startPress}
-        onTouchEnd={cancelPress}
-        onTouchMove={cancelPress}
-        onTouchCancel={cancelPress}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          cancelPress();
-          onShowTafsir();
-        }}
-        style={stateStyle}
-      >
-        {hideText ? (
-          <>
-            {/* The mask hides the words, not their shape: the bar stays visible so the
-                memoriser still sees where each line runs, and can still tap it. */}
-            {head && (
-              <span className="bg-primary-200 dark:bg-primary-700 rounded-sm px-2 select-none" style={{ color: 'transparent' }}>
-                {head}
-                {' '}
-              </span>
-            )}
-            <span className="mushaf-ayah-tail">
-              <span className="bg-primary-200 dark:bg-primary-700 rounded-sm px-2 select-none" style={{ color: 'transparent' }}>
-                {tailWord}
-              </span>
-              {mark}
-            </span>
-          </>
-        ) : hideWordByWord ? (
-          <>
-            {words.slice(0, -1).map(word)}
-            <span className="mushaf-ayah-tail">
-              {word(tailWord, words.length - 1)}
-              {mark}
-            </span>
-          </>
-        ) : (
-          <>
-            {head ? `${head} ` : null}
-            <span className="mushaf-ayah-tail">
-              {tailWord}
-              {mark}
-            </span>
-          </>
-        )}
-      </span>{' '}
-    </span>
-  );
-}
-
-// Surah list item - Enhanced
-function SurahListItem({ surah, onOpen, onHifz }: { surah: SurahMeta; onOpen: () => void; onHifz: () => void }) {
-  return (
-    <Card className="p-4! transition-all duration-300 hover:-translate-y-1 hover:border-primary-400 hover:shadow-xl sm:p-5! group">
-      <div className="flex items-center gap-4">
-        <button
-          onClick={onOpen}
-          className="flex min-w-0 flex-1 items-center gap-4 rounded-2xl text-right outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500 dark:focus-visible:ring-gold-400 transition-colors hover:bg-primary-50/50 dark:hover:bg-primary-900/30 -mx-2 px-2 py-2"
-        >
-          <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border-2 border-primary-200 bg-linear-to-br from-primary-50 to-primary-100 shadow-md dark:border-primary-700 dark:from-primary-800/80 dark:to-primary-900 group-hover:scale-110 transition-transform">
-            <span className="text-lg font-bold text-primary-700 dark:text-gold-400">
-              {toArabicNumber(surah.id)}
-            </span>
-            <div className="absolute -bottom-1 -right-1 h-2.5 w-2.5 rounded-full bg-gold-400 shadow-xs" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 mb-1">
-              <h3 className="text-lg font-bold text-primary-800 dark:text-primary-100">{surah.name}</h3>
-              <Badge variant={surah.revelationType === 'meccan' ? 'gold' : 'primary'}>
-                {surah.revelationType === 'meccan' ? 'مكية' : 'مدنية'}
-              </Badge>
-            </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
-              {surah.nameLatin}
-            </p>
-            <div className="mt-1.5 flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
-              <span className="flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-primary-400" />
-                {toArabicNumber(surah.ayahCount)} آية
-              </span>
-              <span className="text-primary-300">·</span>
-              <span className="flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-gold-400" />
-                صفحة {toArabicNumber(surah.pageStart)}
-              </span>
-            </div>
-          </div>
-        </button>
-        <button
-          onClick={onHifz}
-          aria-label={`بدء الحفظ في سورة ${surah.name}`}
-          className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-2xl border-2 border-gold-200 bg-linear-to-br from-gold-50 to-gold-100 px-3 text-sm font-bold text-gold-700 shadow-md transition-all duration-300 hover:scale-105 hover:border-gold-400 hover:shadow-lg dark:border-gold-800/60 dark:from-gold-900/25 dark:to-gold-900/40 dark:text-gold-300 dark:hover:border-gold-600"
-          title={`وضع الحفظ - ${surah.name}`}
-        >
-          <Layers size={16} />
-          <span>حفظ</span>
-        </button>
-      </div>
-    </Card>
-  );
-}
-
-// Page browser
-function PageBrowser({ onSelectPage }: { onSelectPage: (page: number) => void }) {
-  return (
-    <div className="grid grid-cols-5 gap-2">
-      {Array.from({ length: TOTAL_QURAN_PAGES }, (_, i) => i + 1).map((page) => (
-        <button
-          key={page}
-          onClick={() => onSelectPage(page)}
-          className="aspect-square rounded-lg bg-white dark:bg-primary-900/40 border border-primary-100 dark:border-primary-800 flex items-center justify-center text-sm font-medium text-primary-700 dark:text-primary-200 hover:border-primary-400 hover:bg-primary-50 dark:hover:bg-primary-800/40 transition-smooth"
-        >
-          {toArabicNumber(page)}
-        </button>
-      ))}
-    </div>
-  );
 }
