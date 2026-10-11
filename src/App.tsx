@@ -16,6 +16,15 @@ import type { Session } from '@supabase/supabase-js';
 import type { Settings } from '@/db/database';
 import { AzanOverlayModal } from '@/components/AzanOverlayModal';
 import { useAzanTrigger } from '@/hooks/useAzanTrigger';
+import {
+  adoptDeviceTimeZone,
+  currentDevicePosition,
+  notifyTimeZoneAdoption,
+  readDeviceTimeZone,
+  readLastDeviceTimeZone,
+  writeLastDeviceTimeZone,
+  TIME_ZONE_ADOPTION_EVENT,
+} from '@/utils/timeZoneTravel';
 
 const ONBOARDED_KEY = 'hifzi-onboarded';
 // Latch used by lazyWithRetry: after a chunk 404 we reload once; a reloaded page that
@@ -84,6 +93,7 @@ const TasbihScreen = lazyWithRetry(() => import('@/screens/TasbihScreen').then((
 function App() {
   return (
     <>
+      <TimeZoneAdoptionNotice />
       <AppUpdateNotice />
       <Application />
     </>
@@ -180,6 +190,42 @@ function AppUpdateNotice() {
           تنزيل عبر المتصفح كبديل
         </button>
       )}
+    </aside>
+  );
+}
+
+/**
+ * Said out loud when the app moves itself: a change the reader did not make by
+ * hand must not pass unexplained — the times on screen just shifted because the
+ * phone crossed into another zone. It informs and goes away on its own; there
+ * is nothing here to approve.
+ */
+function TimeZoneAdoptionNotice() {
+  const [cityName, setCityName] = useState<string | null>(null);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onAdopted = (event: Event) => {
+      setCityName((event as CustomEvent<string>).detail);
+      clearTimeout(timer);
+      timer = setTimeout(() => setCityName(null), 8000);
+    };
+    window.addEventListener(TIME_ZONE_ADOPTION_EVENT, onAdopted);
+    return () => {
+      window.removeEventListener(TIME_ZONE_ADOPTION_EVENT, onAdopted);
+      clearTimeout(timer);
+    };
+  }, []);
+
+  if (!cityName) return null;
+  return (
+    <aside
+      className="fixed inset-x-3 top-[calc(env(safe-area-inset-top,0px)+0.75rem)] z-[90] mx-auto max-w-lg rounded-2xl border border-gold-300 bg-white p-4 shadow-xl dark:border-gold-600 dark:bg-primary-900"
+      dir="rtl"
+    >
+      <p className="text-sm text-primary-900 dark:text-primary-50">
+        تغيّر توقيت الجهاز — المواقيت الآن في <span className="font-semibold">{cityName}</span>، وأُعيد جدولة التنبيهات على المواقيت الجديدة.
+      </p>
     </aside>
   );
 }
@@ -452,6 +498,46 @@ function AppContent({
       rescheduleAllNotifications();
     }
   }, [settings]);
+
+  // A trip moves the app with the phone: the new zone's own summer/winter rules
+  // come free with its IANA name, a permitted GPS fix gives the real position,
+  // a preset city with that zone is the fallback, and a city pinned deliberately
+  // is never moved. Checked on open, on return to the foreground, and every ten
+  // minutes (a SIM or network swap can change the zone mid-session). The settings
+  // effect above re-arms every notification at the new city's instants.
+  useEffect(() => {
+    if (!settings || !onboarded) return;
+
+    let adopting = false;
+    const adoptZone = () => {
+      if (adopting) return;
+      adopting = true;
+      void adoptDeviceTimeZone(settings, readLastDeviceTimeZone(), readDeviceTimeZone(), {
+        position: currentDevicePosition,
+        save,
+        writePreviousZone: writeLastDeviceTimeZone,
+        notify: notifyTimeZoneAdoption,
+      })
+        .catch(() => {
+          // A failed save keeps the old baseline, so the next check retries it
+          // instead of the trip being lost.
+        })
+        .finally(() => {
+          adopting = false;
+        });
+    };
+
+    adoptZone();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') adoptZone();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    const interval = setInterval(adoptZone, 10 * 60_000);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      clearInterval(interval);
+    };
+  }, [settings, onboarded, save]);
 
   // Android drops pending alarms when the app is killed or the device reboots, and the
   // armed window is finite. Re-arming on every foreground keeps the schedule honest
