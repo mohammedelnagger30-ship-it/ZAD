@@ -77,12 +77,14 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
       next.add(currentPage);
       try {
         localStorage.setItem('qran-read-pages', JSON.stringify(Array.from(next)));
-      } catch {}
+      } catch {
+        /* A page read that can't be remembered costs nothing. */
+      }
       return next;
     });
     onPageChange?.(currentPage);
-  }, [currentPage]);
-const progressInfo = `قراءة ${readPages.size} من ${totalPages} صفحة (${Math.round((readPages.size / totalPages) * 100)} ٪)`;
+  }, [currentPage, onPageChange]);
+  const progressInfo = `قراءة ${readPages.size} من ${totalPages} صفحة (${Math.round((readPages.size / totalPages) * 100)} ٪)`;
   /**
    * The ayah last pressed, and which of its two uses the reader is being asked
    * about: the meaning behind «التفسير», the voice behind «التلاوة».
