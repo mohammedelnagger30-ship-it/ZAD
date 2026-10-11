@@ -229,20 +229,57 @@ const TIME_SOURCES: TimeSource[] = [
   },
   {
     request: async () => {
+      const response = await fetch('https://timeapi.io/api/Time/current/zone?timeZone=Etc/UTC', { cache: 'no-store' });
+      if (!response.ok) throw new Error('timeapi unavailable');
+      // The service stopped shipping `unixTime`; the field triple below is
+      // unambiguous and needs no string parsing at all. `dateTime` (UTC for this
+      // endpoint) stays as a fallback — it carries no offset designator, so it
+      // is anchored as UTC explicitly rather than in the device's zone.
+      const body = (await response.json()) as {
+        unixTime?: number;
+        dateTime?: string;
+        year?: number;
+        month?: number;
+        day?: number;
+        hour?: number;
+        minute?: number;
+        seconds?: number;
+        milliSeconds?: number;
+      };
+      if (
+        typeof body.year === 'number' &&
+        typeof body.month === 'number' &&
+        typeof body.day === 'number' &&
+        typeof body.hour === 'number' &&
+        typeof body.minute === 'number' &&
+        typeof body.seconds === 'number'
+      ) {
+        return Date.UTC(
+          body.year,
+          body.month - 1,
+          body.day,
+          body.hour,
+          body.minute,
+          body.seconds,
+          body.milliSeconds ?? 0,
+        );
+      }
+      if (typeof body.unixTime === 'number') return body.unixTime * 1000;
+      if (typeof body.dateTime === 'string') {
+        const anchored = /[zZ]|[+-]\d{2}:?\d{2}$/.test(body.dateTime) ? body.dateTime : `${body.dateTime}Z`;
+        const parsed = Date.parse(anchored);
+        if (Number.isFinite(parsed)) return parsed;
+      }
+      throw new Error('no usable time field');
+    },
+  },
+  {
+    request: async () => {
       const response = await fetch('https://worldtimeapi.org/api/timezone/Etc/UTC', { cache: 'no-store' });
       if (!response.ok) throw new Error('worldtimeapi unavailable');
       const body = (await response.json()) as { unixtime?: number };
       if (typeof body.unixtime !== 'number') throw new Error('no unixtime');
       return body.unixtime * 1000;
-    },
-  },
-  {
-    request: async () => {
-      const response = await fetch('https://timeapi.io/api/Time/current/zone?timeZone=Etc/UTC', { cache: 'no-store' });
-      if (!response.ok) throw new Error('timeapi unavailable');
-      const body = (await response.json()) as { unixTime?: number };
-      if (typeof body.unixTime !== 'number') throw new Error('no unixTime');
-      return body.unixTime * 1000;
     },
   },
 ];
@@ -296,7 +333,18 @@ export function startClockService(): void {
   ensureAnchor();
 
   // First contact with a server settles the argument about the current instant.
-  void syncTrustedTime();
+  // Networks tend to come up after the app does, so a failed first try gets one
+  // quick second chance; the periodic sync below keeps trying regardless.
+  void syncTrustedTime().then((synced) => {
+    if (synced) return;
+    globalThis.setTimeout?.(() => {
+      if (globalThis.navigator?.onLine !== false) void syncTrustedTime();
+    }, 30_000);
+  });
+
+  globalThis.addEventListener?.('online', () => {
+    void syncTrustedTime();
+  });
 
   const watchdog = globalThis.setInterval?.(() => {
     if (checkDeviceClockJump()) return; // a jump already told every subscriber
