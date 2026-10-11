@@ -1,9 +1,11 @@
 name: Android APK release
 
 on:
+  # Releases are cut from version tags (push a `v*` tag) or manually
+  # via workflow_dispatch. A plain push to main must NOT publish a
+  # release — GITHUB_RUN_NUMBER-based "1.0.N" tags were polluting
+  # the releases page.
   push:
-    branches:
-      - main
     tags:
       - 'v*'
   workflow_dispatch:
