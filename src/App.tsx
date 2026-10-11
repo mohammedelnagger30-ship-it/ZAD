@@ -6,6 +6,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { AuthScreen } from '@/components/AuthScreen';
 import { generateDailyTasks, markMissedTasks } from '@/utils/taskManager';
 import { rescheduleAllNotifications } from '@/utils/notificationScheduler';
+import { onClockChange, startClockService } from '@/utils/clock';
 import { clearLocalUserData, startCloudSync, synchronizeNow, type CloudSyncState } from '@/utils/cloudSync';
 import { isSupabaseConfigured, supabase } from '@/utils/supabaseClient';
 import { useAppUpdate } from '@/hooks/useAppUpdate';
@@ -430,6 +431,17 @@ function AppContent({
   useEffect(() => {
     const flag = localStorage.getItem(ONBOARDED_KEY);
     setOnboarded(flag === 'true');
+  }, []);
+
+  // Keep time by the trusted clock — a phone whose clock the reader moved must
+  // still show the city's prayer times and sound the adhan at the real instant.
+  // The queue re-arms whenever the clock corrects itself: a jump the watchdog
+  // catches against the monotonic anchor, or a network sync re-capturing it.
+  useEffect(() => {
+    startClockService();
+    return onClockChange(() => {
+      void rescheduleAllNotifications();
+    });
   }, []);
 
   // Generate daily tasks, mark missed ones, and reschedule notifications on app open

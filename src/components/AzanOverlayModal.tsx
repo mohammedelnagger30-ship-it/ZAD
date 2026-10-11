@@ -6,6 +6,7 @@ import { formatTime12h, getDateInTimeZone, getPrayerTimeZone } from '@/utils/pra
 import { confirmPrayer, PRAYER_LABELS_AR, type PrayerKey } from '@/utils/prayerTracker';
 import { formatDateKey, formatArabicDate, getHijriDate } from '@/utils/dateUtils';
 import { notificationId } from '@/utils/notifications';
+import { trustedNow } from '@/utils/clock';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 
@@ -56,7 +57,7 @@ export function AzanOverlayModal({
   const timeZone = getPrayerTimeZone(settings.timeZone, settings.cityName);
   const displayTime = prayerTime
     ? formatTime12h(prayerTime, timeZone)
-    : formatTime12h(new Date(), timeZone);
+    : formatTime12h(trustedNow(), timeZone);
 
   /**
    * The adhan reached us as a notification, so the notification channel has already
@@ -128,7 +129,7 @@ export function AzanOverlayModal({
       // clock can sit on either side of midnight while the overlay is open — a prayer
       // near midnight, a late notification tap, a device far from the selected zone —
       // and `todayKey()` (the device's day) would stamp the wrong date onto it.
-      const prayerDate = formatDateKey(getDateInTimeZone(prayerTime ?? new Date(), timeZone));
+      const prayerDate = formatDateKey(getDateInTimeZone(prayerTime ?? trustedNow(), timeZone));
       await confirmPrayer(prayerDate, prayerKey, 'ontime');
       setConfirmed(true);
       if (audioRef.current) {
@@ -192,7 +193,7 @@ export function AzanOverlayModal({
 
   // The adhan page belongs to the selected city, so the date it shows is the city's —
   // on a device far from the selected zone these two days can differ.
-  const today = getDateInTimeZone(prayerTime ?? new Date(), timeZone);
+  const today = getDateInTimeZone(prayerTime ?? trustedNow(), timeZone);
 
   return (
     <div

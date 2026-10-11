@@ -10,6 +10,7 @@ import {
   type PrayerTimeInfo,
 } from '@/utils/prayerTimes';
 import { hasNotificationPermission } from '@/utils/notifications';
+import { onClockChange, trustedNow, trustedNowMs } from '@/utils/clock';
 import type { PrayerKey } from '@/utils/prayerTracker';
 
 export interface AzanTriggerState {
@@ -62,7 +63,7 @@ function readFiredPrayers(): Set<number> {
   try {
     const raw = sessionStorage.getItem(FIRED_STORAGE_KEY);
     if (!raw) return new Set<number>();
-    const cutoff = Date.now() - FIRED_RETENTION_MS;
+    const cutoff = trustedNowMs() - FIRED_RETENTION_MS;
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return new Set<number>();
     return new Set(parsed.filter((v): v is number => typeof v === 'number' && v > cutoff));
@@ -73,7 +74,7 @@ function readFiredPrayers(): Set<number> {
 
 function writeFiredPrayers(fired: Set<number>): void {
   try {
-    const cutoff = Date.now() - FIRED_RETENTION_MS;
+    const cutoff = trustedNowMs() - FIRED_RETENTION_MS;
     const kept = [...fired].filter((instant) => instant > cutoff);
     fired.clear();
     for (const instant of kept) fired.add(instant);
@@ -257,13 +258,13 @@ export function useAzanTrigger(settings: Settings | null) {
 
       let times;
       try {
-        times = calculatePrayerTimes(latitude, longitude, new Date(), calcMethod, asrMadhab, timeZone);
+        times = calculatePrayerTimes(latitude, longitude, trustedNow(), calcMethod, asrMadhab, timeZone);
       } catch (err) {
         console.warn('Prayer time calculation failed:', err);
         return;
       }
 
-      const now = Date.now();
+      const now = trustedNowMs();
       for (const prayer of times.prayers) {
         if (prayer.name === 'sunrise') continue;
         const instant = prayer.time.getTime();
@@ -290,7 +291,7 @@ export function useAzanTrigger(settings: Settings | null) {
       }
       if (!next) return;
 
-      const delay = Math.min(Math.max(next.time.getTime() - Date.now(), 0), MAX_TIMEOUT_MS);
+      const delay = Math.min(Math.max(next.time.getTime() - trustedNowMs(), 0), MAX_TIMEOUT_MS);
       dueTimer = window.setTimeout(() => {
         sweep();
         arm();
@@ -309,6 +310,13 @@ export function useAzanTrigger(settings: Settings | null) {
     arm();
     const sweepTimer = window.setInterval(sweep, SWEEP_MS);
     document.addEventListener('visibilitychange', handleWake);
+    // A corrected trusted instant — a network sync, or a clock change caught by
+    // the watchdog — re-points every deadline: check what is already due and
+    // re-aim the next timer.
+    const offClockChange = onClockChange(() => {
+      sweep();
+      arm();
+    });
 
     return () => {
       disposed = true;
@@ -316,6 +324,7 @@ export function useAzanTrigger(settings: Settings | null) {
       if (fallbackTimer !== undefined) window.clearTimeout(fallbackTimer);
       window.clearInterval(sweepTimer);
       document.removeEventListener('visibilitychange', handleWake);
+      offClockChange();
     };
   }, [settings, openAzan, isFired, refreshNotificationPermission]);
 

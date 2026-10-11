@@ -1,5 +1,6 @@
 import { db, type HifzPlan, type DailyTask, type ProgressType } from '@/db/database';
 import { todayKey, formatDateKey } from '@/utils/dateUtils';
+import { trustedNow, trustedNowMs } from '@/utils/clock';
 import {
   getSurah,
   getAyahPage,
@@ -83,7 +84,7 @@ function getProgressRanges(portion: string): Array<{ surahId: number; ayahStart:
   return ranges;
 }
 
-export async function generateDailyTasks(date: Date = new Date()): Promise<void> {
+export async function generateDailyTasks(date: Date = trustedNow()): Promise<void> {
   const dateKey = formatDateKey(date);
   const dayOfWeek = date.getDay();
 
@@ -139,7 +140,7 @@ export async function generateDailyTasks(date: Date = new Date()): Promise<void>
         portion,
         scheduledTime: plan.time,
         status: 'pending',
-        createdAt: Date.now(),
+        createdAt: trustedNowMs(),
       });
     }
     if (tasksToAdd.length > 0) await db.tasks.bulkAdd(tasksToAdd);
@@ -159,7 +160,7 @@ export async function confirmTask(
 ): Promise<void> {
   const patch: Partial<DailyTask> = {
     status,
-    confirmedAt: Date.now(),
+    confirmedAt: trustedNowMs(),
   };
   if (strength) patch.strength = strength;
   await db.tasks.update(taskId, patch);
@@ -173,7 +174,7 @@ export async function confirmTask(
         : strength === 'strong' ? 'strong' : strength === 'medium' ? 'reviewing' : 'weak';
       const ranges = getProgressRanges(task.portion);
       if (ranges.length > 0) {
-        const ratedAt = Date.now();
+        const ratedAt = trustedNowMs();
         await db.hifzProgress.bulkAdd(ranges.map((range) => ({ ...range, status: progressStatus, ratedAt })));
       }
     }
@@ -183,7 +184,7 @@ export async function confirmTask(
 export async function snoozeTask(taskId: number, minutes: number): Promise<void> {
   await db.tasks.update(taskId, {
     status: 'snoozed',
-    snoozedUntil: Date.now() + minutes * 60000,
+    snoozedUntil: trustedNowMs() + minutes * 60000,
   });
 }
 
@@ -196,8 +197,8 @@ export async function unsnoozeTask(taskId: number): Promise<void> {
 
 export async function markMissedTasks(): Promise<void> {
   const dateKey = todayKey();
-  const now = Date.now();
-  const endOfDay = new Date();
+  const now = trustedNowMs();
+  const endOfDay = trustedNow();
   endOfDay.setHours(23, 59, 0, 0);
   const isEndOfDay = now >= endOfDay.getTime();
 
@@ -216,7 +217,7 @@ export async function markMissedTasks(): Promise<void> {
   }
 
   // Also mark yesterday's pending tasks as missed
-  const yesterday = new Date();
+  const yesterday = trustedNow();
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayKey = formatDateKey(yesterday);
   const yesterdayTasks = await db.tasks.where('date').equals(yesterdayKey).toArray();
@@ -234,7 +235,7 @@ export async function markMissedTasks(): Promise<void> {
  */
 export async function getStreakCount(): Promise<number> {
   const MAX_LOOKBACK_DAYS = 365;
-  const today = new Date();
+  const today = trustedNow();
 
   const dateKeys: string[] = [];
   for (let i = 0; i < MAX_LOOKBACK_DAYS; i++) {

@@ -13,6 +13,7 @@ import {
   CITY_PRESETS,
 } from '@/utils/prayerTimes';
 import { usePrayerSchedule } from '@/hooks/usePrayerSchedule';
+import { trustedNow } from '@/utils/clock';
 import {
   getDayPrayerRecords,
   confirmPrayer,
@@ -106,8 +107,8 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
   // Which (day, prayer) the status sheet is open for, if any.
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
   // Reference clock for the countdown; keeps `getTimeUntil` in sync with one timer.
-  const [now, setNow] = useState(() => new Date());
-  const today = new Date();
+  const [now, setNow] = useState(() => trustedNow());
+  const today = trustedNow();
 
   const location =
     settings.latitude != null && settings.longitude != null
@@ -147,7 +148,7 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
     // reloads the page by hand.
     let dayKey = todayKey();
     const interval = setInterval(() => {
-      setNow(new Date());
+      setNow(trustedNow());
       const currentDayKey = todayKey();
       if (currentDayKey !== dayKey) {
         dayKey = currentDayKey;

@@ -10,6 +10,7 @@ import {
   getTimeUntil,
 } from '@/utils/prayerTimes';
 import { usePrayerSchedule } from '@/hooks/usePrayerSchedule';
+import { trustedNow } from '@/utils/clock';
 import {
   getDayPrayerRecords,
   confirmPrayer,
@@ -43,10 +44,10 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
   const [dailyQuranMessageError, setDailyQuranMessageError] = useState('');
   // Drives the "time until next prayer" countdown. Stored as a timestamp (not a bare
   // counter) so it can be handed to `getTimeUntil` as the reference clock.
-  const [now, setNow] = useState(() => new Date());
+  const [now, setNow] = useState(() => trustedNow());
   // Which prayer the confirmation sheet is open for, if any.
   const [sheetPrayer, setSheetPrayer] = useState<PrayerKey | null>(null);
-  const today = new Date();
+  const today = trustedNow();
 
   const load = useCallback(async () => {
     const t = await getTodayTasks();
@@ -64,7 +65,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
 
   useEffect(() => {
     load();
-    const interval = setInterval(() => setNow(new Date()), 1000);
+    const interval = setInterval(() => setNow(trustedNow()), 1000);
     return () => clearInterval(interval);
   }, [load]);
 
@@ -78,7 +79,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
       try {
         const { getDailyQuranMessage } = await import('@/utils/dailyQuranMessage');
         if (!alive) return;
-        setDailyQuranMessage(getDailyQuranMessage(new Date()));
+        setDailyQuranMessage(getDailyQuranMessage(trustedNow()));
         setDailyQuranMessageError('');
       } catch (error) {
         if (!alive) return;

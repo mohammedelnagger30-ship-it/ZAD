@@ -7,6 +7,7 @@ import {
   Qibla,
   Madhab,
 } from 'adhan';
+import { trustedNow, trustedNowMs } from '@/utils/clock';
 
 export interface PrayerTimeInfo {
   name: string;
@@ -130,7 +131,7 @@ export function calculatePrayerTimesForDay(
   const pt = new PrayerTimes(coords, prayerDate, params);
   const qiblaDirection = Qibla(coords);
 
-  const now = Date.now();
+  const now = trustedNowMs();
   const prayers: PrayerTimeInfo[] = finitePrayerTimes(pt).map((prayer) => ({
     ...prayer,
     passed: prayer.time.getTime() < now,
@@ -146,7 +147,7 @@ export function getNextPrayer(
   asrMadhab: 'standard' | 'hanafi',
   timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone,
 ): PrayerTimeInfo | null {
-  const now = new Date();
+  const now = trustedNow();
   const today = calculatePrayerTimes(latitude, longitude, now, calcMethod, asrMadhab, timeZone);
   const upcoming = today.prayers.filter((p) => p.name !== 'sunrise' && p.time.getTime() > now.getTime());
   if (upcoming.length > 0) {
@@ -265,7 +266,7 @@ export function formatTime12h(
  * `now` is injectable so callers that already re-render on a timer (e.g. HomeScreen)
  * stay in sync with a single clock instead of each call reading a fresh `Date()`.
  */
-export function getTimeUntil(date: Date, now: Date = new Date()): string {
+export function getTimeUntil(date: Date, now: Date = trustedNow()): string {
   const diff = date.getTime() - now.getTime();
   if (diff <= 0) return 'حَانَ الآنْ';
 

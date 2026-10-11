@@ -9,6 +9,7 @@ import {
   calendarDayInZone,
   getPrayerTimeZone,
 } from '@/utils/prayerTimes';
+import { deviceClockDriftMs, toDeviceClock, trustedNow, trustedNowMs } from '@/utils/clock';
 import { generateDailyTasks, getTodayTasks } from '@/utils/taskManager';
 import {
   cancelAllNotifications,
@@ -190,6 +191,16 @@ export async function rescheduleAllNotifications(): Promise<void> {
     console.error('Could not create notification channels:', err);
   }
 
+  /**
+   * Android fires an alarm when the *device* clock reaches the target, so a
+   * phone whose clock has drifted from the trusted instant would sound every
+   * alarm shifted by exactly that drift. Each true instant below is armed with
+   * the drift added, which lands the sound on the real moment regardless of
+   * what the phone's clock now claims.
+   */
+  const drift = deviceClockDriftMs();
+  const armedAt = (instant: Date) => new Date(toDeviceClock(instant.getTime(), drift));
+
   // 1. Prayer notifications for the next PRAYER_NOTIFICATION_DAYS days.
   //
   // More than "today + tomorrow" is what keeps the adhan firing while the app stays
@@ -197,8 +208,8 @@ export async function rescheduleAllNotifications(): Promise<void> {
   // the process, so a two-day horizon meant the adhan silently stopped on day three.
   if (settings.latitude != null && settings.longitude != null) {
     const timeZone = getPrayerTimeZone(settings.timeZone, settings.cityName);
-    const firstDay = calendarDayInZone(new Date(), timeZone);
-    const now = Date.now();
+    const firstDay = calendarDayInZone(trustedNow(), timeZone);
+    const now = trustedNowMs();
 
     // One slot number per prayer, shared by the prayer alert and its reminder: the two
     // live in disjoint id ranges, while every prayer across the window gets its own.
@@ -221,7 +232,7 @@ export async function rescheduleAllNotifications(): Promise<void> {
           id: notificationId.prayer(slot),
           title: `حان وقت صلاة ${prayer.arabicName}`,
           body: `أدِّ صلاة ${prayer.arabicName} في وقتها`,
-          schedule: { at: prayer.time, allowWhileIdle: true },
+          schedule: { at: armedAt(prayer.time), allowWhileIdle: true },
           channelId: settings.adhanSound ? `prayer-${getAdhanSound(settings.adhanVoiceId).id}` : 'prayer-muted',
           sound: settings.adhanSound ? getAdhanSound(settings.adhanVoiceId).file : undefined,
           smallIcon: 'ic_notification',
@@ -242,7 +253,7 @@ export async function rescheduleAllNotifications(): Promise<void> {
               id: notificationId.reminder(slot),
               title: `تذكير: صلاة ${prayer.arabicName} بعد ${settings.prePrayerReminder} دقيقة`,
               body: `استعد لصلاة ${prayer.arabicName}`,
-              schedule: { at: reminderTime, allowWhileIdle: true },
+              schedule: { at: armedAt(reminderTime), allowWhileIdle: true },
               channelId: 'prayer-reminder',
               smallIcon: 'ic_notification',
               iconColor: '#1f734e',
@@ -266,12 +277,12 @@ export async function rescheduleAllNotifications(): Promise<void> {
       console.error('Invalid random dhikr reminder settings; reminders were not scheduled.');
     } else {
       const duration = (endMinute - startMinute + 1440) % 1440;
-      const now = new Date();
+      const now = trustedNow();
       const previousMessageByCategory = new Map<DhikrReminderCategory, number>();
 
       if (duration > 0) {
         for (let dayOffset = 0; dayOffset < 2; dayOffset += 1) {
-          const windowStart = new Date();
+          const windowStart = trustedNow();
           windowStart.setHours(0, 0, 0, 0);
           windowStart.setDate(windowStart.getDate() + dayOffset);
           windowStart.setMinutes(startMinute);
@@ -294,7 +305,7 @@ export async function rescheduleAllNotifications(): Promise<void> {
               id: notificationId.dhikr(dayOffset * 1000 + slot),
               title: reminder.title,
               body: reminder.messages[messageIndex],
-              schedule: { at, allowWhileIdle: true },
+              schedule: { at: armedAt(at), allowWhileIdle: true },
               channelId: 'azkar',
               smallIcon: 'ic_notification',
               iconColor: '#1f734e',
@@ -314,14 +325,14 @@ export async function rescheduleAllNotifications(): Promise<void> {
     const scheduledAt = task.status === 'snoozed' && task.snoozedUntil
       ? new Date(task.snoozedUntil)
       : new Date(`${task.date}T${task.scheduledTime}:00`);
-    if (scheduledAt <= new Date()) continue;
+    if (scheduledAt <= trustedNow()) continue;
 
     const typeText = task.type === 'hifz' ? 'الحفظ' : 'المراجعة';
     queue.push({
       id: notificationId.task(task.id ?? 0),
       title: `حان وقت ${typeText}`,
       body: `وقت ${typeText}: ${task.portion}`,
-      schedule: { at: scheduledAt, allowWhileIdle: true },
+      schedule: { at: armedAt(scheduledAt), allowWhileIdle: true },
       channelId: task.type === 'hifz' ? 'hifz' : 'review',
       sound: settings.notificationSound ? 'notification.wav' : undefined,
       smallIcon: 'ic_notification',
@@ -330,10 +341,10 @@ export async function rescheduleAllNotifications(): Promise<void> {
   }
 
   // 4. Hadith of the day (9:00 AM)
-  const hadithTime = new Date();
+  const hadithTime = trustedNow();
   hadithTime.setHours(9, 0, 0, 0);
-  hadithTime.setDate(hadithTime.getDate() + (hadithTime < new Date() ? 1 : 0));
-  if (hadithTime > new Date()) {
+  hadithTime.setDate(hadithTime.getDate() + (hadithTime < trustedNow() ? 1 : 0));
+  if (hadithTime > trustedNow()) {
     queue.push({
       id: notificationId.hadith(),
       title: 'حديث اليوم',

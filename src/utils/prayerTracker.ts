@@ -1,6 +1,7 @@
 ﻿import { db, type PrayerRecord, type SunnahRecord } from '@/db/database';
 import { formatDateKey, addDays, getLast7Days, getDayNameShort } from '@/utils/dateUtils';
 import { calculatePrayerTimes } from '@/utils/prayerTimes';
+import { trustedNow, trustedNowMs } from '@/utils/clock';
 
 export async function getPrayerRecord(date: string, prayer: string): Promise<PrayerRecord | undefined> {
   return db.prayerRecords.where('date').equals(date).toArray().then(
@@ -16,7 +17,7 @@ export async function getDayPrayerRecords(date: string): Promise<PrayerRecord[]>
 export type PrayerStatus = 'ontime' | 'late' | 'missed';
 
 /** A day's prayer slot can be written only for today or yesterday. */
-export function canEditPrayerDate(date: string, now = new Date()): boolean {
+export function canEditPrayerDate(date: string, now = trustedNow()): boolean {
   const today = formatDateKey(now);
   const yesterday = formatDateKey(addDays(now, -1));
   return date === today || date === yesterday;
@@ -31,7 +32,7 @@ export function canEditPrayerDate(date: string, now = new Date()): boolean {
 export function assertPrayerRecordable(
   date: string,
   hasRecord: boolean,
-  now = new Date()
+  now = trustedNow()
 ): void {
   if (!canEditPrayerDate(date, now)) {
     throw new Error('يمكن تسجيل صلاة اليوم أو أمس فقط.');
@@ -76,14 +77,14 @@ export function confirmPrayer(
       date,
       prayer,
       status,
-      confirmedAt: Date.now(),
+      confirmedAt: trustedNowMs(),
       // Written here as well as by cloudSync's Dexie hooks: rows created while no
       // account is signed in (the common case) reached the cloud with no sync
       // timestamp at all, which conflicts resolve as 1970 — such a row loses every
       // comparison against another device's real timestamp. The id keeps the row
       // mapped to `date:prayer` even if a push happens before any hook runs.
       syncId: `${date}:${prayer}`,
-      syncModifiedAt: Date.now(),
+      syncModifiedAt: trustedNowMs(),
     });
   });
 }
@@ -119,7 +120,7 @@ export function setSunnah(date: string, type: string, done: boolean): Promise<vo
     if (existing) {
       await db.sunnahRecords.update(existing.id!, { done });
     } else {
-      await db.sunnahRecords.add({ date, type, done, syncId: `${date}:${type}`, syncModifiedAt: Date.now() });
+      await db.sunnahRecords.add({ date, type, done, syncId: `${date}:${type}`, syncModifiedAt: trustedNowMs() });
     }
   });
 }
@@ -130,7 +131,7 @@ export function toggleSunnah(date: string, type: string): Promise<void> {
     if (existing) {
       await db.sunnahRecords.update(existing.id!, { done: !existing.done });
     } else {
-      await db.sunnahRecords.add({ date, type, done: true, syncId: `${date}:${type}`, syncModifiedAt: Date.now() });
+      await db.sunnahRecords.add({ date, type, done: true, syncId: `${date}:${type}`, syncModifiedAt: trustedNowMs() });
     }
   });
 }
@@ -195,7 +196,7 @@ export async function getWeeklyPrayerStats(): Promise<PrayerStats> {
 }
 
 export async function getMonthlyPrayerStats(): Promise<PrayerStats> {
-  const now = new Date();
+  const now = trustedNow();
   const dates: string[] = [];
   for (let i = 29; i >= 0; i--) {
     const d = new Date(now);
@@ -297,7 +298,7 @@ const noStatus = (): Record<PrayerKey, PrayerStatus | null> =>
  * should always pass it.
  */
 export async function getPrayerGrid(location?: PrayerGridLocation): Promise<DayPrayerGrid[]> {
-  const now = new Date();
+  const now = trustedNow();
   const todayIso = formatDateKey(now);
   const dates = getLast7Days();
 
