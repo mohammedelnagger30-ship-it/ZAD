@@ -7,14 +7,22 @@ wooden stand, all on a light backdrop.
 
 make-icons.ps1 cuts the program's true-squircle border (superellipse
 n=5) out of the prepared file and paints everything outside it deep
-green, so the prepared file must be the mark full-bleed:
-  1. crop the green squircle field edge-to-edge (its extents come from
-     a row/column profile of green pixels, so the baked drop shadow
-     that hangs below the squircle never counts as field);
-  2. flood the light backdrop (and its shadow) that leaks in at the
-     corners with the field's own edge colour -- every such pixel is
-     reachable from the border without crossing green, while the arch,
-     crescent, mosque and Mushaf stay safely inside the field.
+green, so the prepared file must be the mark on a clean full-bleed
+field:
+  1. measure the green field (row/column profile of green pixels, so
+     the baked drop shadow that hangs below the squircle never counts);
+  2. cut a tight square on that field and flood the backdrop leaking
+     in at its corners with the field's edge colour -- this patch now
+     holds the mark (arch, crescent, mosque, Mushaf) and its glow,
+     without the mockup's lit rim, its shadow or its backdrop;
+  3. lay that patch, scaled down to MARK_SCALE, onto a radial
+     gradient of the same family (glow tone at the centre fading to
+     the edge tone), blending the two through a smoothstep ring
+     FADE_IN..FADE_OUT -- the mark sits smaller, optically centred,
+     in one continuous field with nothing of the mockup left over.
+
+The three constants below place the ring outside the mark and inside
+the patch rim; retune them if a future artwork's mark is wider.
 
 Run from the repository root:
     python scripts/prep-icon.py
@@ -30,8 +38,12 @@ SRC = ROOT / "icon-source.jpg"
 OUT = ROOT / "icon-prepared.png"
 
 SIZE = 1024          # output edge (make-icons scales it to every target)
-EDGE_INSET = 0.99    # crop slightly inside the field so no light halo
+EDGE_INSET = 0.99    # tight field crop, slightly inside the field edge
 PROFILE_FLOOR = 0.25  # rows/cols below this share of the peak count are shadow
+
+MARK_SCALE = 0.78    # patch size on the canvas: shrinks the mark into a margin
+FADE_IN = 0.67       # full-opacity ring radius (fraction of half-size)
+FADE_OUT = 0.755     # fully blended ring radius, inside the patch rim
 
 
 def field_mask(a: np.ndarray) -> np.ndarray:
@@ -75,24 +87,49 @@ def border_reachable(not_field: np.ndarray) -> np.ndarray:
         reach = grown
 
 
+def smoothstep(t: np.ndarray) -> np.ndarray:
+    t = np.clip(t, 0.0, 1.0)
+    return t * t * (3 - 2 * t)
+
+
 def main() -> None:
     im = Image.open(SRC).convert("RGB")
     a = np.asarray(im)
+
+    # Tight square on the field; its corners/backdrop get flooded, so the
+    # patch holds the mark and its glow but none of the mockup's frame.
     x0, y0, x1, y1 = field_box(field_mask(a))
-    crop = a[y0:y1, x0:x1]
-    print(f"field crop {x1 - x0}x{y1 - y0} from {im.size[0]}x{im.size[1]}")
-
-    mask = field_mask(crop)
-    leak = border_reachable(~mask)
-    # The field's own edge colour, sampled where it meets the crop border.
-    edge_pixels = crop[mask & border_edge(mask)]
+    tight = a[y0:y1, x0:x1]
+    mask = field_mask(tight)
+    edge_pixels = tight[mask & border_edge(mask)]
     edge = (np.median(edge_pixels.reshape(-1, 3), axis=0) if len(edge_pixels)
-            else np.median(crop[mask].reshape(-1, 3), axis=0))
-    print(f"backdrop pixels to fill: {int(leak.sum())}, edge colour {tuple(int(v) for v in edge)}")
+            else np.median(tight[mask].reshape(-1, 3), axis=0))
+    patch = tight.copy()
+    patch[border_reachable(~mask)] = edge
+    h, w = patch.shape[:2]
+    # Glow tone: the bright field right above the mark, not the mark itself.
+    glow = np.median(patch[int(h * 0.18):int(h * 0.28),
+                           int(w * 0.40):int(w * 0.61)].reshape(-1, 3), axis=0)
 
-    out = crop.copy()
-    out[leak] = edge
-    Image.fromarray(out).resize((SIZE, SIZE), Image.LANCZOS).save(OUT)
+    # One continuous radial field: glow at the centre fading to the edge.
+    half = SIZE / 2
+    yy, xx = np.mgrid[0:SIZE, 0:SIZE]
+    rr = np.hypot(yy - half, xx - half) / half
+    canvas = glow + (edge - glow) * smoothstep(rr)[..., None]
+
+    # The patch, MARK_SCALE big, blended in through a smoothstep ring: the
+    # mark shrinks and centres, the blend ends before the patch rim.
+    side = int(SIZE * MARK_SCALE)
+    small = np.asarray(Image.fromarray(patch).resize((side, side), Image.LANCZOS))
+    pad = (SIZE - side) // 2
+    layer = np.tile(edge, (SIZE, SIZE, 1)).astype(float)
+    layer[pad:pad + side, pad:pad + side] = small
+    alpha = smoothstep((FADE_OUT - rr) / (FADE_OUT - FADE_IN))[..., None]
+    out = canvas * (1 - alpha) + layer * alpha
+
+    print(f"field {w}x{h} -> mark at {MARK_SCALE:.0%}, "
+          f"glow {tuple(int(v) for v in glow)}, edge {tuple(int(v) for v in edge)}")
+    Image.fromarray(np.clip(out, 0, 255).astype(np.uint8)).save(OUT)
     print(f"wrote {OUT}")
 
 
