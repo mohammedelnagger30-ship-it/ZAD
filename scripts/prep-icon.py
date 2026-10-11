@@ -21,8 +21,8 @@ field:
      FADE_IN..FADE_OUT -- the mark sits smaller, optically centred,
      in one continuous field with nothing of the mockup left over.
 
-The three constants below place the ring outside the mark and inside
-the patch rim; retune them if a future artwork's mark is wider.
+The blend ring follows MARK_SCALE (fractions of the patch rim), so
+tune MARK_SCALE alone if a future artwork's mark needs another size.
 
 Run from the repository root:
     python scripts/prep-icon.py
@@ -41,9 +41,9 @@ SIZE = 1024          # output edge (make-icons scales it to every target)
 EDGE_INSET = 0.99    # tight field crop, slightly inside the field edge
 PROFILE_FLOOR = 0.25  # rows/cols below this share of the peak count are shadow
 
-MARK_SCALE = 0.78    # patch size on the canvas: shrinks the mark into a margin
-FADE_IN = 0.67       # full-opacity ring radius (fraction of half-size)
-FADE_OUT = 0.755     # fully blended ring radius, inside the patch rim
+MARK_SCALE = 0.64    # patch size on the canvas: shrinks the mark into a margin
+FADE_IN_FRAC = 0.86  # full-opacity ring, as a fraction of the patch rim
+FADE_OUT_FRAC = 0.97  # fully blended ring, still inside the patch rim
 
 
 def field_mask(a: np.ndarray) -> np.ndarray:
@@ -124,7 +124,8 @@ def main() -> None:
     pad = (SIZE - side) // 2
     layer = np.tile(edge, (SIZE, SIZE, 1)).astype(float)
     layer[pad:pad + side, pad:pad + side] = small
-    alpha = smoothstep((FADE_OUT - rr) / (FADE_OUT - FADE_IN))[..., None]
+    fade_in, fade_out = FADE_IN_FRAC * MARK_SCALE, FADE_OUT_FRAC * MARK_SCALE
+    alpha = smoothstep((fade_out - rr) / (fade_out - fade_in))[..., None]
     out = canvas * (1 - alpha) + layer * alpha
 
     print(f"field {w}x{h} -> mark at {MARK_SCALE:.0%}, "
