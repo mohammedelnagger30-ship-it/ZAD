@@ -1,161 +1,167 @@
+"""Generates the Qurra launcher artwork: scripts/assets/icon-prepared.png.
+
+The mark is deliberately minimal so it stays legible at 48dp: a pointed
+mihrab arch in gold, a small crescent in its upper opening, and an open
+Mushaf fanning out at the arch's base — three shapes with generous
+negative space on a deep-green radial field.
+
+Run from the repository root:
+    python scripts/prep-icon.py
 """
-Icon prep step for the Qurra launcher icon (run BEFORE scripts\\make-icons.ps1).
 
-The raw artwork (scripts\\assets\\icon-source.png) is an AI render: the green
-squircle sits in a cream margin with a soft drop shadow, it is 916x961 rather
-than square, and the margin is uneven — which is why a naive crop produced a
-wobbly border. This script turns it into a clean full-bleed tile:
+from pathlib import Path
 
-  1. keys out the cream margin + its shadow (flood fill from the frame edges,
-     so the ivory arch and pages inside the artwork are never touched),
-  2. extends the green field with a coarse-to-fine harmonic (Laplace) fill —
-     no streaks, no visible seam where the squircle used to end,
-  3. crops a square centred on the squircle (no stretching),
-  4. colour-grades it into one coordinated palette: richer green, warm
-     ivory/gold highlights, deep-green shadows, soft vignette.
+from PIL import Image, ImageDraw
 
-Output: scripts\\assets\\icon-prepared.png (1024x1024, square, unmasked).
-scripts\\make-icons.ps1 then only has to scale it and cut the program's
-rounded-square border, so the whole icon set stays reproducible.
+SS = 4                                   # supersampling factor
+S = 1024 * SS                            # working canvas
+OUT = Path(__file__).resolve().parent / "assets" / "icon-prepared.png"
 
-Requires: numpy, Pillow (dev-only; the prepared PNG is committed).
-    python scripts\\prep-icon.py
-"""
-import numpy as np
-from PIL import Image
+# Palette (kept in sync with the app theme).
+FIELD_EDGE = (9, 30, 25)        # #091E19  field corners
+FIELD_CENTER = (23, 74, 61)     # #174A3D  field middle
+GLOW_TINT = (190, 158, 92)      # soft gold glow behind the mark
+GOLD_LIGHT = (236, 224, 184)    # #ECE0B8  lit gold (top of the mark)
+GOLD_DEEP = (158, 132, 82)      # #9E8452  shadow gold (bottom)
+IVORY = (253, 247, 229)         # #FDF7E5  page ivory
+IVORY_DEEP = (244, 233, 201)    # #F4E9C9  page ivory, shaded edge
 
-try:
-    from PIL import ImageFilter  # noqa: F401  (kept for local experiments)
-except ImportError:
-    pass
-
-import os
-import sys
-
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = os.path.join(ROOT, 'scripts', 'assets', 'icon-source.png')
-PREPARED = os.path.join(ROOT, 'scripts', 'assets', 'icon-prepared.png')
-OUT_SIZE = 1024
+C = S / 2
 
 
-def key_background(img):
-    """Cream margin + drop shadow, but only what is reachable from the frame.
-
-    Flood fill from the border so interior ivory (arch, crescent, pages) is
-    never classified as background even though it shares the colour.
-    """
-    mx = img.max(2)
-    chroma = mx - img.min(2)
-    bg = ((mx > 236) & (chroma < 24)) | ((mx > 168) & (mx <= 236) & (chroma < 30))
-    conn = np.zeros_like(bg)
-    conn[0, :] |= bg[0, :]
-    conn[-1, :] |= bg[-1, :]
-    conn[:, 0] |= bg[:, 0]
-    conn[:, -1] |= bg[:, -1]
-    while True:
-        new = conn.copy()
-        new[1:, :] |= conn[:-1, :]
-        new[:-1, :] |= conn[1:, :]
-        new[:, 1:] |= conn[:, :-1]
-        new[:, :-1] |= conn[:, 1:]
-        new &= bg
-        if np.array_equal(new, conn):
-            return conn
-        conn = new
+def lerp(a, b, t):
+    return tuple(int(round(a[i] + (b[i] - a[i]) * t)) for i in range(3))
 
 
-def diffusion_fill(img, bgm):
-    """Harmonic (Laplace) fill of the keyed margin, coarse-to-fine so it is
-    fast. The field continues past the squircle with no streaks and no seam."""
-    H, W = img.shape[:2]
-
-    def jacobi(u, m, iters):
-        for _ in range(iters):
-            p = np.pad(u, ((1, 1), (1, 1), (0, 0)), mode='edge')
-            nb = (p[:-2, 1:-1] + p[2:, 1:-1] + p[1:-1, :-2] + p[1:-1, 2:]) / 4.0
-            u = np.where(m[..., None], nb, u)
-        return u
-
-    def down(a, h, w):
-        im = Image.fromarray(np.rint(np.clip(a, 0, 255)).astype(np.uint8))
-        return np.asarray(im.resize((w, h), Image.BILINEAR)).astype(np.float32)
-
-    u = img.astype(np.float32).copy()
-    u[bgm] = img[~bgm].reshape(-1, 3).mean(0)
-    for size, iters in ((80, 2600), (160, 700), (320, 250), (640, 90), (0, 40)):
-        if size == 0:
-            u = jacobi(u, bgm, iters)
-            break
-        h = max(8, int(round(H / min(H, W) * size)))
-        w = max(8, int(round(W / min(H, W) * size)))
-        u_s = down(u, h, w)
-        m_s = np.asarray(Image.fromarray((bgm * 255).astype(np.uint8))
-                         .resize((w, h), Image.BILINEAR)) > 128
-        u_s = jacobi(u_s, m_s, iters)
-        u = np.where(bgm[..., None], down(u_s, H, W), img)
-    return np.clip(u, 0, 255)
+def cubic(p0, p1, p2, p3, steps=220):
+    pts = []
+    for i in range(steps + 1):
+        t = i / steps
+        u = 1.0 - t
+        pts.append((
+            u * u * u * p0[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t * t * t * p3[0],
+            u * u * u * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t * t * t * p3[1],
+        ))
+    return pts
 
 
-def grade(x):
-    """One coordinated palette: richer green, ivory/gold highlights, soft depth."""
-    x = x / 255.0
-    lum = x @ np.array([0.2126, 0.7152, 0.0722], np.float32)
-    x = lum[..., None] + (x - lum[..., None]) * 1.12      # saturation
-    x = (x - 0.45) * 1.07 + 0.45                           # gentle contrast
-    hi = np.array([0.788, 0.682, 0.455], np.float32)       # #C9AE74 app gold
-    sh = np.array([0.055, 0.200, 0.160], np.float32)       # #0E3329 deep green
-    k_hi = (0.07 * lum ** 3)[..., None]
-    k_sh = (0.07 * (1 - lum) ** 3)[..., None]
-    x = x * (1 - k_hi) + hi * k_hi
-    x = x * (1 - k_sh) + sh * k_sh
-    H, W = x.shape[:2]
-    ys, xs = np.mgrid[0:H, 0:W]
-    rr = np.hypot(xs - (W - 1) / 2, ys - (H - 1) / 2)
-    rr = rr / rr.max()
-    x = x * (1 - 0.08 * rr ** 2.4)[..., None]              # gentle vignette
-    # soft key light from the top-centre: lifts the field so the icon holds its
-    # own next to the bright global apps without touching the ivory or gold
-    x = x * (1.0 + 0.085 * np.exp(-((rr / 0.62) ** 2)))[..., None]
-    return np.clip(x, 0, 1)
+def quad(p0, p1, p2, steps=180):
+    pts = []
+    for i in range(steps + 1):
+        t = i / steps
+        u = 1.0 - t
+        pts.append((
+            u * u * p0[0] + 2 * u * t * p1[0] + t * t * p2[0],
+            u * u * p0[1] + 2 * u * t * p1[1] + t * t * p2[1],
+        ))
+    return pts
 
 
-def main():
-    if not os.path.exists(SRC):
-        sys.exit('missing source artwork: %s' % SRC)
-    src = np.asarray(Image.open(SRC).convert('RGB')).astype(np.float32)
-
-    bgm = key_background(src)
-    print('keyed %.2f%% of the canvas as margin/shadow' % (100 * bgm.mean()))
-
-    filled = diffusion_fill(src, bgm)
-
-    # square crop centred on the squircle (it is 916x961, so a symmetric
-    # square crop avoids any stretching)
-    green = ~bgm
-    ys, xs = np.where(green)
-    x0, x1 = xs.min(), xs.max()
-    y0, y1 = ys.min(), ys.max()
-    print('squircle bbox %d,%d - %d,%d -> %dx%d'
-          % (x0, y0, x1, y1, x1 - x0 + 1, y1 - y0 + 1))
-    side = max(x1 - x0 + 1, y1 - y0 + 1)
-    sx0 = int(round((x0 + x1) / 2.0 - side / 2.0))
-    sy0 = int(round((y0 + y1) / 2.0 - side / 2.0))
-    crop = filled[sy0:sy0 + side, sx0:sx0 + side]
-    im = Image.fromarray(np.rint(crop).astype(np.uint8)).resize(
-        (OUT_SIZE, OUT_SIZE), Image.LANCZOS)
-
-    out = grade(np.asarray(im).astype(np.float32))
-    im = Image.fromarray(np.rint(out * 255).astype(np.uint8))
-    im.save(PREPARED)
-
-    px = im.load()
-    print('wrote %s (%dx%d)' % (PREPARED, im.size[0], im.size[1]))
-    for name, pt in [('corner TL', (2, 2)), ('corner TR', (OUT_SIZE - 3, 2)),
-                     ('corner BL', (2, OUT_SIZE - 3)), ('corner BR', (OUT_SIZE - 3, OUT_SIZE - 3)),
-                     ('mid top', (OUT_SIZE // 2, 2)), ('mid bottom', (OUT_SIZE // 2, OUT_SIZE - 3)),
-                     ('centre', (OUT_SIZE // 2, OUT_SIZE // 2))]:
-        print('  %-12s #%02X%02X%02X' % ((name,) + px[pt]))
+def radial_field(size, inner, outer, cx=0.5, cy=0.42):
+    """Low-res radial gradient, upscaled bicubic."""
+    small = 512
+    img = Image.new("RGB", (small, small))
+    px = img.load()
+    for y in range(small):
+        for x in range(small):
+            dx = (x + 0.5) / small - cx
+            dy = (y + 0.5) / small - cy
+            d = min(1.0, ((dx * dx + dy * dy) ** 0.5) / 0.75)
+            px[x, y] = lerp(inner, outer, d)
+    return img.resize((size, size), Image.BICUBIC)
 
 
-if __name__ == '__main__':
-    main()
+def vertical_gradient(size, top, bottom):
+    col = Image.new("RGB", (1, size))
+    px = col.load()
+    for y in range(size):
+        px[0, y] = lerp(top, bottom, y / max(1, size - 1))
+    return col.resize((size, size), Image.BILINEAR)
+
+
+def glow_mask(size, cx, cy, radius):
+    """Feathered radial mask (smoothstep falloff)."""
+    small = 256
+    m = Image.new("L", (small, small), 0)
+    px = m.load()
+    scx, scy = cx * small / size, cy * small / size
+    srad = radius * small / size
+    for y in range(small):
+        for x in range(small):
+            dx = (x + 0.5) - scx
+            dy = (y + 0.5) - scy
+            d = ((dx * dx + dy * dy) ** 0.5) / srad
+            if d < 1.0:
+                t = 1.0 - d
+                px[x, y] = int(255 * t * t * (3 - 2 * t))
+    return m.resize((size, size), Image.BICUBIC)
+
+
+def build():
+    # --- deep-green field with a soft gold glow behind the mark ---
+    base = radial_field(S, FIELD_CENTER, FIELD_EDGE)
+    glow = glow_mask(S, C, C * 1.02, 340 * SS).point(lambda v: v // 5)
+    base = Image.composite(Image.new("RGB", (S, S), GLOW_TINT), base, glow)
+
+    gold = vertical_gradient(S, GOLD_LIGHT, GOLD_DEEP)
+
+    def stamp(mask):
+        base.paste(gold, (0, 0), mask)
+
+    # --- mihrab arch: two ogee curves meeting in a rounded point ---
+    apex = (C, 320 * SS)
+    foot_l = (352 * SS, 730 * SS)
+    foot_r = (672 * SS, 730 * SS)
+    w = int(58 * SS)
+    r = w // 2
+
+    arch = Image.new("L", (S, S), 0)
+    d = ImageDraw.Draw(arch)
+    d.line(cubic(foot_l, (352 * SS, 560 * SS), (430 * SS, 430 * SS), apex),
+           fill=255, width=w, joint="curve")
+    d.line(cubic(foot_r, (672 * SS, 560 * SS), (590 * SS, 430 * SS), apex),
+           fill=255, width=w, joint="curve")
+    for p in (apex, foot_l, foot_r):        # rounded caps at every end
+        d.ellipse([p[0] - r, p[1] - r, p[0] + r, p[1] + r], fill=255)
+    stamp(arch)
+
+    # --- crescent in the arch's upper opening, horns up-right ---
+    cx, cy = C, 470 * SS
+    ro, ri = 40 * SS, 34 * SS
+    ox, oy = 15 * SS, -11 * SS
+    cres = Image.new("L", (S, S), 0)
+    d = ImageDraw.Draw(cres)
+    d.ellipse([cx - ro, cy - ro, cx + ro, cy + ro], fill=255)
+    d.ellipse([cx + ox - ri, cy + oy - ri, cx + ox + ri, cy + oy + ri], fill=0)
+    stamp(cres)
+
+    # --- open Mushaf fanning out at the arch's base ---
+    top = (quad((430 * SS, 596 * SS), (476 * SS, 620 * SS), (512 * SS, 612 * SS))
+           + quad((512 * SS, 612 * SS), (548 * SS, 620 * SS), (594 * SS, 596 * SS))[1:])
+    bottom = (quad((404 * SS, 616 * SS), (460 * SS, 664 * SS), (512 * SS, 690 * SS))
+              + quad((512 * SS, 690 * SS), (564 * SS, 664 * SS), (620 * SS, 616 * SS))[1:])
+    outline = top + bottom[::-1] + [(430 * SS, 596 * SS)]
+
+    edge = Image.new("L", (S, S), 0)
+    d = ImageDraw.Draw(edge)
+    d.line(outline + [outline[0]], fill=255, width=int(12 * SS), joint="curve")
+    stamp(edge)
+
+    pages = Image.new("L", (S, S), 0)
+    d = ImageDraw.Draw(pages)
+    d.polygon(outline, fill=255)
+    base.paste(vertical_gradient(S, IVORY, IVORY_DEEP), (0, 0), pages)
+
+    spine = Image.new("L", (S, S), 0)       # centre crease
+    d = ImageDraw.Draw(spine)
+    d.line([(512 * SS, 614 * SS), (512 * SS, 688 * SS)],
+           fill=255, width=int(6 * SS), joint="curve")
+    stamp(spine)
+
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    base.resize((1024, 1024), Image.LANCZOS).save(OUT)
+    print(f"wrote {OUT} ({OUT.stat().st_size} bytes)")
+
+
+if __name__ == "__main__":
+    build()

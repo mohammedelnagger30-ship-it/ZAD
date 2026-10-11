@@ -4,11 +4,13 @@
 #   python scripts\prep-icon.py      # artwork -> scripts\assets\icon-prepared.png
 #   powershell -File scripts\make-icons.ps1
 #
-# The mark is the Qurra artwork: an ogee arch over a mosque silhouette, a
-# crescent moon and an open Mushaf on a rehl, on a deep-green field. The border
-# is the program's rounded square cut as a true squircle (superellipse n=5,
-# continuous curvature like iOS/WhatsApp) rather than a plain rounded rect, so
-# the corners read as one continuous curve at every size.
+# The mark is the Qurra artwork: a pointed mihrab arch in gold, a
+# small crescent in its upper opening, and an open Mushaf fanning
+# out at the arch's base, on a deep-green radial field. The
+# border is the program's rounded square cut as a true squircle
+# (superellipse n=5, continuous curvature like iOS/WhatsApp)
+# rather than a plain rounded rect, so the corners read as one
+# continuous curve at every size.
 #
 # prep-icon.py is dev-only (numpy/Pillow); icon-prepared.png is committed, so
 # this script needs nothing but .NET.
