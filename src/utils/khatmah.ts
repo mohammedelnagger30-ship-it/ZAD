@@ -78,6 +78,18 @@ export function createKhatmahPlan(today: string, targetDays: number | null): Kha
   };
 }
 
+/**
+ * Where the plan's cursor goes when the reader lands on `landed` — null when
+ * the landing teaches the plan nothing: an impossible page, or one at or behind
+ * the cursor, since re-reading and jumping backwards claim no new ground. A
+ * finished plan cannot be moved by reading further; the total is the total.
+ */
+export function nextKhatmahCursor(currentPage: number, landed: number): number | null {
+  if (!Number.isFinite(landed) || landed < 1 || landed > TOTAL_QURAN_PAGES) return null;
+  if (landed <= currentPage) return null;
+  return landed;
+}
+
 /** Loads the most recent plan; the table is a singleton by discipline, not by schema. */
 export async function loadKhatmah(): Promise<KhatmahPlan | null> {
   const rows = await db.khatmah.toArray();
@@ -95,4 +107,20 @@ export async function saveKhatmah(plan: KhatmahPlan): Promise<KhatmahPlan> {
 /** Ends the current plan (used by «إنهاء» and by starting fresh after a finish). */
 export async function clearKhatmah(): Promise<void> {
   await db.khatmah.clear();
+}
+
+/**
+ * Advance the running plan with a page the reader actually landed on, so the
+ * daily count follows the mushaf instead of a hand-pressed +1. The mushaf
+ * reports every settled page; forward readings move the plan, everything else
+ * and a missing plan cost a read and nothing more. Returns the new cursor, or
+ * null when nothing moved.
+ */
+export async function creditKhatmahPage(landed: number): Promise<number | null> {
+  const plan = await loadKhatmah();
+  if (!plan) return null;
+  const next = nextKhatmahCursor(plan.currentPage, landed);
+  if (next === null) return null;
+  await saveKhatmah({ ...plan, currentPage: next, updatedAt: Date.now() });
+  return next;
 }

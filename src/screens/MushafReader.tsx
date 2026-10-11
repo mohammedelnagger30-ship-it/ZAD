@@ -34,6 +34,7 @@ import {
 } from '@/data/surahs';
 import { getTotalPages, getHizbForPage } from '@/data/mushafPages';
 import { db, type Settings } from '@/db/database';
+import { creditKhatmahPage } from '@/utils/khatmah';
 
 interface MushafReaderProps {
   settings: Settings;
@@ -84,6 +85,18 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
     });
     onPageChange?.(currentPage);
   }, [currentPage, onPageChange]);
+
+  // The khatmah plan follows the reader: landing on a page past the plan's
+  // cursor advances it there — forward only, since re-reading and jumping
+  // backwards claim no new ground. Never on the opening settle, so a fresh plan
+  // reopened at yesterday's page doesn't inherit it before a page is turned.
+  const landedPageRef = useRef(startPage);
+  useEffect(() => {
+    if (currentPage === landedPageRef.current) return;
+    landedPageRef.current = currentPage;
+    void creditKhatmahPage(currentPage);
+  }, [currentPage]);
+
   const progressInfo = `قراءة ${readPages.size} من ${totalPages} صفحة (${Math.round((readPages.size / totalPages) * 100)} ٪)`;
   /**
    * The ayah last pressed, and which of its two uses the reader is being asked

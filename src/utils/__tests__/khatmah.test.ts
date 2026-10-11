@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@jest/globals';
-import { createKhatmahPlan, describeKhatmah } from '@/utils/khatmah';
+import { createKhatmahPlan, describeKhatmah, nextKhatmahCursor } from '@/utils/khatmah';
 import { TOTAL_QURAN_PAGES } from '@/data/surahs';
 import type { KhatmahPlan } from '@/db/database';
 
@@ -91,5 +91,33 @@ describe('createKhatmahPlan', () => {
     expect(p.targetDate).toBeNull();
     expect(p.currentPage).toBe(0);
     expect(p.startDate).toBe('2026-10-10');
+  });
+});
+
+describe('nextKhatmahCursor', () => {
+  it('advances the plan to a page the reader landed on past the cursor', () => {
+    expect(nextKhatmahCursor(100, 101)).toBe(101);
+    // A plan opened while the mushaf already stood further on follows the
+    // reading instead of demanding the pages be counted from zero again.
+    expect(nextKhatmahCursor(0, 150)).toBe(150);
+    // A jump ahead is ground the reader claims to stand on, same as a +1.
+    expect(nextKhatmahCursor(100, 400)).toBe(400);
+  });
+
+  it('claims nothing on re-reads, backward jumps, or standing still', () => {
+    expect(nextKhatmahCursor(100, 99)).toBeNull();
+    expect(nextKhatmahCursor(100, 100)).toBeNull();
+  });
+
+  it('ignores impossible landings', () => {
+    expect(nextKhatmahCursor(0, 0)).toBeNull();
+    expect(nextKhatmahCursor(0, -1)).toBeNull();
+    expect(nextKhatmahCursor(0, TOTAL_QURAN_PAGES + 1)).toBeNull();
+    expect(nextKhatmahCursor(0, Number.NaN)).toBeNull();
+  });
+
+  it('never overshoots the last page, and a finished plan stays finished', () => {
+    expect(nextKhatmahCursor(0, TOTAL_QURAN_PAGES)).toBe(TOTAL_QURAN_PAGES);
+    expect(nextKhatmahCursor(TOTAL_QURAN_PAGES, TOTAL_QURAN_PAGES)).toBeNull();
   });
 });
