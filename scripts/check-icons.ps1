@@ -1,16 +1,18 @@
 Add-Type -AssemblyName System.Drawing
 
 # Verifies the generated icons: real PNGs, correct dimensions, and a genuine
-# two-tone image rather than a blank or all-black square. The app icons fill the
-# frame with the mark, so they must be mostly green field; the og-image is the
-# calm light field by design (mark on the left, title on the right), so what is
-# required there is the mark itself — a green presence, not a green background.
+# two-tone image rather than a blank or all-black square. The icon is the Qurra
+# mark full-bleed on a deep-green field cut to the program's squircle, so it is
+# mostly green with a small but real ivory/gold mark; the og-image is that same
+# mark on the left of a deep-green field with the name on the right, so it runs
+# even greener. The floors below are set near the measured values (77%/4.4% and
+# 92%/1.8%) so a washed-out or missing mark fails loudly.
 $root = Split-Path -Parent $PSScriptRoot
 $outDir = Join-Path $root 'public\icons'
 
 $fail = 0
 function Test-Icon {
-    param([string]$Name, [int]$ExpectW, [int]$ExpectH, [double]$MinGoldPct = 1, [double]$MinGreenPct = 20)
+    param([string]$Name, [int]$ExpectW, [int]$ExpectH, [double]$MinGoldPct = 1.5, [double]$MinGreenPct = 45)
 
     $path = Join-Path $outDir $Name
     if (-not (Test-Path $path)) { "FAIL $Name missing"; $script:fail++; return }
@@ -51,6 +53,6 @@ function Test-Icon {
 
 Test-Icon 'icon-512.png' 512 512
 Test-Icon 'icon-192.png' 192 192
-Test-Icon 'og-image.png' 1200 630 0.5 3
+Test-Icon 'og-image.png' 1200 630 0.8 60
 
 if ($fail -eq 0) { "`nICON CHECKS PASSED" } else { "`n$fail ICON CHECK(S) FAILED"; exit 1 }
