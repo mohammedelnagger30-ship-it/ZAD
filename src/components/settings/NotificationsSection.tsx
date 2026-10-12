@@ -1,10 +1,23 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Bell, Play, Sparkles, Square, Volume2 } from 'lucide-react';
+import { Bell, Download, Play, Sparkles, Square, Trash2, Volume2 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Card, Button } from '@/components/ui';
 import { TimeOptionButton } from '@/components/TimeOptionButton';
 import { SectionTitle } from '@/components/settings/SectionTitle';
-import { ADHAN_SOUNDS, DEFAULT_ADHAN_SOUND_ID } from '@/data/adhanSounds';
+import {
+  ADHAN_SOUNDS,
+  DEFAULT_ADHAN_SOUND_ID,
+  adhanDownloadUrl,
+  isAdhanSoundReady,
+  type AdhanSound,
+} from '@/data/adhanSounds';
+import { useDownloadedAdhanVoices } from '@/hooks/useAdhanVoices';
+import {
+  AdhanDownloadError,
+  deleteAdhanVoice,
+  downloadAdhanVoice,
+  resolveAdhanPlayUrl,
+} from '@/utils/adhanStore';
 import { rescheduleAllNotifications } from '@/utils/notificationScheduler';
 import { canScheduleExactAlarms, NOTIFICATION_WARNING_EVENT, requestExactAlarms, requestNotificationPermission } from '@/utils/notifications';
 import { type Settings } from '@/db/database';
@@ -14,10 +27,25 @@ interface NotificationsSectionProps {
   onSaveSettings: (patch: Partial<Settings>) => void;
 }
 
+/** "3.1 ميجا" — how the download list states what a voice will cost the user. */
+function adhanSizeLabel(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} ميجا`;
+}
+
 export function NotificationsSection({ settings, onSaveSettings }: NotificationsSectionProps) {
   const [adhanPreviewStatus, setAdhanPreviewStatus] = useState('');
   const [previewingAdhanId, setPreviewingAdhanId] = useState<string | null>(null);
   const adhanAudioRef = useRef<HTMLAudioElement | null>(null);
+  /**
+   * On-demand voices: which are already on the device, which one is downloading right
+   * now, and how far it got. Everything else in this section assumes the selected voice
+   * can actually play — the picker only offers voices that are ready.
+   */
+  const downloadedAdhanVoices = useDownloadedAdhanVoices();
+  const [adhanDownloadingId, setAdhanDownloadingId] = useState<string | null>(null);
+  const [adhanProgress, setAdhanProgress] = useState<{ received: number; total: number } | null>(null);
+  const [adhanNotice, setAdhanNotice] = useState('');
+  const adhanAbortRef = useRef<AbortController | null>(null);
   const [dhikrPermissionStatus, setDhikrPermissionStatus] = useState('');
 
   /**
@@ -69,7 +97,15 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
 
     stopAdhanPreview();
     setAdhanPreviewStatus('');
-    const audio = new Audio(`${import.meta.env.BASE_URL}audio/${sound.file}`);
+    let url: string;
+    try {
+      // Bundled voices play from the app package; downloaded ones from the stored file.
+      url = await resolveAdhanPlayUrl(sound);
+    } catch {
+      setAdhanPreviewStatus('تعذّق الوصول إلى ملف الصوت. أعد تنزيل الصوت ثم حاول مجددًا.');
+      return;
+    }
+    const audio = new Audio(url);
     audio.preload = 'auto';
     audio.onended = () => {
       if (adhanAudioRef.current === audio) {
@@ -106,6 +142,63 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
       setAdhanPreviewStatus('تم إيقاف التسجيل بعد تغيير صوت الأذان.');
     }
   }, [previewingAdhanId, settings.adhanVoiceId, stopAdhanPreview]);
+
+  /** Fetches one on-demand voice, one file, exactly like the content library does. */
+  const downloadAdhan = useCallback(async (sound: AdhanSound) => {
+    const url = adhanDownloadUrl(sound);
+    if (!url || adhanDownloadingId) return;
+    setAdhanNotice('');
+    setAdhanDownloadingId(sound.id);
+    setAdhanProgress(null);
+    const controller = new AbortController();
+    adhanAbortRef.current = controller;
+    try {
+      await downloadAdhanVoice(sound, setAdhanProgress, controller.signal);
+      setAdhanNotice(`تم تنزيل «${sound.name}» — اختره الآن من القائمة ليستعمله الأذان.`);
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') {
+        setAdhanNotice('تم إيقاف التنزيل.');
+      } else if (error instanceof AdhanDownloadError) {
+        setAdhanNotice(error.message);
+      } else {
+        setAdhanNotice('تعذّر تنزيل الصوت. تحقّق من الاتصال ثم أعد المحاولة.');
+      }
+    } finally {
+      adhanAbortRef.current = null;
+      setAdhanDownloadingId(null);
+      setAdhanProgress(null);
+    }
+  }, [adhanDownloadingId]);
+
+  const cancelAdhanDownload = useCallback(() => {
+    adhanAbortRef.current?.abort();
+  }, []);
+
+  /**
+   * Drops a downloaded voice — and the choice itself when it was the selected one: an
+   * adhan that can no longer play must fall back to the bundled Makkah voice on the
+   * spot, not at the next prayer.
+   */
+  const removeAdhan = useCallback(async (sound: AdhanSound) => {
+    await deleteAdhanVoice(sound);
+    if (settings.adhanVoiceId === sound.id) {
+      onSaveSettings({ adhanVoiceId: DEFAULT_ADHAN_SOUND_ID });
+      setAdhanNotice('حُذف الصوت، ورجع الأذان لصوت المسجد الحرام الافتراضي.');
+    } else {
+      setAdhanNotice('حُذف الصوت من الجهاز.');
+    }
+  }, [onSaveSettings, settings.adhanVoiceId]);
+
+  useEffect(() => () => {
+    adhanAbortRef.current?.abort();
+  }, []);
+
+  const readyAdhanVoices = ADHAN_SOUNDS.filter((sound) => isAdhanSoundReady(sound, downloadedAdhanVoices));
+  const storedAdhanVoices = ADHAN_SOUNDS.filter(
+    (sound) => !sound.bundled && downloadedAdhanVoices.has(sound.id),
+  );
+  const pendingAdhanVoices = ADHAN_SOUNDS.filter((sound) => !isAdhanSoundReady(sound, downloadedAdhanVoices));
+  const selectedAdhanIsReady = readyAdhanVoices.some((sound) => sound.id === settings.adhanVoiceId);
 
   useEffect(() => () => {
     adhanAudioRef.current?.pause();
@@ -198,15 +291,11 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
                   </label>
                   <select
                     id="adhan-sound"
-                    value={
-                      ADHAN_SOUNDS.some((sound) => sound.id === settings.adhanVoiceId)
-                        ? settings.adhanVoiceId
-                        : DEFAULT_ADHAN_SOUND_ID
-                    }
+                    value={selectedAdhanIsReady ? settings.adhanVoiceId : DEFAULT_ADHAN_SOUND_ID}
                     onChange={(e) => onSaveSettings({ adhanVoiceId: e.target.value })}
                     className="w-full bg-white dark:bg-primary-900 border border-primary-200 dark:border-primary-700 rounded-xl py-2.5 px-3 text-sm text-primary-900 dark:text-primary-100 font-semibold focus:outline-hidden focus:ring-2 focus:ring-primary-500"
                   >
-                    {ADHAN_SOUNDS.map((sound) => (
+                    {readyAdhanVoices.map((sound) => (
                       <option key={sound.id} value={sound.id}>
                         {sound.name}
                       </option>
@@ -231,6 +320,86 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
                     <Sparkles size={15} /> معاينة صفحة الأذان
                   </Button>
                 </div>
+
+                {pendingAdhanVoices.length > 0 && (
+                  <div className="rounded-2xl border border-primary-100 bg-white/70 p-3 space-y-2 dark:border-primary-800/80 dark:bg-primary-900/20">
+                    <p className="text-xs font-semibold text-primary-900 dark:text-primary-100">
+                      أصوات إضافية — تُنزَّل عند الحاجة
+                    </p>
+                    <p className="text-[11px] text-primary-700 dark:text-primary-300">
+                      تنزّل الصوت مرة واحدة فيصبح متاحًا للأذان وصفحة الصلاة بدون إنترنت.
+                    </p>
+                    <ul className="space-y-2">
+                      {pendingAdhanVoices.map((sound) => {
+                        const downloading = adhanDownloadingId === sound.id;
+                        return (
+                          <li key={sound.id} className="flex items-center gap-2 rounded-xl bg-primary-50/70 px-2.5 py-2 dark:bg-primary-900/40">
+                            <span className="flex-1 text-[11px] font-semibold text-primary-900 dark:text-primary-100">
+                              {sound.name}
+                            </span>
+                            <span className="text-[10px] text-primary-600 dark:text-primary-400">
+                              {sound.remote ? adhanSizeLabel(sound.remote.sizeBytes) : ''}
+                            </span>
+                            {downloading ? (
+                              <button
+                                type="button"
+                                onClick={cancelAdhanDownload}
+                                className="rounded-lg bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-800 dark:bg-amber-900/50 dark:text-amber-200"
+                              >
+                                {adhanProgress && adhanProgress.total > 0
+                                  ? `${Math.floor((adhanProgress.received / adhanProgress.total) * 100)}٪ — إيقاف`
+                                  : 'جارٍ التنزيل — إيقاف'}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => void downloadAdhan(sound)}
+                                className="flex items-center gap-1 rounded-lg bg-primary-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-primary-700"
+                              >
+                                <Download size={12} /> تنزيل
+                              </button>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+
+                {storedAdhanVoices.length > 0 && (
+                  <div className="rounded-2xl border border-primary-100 bg-white/70 p-3 space-y-2 dark:border-primary-800/80 dark:bg-primary-900/20">
+                    <p className="text-xs font-semibold text-primary-900 dark:text-primary-100">
+                      الأصوات المُنزَّلة على الجهاز
+                    </p>
+                    <ul className="space-y-2">
+                      {storedAdhanVoices.map((sound) => (
+                        <li key={sound.id} className="flex items-center gap-2 rounded-xl bg-primary-50/70 px-2.5 py-2 dark:bg-primary-900/40">
+                          <span className="flex-1 text-[11px] font-semibold text-primary-900 dark:text-primary-100">
+                            {sound.name}
+                          </span>
+                          {sound.remote && (
+                            <span className="text-[10px] text-primary-600 dark:text-primary-400">
+                              {adhanSizeLabel(sound.remote.sizeBytes)}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => void removeAdhan(sound)}
+                            className="flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1 text-[11px] font-bold text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/40"
+                          >
+                            <Trash2 size={12} /> حذف
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {adhanNotice && (
+                  <p role="status" className="text-xs font-semibold text-primary-700 dark:text-gold-300 text-center">
+                    {adhanNotice}
+                  </p>
+                )}
 
                 {adhanPreviewStatus && (
                   <p role="status" className="text-xs font-semibold text-primary-700 dark:text-gold-300 text-center">

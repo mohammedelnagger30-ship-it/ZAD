@@ -2,7 +2,6 @@ import { LocalNotifications, type LocalNotificationSchema } from '@capacitor/loc
 import { Capacitor } from '@capacitor/core';
 import { getSettings } from '@/db/database';
 import type { Settings } from '@/db/database';
-import { getAdhanSound } from '@/data/adhanSounds';
 import {
   addCalendarDays,
   calculatePrayerTimesForDay,
@@ -14,8 +13,14 @@ import { deviceClockDriftMs, toDeviceClock, trustedNow, trustedNowMs } from '@/u
 import { generateDailyTasks, getTodayTasks } from '@/utils/taskManager';
 import {
   scheduleAdhanOverlay,
+  setAdhanChannel,
   type AdhanOverlayAlarm,
 } from '@/utils/adhanOverlay';
+import {
+  ensureAdhanVoicesLoaded,
+  resolveAdhanSoundPath,
+  usableAdhanSound,
+} from '@/utils/adhanStore';
 import {
   cancelAllNotifications,
   canScheduleExactAlarms,
@@ -100,16 +105,32 @@ function timeToMinutes(value: string): number | null {
 
 export async function createNotificationChannels(settings: Settings): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
-  const adhan = getAdhanSound(settings.adhanVoiceId);
-  await LocalNotifications.createChannel({
-    id: `prayer-${adhan.id}`,
-    name: `الأذان — ${adhan.name}`,
-    description: 'تنبيه عند دخول وقت الصلاة',
-    importance: 4,
-    sound: adhan.file,
-    vibration: true,
-    visibility: 1,
-  });
+  // The chosen voice may be one the user downloaded; knowing what is on disk decides
+  // which of the two channel builders below can describe it.
+  await ensureAdhanVoicesLoaded();
+  const adhan = usableAdhanSound(settings.adhanVoiceId);
+  const storedPath = await resolveAdhanSoundPath(adhan);
+  if (storedPath) {
+    // A downloaded voice has no res/raw entry, so the plugin's builder would point the
+    // channel at a resource that isn't there and the prayer would arrive silent. The
+    // native side publishes the stored file through the FileProvider instead.
+    await setAdhanChannel({
+      id: `prayer-${adhan.id}`,
+      name: `الأذان — ${adhan.name}`,
+      description: 'تنبيه عند دخول وقت الصلاة',
+      soundPath: storedPath,
+    });
+  } else {
+    await LocalNotifications.createChannel({
+      id: `prayer-${adhan.id}`,
+      name: `الأذان — ${adhan.name}`,
+      description: 'تنبيه عند دخول وقت الصلاة',
+      importance: 4,
+      sound: adhan.file,
+      vibration: true,
+      visibility: 1,
+    });
+  }
   await LocalNotifications.createChannel({
     id: 'prayer-muted',
     name: 'مواقيت الصلاة — دون صوت',
@@ -237,7 +258,7 @@ export async function rescheduleAllNotifications(): Promise<void> {
     const timeZone = getPrayerTimeZone(settings.timeZone, settings.cityName);
     const firstDay = calendarDayInZone(trustedNow(), timeZone);
     const now = trustedNowMs();
-    const adhan = getAdhanSound(settings.adhanVoiceId);
+    const adhan = usableAdhanSound(settings.adhanVoiceId);
     const channelId = settings.adhanSound ? `prayer-${adhan.id}` : 'prayer-muted';
 
     // One slot number per prayer, shared by the prayer alert and its reminder: the two
@@ -276,7 +297,9 @@ export async function rescheduleAllNotifications(): Promise<void> {
           body,
           schedule: { at: armedAt(prayer.time), allowWhileIdle: true },
           channelId,
-          sound: settings.adhanSound ? adhan.file : undefined,
+          // Only a bundled voice can ride the plugin's per-notification sound, which
+          // resolves resources; a downloaded one already rings through its channel.
+          sound: settings.adhanSound && adhan.bundled ? adhan.file : undefined,
           ...NOTIFICATION_BRAND,
           extra: {
             type: 'prayer',

@@ -1,11 +1,17 @@
 package com.hifzi.app;
 
 import android.app.AlarmManager;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.media.AudioAttributes;
+import android.net.Uri;
 import android.os.Build;
+
+import androidx.core.content.FileProvider;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -17,6 +23,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 import org.json.JSONArray;
 import org.json.JSONException;
+
+import java.io.File;
 
 /**
  * Arms the prayer-time takeover alarms behind the auto-opening adhan page.
@@ -141,6 +149,60 @@ public class AdhanOverlay extends Plugin {
     @PluginMethod
     public void cancelAll(PluginCall call) {
         cancelArmed((AlarmManager) getContext().getSystemService(Context.ALARM_SERVICE));
+        call.resolve();
+    }
+
+    /**
+     * Creates (or updates) a prayer channel whose sound is a file stored by the app.
+     *
+     * A channel's sound must be an Android resource, so a voice the user downloaded
+     * cannot go through the notification plugin's channel builder: a raw path or a URL
+     * there resolves to nothing and the prayer comes in silent. The stored file is
+     * handed to the system through the app's FileProvider — the same route the plugin
+     * uses for bundled web assets — with {@code res/xml/file_paths.xml} covering the
+     * {@code adhan_store/} directory this store writes into.
+     */
+    @PluginMethod
+    public void setChannel(PluginCall call) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            call.resolve();
+            return;
+        }
+
+        String id = call.getString("id");
+        String name = call.getString("name");
+        String soundPath = call.getString("soundPath");
+        if (id == null || name == null || soundPath == null) {
+            call.reject("بيانات قناة الأذان غير مكتملة.", "invalid-channel");
+            return;
+        }
+
+        File sound = new File(soundPath);
+        if (!sound.isFile() || sound.length() == 0L) {
+            call.reject("ملف صوت الأذان غير موجود.", "missing-sound");
+            return;
+        }
+
+        Uri soundUri = FileProvider.getUriForFile(
+            getContext(), getContext().getPackageName() + ".fileprovider", sound);
+
+        NotificationChannel channel = new NotificationChannel(
+            id, name, NotificationManager.IMPORTANCE_HIGH);
+        channel.setDescription(call.getString("description"));
+        channel.enableVibration(true);
+        channel.setLockscreenVisibility(android.app.Notification.VISIBILITY_PUBLIC);
+        channel.setSound(soundUri, new AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build());
+
+        NotificationManager manager = (NotificationManager)
+            getContext().getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager == null) {
+            call.reject("تعذّر الوصول إلى خدمة الإشعارات.", "notification-manager-unavailable");
+            return;
+        }
+        manager.createNotificationChannel(channel);
         call.resolve();
     }
 

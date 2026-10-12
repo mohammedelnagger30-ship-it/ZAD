@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Play, Volume2, VolumeX, CheckCircle2, Bell, BookOpen, X, Sparkles, Clock, MapPin } from 'lucide-react';
 import type { Settings } from '@/db/database';
 import { getAdhanSound } from '@/data/adhanSounds';
+import { resolveAdhanPlayUrl } from '@/utils/adhanStore';
 import { formatTime12h, getDateInTimeZone, getPrayerTimeZone } from '@/utils/prayerTimes';
 import { confirmPrayer, PRAYER_LABELS_AR, type PrayerKey } from '@/utils/prayerTracker';
 import { formatDateKey, formatArabicDate, getHijriDate } from '@/utils/dateUtils';
@@ -74,7 +75,28 @@ export function AzanOverlayModal({
 
   const displayName = prayerName || PRAYER_LABELS_AR[prayerKey] || 'الصلاة';
   const adhanSound = getAdhanSound(settings.adhanVoiceId);
-  const audioUrl = `/audio/${adhanSound.file}`;
+  /**
+   * Where the recording lives. A bundled voice is in the package, so its URL is known
+   * at once; a downloaded one is answered by the store, and the play effect below waits
+   * for it rather than starting a player against a path that isn't there yet.
+   */
+  const [audioUrl, setAudioUrl] = useState<string | null>(() =>
+    adhanSound.bundled ? `/audio/${adhanSound.file}` : null,
+  );
+
+  useEffect(() => {
+    if (adhanSound.bundled) {
+      setAudioUrl(`/audio/${adhanSound.file}`);
+      return;
+    }
+    let alive = true;
+    void resolveAdhanPlayUrl(adhanSound).then((url) => {
+      if (alive) setAudioUrl(url);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [adhanSound]);
 
   const timeZone = getPrayerTimeZone(settings.timeZone, settings.cityName);
   const displayTime = prayerTime
@@ -97,6 +119,9 @@ export function AzanOverlayModal({
       setSnoozed(false);
       return;
     }
+
+    // Still resolving where the downloaded voice lives — the effect re-runs once known.
+    if (audioUrl === null) return;
 
     const audio = new Audio(audioUrl);
     audioRef.current = audio;

@@ -36,6 +36,12 @@ export interface AdhanOverlayEvent {
 interface AdhanOverlayPlugin {
   schedule(options: { alarms: AdhanOverlayAlarm[] }): Promise<void>;
   cancelAll(): Promise<void>;
+  setChannel(options: {
+    id: string;
+    name: string;
+    description?: string;
+    soundPath: string;
+  }): Promise<void>;
   addListener(
     eventName: 'adhanReceived' | 'adhanLaunch',
     listenerFunc: (data: AdhanOverlayEvent) => void,
@@ -53,6 +59,23 @@ const AdhanOverlay = registerPlugin<AdhanOverlayPlugin>('AdhanOverlay');
 export async function scheduleAdhanOverlay(alarms: AdhanOverlayAlarm[]): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
   await AdhanOverlay.schedule({ alarms });
+}
+
+/**
+ * Create/update a prayer channel whose sound is a file the app stored on disk.
+ *
+ * Only needed for downloaded voices: bundled ones go through the notification plugin's
+ * channel builder, which resolves them from res/raw. A stored file has no resource id,
+ * so the native side publishes it through the FileProvider instead.
+ */
+export async function setAdhanChannel(options: {
+  id: string;
+  name: string;
+  description?: string;
+  soundPath: string;
+}): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  await AdhanOverlay.setChannel(options);
 }
 
 /** Drop every armed takeover alarm. */

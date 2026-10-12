@@ -12,7 +12,7 @@ export function AboutSection() {
           <p className="font-bold text-sm text-primary-900 dark:text-primary-50">قُرّة — رفيق القرآن والعبادة اليومية</p>
           <p>يعمل بالكامل بدون إنترنت بحفظ كامل لجميع بياناتك محلياً على جهازك.</p>
           <p className="pt-2 text-[11px] text-gray-400 dark:text-gray-500 border-t border-primary-100 dark:border-primary-800/50">
-            الإصدار {import.meta.env.VITE_APP_VERSION ?? '1.18.2'} • جميع الحقوق محفوظة
+            الإصدار {import.meta.env.VITE_APP_VERSION ?? '1.18.3'} • جميع الحقوق محفوظة
           </p>
         </Card>
       </section>

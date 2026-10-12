@@ -1,5 +1,6 @@
 import { ADHKAR_CATEGORIES } from '@/data/adhkar';
 import { TOTAL_QURAN_PAGES } from '@/data/surahs';
+import { db } from '@/db/database';
 
 /**
  * Backup export/import validation.
@@ -29,6 +30,38 @@ export const IGNORED_BACKUP_KEYS = ['_exportDate', 'streaks'];
 
 /** localStorage key holding the adhkar counters — carried in backups as `adhkar`. */
 export const ADHKAR_STATE_KEY = 'hifzi-adhkar-state';
+
+/**
+ * Builds the whole backup payload: every table, plus the adhkar counters that live in
+ * localStorage, stamped with the moment it was taken. This is the shape the export
+ * button downloads, the shape the import validator accepts, and the shape the automatic
+ * backup stores — one builder so the three cannot drift apart.
+ */
+export async function backupData(): Promise<Record<string, unknown>> {
+  const data: Record<string, unknown> = {
+    _exportDate: new Date().toISOString(),
+  };
+  // Settings are one record, not rows — every other table is taken whole.
+  data.settings = [await db.settings.get(1)];
+  data.plans = await db.plans.toArray();
+  data.tasks = await db.tasks.toArray();
+  data.bookmarks = await db.bookmarks.toArray();
+  data.pageBookmarks = await db.pageBookmarks.toArray();
+  data.prayerRecords = await db.prayerRecords.toArray();
+  data.sunnahRecords = await db.sunnahRecords.toArray();
+  data.hifzProgress = await db.hifzProgress.toArray();
+  data.hadithFavorites = await db.hadithFavorites.toArray();
+  data.khatmah = await db.khatmah.toArray();
+  const adhkarState = localStorage.getItem(ADHKAR_STATE_KEY);
+  if (adhkarState) {
+    try {
+      data.adhkar = JSON.parse(adhkarState) as unknown;
+    } catch {
+      // A corrupt counter must not take the whole backup down with it.
+    }
+  }
+  return data;
+}
 
 export function isValidAdhkarBackup(value: unknown): value is {
   day: string;

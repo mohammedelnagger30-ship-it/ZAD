@@ -106,19 +106,19 @@
 
 ### أصوات الأذان
 
-| التسجيل | المؤدي | الترخيص | المصدر | الملف المضمّن |
+| التسجيل | المؤدي | الترخيص | المصدر | الملف |
 |---|---|---|---|---|
-| أذان الجمعة الثاني | عاصم جاويد | CC0 1.0 | [Internet Archive](https://archive.org/details/icr-friday-prayer-2nd-adhan-17th-may-2024-9th-dhul-qadah-1445-by-asim-javed) | `android/app/src/main/res/raw/adhan_asim_javed.mp3`; `public/audio/adhan_asim_javed.mp3` |
-| أذان | Adam-synagda | CC0 1.0 | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Beautiful_adhan.ogg) | `android/app/src/main/res/raw/adhan_adam_synagda.ogg`; `public/audio/adhan_adam_synagda.ogg` |
-| أذان الفجر | المسجد الحرام — لا تُثبت هوية المؤذن | غير مُعلنة | [Internet Archive — adhan_202303](https://archive.org/details/adhan_202303) | `android/app/src/main/res/raw/adhan_makkah_fajr.mp3`; `public/audio/adhan_makkah_fajr.mp3` |
-| أذان | مشاري راشد العفاسي | غير مُعلنة | [Internet Archive — Very Beautiful Adhaan By Mishary Al Afasy](https://archive.org/details/VeryBeautifulAdhaanByMisharyAlAfasy) | `android/app/src/main/res/raw/adhan_alafasy_general.mp3`; `public/audio/adhan_alafasy_general.mp3` |
-| أذان | السيد النقشبندي | غير مُعلنة | [Internet Archive — adhan_202303](https://archive.org/details/adhan_202303) | `android/app/src/main/res/raw/adhan_sayyid_naqshbandi.mp3`; `public/audio/adhan_sayyid_naqshbandi.mp3` |
-| أذان | محمود الطبلاوي | غير مُعلنة | [Internet Archive — adhan_202303](https://archive.org/details/adhan_202303) | `android/app/src/main/res/raw/adhan_tablawi.mp3`; `public/audio/adhan_tablawi.mp3` |
-| أذان | أحمد الكوردي | غير مُعلنة | [Internet Archive — adhan_202303](https://archive.org/details/adhan_202303) | `android/app/src/main/res/raw/adhan_ahmad_kurdi.mp3`; `public/audio/adhan_ahmad_kurdi.mp3` |
-| أذان | منصور السالمي | غير مُعلنة | [Internet Archive — adhan_202303](https://archive.org/details/adhan_202303) | `android/app/src/main/res/raw/adhan_mansur_salmi.mp3`; `public/audio/adhan_mansur_salmi.mp3` |
-| أذان | ناصر القطامي | غير مُعلنة | [Internet Archive — adhan_202303](https://archive.org/details/adhan_202303) | `android/app/src/main/res/raw/adhan_nasir_qatami.mp3`; `public/audio/adhan_nasir_qatami.mp3` |
+| أذان الجمعة الثاني | عاصم جاويد | CC0 1.0 | [Internet Archive](https://archive.org/details/icr-friday-prayer-2nd-adhan-17th-may-2024-9th-dhul-qadah-1445-by-asim-javed) | مضمّن: `android/app/src/main/res/raw/adhan_asim_javed.mp3`; `public/audio/adhan_asim_javed.mp3` |
+| أذان | Adam-synagda | CC0 1.0 | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Beautiful_adhan.ogg) | مضمّن: `android/app/src/main/res/raw/adhan_adam_synagda.ogg`; `public/audio/adhan_adam_synagda.ogg` |
+| أذان الفجر | المسجد الحرام — لا تُثبت هوية المؤذن | غير مُعلنة | [Internet Archive — adhan_202303](https://archive.org/details/adhan_202303) | يُنزَّل: `content/adhans/adhan_makkah_fajr.mp3` |
+| أذان | مشاري راشد العفاسي | غير مُعلنة | [Internet Archive — Very Beautiful Adhaan By Mishary Al Afasy](https://archive.org/details/VeryBeautifulAdhaanByMisharyAlAfasy) | يُنزَّل: `content/adhans/adhan_alafasy_general.mp3` |
+| أذان | السيد النقشبندي | غير مُعلنة | [Internet Archive — adhan_202303](https://archive.org/details/adhan_202303) | يُنزَّل: `content/adhans/adhan_sayyid_naqshbandi.mp3` |
+| أذان | محمود الطبلاوي | غير مُعلنة | [Internet Archive — adhan_202303](https://archive.org/details/adhan_202303) | يُنزَّل: `content/adhans/adhan_tablawi.mp3` |
+| أذان | أحمد الكوردي | غير مُعلنة | [Internet Archive — adhan_202303](https://archive.org/details/adhan_202303) | يُنزَّل: `content/adhans/adhan_ahmad_kurdi.mp3` |
+| أذان | منصور السالمي | غير مُعلنة | [Internet Archive — adhan_202303](https://archive.org/details/adhan_202303) | يُنزَّل: `content/adhans/adhan_mansur_salmi.mp3` |
+| أذان | ناصر القطامي | غير مُعلنة | [Internet Archive — adhan_202303](https://archive.org/details/adhan_202303) | يُنزَّل: `content/adhans/adhan_nasir_qatami.mp3` |
 
-يختار المستخدم صوت الأذان من الإعدادات: اثنا عشر صوتًا، كل ملف مضمّن في `public/audio` وفي `android/app/src/main/res/raw` (المسار الأول للتشغيل داخل التطبيق، والثاني لصوت إشعار الصلاة). يمكن تشغيل التسجيل كاملًا من معاينة مباشرة، كما تستخدمه إشعارات الصلاة على أندرويد؛ وقد يقيّد النظام صوت الإشعار بحسب مستوى صوت الإشعارات أو وضع عدم الإزعاج. نسبة التسجيلات السبعة الأخيرة إلى أصحابها مأخوذة من تسمية الملف في مصدره وبصمات ID3 المدمجة داخله (مثل «الاذان بصوت الشيخ منصور السالمى»)، ولم يُعلن مصدرها ترخيصًا؛ فلا تُوزَّع خارج التطبيق إلا بإذن أصحابها.
+يختار المستخدم صوت الأذان من الإعدادات، وعلى مرّتين: خمسة أصوات مضمّنة في التطبيق نفسه (`public/audio` للتشغيل داخل التطبيق، و`android/app/src/main/res/raw` لصوت إشعار الصلاة) تعمل من أول فتحة بلا شبكة؛ وبقية الأصوات السبعة تُنزَّل عند الحاجة من مخزن المشروع على GitHub (`content/adhans/`، خارج `public/` فلا تدخل ملف الـ APK) بضغطة واحدة من نفس القسم، مضغوطة إلى 96 kbps أحادي القناة (20.1 ← 15.2 ميجا) لتقليل حجم التنزيل، وتُحفظ في مجلد التطبيق الخاص بحيث تعمل بعد التنزيل بلا إنترنت — مع استعمالها لمعاينة الاستماع ولصفحة الأذان ولصوت إشعار الصلاة (تمرّر قناة الإشعار بالملف المخزَّن عبر FileProvider لأن صوت القناة يجب أن يكون موردًا مضمّنًا؛ انظر `AdhanOverlay.setChannel` و`res/xml/file_paths.xml`). تُرفض أي إجابة ليست ملفًا صوتيًا حقيقيًا حتى لا يُخزَّن خطأ بدل أذان. نسبة التسجيلات السبعة إلى أصحابها مأخوذة من تسمية الملف في مصدره وبصمات ID3 المدمجة داخله (مثل «الاذان بصوت الشيخ منصور السالمى»)، ولم يُعلن مصدرها ترخيصًا؛ فلا تُوزَّع خارج التطبيق إلا بإذن أصحابها.
 
 ### تسجيلات الأذكار
 
