@@ -8,6 +8,7 @@ import {
   ADHAN_SOUNDS,
   DEFAULT_ADHAN_SOUND_ID,
   adhanDownloadUrl,
+  getAdhanSound,
   isAdhanSoundReady,
   type AdhanSound,
 } from '@/data/adhanSounds';
@@ -154,7 +155,12 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
     adhanAbortRef.current = controller;
     try {
       await downloadAdhanVoice(sound, setAdhanProgress, controller.signal);
-      setAdhanNotice(`تم تنزيل «${sound.name}» — اختره الآن من القائمة ليستعمله الأذان.`);
+      setAdhanNotice(`تم تنزيل «${sound.name}» — صار جاهزًا للاستعمال.`);
+      if (sound.id === settings.adhanVoiceId) {
+        // The voice was already chosen: the prayer channel must now ring the stored
+        // file instead of falling back to the bundled Makkah adhan.
+        void rescheduleAllNotifications();
+      }
     } catch (error) {
       if ((error as Error).name === 'AbortError') {
         setAdhanNotice('تم إيقاف التنزيل.');
@@ -168,7 +174,7 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
       setAdhanDownloadingId(null);
       setAdhanProgress(null);
     }
-  }, [adhanDownloadingId]);
+  }, [adhanDownloadingId, settings.adhanVoiceId]);
 
   const cancelAdhanDownload = useCallback(() => {
     adhanAbortRef.current?.abort();
@@ -193,12 +199,11 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
     adhanAbortRef.current?.abort();
   }, []);
 
-  const readyAdhanVoices = ADHAN_SOUNDS.filter((sound) => isAdhanSoundReady(sound, downloadedAdhanVoices));
-  const storedAdhanVoices = ADHAN_SOUNDS.filter(
-    (sound) => !sound.bundled && downloadedAdhanVoices.has(sound.id),
-  );
-  const pendingAdhanVoices = ADHAN_SOUNDS.filter((sound) => !isAdhanSoundReady(sound, downloadedAdhanVoices));
-  const selectedAdhanIsReady = readyAdhanVoices.some((sound) => sound.id === settings.adhanVoiceId);
+  // Every voice is offered in the picker: a bundled one is ready at once, the rest are
+  // ready only after the user downloads them — picking one that isn't on the device yet
+  // simply puts its download button under the picker.
+  const selectedAdhan = getAdhanSound(settings.adhanVoiceId);
+  const selectedAdhanReady = isAdhanSoundReady(selectedAdhan, downloadedAdhanVoices);
 
   useEffect(() => () => {
     adhanAudioRef.current?.pause();
@@ -291,17 +296,66 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
                   </label>
                   <select
                     id="adhan-sound"
-                    value={selectedAdhanIsReady ? settings.adhanVoiceId : DEFAULT_ADHAN_SOUND_ID}
+                    value={selectedAdhan.id}
                     onChange={(e) => onSaveSettings({ adhanVoiceId: e.target.value })}
                     className="w-full bg-white dark:bg-primary-900 border border-primary-200 dark:border-primary-700 rounded-xl py-2.5 px-3 text-sm text-primary-900 dark:text-primary-100 font-semibold focus:outline-hidden focus:ring-2 focus:ring-primary-500"
                   >
-                    {readyAdhanVoices.map((sound) => (
+                    {ADHAN_SOUNDS.map((sound) => (
                       <option key={sound.id} value={sound.id}>
                         {sound.name}
+                        {isAdhanSoundReady(sound, downloadedAdhanVoices) ? '' : ' — تنزيل'}
                       </option>
                     ))}
                   </select>
                 </div>
+
+                {!selectedAdhanReady && (
+                  <div className="space-y-2 rounded-2xl border border-primary-100 bg-white/70 p-3 dark:border-primary-800/80 dark:bg-primary-900/20">
+                    <div className="flex items-center gap-2">
+                      <span className="flex-1 text-[11px] font-semibold text-primary-900 dark:text-primary-100">
+                        {selectedAdhan.name}
+                        {selectedAdhan.remote ? ` — ${adhanSizeLabel(selectedAdhan.remote.sizeBytes)}` : ''}
+                      </span>
+                      {adhanDownloadingId === selectedAdhan.id ? (
+                        <button
+                          type="button"
+                          onClick={cancelAdhanDownload}
+                          className="rounded-lg bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-800 dark:bg-amber-900/50 dark:text-amber-200"
+                        >
+                          {adhanProgress && adhanProgress.total > 0
+                            ? `${Math.floor((adhanProgress.received / adhanProgress.total) * 100)}٪ — إيقاف`
+                            : 'جارٍ التنزيل — إيقاف'}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void downloadAdhan(selectedAdhan)}
+                          className="flex items-center gap-1 rounded-lg bg-primary-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-primary-700"
+                        >
+                          <Download size={12} /> تنزيل
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-primary-700 dark:text-primary-300">
+                      يُنزَّل مرة واحدة فيصير صالحًا للأذان وصفحة الصلاة والإشعار بلا إنترنت — وحتى يكتمل التنزيل يواصل إشعار الصلاة بصوت المسجد الحرام.
+                    </p>
+                  </div>
+                )}
+
+                {selectedAdhanReady && !selectedAdhan.bundled && (
+                  <div className="flex items-center gap-2 rounded-2xl border border-primary-100 bg-white/70 px-3 py-2.5 dark:border-primary-800/80 dark:bg-primary-900/20">
+                    <span className="flex-1 text-[11px] font-semibold text-primary-900 dark:text-primary-100">
+                      {selectedAdhan.name} — مُنزَّل على الجهاز
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void removeAdhan(selectedAdhan)}
+                      className="flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1 text-[11px] font-bold text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/40"
+                    >
+                      <Trash2 size={12} /> حذف
+                    </button>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-2">
                   {/* Play audio preview */}
@@ -320,80 +374,6 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
                     <Sparkles size={15} /> معاينة صفحة الأذان
                   </Button>
                 </div>
-
-                {pendingAdhanVoices.length > 0 && (
-                  <div className="rounded-2xl border border-primary-100 bg-white/70 p-3 space-y-2 dark:border-primary-800/80 dark:bg-primary-900/20">
-                    <p className="text-xs font-semibold text-primary-900 dark:text-primary-100">
-                      أصوات إضافية — تُنزَّل عند الحاجة
-                    </p>
-                    <p className="text-[11px] text-primary-700 dark:text-primary-300">
-                      تنزّل الصوت مرة واحدة فيصبح متاحًا للأذان وصفحة الصلاة بدون إنترنت.
-                    </p>
-                    <ul className="space-y-2">
-                      {pendingAdhanVoices.map((sound) => {
-                        const downloading = adhanDownloadingId === sound.id;
-                        return (
-                          <li key={sound.id} className="flex items-center gap-2 rounded-xl bg-primary-50/70 px-2.5 py-2 dark:bg-primary-900/40">
-                            <span className="flex-1 text-[11px] font-semibold text-primary-900 dark:text-primary-100">
-                              {sound.name}
-                            </span>
-                            <span className="text-[10px] text-primary-600 dark:text-primary-400">
-                              {sound.remote ? adhanSizeLabel(sound.remote.sizeBytes) : ''}
-                            </span>
-                            {downloading ? (
-                              <button
-                                type="button"
-                                onClick={cancelAdhanDownload}
-                                className="rounded-lg bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-800 dark:bg-amber-900/50 dark:text-amber-200"
-                              >
-                                {adhanProgress && adhanProgress.total > 0
-                                  ? `${Math.floor((adhanProgress.received / adhanProgress.total) * 100)}٪ — إيقاف`
-                                  : 'جارٍ التنزيل — إيقاف'}
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => void downloadAdhan(sound)}
-                                className="flex items-center gap-1 rounded-lg bg-primary-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-primary-700"
-                              >
-                                <Download size={12} /> تنزيل
-                              </button>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                )}
-
-                {storedAdhanVoices.length > 0 && (
-                  <div className="rounded-2xl border border-primary-100 bg-white/70 p-3 space-y-2 dark:border-primary-800/80 dark:bg-primary-900/20">
-                    <p className="text-xs font-semibold text-primary-900 dark:text-primary-100">
-                      الأصوات المُنزَّلة على الجهاز
-                    </p>
-                    <ul className="space-y-2">
-                      {storedAdhanVoices.map((sound) => (
-                        <li key={sound.id} className="flex items-center gap-2 rounded-xl bg-primary-50/70 px-2.5 py-2 dark:bg-primary-900/40">
-                          <span className="flex-1 text-[11px] font-semibold text-primary-900 dark:text-primary-100">
-                            {sound.name}
-                          </span>
-                          {sound.remote && (
-                            <span className="text-[10px] text-primary-600 dark:text-primary-400">
-                              {adhanSizeLabel(sound.remote.sizeBytes)}
-                            </span>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => void removeAdhan(sound)}
-                            className="flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1 text-[11px] font-bold text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/40"
-                          >
-                            <Trash2 size={12} /> حذف
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
 
                 {adhanNotice && (
                   <p role="status" className="text-xs font-semibold text-primary-700 dark:text-gold-300 text-center">
