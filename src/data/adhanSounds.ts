@@ -15,6 +15,12 @@ export const ADHAN_SOUNDS: AdhanSound[] = [
     source: 'IslamDownload',
   },
   {
+    id: 'makkah_fajr',
+    name: 'المسجد الحرام مكة — أذان الفجر',
+    file: 'adhan_makkah_fajr.mp3',
+    source: 'Archive.org',
+  },
+  {
     id: 'mishary_alafasy_fajr',
     name: 'مشاري راشد العفاسي — أذان الفجر (مقام حجاز)',
     file: 'adhan_mishary_alafasy_fajr.mp3',
@@ -37,6 +43,42 @@ export const ADHAN_SOUNDS: AdhanSound[] = [
     name: 'آدم سيناجدا — أذان',
     file: 'adhan_adam_synagda.ogg',
     source: 'CC0',
+  },
+  {
+    id: 'alafasy_general',
+    name: 'مشاري راشد العفاسي — أذان',
+    file: 'adhan_alafasy_general.mp3',
+    source: 'Archive.org',
+  },
+  {
+    id: 'sayyid_naqshbandi',
+    name: 'السيد النقشبندي — أذان',
+    file: 'adhan_sayyid_naqshbandi.mp3',
+    source: 'Archive.org',
+  },
+  {
+    id: 'tablawi',
+    name: 'محمود الطبلاوي — أذان',
+    file: 'adhan_tablawi.mp3',
+    source: 'Archive.org',
+  },
+  {
+    id: 'ahmad_kurdi',
+    name: 'أحمد الكوردي — أذان',
+    file: 'adhan_ahmad_kurdi.mp3',
+    source: 'Archive.org',
+  },
+  {
+    id: 'mansur_salmi',
+    name: 'منصور السالمي — أذان',
+    file: 'adhan_mansur_salmi.mp3',
+    source: 'Archive.org',
+  },
+  {
+    id: 'nasir_qatami',
+    name: 'ناصر القطامي — أذان',
+    file: 'adhan_nasir_qatami.mp3',
+    source: 'Archive.org',
   },
 ];
 
