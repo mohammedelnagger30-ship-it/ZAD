@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath, URL } from 'node:url';
+import { cssEngineCompat } from './scripts/css-engine-compat.ts';
 import pkg from './package.json' with { type: 'json' };
 
 export default defineConfig(({ mode }) => {
@@ -15,6 +16,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       tailwindcss(),
+      cssEngineCompat(),
       VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg', 'icons/*.png'],
@@ -54,6 +56,12 @@ export default defineConfig(({ mode }) => {
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2,json,mp3,ogg}'],
         globIgnores: ['**/quranText-*.js'],
+        // vite-plugin-pwa marks everything under assets/ as cache-bust-free, i.e. its URL
+        // is taken as proof of its content — so a stylesheet rewritten under an unchanged
+        // URL would never be re-fetched, and the old bytes would outlive the fix. A regex
+        // that matches nothing makes every file carry a content revision instead, which
+        // turns "the bytes changed" into "the cache key changed".
+        dontCacheBustURLsMatching: /^$/,
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
         runtimeCaching: [
           {

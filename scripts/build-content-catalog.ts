@@ -19,7 +19,14 @@ const TAFSIR_CACHE = join(CACHE, 'tafsir');
 const OUT = join(ROOT, 'src', 'data', 'contentCatalog.ts');
 
 /** Maps the app's existing collection ids onto the upstream file slugs. */
-const HADITH = [
+const HADITH: readonly {
+  id: string;
+  slug: string;
+  titleAr: string;
+  author: string;
+  /** True when the collection ships inside the app (public/hadith/). */
+  bundled?: boolean;
+}[] = [
   { id: 'arbaeen_nawawi', slug: 'ara-nawawi', titleAr: 'الأربعون النووية', author: 'الإمام يحيى بن شرف النووي' },
   { id: 'forty_qudsi', slug: 'ara-qudsi', titleAr: 'الأربعون القدسية', author: 'غير مذكور في بيانات المصدر' },
   { id: 'muwatta_malik', slug: 'ara-malik', titleAr: 'موطأ مالك', author: 'الإمام مالك بن أنس' },
@@ -27,9 +34,18 @@ const HADITH = [
   { id: 'jami_tirmidhi', slug: 'ara-tirmidhi', titleAr: 'جامع الترمذي', author: 'الإمام محمد بن عيسى الترمذي' },
   { id: 'sunan_nasai', slug: 'ara-nasai', titleAr: 'سنن النسائي', author: 'الإمام أحمد بن شعيب النسائي' },
   { id: 'sunan_abi_dawud', slug: 'ara-abudawud', titleAr: 'سنن أبي داود', author: 'الإمام سليمان بن الأشعث السجستاني' },
-  { id: 'sahih_muslim', slug: 'ara-muslim', titleAr: 'صحيح مسلم', author: 'الإمام مسلم بن الحجاج النيسابوري' },
+  {
+    id: 'sahih_muslim',
+    slug: 'ara-muslim',
+    titleAr: 'صحيح مسلم',
+    author: 'الإمام مسلم بن الحجاج النيسابوري',
+    // The essential collection: bundled with the app so the daily card and
+    // search work from the first launch with no network. Its payload is
+    // copied to public/hadith/ by `npm run data:fetch`.
+    bundled: true,
+  },
   { id: 'sahih_bukhari', slug: 'ara-bukhari', titleAr: 'صحيح البخاري', author: 'الإمام محمد بن إسماعيل البخاري' },
-] as const;
+];
 
 const TAFSIR = [
   { id: 'muyassar', slug: 'ar-tafsir-muyassar', titleAr: 'التفسير الميسر', authorAr: 'مجموعة من العلماء', blurb: 'مختصر ميسّر يشرح المعنى الإجمالي لكل آية، أنسب للقارئ المبتدئ.' },
@@ -141,6 +157,12 @@ export interface HadithBook {
   slug: string;
   count: number;
   downloadBytes: number;
+  /**
+   * True when the collection is bundled inside the app itself
+   * (public/hadith/<slug>.json) and is copied onto the device on
+   * first use, with no network involved.
+   */
+  bundled: boolean;
 }
 
 const TAFSIR_WEIGHT: Record<TafsirEdition['id'], TafsirEdition['weight']> = {
@@ -183,6 +205,7 @@ ${hadithRows
     slug: '${h.slug}',
     count: ${h.count},
     downloadBytes: ${h.downloadBytes},
+    bundled: ${h.bundled ?? false},
   },`,
   )
   .join('\n')}

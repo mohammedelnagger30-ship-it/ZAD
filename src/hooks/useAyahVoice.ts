@@ -21,6 +21,8 @@ export function useAyahVoice({
 }: UseAyahVoiceOptions) {
   const [reciterId, setReciterId] = useState(loadPreferredReciter);
   const [voiceEngaged, setVoiceEngaged] = useState(false);
+  /** True when the loaded source holds no verse timings: the whole file plays. */
+  const [voiceWholeFile, setVoiceWholeFile] = useState(false);
   const [voicePhase, setVoicePhase] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [voicePlaying, setVoicePlaying] = useState(false);
   /** Set when this ayah has run to its end: «متابعة» then means the one after it. */
@@ -50,6 +52,7 @@ export function useAyahVoice({
     // document is not paused for us — stop it while it can still be reached.
     pauseVoice();
     releaseVoice();
+    setVoiceWholeFile(false);
     setAyahChoice(null);
   }, [pauseVoice, releaseVoice, setAyahChoice]);
 
@@ -61,8 +64,28 @@ export function useAyahVoice({
    */
   const playAyahFrom = useCallback((source: SurahAudioSource, ayah: number, restart = false) => {
     const audio = voiceAudioRef.current;
+    if (!audio) {
+      setVoicePhase('error');
+      setVoiceError('تعذّر تشغيل التلاوة — أعد المحاولة.');
+      return;
+    }
+    // A recording with no verse timings (the children-repetition muallim)
+    // plays as one whole surah file: any ayah press starts it.
+    if (source.verseTimings.length === 0) {
+      voiceTimingRef.current = null;
+      if (audio.src !== source.url) audio.src = source.url;
+      if (restart || audio.ended) {
+        audio.currentTime = 0;
+      }
+      audio.play().catch(() => {
+        setVoicePhase('error');
+        setVoiceError('تعذّر تشغيل التلاوة — أعد المحاولة.');
+      });
+      setVoiceDone(false);
+      return;
+    }
     const timing = source.verseTimings.find((entry) => entry.ayah === ayah);
-    if (!audio || !timing) {
+    if (!timing) {
       setVoicePhase('error');
       setVoiceError('لم يُعثر على تلاوة لهذه الآية داخل ملف السورة.');
       return;
@@ -114,6 +137,7 @@ export function useAyahVoice({
           releaseVoice();
           if (source.blob) voiceUrlRef.current = source.url;
           voiceSourceRef.current = { surahId, source };
+          setVoiceWholeFile(source.verseTimings.length === 0);
           setVoicePhase('ready');
           playAyahFrom(source, ayah);
         })
@@ -288,6 +312,7 @@ export function useAyahVoice({
   /** A newly pressed ayah starts from silence: the transport is idle again. */
   const resetVoice = useCallback(() => {
     setVoiceEngaged(false);
+    setVoiceWholeFile(false);
     setVoicePhase('idle');
     setVoicePlaying(false);
     setVoiceDone(false);
@@ -319,7 +344,9 @@ export function useAyahVoice({
     voicePhase === 'loading' || (voiceDone && atLastAyah && voiceScope === 'ayah');
   /** What the block is telling the reader: what is being listened to, and what happens when it runs out. */
   const voiceScopeHint =
-    voiceDone && voiceScope === 'surah' && atLastAyah
+    voiceWholeFile
+      ? `تلاوة ترديد الأطفال بصوت ${voiceReciterName} — الشيخ يقرأ والآطفال يعيدون وراءه، ردّد معهم.`
+      : voiceDone && voiceScope === 'surah' && atLastAyah
       ? 'انتهت السورة — «من الأول» تُشغّلها من أولها.'
       : voiceScope === 'surah'
         ? `تستمر التلاوة من حيث وقفت حتى آخر السورة بصوت ${voiceReciterName} — تتبع الصفحة مع التلاوة.`
@@ -332,6 +359,7 @@ export function useAyahVoice({
 
   return {
     voiceEngaged,
+    voiceWholeFile,
     voicePhase,
     voiceError,
     voiceAudioRef,

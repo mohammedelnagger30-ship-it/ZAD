@@ -88,7 +88,7 @@ export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenPro
       <div className="pointer-events-none absolute bottom-10 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-gold-400/10 blur-3xl" />
 
       {/* Main Glassmorphism Auth Container */}
-      <section className="relative w-full max-w-sm rounded-3xl border border-primary-200/60 bg-white/90 p-6 shadow-2xl backdrop-blur-xl dark:border-primary-800/80 dark:bg-primary-950/85 transition-all duration-300">
+      <section className="relative w-full max-w-sm sm:max-w-md lg:max-w-lg rounded-3xl border border-primary-200/60 bg-white/90 p-6 shadow-2xl backdrop-blur-xl dark:border-primary-800/80 dark:bg-primary-950/85 transition-all duration-300">
         
         {/* Top Header Controls: Theme Mode & Color Palette Switcher */}
         <div className="mb-6 flex items-center justify-between border-b border-primary-100 pb-4 dark:border-primary-900">
@@ -99,7 +99,7 @@ export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenPro
               onClick={() => void changeTheme('light')}
               title="الوضع الفاتح"
               aria-label="الوضع الفاتح"
-              className={`rounded-lg p-1.5 text-xs transition ${
+              className={`rounded-lg min-h-10 min-w-10 p-2.5 md:p-3 text-xs transition ${
                 themeMode === 'light'
                   ? 'bg-white text-primary-700 shadow-sm dark:bg-primary-800 dark:text-gold-300'
                   : 'text-gray-500 hover:text-primary-700 dark:text-gray-400 dark:hover:text-gold-300'
@@ -112,7 +112,7 @@ export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenPro
               onClick={() => void changeTheme('dark')}
               title="الوضع الداكن"
               aria-label="الوضع الداكن"
-              className={`rounded-lg p-1.5 text-xs transition ${
+              className={`rounded-lg min-h-10 min-w-10 p-2.5 md:p-3 text-xs transition ${
                 themeMode === 'dark'
                   ? 'bg-white text-primary-700 shadow-sm dark:bg-primary-800 dark:text-gold-300'
                   : 'text-gray-500 hover:text-primary-700 dark:text-gray-400 dark:hover:text-gold-300'
@@ -125,7 +125,7 @@ export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenPro
               onClick={() => void changeTheme('system')}
               title="حسب النظام"
               aria-label="حسب النظام"
-              className={`rounded-lg p-1.5 text-xs transition ${
+              className={`rounded-lg min-h-10 min-w-10 p-2.5 md:p-3 text-xs transition ${
                 themeMode === 'system'
                   ? 'bg-white text-primary-700 shadow-sm dark:bg-primary-800 dark:text-gold-300'
                   : 'text-gray-500 hover:text-primary-700 dark:text-gray-400 dark:hover:text-gold-300'
@@ -144,7 +144,7 @@ export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenPro
                 onClick={() => void changeColorPalette(palette.id as ColorPalette)}
                 title={`سمة ${palette.name}`}
                 aria-label={`سمة ${palette.name}`}
-                className={`h-5 w-5 rounded-full transition-transform ${
+                className={`h-6 w-6 md:h-7 md:w-7 rounded-full transition-transform ${
                   colorPalette === palette.id ? 'scale-125 ring-2 ring-gold-400 ring-offset-2 dark:ring-offset-primary-950' : 'hover:scale-110 opacity-70'
                 }`}
                 style={{ backgroundColor: palette.color }}
@@ -158,7 +158,7 @@ export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenPro
           <BookOpen size={28} />
         </div>
         <h1 className="text-center text-2xl font-bold text-primary-900 dark:text-primary-50">قُرّة</h1>
-        <p className="mt-1.5 text-center text-xs text-primary-700/80 dark:text-primary-300 leading-relaxed">
+        <p className="mt-1.5 text-center text-xs sm:text-sm text-primary-700/80 dark:text-primary-300 leading-relaxed">
           سجّل الدخول لمزامنة بياناتك وسورك وحفظك بأمان بين جميع أجهزتك.
         </p>
 

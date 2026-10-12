@@ -7,6 +7,7 @@ import { MushafHeader } from '@/components/mushaf/MushafHeader';
 import { MushafDock } from '@/components/mushaf/MushafDock';
 import { AyahVoiceSheet } from '@/components/mushaf/AyahVoiceSheet';
 import { useAyahVoice } from '@/hooks/useAyahVoice';
+import { useViewportStep } from '@/hooks/useViewportStep';
 import {
   ZOOM_STEP,
   ZOOM_MIN,
@@ -448,6 +449,7 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
     voicePrimaryLabel,
     voicePrimaryDisabled,
     voiceHint,
+    voiceWholeFile,
   } = useAyahVoice({ ayahChoice, setAyahChoice, showAyah, updatePrefs, voiceScope });
   const handleAyahPress = useCallback(
     (surahId: number, ayahNumber: number) => {
@@ -612,7 +614,13 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
 
   const isBookmarked = bookmarkedPages.has(currentPage);
   const zoomPercent = Math.round(prefs.zoom * 100);
-  const effectiveFontSize = Math.round(settings.fontSize * prefs.zoom * prefs.readingScale);
+  // The reader's own size keeps the reader's zoom and reading scale multiplying it exactly
+  // as before; the viewport only lifts the base a step on a wider sheet, so a tablet reads
+  // at a tablet size while the reader's saved size stays the size the reader asked for.
+  const viewportStep = useViewportStep();
+  const effectiveFontSize = Math.round(
+    settings.fontSize * viewportStep * prefs.zoom * prefs.readingScale
+  );
   const mode = prefs.mode;
   /** The ayah under discussion, held on the page while either of its sheets is open. */
   const activeReadingAyah = tafsirAyah ?? ayahChoice;
@@ -748,6 +756,7 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
         setTafsirAyah={setTafsirAyah}
         openVoice={openVoice}
         voiceEngaged={voiceEngaged}
+        voiceWholeFile={voiceWholeFile}
         voiceHint={voiceHint}
         voiceScope={voiceScope}
         handleVoiceScope={handleVoiceScope}

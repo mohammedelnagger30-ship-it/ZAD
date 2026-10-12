@@ -1,7 +1,7 @@
 {
   "name": "vite-react-typescript-starter",
   "private": true,
-  "version": "1.18.4",
+  "version": "1.19.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -36,6 +36,8 @@
     "@supabase/supabase-js": "^2.117.2",
     "adhan": "^4.4.6",
     "dexie": "^4.4.6",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "lucide-react": "^0.446.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

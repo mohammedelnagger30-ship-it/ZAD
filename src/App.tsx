@@ -25,6 +25,7 @@ import {
   writeLastDeviceTimeZone,
   TIME_ZONE_ADOPTION_EVENT,
 } from '@/utils/timeZoneTravel';
+import { initAutoBackup } from '@/utils/autoBackup';
 
 const ONBOARDED_KEY = 'hifzi-onboarded';
 // Latch used by lazyWithRetry: after a chunk 404 we reload once; a reloaded page that
@@ -122,7 +123,7 @@ function AppUpdateNotice() {
   const percent = progress && progress.percent >= 0 ? progress.percent : null;
 
   return (
-    <aside className="fixed inset-x-3 top-[calc(env(safe-area-inset-top,0px)+0.75rem)] z-[100] mx-auto max-w-lg rounded-2xl border border-gold-300 bg-white p-4 shadow-xl dark:border-gold-600 dark:bg-primary-900" dir="rtl">
+    <aside className="fixed inset-x-3 top-[calc(env(safe-area-inset-top,0px)+0.75rem)] z-[100] mx-auto max-w-lg rounded-2xl border border-gold-300 bg-white p-4 shadow-xl dark:border-gold-600 dark:bg-primary-900 md:left-3 md:right-28 lg:right-36" dir="rtl">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="font-semibold text-primary-900 dark:text-primary-50">
@@ -220,7 +221,7 @@ function TimeZoneAdoptionNotice() {
   if (!cityName) return null;
   return (
     <aside
-      className="fixed inset-x-3 top-[calc(env(safe-area-inset-top,0px)+0.75rem)] z-[90] mx-auto max-w-lg rounded-2xl border border-gold-300 bg-white p-4 shadow-xl dark:border-gold-600 dark:bg-primary-900"
+      className="fixed inset-x-3 top-[calc(env(safe-area-inset-top,0px)+0.75rem)] z-[90] mx-auto max-w-lg rounded-2xl border border-gold-300 bg-white p-4 shadow-xl dark:border-gold-600 dark:bg-primary-900 md:left-3 md:right-28 lg:right-36"
       dir="rtl"
     >
       <p className="text-sm text-primary-900 dark:text-primary-50">
@@ -496,6 +497,8 @@ function AppContent({
       generateDailyTasks();
       markMissedTasks();
       rescheduleAllNotifications();
+      // Initialize auto-backup system
+      initAutoBackup();
     }
   }, [settings]);
 
@@ -617,8 +620,8 @@ function AppContent({
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-surface-light dark:bg-surface-dark text-primary-900 dark:text-primary-50" dir="rtl">
-        <main className="min-h-screen min-h-dvh px-4 pt-4 pb-24 md:pr-24 md:pl-8 md:pt-8 md:pb-8">
-          <div className="w-full max-w-md mx-auto md:max-w-3xl xl:max-w-5xl 2xl:max-w-6xl">
+        <main className="min-h-screen min-h-dvh px-4 pt-4 pb-24 sm:px-6 md:pr-24 md:pl-8 md:pt-8 md:pb-8 lg:pr-32 xl:pr-36">
+          <div className="w-full max-w-md mx-auto sm:max-w-xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl 2xl:max-w-6xl">
             <SyncNotice syncState={syncState} onSyncNow={onSyncNow} />
             <Suspense fallback={<ScreenLoading />}>
               {/* Selecting the active tab again remounts its screen. */}
@@ -628,7 +631,7 @@ function AppContent({
               {screen === 'prayer' && <PrayerScreen key={`prayer-${resetNonce}`} settings={settings} onSaveSettings={save} navigate={navigate} />}
               {screen === 'salah' && <PrayerGuideScreen key={`salah-${resetNonce}`} navigate={navigate} />}
               {screen === 'hadith' && <HadithScreen key={`hadith-${resetNonce}`} params={params} />}
-              {screen === 'progress' && <ProgressScreen key={`progress-${resetNonce}`} />}
+              {screen === 'progress' && <ProgressScreen key={`progress-${resetNonce}`} settings={settings} />}
               {screen === 'settings' && (
                 <SettingsScreen
                   key={`settings-${resetNonce}-${syncRevision}`}

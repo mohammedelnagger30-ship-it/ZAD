@@ -39,7 +39,7 @@ export function HifzControls({
               </div>
 
               {/* Ayah range selection */}
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                 <span className="text-xs text-gray-600 dark:text-gray-300">من آية:</span>
                 <input
                   type="number"
@@ -63,7 +63,7 @@ export function HifzControls({
               <div className="flex gap-2">
                 <button
                   onClick={() => setHideText(!hideText)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-smooth ${
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-smooth md:max-w-md ${
                     hideText
                       ? 'bg-gold-500 text-white'
                       : 'bg-white dark:bg-primary-900/60 text-gray-600 dark:text-gray-300 border border-gold-200 dark:border-gold-800'
@@ -74,7 +74,7 @@ export function HifzControls({
                 </button>
                 <button
                   onClick={() => setHideWordByWord(!hideWordByWord)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-smooth ${
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-smooth md:max-w-md ${
                     hideWordByWord
                       ? 'bg-gold-500 text-white'
                       : 'bg-white dark:bg-primary-900/60 text-gray-600 dark:text-gray-300 border border-gold-200 dark:border-gold-800'

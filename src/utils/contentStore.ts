@@ -1,8 +1,10 @@
 // Downloadable content store — tafsir, hadith text and Quran audio kept on the device.
 //
-// The Quran text is bundled with the app (see `data/quranText.ts`), but the tafsirs and
-// hadith collections are far too large for that: the eight Arabic tafsirs total ~316 MB
-// and the nine hadith collections ~46 MB. So they are fetched from their open sources on
+// The Quran text is bundled with the app (see `data/quranText.ts`), and so is
+// the essential hadith collection, صحيح مسلم (see `public/hadith/`, read by
+// `utils/hadithService`). Everything else is far too large for that: the eight
+// Arabic tafsirs total ~316 MB and the remaining hadith collections ~37 MB.
+// So they are fetched from their open sources on
 // demand and written here, which makes them part of the app for good — after a download
 // they work with no network at all.
 //

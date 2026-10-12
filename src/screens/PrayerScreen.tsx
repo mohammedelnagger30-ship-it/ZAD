@@ -244,7 +244,7 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
   return (
     <div className="space-y-6 pb-6">
       {/* Enhanced Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold text-primary-800 dark:text-primary-100">مواقيت الصلاة</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -253,7 +253,7 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
         </div>
         <button
           onClick={() => setShowLocation(true)}
-          className="flex items-center gap-2 rounded-2xl border-2 border-primary-200 bg-white px-4 py-2.5 text-sm font-semibold text-primary-700 shadow-md transition-all hover:border-primary-400 hover:shadow-lg dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-200 dark:hover:border-primary-600"
+          className="flex max-w-[45vw] items-center gap-2 truncate rounded-2xl border-2 border-primary-200 bg-white px-4 py-2.5 text-sm font-semibold text-primary-700 shadow-md transition-all hover:border-primary-400 hover:shadow-lg dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-200 dark:hover:border-primary-600"
         >
           <MapPin size={18} />
           {settings.cityName || 'الموقع'}
@@ -271,7 +271,7 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
           <div className="pointer-events-none absolute right-1/3 bottom-0 -z-10 h-48 w-48 rounded-full border-4 border-white/5 opacity-50" />
           <Clock className="pointer-events-none absolute -right-8 bottom-0 -z-10 h-40 w-40 rotate-12 text-white/[0.05]" />
 
-          <div className="relative flex items-center justify-between gap-6">
+          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
             <div className="flex-1">
               <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 backdrop-blur-xs">
                 <span className="h-2 w-2 rounded-full bg-gold-400 animate-pulse" />
@@ -478,7 +478,7 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
       <div>
         <SectionHeader title="نوافل مستقلة" icon={<Sun size={20} />} />
         <Card noPadding className="p-4!">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {SUNNAH_TYPES.filter((sunnah) => !sunnah.prayer).map((sunnah) => (
               <button
                 key={sunnah.key}
@@ -625,7 +625,7 @@ function LocationPicker({ onPick, onAuto }: { onPick: (lat: number, lng: number,
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center" onClick={(e) => e.target === e.currentTarget && null}>
-      <Card className="w-full max-w-md max-h-[80vh] flex flex-col animate-slide-up p-0!" noPadding>
+      <Card className="w-full max-w-md max-h-[80vh] flex flex-col animate-slide-up p-0! md:max-w-lg" noPadding>
         <div className="p-4 border-b border-primary-100 dark:border-primary-800">
           <h2 className="text-lg font-bold text-primary-800 dark:text-primary-100 mb-3">اختر موقعك</h2>
           <Button variant="secondary" size="sm" onClick={onAuto} className="mb-2">

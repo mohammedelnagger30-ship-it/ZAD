@@ -149,7 +149,11 @@ export function useAppUpdate(): AppUpdateController {
   }, [install]);
 
   useEffect(() => {
-    if (Capacitor.isNativePlatform()) void check();
+    if (!Capacitor.isNativePlatform()) return undefined;
+    // Delay the first check slightly — on cold start the WebView network stack
+    // may not be fully ready, causing a spurious "failed to fetch" error.
+    const timer = setTimeout(() => { void check(); }, 3000);
+    return () => clearTimeout(timer);
   }, [check]);
 
   useEffect(() => {

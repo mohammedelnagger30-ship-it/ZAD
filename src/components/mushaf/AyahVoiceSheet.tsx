@@ -12,6 +12,7 @@ interface AyahVoiceSheetProps {
   setTafsirAyah: (ayah: { surahId: number; ayahNumber: number } | null) => void;
   openVoice: () => void;
   voiceEngaged: boolean;
+  voiceWholeFile: boolean;
   voiceHint: string;
   voiceScope: VoiceScope;
   handleVoiceScope: (scope: VoiceScope) => void;
@@ -35,6 +36,7 @@ export function AyahVoiceSheet({
   setTafsirAyah,
   openVoice,
   voiceEngaged,
+  voiceWholeFile,
   voiceHint,
   voiceScope,
   handleVoiceScope,
@@ -74,22 +76,26 @@ export function AyahVoiceSheet({
 
           {voiceEngaged && (
             <div className="mushaf-voice">
-              <div className="mushaf-seg" role="group" aria-label="نطاق التلاوة">
-                <button
-                  className="mushaf-seg__item"
-                  aria-pressed={voiceScope === 'ayah'}
-                  onClick={() => handleVoiceScope('ayah')}
-                >
-                  <span>الآية</span>
-                </button>
-                <button
-                  className="mushaf-seg__item"
-                  aria-pressed={voiceScope === 'surah'}
-                  onClick={() => handleVoiceScope('surah')}
-                >
-                  <span>السورة</span>
-                </button>
-              </div>
+              {/* A whole-file recording (children-repetition muallim) has no
+                  ayah boundaries, so there is no scope to choose. */}
+              {!voiceWholeFile && (
+                <div className="mushaf-seg" role="group" aria-label="نطاق التلاوة">
+                  <button
+                    className="mushaf-seg__item"
+                    aria-pressed={voiceScope === 'ayah'}
+                    onClick={() => handleVoiceScope('ayah')}
+                  >
+                    <span>الآية</span>
+                  </button>
+                  <button
+                    className="mushaf-seg__item"
+                    aria-pressed={voiceScope === 'surah'}
+                    onClick={() => handleVoiceScope('surah')}
+                  >
+                    <span>السورة</span>
+                  </button>
+                </div>
+              )}
 
               <label className="mushaf-voice__reciter">
                 <span>القارئ</span>

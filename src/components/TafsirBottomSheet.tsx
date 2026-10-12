@@ -121,18 +121,18 @@ export function TafsirBottomSheet({ surahId, ayahNumber, onClose, onNavigateAyah
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col justify-end" dir="rtl">
+    <div className="fixed inset-0 z-[60] flex flex-col justify-end md:items-center md:justify-center md:p-6" dir="rtl">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/50 animate-fade-in" onClick={onClose} />
 
       {/* Sheet */}
-      <div className="relative bg-white dark:bg-primary-900 rounded-t-3xl max-h-[85vh] flex flex-col animate-slide-up">
+      <div className="relative bg-white dark:bg-primary-900 rounded-t-3xl max-h-[85vh] flex flex-col animate-slide-up md:max-w-2xl md:max-h-[80vh] md:rounded-3xl md:border md:shadow-2xl">
         <div className="flex justify-center pt-3 pb-1">
           <div className="w-12 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full" />
         </div>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-primary-100 dark:border-primary-800">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-primary-100 dark:border-primary-800 w-full max-w-2xl mx-auto">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-lg font-bold text-primary-800 dark:text-primary-100 truncate">
               {surah?.name}
@@ -169,7 +169,7 @@ export function TafsirBottomSheet({ surahId, ayahNumber, onClose, onNavigateAyah
         </div>
 
         {/* Edition selector */}
-        <div className="px-5 py-3 border-b border-primary-100 dark:border-primary-800">
+        <div className="px-5 py-3 border-b border-primary-100 dark:border-primary-800 w-full max-w-2xl mx-auto">
           {showPicker ? (
             <div className="space-y-2">
               <p className="text-xs text-gray-500 dark:text-gray-400">اختر التفسير</p>
@@ -232,7 +232,7 @@ export function TafsirBottomSheet({ surahId, ayahNumber, onClose, onNavigateAyah
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="flex-1 overflow-y-auto px-5 py-4 md:px-8">
           {state.status === 'loading' && (
             <div className="flex items-center justify-center py-10 gap-2 text-primary-600 dark:text-gold-400">
               <Loader2 size={18} className="animate-spin" />
@@ -284,9 +284,9 @@ export function TafsirBottomSheet({ surahId, ayahNumber, onClose, onNavigateAyah
           )}
 
           {state.status === 'ready' && state.text && (
-            <div className="space-y-3">
+            <div className="space-y-3 mx-auto max-w-2xl">
               <div className="bg-primary-50 dark:bg-primary-800/20 rounded-2xl p-4">
-                <p className="text-sm leading-loose text-primary-800 dark:text-primary-100 whitespace-pre-line">
+                <p className="text-sm leading-loose text-primary-800 dark:text-primary-100 whitespace-pre-line md:text-base">
                   {state.text}
                 </p>
               </div>
@@ -305,7 +305,7 @@ export function TafsirBottomSheet({ surahId, ayahNumber, onClose, onNavigateAyah
         </div>
 
         {/* Ayah navigation */}
-        <div className="flex items-center justify-between px-5 py-3 border-t border-primary-100 dark:border-primary-800">
+        <div className="flex items-center justify-between px-5 py-3 border-t border-primary-100 dark:border-primary-800 w-full max-w-2xl mx-auto">
           <button
             onClick={() => onNavigateAyah?.(-1)}
             disabled={atFirstAyahOfQuran || !onNavigateAyah}

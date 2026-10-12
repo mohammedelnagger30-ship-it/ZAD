@@ -43,8 +43,42 @@ export async function checkForAppUpdate(): Promise<AppUpdateCheck> {
   return checkInFlight;
 }
 
+const FETCH_TIMEOUT_MS = 10_000;
+
+async function fetchWithTimeout(url: string, options: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (cause) {
+    if (cause instanceof Error && cause.name === 'AbortError') {
+      throw new Error('انتهت مهلة التحقق من التحديثات — تحقق من اتصالك بالإنترنت.');
+    }
+    throw cause;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function fetchUpdateCheck(): Promise<AppUpdateCheck> {
-  const response = await fetch(GITHUB_RELEASE_API, {
+  // Retry once on network failure (common on mobile right after app launch).
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await fetchUpdateCheckOnce();
+    } catch (cause) {
+      lastError = cause;
+      // Don't retry on HTTP-level errors (403, 429, etc.) — only network failures.
+      if (cause instanceof Error && cause.message.startsWith('GitHub returned HTTP')) throw cause;
+      if (cause instanceof Error && cause.message.startsWith('تم تجاوز')) throw cause;
+      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+  }
+  throw lastError;
+}
+
+async function fetchUpdateCheckOnce(): Promise<AppUpdateCheck> {
+  const response = await fetchWithTimeout(GITHUB_RELEASE_API, {
     headers: { Accept: 'application/vnd.github+json' },
     cache: 'no-store',
   });

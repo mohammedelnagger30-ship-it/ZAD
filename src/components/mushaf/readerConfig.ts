@@ -104,6 +104,20 @@ export function clampNumber(value: unknown, min: number, max: number, fallback: 
   return Math.min(max, Math.max(min, n));
 }
 
+/**
+ * How much a sheet of type grows once there is sheet to grow into.
+ *
+ * The saved size is the size the reader asked for and must not be rewritten by the
+ * device it happens to be read on; the viewport only lifts it a step where there is
+ * room for a step, so the same reader opens at the same size on a phone and reads
+ * a little larger on the tablet in front of them. Both screens that typeset a page
+ * — the reader and the surah view — take it from here so they never drift apart.
+ */
+export function readerViewportStep(): number {
+  if (typeof window === 'undefined') return 1;
+  return window.innerWidth >= 1024 ? 1.15 : window.innerWidth >= 768 ? 1.07 : 1;
+}
+
 /** Nothing follows a surah's own last ayah, so the transport has nothing to offer there. */
 export function isSurahEnd(choice: { surahId: number; ayahNumber: number } | null): boolean {
   if (!choice) return false;

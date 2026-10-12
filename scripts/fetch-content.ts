@@ -10,7 +10,7 @@
  *                  Nawawi's 40, Riyad as-Salihin and Qudsi.
  */
 import { mkdirSync, writeFileSync, existsSync, statSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -46,7 +46,7 @@ async function fetchCached(name: string, url: string): Promise<string> {
 // ---------------------------------------------------------------------------
 
 const QURAN_URL =
-  'https://tanzil.net/pub/download/index.php?quranType=uthmani&outType=txt-2&agree=true';
+  'https://tanzil.net/pub/download/index.php?quranType=uthmani&outType=txt-2&agree=true&marks=true';
 
 async function buildQuranText() {
   console.log('\n== Quran text (Tanzil, Uthmani) ==');
@@ -102,7 +102,10 @@ const HADITH_SOURCES = [
   { slug: 'ara-tirmidhi', titleAr: 'جامع الترمذي' },
   { slug: 'ara-nasai', titleAr: 'سنن النسائي' },
   { slug: 'ara-abudawud', titleAr: 'سنن أبي داود' },
-  { slug: 'ara-muslim', titleAr: 'صحيح مسلم' },
+  // The essential collection. Besides the measurement cache, its payload is
+  // copied into public/hadith/ so it ships with the app — see
+  // utils/hadithService.ts, which prefers it over the CDN.
+  { slug: 'ara-muslim', titleAr: 'صحيح مسلم', bundled: true },
   { slug: 'ara-bukhari', titleAr: 'صحيح البخاري' },
 ] as const;
 
@@ -122,8 +125,10 @@ interface RawCollection {
  * Fetches the collections into `.cache/` purely so their real sizes can be measured by
  * `npm run data:catalog`.
  *
- * Nothing is written to `src/`: hadith is far too large to bundle (46 MB for all nine) and
- * the app downloads it per collection on the user's device at runtime.
+ * Nothing is written to `src/`: hadith is far too large to bundle wholesale
+ * (46 MB for all nine) and the app downloads it per collection on the user's
+ * device at runtime. The one exception is the essential collection (صحيح مسلم),
+ * whose payload is copied into `public/hadith/` so it ships inside the app.
  */
 async function cacheHadith() {
   console.log('\n== Hadith collections (cached for measurement only) ==');
@@ -144,6 +149,13 @@ async function cacheHadith() {
         `  ${src.slug.padEnd(16)} ${String(usable).padStart(5)} hadiths  ` +
           `${String(sections.size).padStart(3)} sections  ${mb(Buffer.byteLength(raw))}`,
       );
+
+      if ('bundled' in src && src.bundled) {
+        const target = join(ROOT, 'public', 'hadith', `${src.slug}.json`);
+        mkdirSync(dirname(target), { recursive: true });
+        writeFileSync(target, raw, 'utf8');
+        console.log(`          bundled -> ${relative(ROOT, target)}`);
+      }
     } catch (err) {
       console.log(`  SKIP ${src.slug}: ${(err as Error).message}`);
     }
@@ -157,6 +169,7 @@ async function main() {
   await cacheHadith();
   console.log(
     '\nQuran text written to src/data/quran-full.json (bundled).\n' +
+      'Sahih Muslim written to public/hadith/ara-muslim.json (bundled with the app).\n' +
       'Hadith cached for measurement only — run `npm run data:catalog` next.',
   );
 }

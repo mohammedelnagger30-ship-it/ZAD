@@ -10,7 +10,7 @@
  * Run with `npm run check:content`. Needs no network and no cache.
  */
 
-import { readdirSync, statSync, existsSync } from 'node:fs';
+import { readdirSync, statSync, existsSync, readFileSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -173,6 +173,47 @@ check(
   HADITH_BOOKS.some((b) => b.id === HADITH_OF_DAY_BOOK && b.count > 0),
   'the hadith-of-the-day collection is a real book with hadiths',
 );
+
+// The essential collection ships inside the app itself. The asset must exist,
+// match the catalogue's measured size, and hold the same number of hadiths —
+// otherwise the offline copy would quietly differ from what the UI advertises.
+const bundledBooks = HADITH_BOOKS.filter((book) => book.bundled);
+check(
+  bundledBooks.length === 1,
+  'exactly one hadith collection is bundled with the app',
+  bundledBooks.map((b) => b.id).join(', '),
+);
+check(
+  bundledBooks[0]?.id === HADITH_OF_DAY_BOOK,
+  'the bundled collection is the hadith-of-the-day book',
+  bundledBooks[0]?.id,
+);
+for (const book of bundledBooks) {
+  const asset = join(ROOT, 'public', 'hadith', `${book.slug}.json`);
+  check(existsSync(asset), `${book.id}: bundled asset exists in public/hadith`, asset);
+  if (!existsSync(asset)) continue;
+  const assetBytes = statSync(asset).size;
+  check(
+    assetBytes === book.downloadBytes,
+    `${book.id}: bundled asset matches the measured size`,
+    `${assetBytes} vs ${book.downloadBytes}`,
+  );
+  try {
+    const parsed = JSON.parse(readFileSync(asset, 'utf8')) as {
+      hadiths?: { text?: string; arabic?: string }[];
+    };
+    const usable = (parsed.hadiths ?? []).filter(
+      (h) => (h.text ?? h.arabic ?? '').trim(),
+    ).length;
+    check(
+      usable === book.count,
+      `${book.id}: bundled asset holds the catalogue's hadith count`,
+      `${usable} vs ${book.count}`,
+    );
+  } catch (err) {
+    check(false, `${book.id}: bundled asset is valid JSON`, (err as Error).message);
+  }
+}
 
 console.log('\n== hadith text hygiene ==');
 

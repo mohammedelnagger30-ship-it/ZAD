@@ -192,10 +192,10 @@ export function HadithScreen({ params }: HadithScreenProps) {
     const book = getHadithBook(selected.collectionId);
     return (
       <div className="space-y-4 pb-4">
-        <div className="flex items-center justify-between sticky top-0 z-30 bg-surface-light dark:bg-surface-dark/95 backdrop-blur-lg py-2 -mx-4 px-4 border-b border-primary-100 dark:border-primary-800/30">
+        <div className="flex items-center justify-between sticky top-0 z-30 bg-surface-light dark:bg-surface-dark/95 backdrop-blur-lg py-2 -mx-4 px-4 md:-mx-6 md:px-6 border-b border-primary-100 dark:border-primary-800/30">
           <button
             onClick={() => setViewMode(detailReturnView)}
-            className="flex items-center gap-1 text-primary-600 dark:text-gold-400"
+            className="-my-2.5 flex items-center gap-1 py-2.5 text-primary-600 dark:text-gold-400"
           >
             <ChevronRight size={20} />
             <span className="text-sm">رجوع</span>
@@ -203,6 +203,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
           <button
             onClick={() => void toggleFavorite(selected.id)}
             aria-label={favorites.has(selected.id) ? 'إزالة من المفضلة' : 'إضافة إلى المفضلة'}
+            className="-m-2.5 p-2.5"
           >
             {favorites.has(selected.id) ? (
               <Heart size={22} className="text-error-500 fill-error-500" />
@@ -212,7 +213,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
           </button>
         </div>
 
-        <Card className="animate-fade-in">
+        <Card className="animate-fade-in md:max-w-3xl mx-auto">
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="primary">{selected.collectionTitle}</Badge>
@@ -250,7 +251,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
             <div>
               <p
                 className="quran-text leading-loose text-primary-900 dark:text-primary-50 whitespace-pre-line"
-                style={{ fontSize: 21, lineHeight: 2.3 }}
+                style={{ fontSize: 'clamp(21px, 2vw, 26px)', lineHeight: 2.3 }}
               >
                 {selected.text}
               </p>
@@ -390,7 +391,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
                   className="w-full rounded-xl border border-primary-100 bg-white py-2.5 pr-10 pl-3 text-sm text-primary-800 placeholder:text-gray-400 focus:border-primary-400 focus:outline-hidden dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-100"
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 md:space-y-0 md:grid md:grid-cols-2 md:gap-3 md:items-start">
                 {filteredBrowseSections.map((section) => (
                   <Card
                     key={section.number}
@@ -474,7 +475,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
                     void toggleFavorite(hadith.id);
                   }}
                   aria-label={favorites.has(hadith.id) ? 'إزالة من المفضلة' : 'إضافة إلى المفضلة'}
-                  className="shrink-0"
+                  className="shrink-0 -m-2.5 p-2.5"
                 >
                   <Heart
                     size={18}
@@ -486,7 +487,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
                   />
                 </button>
               </div>
-              <p className="quran-text rounded-xl border-r-2 border-gold-400 bg-primary-50/60 px-3 py-3 text-[17px] leading-[2.1] text-primary-900 dark:bg-primary-800/30 dark:text-primary-50 line-clamp-4 whitespace-pre-line">
+              <p className="quran-text rounded-xl border-r-2 border-gold-400 bg-primary-50/60 px-3 py-3 text-[17px] leading-[2.1] text-primary-900 dark:bg-primary-800/30 dark:text-primary-50 line-clamp-4 whitespace-pre-line md:max-w-3xl">
                 {hadith.text}
               </p>
             </Card>
@@ -527,7 +528,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setViewMode('browse')}
-            className="w-9 h-9 rounded-lg bg-primary-100 dark:bg-primary-800 flex items-center justify-center text-primary-600 dark:text-gold-400"
+            className="w-10 h-10 rounded-lg bg-primary-100 dark:bg-primary-800 flex items-center justify-center text-primary-600 dark:text-gold-400"
             title="تصفح"
             aria-label="تصفح كتب الحديث"
           >
@@ -535,7 +536,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
           </button>
           <button
             onClick={openContentManager}
-            className="w-9 h-9 rounded-lg bg-primary-100 dark:bg-primary-800 flex items-center justify-center text-primary-600 dark:text-gold-400"
+            className="w-10 h-10 rounded-lg bg-primary-100 dark:bg-primary-800 flex items-center justify-center text-primary-600 dark:text-gold-400"
             title="مكتبة المحتوى"
             aria-label="مكتبة المحتوى"
           >
@@ -559,7 +560,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
             </p>
             <button
               onClick={() => setViewMode('browse')}
-              className="mt-2 text-sm font-semibold text-primary-600 hover:text-primary-700 dark:text-gold-400"
+              className="mt-1 py-2.5 text-sm font-semibold text-primary-600 hover:text-primary-700 dark:text-gold-400"
             >
               استعراض فهرس الكتب
             </button>
@@ -580,7 +581,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
           <button
             onClick={() => setQuery('')}
             aria-label="مسح البحث"
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full p-2.5 text-gray-400"
           >
             <X size={16} />
           </button>
@@ -591,7 +592,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
         <button
           onClick={() => setSahihOnly(!sahihOnly)}
           aria-pressed={sahihOnly}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-smooth ${
+          className={`flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-smooth ${
             sahihOnly
               ? 'bg-success-500 text-white'
               : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
@@ -603,7 +604,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
         <button
           onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
           aria-pressed={showFavoritesOnly}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-smooth ${
+          className={`flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-smooth ${
             showFavoritesOnly
               ? 'bg-error-500 text-white'
               : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
@@ -698,7 +699,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
               }
             />
           ) : visibleHits.length > 0 ? (
-            <div className="space-y-3">
+            <div className="space-y-3 md:max-w-3xl">
               {visibleHits.map((hadith) => (
                 <Card
                   key={hadith.id}
@@ -727,7 +728,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
                         void toggleFavorite(hadith.id);
                       }}
                       aria-label={favorites.has(hadith.id) ? 'إزالة من المفضلة' : 'إضافة إلى المفضلة'}
-                      className="shrink-0"
+                      className="shrink-0 -m-2.5 p-2.5"
                     >
                       <Heart
                         size={18}
@@ -739,7 +740,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
                       />
                     </button>
                   </div>
-                  <p className="quran-text rounded-xl border-r-2 border-gold-400 bg-primary-50/60 px-3 py-3 text-[17px] leading-[2.1] text-primary-900 dark:bg-primary-800/30 dark:text-primary-50 line-clamp-4 whitespace-pre-line">
+                  <p className="quran-text rounded-xl border-r-2 border-gold-400 bg-primary-50/60 px-3 py-3 text-[17px] leading-[2.1] text-primary-900 dark:bg-primary-800/30 dark:text-primary-50 line-clamp-4 whitespace-pre-line md:max-w-3xl">
                     {hadith.text}
                   </p>
                   <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
@@ -766,8 +767,8 @@ export function HadithScreen({ params }: HadithScreenProps) {
 
 function BackBar({ onBack }: { onBack: () => void }) {
   return (
-    <div className="flex items-center justify-between sticky top-0 z-30 bg-surface-light dark:bg-surface-dark/95 backdrop-blur-lg py-2 -mx-4 px-4 border-b border-primary-100 dark:border-primary-800/30">
-      <button onClick={onBack} className="flex items-center gap-1 text-primary-600 dark:text-gold-400">
+    <div className="flex items-center justify-between sticky top-0 z-30 bg-surface-light dark:bg-surface-dark/95 backdrop-blur-lg py-2 -mx-4 px-4 md:-mx-6 md:px-6 border-b border-primary-100 dark:border-primary-800/30">
+      <button onClick={onBack} className="-my-2.5 flex items-center gap-1 py-2.5 text-primary-600 dark:text-gold-400">
         <ChevronRight size={20} />
         <span className="text-sm">رجوع</span>
       </button>
@@ -787,7 +788,7 @@ function FilterChip({
   return (
     <button
       onClick={onClick}
-      className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-smooth flex-shrink-0 ${
+      className={`px-3 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap transition-smooth flex-shrink-0 ${
         active
           ? 'bg-primary-600 text-white'
           : 'bg-primary-50 dark:bg-primary-800/40 text-primary-600 dark:text-primary-200'

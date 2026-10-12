@@ -298,7 +298,7 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
                     id="adhan-sound"
                     value={selectedAdhan.id}
                     onChange={(e) => onSaveSettings({ adhanVoiceId: e.target.value })}
-                    className="w-full bg-white dark:bg-primary-900 border border-primary-200 dark:border-primary-700 rounded-xl py-2.5 px-3 text-sm text-primary-900 dark:text-primary-100 font-semibold focus:outline-hidden focus:ring-2 focus:ring-primary-500"
+                    className="w-full md:max-w-md bg-white dark:bg-primary-900 border border-primary-200 dark:border-primary-700 rounded-xl py-2.5 px-3 text-sm text-primary-900 dark:text-primary-100 font-semibold focus:outline-hidden focus:ring-2 focus:ring-primary-500"
                   >
                     {ADHAN_SOUNDS.map((sound) => (
                       <option key={sound.id} value={sound.id}>
@@ -312,7 +312,7 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
                 {!selectedAdhanReady && (
                   <div className="space-y-2 rounded-2xl border border-primary-100 bg-white/70 p-3 dark:border-primary-800/80 dark:bg-primary-900/20">
                     <div className="flex items-center gap-2">
-                      <span className="flex-1 text-[11px] font-semibold text-primary-900 dark:text-primary-100">
+                      <span className="flex-1 text-[11px] md:text-xs font-semibold text-primary-900 dark:text-primary-100">
                         {selectedAdhan.name}
                         {selectedAdhan.remote ? ` — ${adhanSizeLabel(selectedAdhan.remote.sizeBytes)}` : ''}
                       </span>
@@ -320,7 +320,7 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
                         <button
                           type="button"
                           onClick={cancelAdhanDownload}
-                          className="rounded-lg bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-800 dark:bg-amber-900/50 dark:text-amber-200"
+                          className="rounded-lg bg-amber-100 px-2.5 py-1 text-[11px] md:text-xs font-bold text-amber-800 dark:bg-amber-900/50 dark:text-amber-200"
                         >
                           {adhanProgress && adhanProgress.total > 0
                             ? `${Math.floor((adhanProgress.received / adhanProgress.total) * 100)}٪ — إيقاف`
@@ -330,13 +330,13 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
                         <button
                           type="button"
                           onClick={() => void downloadAdhan(selectedAdhan)}
-                          className="flex items-center gap-1 rounded-lg bg-primary-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-primary-700"
+                          className="flex items-center gap-1 rounded-lg bg-primary-600 px-2.5 py-1 text-[11px] md:text-xs font-bold text-white hover:bg-primary-700"
                         >
                           <Download size={12} /> تنزيل
                         </button>
                       )}
                     </div>
-                    <p className="text-[10px] text-primary-700 dark:text-primary-300">
+                    <p className="text-[10px] md:text-xs text-primary-700 dark:text-primary-300">
                       يُنزَّل مرة واحدة فيصير صالحًا للأذان وصفحة الصلاة والإشعار بلا إنترنت — وحتى يكتمل التنزيل يواصل إشعار الصلاة بصوت المسجد الحرام.
                     </p>
                   </div>
@@ -344,13 +344,13 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
 
                 {selectedAdhanReady && !selectedAdhan.bundled && (
                   <div className="flex items-center gap-2 rounded-2xl border border-primary-100 bg-white/70 px-3 py-2.5 dark:border-primary-800/80 dark:bg-primary-900/20">
-                    <span className="flex-1 text-[11px] font-semibold text-primary-900 dark:text-primary-100">
+                    <span className="flex-1 text-[11px] md:text-xs font-semibold text-primary-900 dark:text-primary-100">
                       {selectedAdhan.name} — مُنزَّل على الجهاز
                     </span>
                     <button
                       type="button"
                       onClick={() => void removeAdhan(selectedAdhan)}
-                      className="flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1 text-[11px] font-bold text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/40"
+                      className="flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1 text-[11px] md:text-xs font-bold text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/40"
                     >
                       <Trash2 size={12} /> حذف
                     </button>
@@ -448,7 +448,7 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
                   </label>
                 </div>
 
-                <Button variant="secondary" size="sm" onClick={enableRandomDhikrNotifications} className="w-full font-semibold">
+                <Button variant="secondary" size="sm" onClick={enableRandomDhikrNotifications} className="w-full md:w-auto md:px-5 font-semibold">
                   <Bell size={16} /> تفعيل صلاحية الإشعارات للهاتف
                 </Button>
                 {dhikrPermissionStatus && (

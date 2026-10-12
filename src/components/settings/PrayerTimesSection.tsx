@@ -21,7 +21,7 @@ export function PrayerTimesSection({ settings, onSaveSettings }: PrayerTimesSect
             <select
               value={settings.calcMethod}
               onChange={(e) => onSaveSettings({ calcMethod: e.target.value })}
-              className="w-full bg-gray-50 dark:bg-primary-900/50 border border-primary-200 dark:border-primary-700 rounded-xl py-2.5 px-3 text-sm text-primary-900 dark:text-primary-100 font-semibold focus:outline-hidden focus:ring-2 focus:ring-primary-500"
+              className="w-full md:max-w-md bg-gray-50 dark:bg-primary-900/50 border border-primary-200 dark:border-primary-700 rounded-xl py-2.5 px-3 text-sm text-primary-900 dark:text-primary-100 font-semibold focus:outline-hidden focus:ring-2 focus:ring-primary-500"
             >
               {CALC_METHODS.map((m) => (
                 <option key={m} value={m}>

@@ -21,7 +21,13 @@ import {
   isQuotaError,
   type DownloadProgress,
 } from './contentStore';
-import { getHadithBook, HADITH_BOOKS, HADITH_OF_DAY_BOOK } from '@/data/contentCatalog';
+import {
+  getHadithBook,
+  hadithUrl,
+  HADITH_BOOKS,
+  HADITH_OF_DAY_BOOK,
+  type HadithBook,
+} from '@/data/contentCatalog';
 import { normalizeGrade, type HadithGrade } from '@/data/hadithCollections';
 import { arabicQueryTerms, normalizeArabic } from './arabic';
 
@@ -338,6 +344,26 @@ export function hadithOfDay(): HadithRecord | null {
 // Downloading
 // ---------------------------------------------------------------------------
 
+/**
+ * Where a collection that is not yet on the device is fetched from.
+ *
+ * The essential collection (صحيح مسلم) is bundled inside the app itself:
+ * `public/hadith/<slug>.json` ships in the webDir, so the daily card,
+ * search and browsing work from the very first launch with no network at
+ * all — the file is copied onto the device on first use. The source CDN
+ * stays the fallback (for web deploys that predate the bundled asset;
+ * the payload is byte-for-byte the same) and remains the only source for
+ * every other book, which the user still downloads on demand.
+ */
+function collectionDownloadUrls(book: HadithBook): string[] {
+  const urls: string[] = [];
+  if (book.bundled) {
+    urls.push(`${import.meta.env.BASE_URL}hadith/${book.slug}.json`);
+  }
+  urls.push(hadithUrl(book.slug));
+  return urls;
+}
+
 /** Returns the collection, downloading it first if it is not on the device. */
 export async function getHadithCollection(
   id: string,
@@ -366,20 +392,31 @@ export async function getHadithCollection(
   const book = getHadithBook(id);
   if (!book) throw new Error(`unknown hadith collection: ${id}`);
 
-  try {
-    await downloadAndStore(
-      key,
-      `https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/${book.slug}.json`,
-      { kind: 'hadith', group: id, surah: 0 },
-      onProgress,
-      signal,
-    );
-  } catch (err) {
-    if (isQuotaError(err)) {
-      throw new Error('مساحة التخزين ممتلئة — احذف مجموعة أخرى ثم أعد المحاولة');
+  // Try the bundled asset first, then the source CDN. A missing bundled
+  // asset (older web deploy) is not worth surfacing as an error — the CDN
+  // copy is the same payload. Aborts and quota errors still propagate.
+  let failure: unknown;
+  let stored = false;
+  for (const url of collectionDownloadUrls(book)) {
+    try {
+      await downloadAndStore(
+        key,
+        url,
+        { kind: 'hadith', group: id, surah: 0 },
+        onProgress,
+        signal,
+      );
+      stored = true;
+      break;
+    } catch (err) {
+      if (isQuotaError(err)) {
+        throw new Error('مساحة التخزين ممتلئة — احذف مجموعة أخرى ثم أعد المحاولة');
+      }
+      if ((err as Error).name === 'AbortError') throw err;
+      failure = err;
     }
-    throw err;
   }
+  if (!stored) throw failure;
 
   const raw = await readText(key);
   const parsed = parseCollection(id, raw ?? '');

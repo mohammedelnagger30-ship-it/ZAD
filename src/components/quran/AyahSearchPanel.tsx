@@ -69,7 +69,7 @@ export function AyahSearchPanel({ ayahQuery, setAyahQuery, ayahSearch, openAyahF
                     )}
                   </div>
                 </div>
-                <div className="space-y-3">
+                <div className="space-y-3 md:max-w-3xl">
                   {ayahSearch.results.map((result) => (
                     <button
                       key={`${result.surahId}:${result.ayahNumber}`}

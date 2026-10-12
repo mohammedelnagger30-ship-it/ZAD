@@ -296,7 +296,7 @@ export function AzanOverlayModal({
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto bg-slate-950/90 backdrop-blur-md p-4 transition-all duration-300"
+      className="fixed inset-0 z-[9999] flex items-start md:items-center justify-center overflow-y-auto bg-slate-950/90 backdrop-blur-md p-4 py-6 min-h-full transition-all duration-300"
       dir="rtl"
       role="dialog"
       aria-modal="true"
@@ -306,7 +306,7 @@ export function AzanOverlayModal({
       <div className="pointer-events-none absolute bottom-10 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-amber-500/15 blur-3xl" />
 
       {/* Main Container Card */}
-      <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-emerald-500/30 bg-linear-to-b from-slate-900 via-emerald-950/90 to-slate-900 p-6 text-white shadow-2xl ring-1 ring-white/10 my-auto">
+      <div className="relative w-full max-w-lg md:max-w-xl overflow-hidden rounded-3xl border border-emerald-500/30 bg-linear-to-b from-slate-900 via-emerald-950/90 to-slate-900 p-6 text-white shadow-2xl ring-1 ring-white/10 my-auto">
         
         {/* Top Header Bar */}
         <div className="flex items-center justify-between pb-4 border-b border-emerald-500/20">
@@ -323,7 +323,7 @@ export function AzanOverlayModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-2 text-slate-400 hover:bg-white/10 hover:text-white transition"
+            className="rounded-full min-h-11 min-w-11 p-2.5 text-slate-400 hover:bg-white/10 hover:text-white transition"
             aria-label="إغلاق"
           >
             <X size={20} />
@@ -354,7 +354,7 @@ export function AzanOverlayModal({
           </p>
 
           {/* Location & Date */}
-          <div className="mt-3 flex items-center justify-center gap-3 text-xs text-slate-300">
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-3 text-xs text-slate-300">
             <span className="flex items-center gap-1">
               <MapPin size={14} className="text-emerald-400" />
               {settings.cityName || 'الموقع الحالي'}
@@ -410,7 +410,7 @@ export function AzanOverlayModal({
                 <button
                   type="button"
                   onClick={toggleMute}
-                  className="rounded-lg p-2 text-slate-400 hover:text-white transition"
+                  className="rounded-lg min-h-11 min-w-11 p-2.5 text-slate-400 hover:text-white transition"
                   aria-label={isMuted ? 'إلغاء الكتم' : 'كتم الصوت'}
                 >
                   {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
@@ -430,7 +430,7 @@ export function AzanOverlayModal({
             <button
               type="button"
               onClick={() => setShowDuaa(!showDuaa)}
-              className="text-[11px] text-slate-400 underline hover:text-slate-200"
+              className="px-2 py-1 text-xs text-slate-400 underline hover:text-slate-200"
             >
               {showDuaa ? 'إخفاء' : 'عرض'}
             </button>
@@ -488,7 +488,7 @@ export function AzanOverlayModal({
               type="button"
               onClick={handleSnooze}
               disabled={snoozed}
-              className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-800 py-2.5 px-3 text-xs font-semibold text-slate-200 transition"
+              className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-800 py-2.5 md:py-3 px-3 text-xs md:text-sm font-semibold text-slate-200 transition"
             >
               <Bell size={15} className="text-amber-400" />
               {snoozed ? 'تم التذكير بعد 10د' : 'تذكير بعد 10 دقائق'}
@@ -498,7 +498,7 @@ export function AzanOverlayModal({
             <button
               type="button"
               onClick={handleGoToAdhkar}
-              className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-800 py-2.5 px-3 text-xs font-semibold text-slate-200 transition"
+              className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-800 py-2.5 md:py-3 px-3 text-xs md:text-sm font-semibold text-slate-200 transition"
             >
               <BookOpen size={15} className="text-emerald-400" />
               أذكار الصلاة

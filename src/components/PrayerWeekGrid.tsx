@@ -30,17 +30,17 @@ interface PrayerWeekGridProps {
  */
 export function PrayerWeekGrid({ grid, onEdit }: PrayerWeekGridProps) {
   return (
-    <div>
+    <div className="lg:max-w-3xl mx-auto">
       {/* Column headers */}
       <div
-        className="grid gap-1 mb-1.5"
+        className="grid gap-1 mb-1.5 lg:max-w-3xl mx-auto"
         style={{ gridTemplateColumns: 'minmax(3.25rem,1fr) repeat(5,minmax(0,1fr))' }}
       >
         <span />
         {FIVE_PRAYERS.map((key) => (
           <span
             key={key}
-            className="text-center text-[11px] font-semibold text-gray-500 dark:text-gray-400"
+            className="text-center text-[11px] md:text-xs font-semibold text-gray-500 dark:text-gray-400"
           >
             {PRAYER_LABELS_AR[key]}
           </span>
@@ -51,7 +51,7 @@ export function PrayerWeekGrid({ grid, onEdit }: PrayerWeekGridProps) {
         {grid.map((day) => (
           <div
             key={day.date}
-            className={`grid gap-1 items-center rounded-xl px-1.5 py-1 ${
+            className={`grid gap-1 items-center rounded-xl px-1.5 py-1 lg:max-w-3xl mx-auto ${
               day.isToday ? 'bg-primary-50 dark:bg-primary-800/40 ring-1 ring-primary-200 dark:ring-primary-700' : ''
             }`}
             style={{ gridTemplateColumns: 'minmax(3.25rem,1fr) repeat(5,minmax(0,1fr))' }}
@@ -67,7 +67,7 @@ export function PrayerWeekGrid({ grid, onEdit }: PrayerWeekGridProps) {
               >
                 {day.isToday ? 'اليوم' : day.dayName}
               </span>
-              <span className="text-[10px] text-gray-400 dark:text-gray-500 tabular-nums">
+              <span className="text-[10px] md:text-xs text-gray-400 dark:text-gray-500 tabular-nums">
                 {day.dayNumber}
               </span>
             </div>
@@ -107,7 +107,7 @@ function GridCell({
   if (!due && !status) {
     return (
       <span
-        className="h-11 rounded-lg bg-gray-100/60 dark:bg-primary-800/20 flex items-center justify-center text-gray-300 dark:text-primary-700"
+        className="h-11 md:h-14 rounded-lg bg-gray-100/60 dark:bg-primary-800/20 flex items-center justify-center text-gray-300 dark:text-primary-700"
         aria-label={`${name} لم يحن وقتها بعد`}
         title="لم يحن وقتها بعد"
       >
@@ -157,7 +157,7 @@ function GridCell({
   if (!editable) {
     return (
       <span
-        className={`h-11 rounded-lg flex flex-col items-center justify-center gap-1 ${visual.cell}`}
+        className={`h-11 md:h-14 rounded-lg flex flex-col items-center justify-center gap-1 ${visual.cell}`}
         aria-label={label}
         title={label}
       >
@@ -172,7 +172,7 @@ function GridCell({
       onClick={() => onEdit(day.date, prayer, status, `${day.isToday ? 'اليوم' : day.dayName} ${day.dayNumber}`)}
       aria-label={label}
       title={label}
-      className={`h-11 rounded-lg flex flex-col items-center justify-center gap-1 ${visual.cell} ring-offset-1 hover:ring-2 hover:ring-primary-300 dark:hover:ring-primary-500 transition-shadow active:scale-95`}
+      className={`h-11 md:h-14 rounded-lg flex flex-col items-center justify-center gap-1 ${visual.cell} ring-offset-1 hover:ring-2 hover:ring-primary-300 dark:hover:ring-primary-500 transition-shadow active:scale-95`}
     >
       <Icon size={16} className={visual.iconClass} />
       {dots}
@@ -227,7 +227,7 @@ function Legend() {
   return (
     <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3 pt-2.5 border-t border-primary-100 dark:border-primary-800/50">
       {items.map((i) => (
-        <span key={i.label} className="inline-flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+        <span key={i.label} className="inline-flex items-center gap-1.5 text-[11px] md:text-xs text-gray-500 dark:text-gray-400">
           <span className={`w-3.5 h-3.5 shrink-0 ${i.cls}`} />
           {i.label}
         </span>

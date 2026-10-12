@@ -54,6 +54,12 @@ export function AudioRecitationPlayer({
   const [error, setError] = useState<string | null>(null);
   // Nothing is being fetched until sound is actually asked for.
   const [sourceLoading, setSourceLoading] = useState(false);
+  /**
+   * True once the prepared source turns out to hold no verse timings (the
+   * children-repetition muallim): the surah plays as one whole file, so the
+   * ayah-cutting UI (repeat counts, «استمع للآية») is hidden for it.
+   */
+  const [wholeFile, setWholeFile] = useState(false);
 
   // Stop playback completely
   const stop = useCallback(() => {
@@ -105,6 +111,7 @@ export function AudioRecitationPlayer({
         }
         sourceUrlRef.current = nextSource.blob ? nextSource.url : null;
         sourceRef.current = nextSource;
+        setWholeFile(nextSource.verseTimings.length === 0);
         setError(null);
         return nextSource;
       } catch (cause: unknown) {
@@ -134,6 +141,33 @@ export function AudioRecitationPlayer({
       const prepared = sourceRef.current;
       const audio = audioRef.current;
       if (!prepared || !audio) return;
+
+      // A recording with no verse timings (the children-repetition muallim)
+      // plays as one whole surah file: any ayah press starts it from the top.
+      if (prepared.verseTimings.length === 0) {
+        setError(null);
+        activeAyahRef.current = null;
+        continuousRef.current = true;
+        currentTimingRef.current = null;
+        verseEndRef.current = null;
+        setSelectedAyah(ayah);
+        setActiveAyah(null);
+        if (audio.src !== prepared.url) {
+          audio.src = prepared.url;
+        }
+        audio.currentTime = 0;
+        audio.playbackRate = playbackRate;
+        audio
+          .play()
+          .then(() => {
+            setIsPlaying(true);
+          })
+          .catch((cause: unknown) => {
+            setIsPlaying(false);
+            setError(cause instanceof Error ? cause.message : 'تعذّر تشغيل التلاوة');
+          });
+        return;
+      }
 
       const timing = prepared.verseTimings.find((item) => item.ayah === ayah);
       if (!timing) {
@@ -233,6 +267,7 @@ export function AudioRecitationPlayer({
     sourceRef.current = null;
     stop();
     setError(null);
+    setWholeFile(false);
     setSourceLoading(false);
 
     return () => {
@@ -262,6 +297,9 @@ export function AudioRecitationPlayer({
     const prepared = sourceRef.current;
     const audio = audioRef.current;
     if (!audio || !prepared) return;
+    // A whole-file recording has no ayah boundaries to track: the `ended`
+    // event stops it.
+    if (prepared.verseTimings.length === 0) return;
 
     const currentMs = audio.currentTime * 1000;
 
@@ -305,26 +343,24 @@ export function AudioRecitationPlayer({
 
   const handleEnded = () => {
     const prepared = sourceRef.current;
-    // Only stop if we're not in continuous mode or if we've truly reached the end
-    // In continuous mode, the audio should play until the end of the surah
-    if (!continuousRef.current) {
+    // A whole-file recording simply stops at its end; only a timed
+    // continuous play walks on to the next ayah by itself.
+    if (!continuousRef.current || !prepared || prepared.verseTimings.length === 0) {
       stop();
-    } else if (prepared) {
-      // In continuous mode, stop playback only if we've reached the last verse
-      if (activeAyahRef.current === prepared.verseTimings[prepared.verseTimings.length - 1].ayah) {
-        stop();
-      } else {
-        // If playback ended unexpectedly in continuous mode, try to continue
-        // This handles cases where the audio file might have buffering issues
-        const nextAyah = activeAyahRef.current ? activeAyahRef.current + 1 : 1;
-        if (nextAyah <= prepared.verseTimings.length) {
-          playAyah(nextAyah, true);
-        } else {
-          stop();
-        }
-      }
+      return;
+    }
+    // In continuous mode, stop playback only if we've reached the last verse
+    if (activeAyahRef.current === prepared.verseTimings[prepared.verseTimings.length - 1].ayah) {
+      stop();
     } else {
-      stop();
+      // If playback ended unexpectedly in continuous mode, try to continue
+      // This handles cases where the audio file might have buffering issues
+      const nextAyah = activeAyahRef.current ? activeAyahRef.current + 1 : 1;
+      if (nextAyah <= prepared.verseTimings.length) {
+        playAyah(nextAyah, true);
+      } else {
+        stop();
+      }
     }
   };
 
@@ -360,33 +396,35 @@ export function AudioRecitationPlayer({
             <Volume2 size={19} className="text-primary-600 dark:text-gold-400" />
             <h3 className="font-bold text-primary-800 dark:text-primary-100">تلاوة صوتية</h3>
           </div>
-          <label className="block space-y-1">
-            <span className="text-xs text-gray-600 dark:text-gray-300">القارئ</span>
-            <select
-              value={reciterId}
-              onChange={(event) => onReciterChange(event.target.value)}
-              className="w-full rounded-xl border border-primary-200 bg-white px-3 py-2.5 text-sm text-primary-800 focus:outline-hidden focus:ring-2 focus:ring-primary-500 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
-            >
-              {AUDIO_RECITERS.map((reciter) => (
-                <option key={reciter.id} value={reciter.id}>
-                  {reciter.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block space-y-1">
-            <span className="text-xs text-gray-600 dark:text-gray-300">سرعة التلاوة</span>
-            <select
-              value={playbackRate}
-              onChange={(event) => updatePlaybackRate(Number(event.target.value))}
-              className="w-full rounded-xl border border-primary-200 bg-white px-3 py-2.5 text-sm text-primary-800 focus:outline-hidden focus:ring-2 focus:ring-primary-500 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
-            >
-              <option value={0.75}>بطيئة — ٠٫٧٥×</option>
-              <option value={1}>عادية — ١×</option>
-              <option value={1.25}>أسرع قليلًا — ١٫٢٥×</option>
-              <option value={1.5}>سريعة — ١٫٥×</option>
-            </select>
-          </label>
+          <div className="md:grid md:grid-cols-2 md:gap-4">
+            <label className="block space-y-1 md:max-w-none">
+              <span className="text-xs text-gray-600 dark:text-gray-300">القارئ</span>
+              <select
+                value={reciterId}
+                onChange={(event) => onReciterChange(event.target.value)}
+                className="w-full rounded-xl border border-primary-200 bg-white px-3 py-2.5 text-sm text-primary-800 focus:outline-hidden focus:ring-2 focus:ring-primary-500 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
+              >
+                {AUDIO_RECITERS.map((reciter) => (
+                  <option key={reciter.id} value={reciter.id}>
+                    {reciter.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block space-y-1 md:max-w-none">
+              <span className="text-xs text-gray-600 dark:text-gray-300">سرعة التلاوة</span>
+              <select
+                value={playbackRate}
+                onChange={(event) => updatePlaybackRate(Number(event.target.value))}
+                className="w-full rounded-xl border border-primary-200 bg-white px-3 py-2.5 text-sm text-primary-800 focus:outline-hidden focus:ring-2 focus:ring-primary-500 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
+              >
+                <option value={0.75}>بطيئة — ٠٫٧٥×</option>
+                <option value={1}>عادية — ١×</option>
+                <option value={1.25}>أسرع قليلًا — ١٫٢٥×</option>
+                <option value={1.5}>سريعة — ١٫٥×</option>
+              </select>
+            </label>
+          </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => void toggleSurah()}
@@ -437,7 +475,7 @@ export function AudioRecitationPlayer({
               {selectedAyah !== null && (
                 <button
                   onClick={() => onShowTafsir(selectedAyah)}
-                  className="min-h-9 rounded-lg px-3 text-xs font-semibold text-primary-700 hover:bg-primary-50 dark:text-gold-300 dark:hover:bg-primary-800"
+                  className="min-h-10 rounded-lg px-3 text-xs font-semibold text-primary-700 hover:bg-primary-50 dark:text-gold-300 dark:hover:bg-primary-800"
                 >
                   التفسير
                 </button>
@@ -445,34 +483,43 @@ export function AudioRecitationPlayer({
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">تكرار الآية:</span>
-              {[
-                { value: 1, label: 'مرة' },
-                { value: 3, label: '٣ مرات' },
-                { value: 5, label: '٥ مرات' },
-                { value: 10, label: '١٠ مرات' },
-                { value: 0, label: 'مستمر' },
-              ].map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => updateRepeatCount(option.value)}
-                  aria-pressed={repeatCount === option.value}
-                  className={`min-h-9 rounded-lg px-2.5 text-xs font-semibold transition-colors ${
-                    repeatCount === option.value
-                      ? 'bg-gold-500 text-white'
-                      : 'bg-primary-50 text-primary-700 hover:bg-primary-100 dark:bg-primary-800 dark:text-primary-200 dark:hover:bg-primary-700'
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-              <button
-                onClick={() => void startSelectedAyah()}
-                disabled={selectedAyah === null || sourceLoading}
-                className="mr-auto inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-xs font-semibold text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {activeAyah === selectedAyah && isPlaying ? <Pause size={15} /> : <Play size={15} />}
-                {activeAyah === selectedAyah && isPlaying ? 'إيقاف مؤقت' : 'استمع للآية'}
-              </button>
+              {wholeFile ? (
+                <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                  تلاوة ترديد الأطفال تُشغَّل سورةً كاملة — الشيخ يقرأ والأطفال يعيدون وراءه،
+                  ردّد معهم.
+                </p>
+              ) : (
+                <>
+                  {[
+                    { value: 1, label: 'مرة' },
+                    { value: 3, label: '٣ مرات' },
+                    { value: 5, label: '٥ مرات' },
+                    { value: 10, label: '١٠ مرات' },
+                    { value: 0, label: 'مستمر' },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => updateRepeatCount(option.value)}
+                      aria-pressed={repeatCount === option.value}
+                      className={`min-h-10 rounded-lg px-2.5 text-xs font-semibold transition-colors ${
+                        repeatCount === option.value
+                          ? 'bg-gold-500 text-white'
+                          : 'bg-primary-50 text-primary-700 hover:bg-primary-100 dark:bg-primary-800 dark:text-primary-200 dark:hover:bg-primary-700'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => void startSelectedAyah()}
+                    disabled={selectedAyah === null || sourceLoading}
+                    className="mr-auto inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-xs font-semibold text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {activeAyah === selectedAyah && isPlaying ? <Pause size={15} /> : <Play size={15} />}
+                    {activeAyah === selectedAyah && isPlaying ? 'إيقاف مؤقت' : 'استمع للآية'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
           {error && (

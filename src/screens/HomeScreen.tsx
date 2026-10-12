@@ -106,13 +106,15 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
   });
 
   const [hadith, setHadith] = useState(() => hadithOfDay());
-  // True while the default collection is being fetched on a fresh install. Sahih Muslim
-  // is ~8.3 MB, so the prompt card says what is happening instead of sitting still.
+  // True while the default collection is being put on the device on a fresh
+  // install. Sahih Muslim is ~8.3 MB, so the prompt card says what is
+  // happening instead of sitting still.
   const [seedingHadith, setSeedingHadith] = useState(false);
 
-  // "Hadith of the day" needs a collection on the device. On a fresh install none exists,
-  // so the default collection (صحيح مسلم) is fetched once — about 8.3 MB, saved for good —
-  // and the card then works offline from then on.
+  // "Hadith of the day" needs a collection on the device. On a fresh install none
+  // exists, so the default collection (صحيح مسلم) is installed once — it is
+  // bundled inside the app itself, so this copies the local asset with no
+  // network at all — and the card then works offline from then on.
   //
   // The installed case has to *open* a collection, not merely find one on the device:
   // `hadithOfDay()` reads a synchronous in-memory snapshot that is empty on every fresh
@@ -191,18 +193,18 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
   return (
     <div className="space-y-5 pb-4">
       {/* Header with greeting */}
-      <div className="bg-linear-to-bl from-primary-700 to-primary-900 dark:from-primary-800 dark:to-primary-950 rounded-3xl p-5 text-white relative overflow-hidden">
+      <div className="bg-linear-to-bl from-primary-700 to-primary-900 dark:from-primary-800 dark:to-primary-950 rounded-3xl p-5 md:p-6 text-white relative overflow-hidden">
         <div className="absolute top-0 left-0 w-32 h-32 bg-gold-400/10 rounded-full -translate-x-16 -translate-y-16" />
         <div className="absolute bottom-0 left-0 w-24 h-24 bg-gold-400/5 rounded-full translate-x-12 translate-y-12" />
         <div className="relative">
           <div className="flex items-center justify-between mb-2">
             <div>
               <p className="text-gold-300 text-sm">{getDayName(today)}</p>
-              <h1 className="text-2xl font-bold mt-0.5">السلام عليكم</h1>
+              <h1 className="text-2xl md:text-3xl font-bold mt-0.5">السلام عليكم</h1>
             </div>
             <div className="text-left">
-              <p className="text-xs text-primary-200">{formatArabicDate(today)}</p>
-              <p className="text-xs text-gold-300 mt-0.5">{getHijriDate(today, settings.hijriAdjustment)}</p>
+              <p className="text-xs md:text-sm text-primary-200">{formatArabicDate(today)}</p>
+              <p className="text-xs md:text-sm text-gold-300 mt-0.5">{getHijriDate(today, settings.hijriAdjustment)}</p>
             </div>
           </div>
 
@@ -228,49 +230,49 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
       </div>
 
       {/* Quick Shortcuts */}
-      <div className="grid grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-4 gap-2.5 md:gap-3">
         <button
           type="button"
           onClick={() => navigate('quran')}
-          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 transition-all hover:scale-[1.02] active:scale-95"
+          className="flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 transition-all hover:scale-[1.02] active:scale-95"
         >
-          <div className="h-10 w-10 rounded-xl bg-primary-100 dark:bg-primary-800 text-primary-700 dark:text-gold-400 flex items-center justify-center mb-1.5 shadow-xs">
+          <div className="h-10 w-10 md:h-12 md:w-12 rounded-xl bg-primary-100 dark:bg-primary-800 text-primary-700 dark:text-gold-400 flex items-center justify-center mb-1.5 shadow-xs">
             <BookOpen size={20} />
           </div>
-          <span className="text-xs font-bold text-primary-900 dark:text-primary-100">المصحف</span>
+          <span className="text-xs md:text-sm font-bold text-primary-900 dark:text-primary-100">المصحف</span>
         </button>
 
         <button
           type="button"
           onClick={() => navigate('prayer')}
-          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 transition-all hover:scale-[1.02] active:scale-95"
+          className="flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 transition-all hover:scale-[1.02] active:scale-95"
         >
-          <div className="h-10 w-10 rounded-xl bg-primary-100 dark:bg-primary-800 text-primary-700 dark:text-gold-400 flex items-center justify-center mb-1.5 shadow-xs">
+          <div className="h-10 w-10 md:h-12 md:w-12 rounded-xl bg-primary-100 dark:bg-primary-800 text-primary-700 dark:text-gold-400 flex items-center justify-center mb-1.5 shadow-xs">
             <Moon size={20} />
           </div>
-          <span className="text-xs font-bold text-primary-900 dark:text-primary-100">الصلاة</span>
+          <span className="text-xs md:text-sm font-bold text-primary-900 dark:text-primary-100">الصلاة</span>
         </button>
 
         <button
           type="button"
           onClick={() => navigate('adhkar')}
-          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 transition-all hover:scale-[1.02] active:scale-95"
+          className="flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 transition-all hover:scale-[1.02] active:scale-95"
         >
-          <div className="h-10 w-10 rounded-xl bg-primary-100 dark:bg-primary-800 text-primary-700 dark:text-gold-400 flex items-center justify-center mb-1.5 shadow-xs">
+          <div className="h-10 w-10 md:h-12 md:w-12 rounded-xl bg-primary-100 dark:bg-primary-800 text-primary-700 dark:text-gold-400 flex items-center justify-center mb-1.5 shadow-xs">
             <Heart size={20} />
           </div>
-          <span className="text-xs font-bold text-primary-900 dark:text-primary-100">الأذكار</span>
+          <span className="text-xs md:text-sm font-bold text-primary-900 dark:text-primary-100">الأذكار</span>
         </button>
 
         <button
           type="button"
           onClick={() => navigate('tasbih')}
-          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 transition-all hover:scale-[1.02] active:scale-95"
+          className="flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 transition-all hover:scale-[1.02] active:scale-95"
         >
-          <div className="h-10 w-10 rounded-xl bg-primary-100 dark:bg-primary-800 text-primary-700 dark:text-gold-400 flex items-center justify-center mb-1.5 shadow-xs">
+          <div className="h-10 w-10 md:h-12 md:w-12 rounded-xl bg-primary-100 dark:bg-primary-800 text-primary-700 dark:text-gold-400 flex items-center justify-center mb-1.5 shadow-xs">
             <Repeat size={20} />
           </div>
-          <span className="text-xs font-bold text-primary-900 dark:text-primary-100">المسبحة</span>
+          <span className="text-xs md:text-sm font-bold text-primary-900 dark:text-primary-100">المسبحة</span>
         </button>
       </div>
 
@@ -284,10 +286,10 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
             <p className="mt-3 text-lg leading-[2.2] text-primary-900 dark:text-primary-50 quran-text">
               {dailyQuranMessage.text}
             </p>
-            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            <p className="mt-2 text-xs md:text-sm text-gray-500 dark:text-gray-400">
               سورة {dailyQuranMessage.surahName} — الآية {toArabicNumber(dailyQuranMessage.ayahNumber)}
             </p>
-            <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+            <p className="mt-1 text-[11px] md:text-sm text-gray-400 dark:text-gray-500">
               آية للتدبر من نص المصحف؛ لا تُعرض كتفسير للآية.
             </p>
           </>
@@ -299,18 +301,18 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
       </Card>
 
       {/* Streak + quick stats */}
-      <div className="grid grid-cols-3 gap-3">
-        <Card className="flex flex-col items-center text-center p-3!">
+      <div className="grid grid-cols-3 gap-3 md:gap-4">
+        <Card className="flex flex-col items-center text-center p-3 md:p-4!">
           <Flame size={24} className={streak > 0 ? 'text-accent-500' : 'text-gray-300 dark:text-gray-600'} />
           <p className="text-2xl font-bold text-primary-700 dark:text-primary-200 mt-1">{streak}</p>
           <p className="text-xs text-gray-500 dark:text-gray-400">أيام متتالية</p>
         </Card>
-        <Card className="flex flex-col items-center text-center p-3!">
+        <Card className="flex flex-col items-center text-center p-3 md:p-4!">
           <Check size={24} className="text-success-500" />
           <p className="text-2xl font-bold text-primary-700 dark:text-primary-200 mt-1">{doneTasks.length}</p>
           <p className="text-xs text-gray-500 dark:text-gray-400">مهام مكتملة</p>
         </Card>
-        <Card className="flex flex-col items-center text-center p-3!">
+        <Card className="flex flex-col items-center text-center p-3 md:p-4!">
           <Clock size={24} className="text-warning-500" />
           <p className="text-2xl font-bold text-primary-700 dark:text-primary-200 mt-1">{pendingTasks.length}</p>
           <p className="text-xs text-gray-500 dark:text-gray-400">مهام معلقة</p>
@@ -337,7 +339,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
             action={<Button onClick={() => navigate('planner')} variant="primary" size="sm">إنشاء خطة</Button>}
           />
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-3 md:space-y-0 md:grid md:grid-cols-2 md:gap-3">
             {tasks.map((task) => (
               <TaskCard
                 key={task.id}
@@ -366,7 +368,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
             }
           />
           <Card noPadding>
-            <div className="grid grid-cols-3 gap-1 p-2">
+            <div className="grid grid-cols-3 gap-1 p-2 md:grid-cols-6 md:gap-2 md:p-3">
               {prayerResult.prayers.map((prayer) => {
                 const isSunrise = prayer.name === 'sunrise';
                 const record = prayerRecords[prayer.name] ?? null;
@@ -469,7 +471,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
             <div className="flex items-start gap-3">
               <Sparkles size={20} className="text-gold-500 shrink-0 mt-1" />
               <div className="flex-1">
-                <p className="text-sm leading-relaxed text-primary-800 dark:text-primary-100 line-clamp-3 quran-text whitespace-pre-line">
+                <p className="text-sm md:text-base md:leading-relaxed md:max-w-prose text-primary-800 dark:text-primary-100 line-clamp-3 quran-text whitespace-pre-line">
                   {hadith.text}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">

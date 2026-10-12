@@ -34,6 +34,12 @@ export interface HadithBook {
   slug: string;
   count: number;
   downloadBytes: number;
+  /**
+   * True when the collection is bundled inside the app itself
+   * (public/hadith/<slug>.json) and is copied onto the device on
+   * first use, with no network involved.
+   */
+  bundled: boolean;
 }
 
 const TAFSIR_WEIGHT: Record<TafsirEdition['id'], TafsirEdition['weight']> = {
@@ -156,6 +162,7 @@ export const HADITH_BOOKS: HadithBook[] = [
     slug: 'ara-nawawi',
     count: 42,
     downloadBytes: 49340,
+    bundled: false,
   },
   {
     id: 'forty_qudsi',
@@ -164,6 +171,7 @@ export const HADITH_BOOKS: HadithBook[] = [
     slug: 'ara-qudsi',
     count: 40,
     downloadBytes: 55258,
+    bundled: false,
   },
   {
     id: 'muwatta_malik',
@@ -172,6 +180,7 @@ export const HADITH_BOOKS: HadithBook[] = [
     slug: 'ara-malik',
     count: 1829,
     downloadBytes: 2150337,
+    bundled: false,
   },
   {
     id: 'sunan_ibn_majah',
@@ -180,6 +189,7 @@ export const HADITH_BOOKS: HadithBook[] = [
     slug: 'ara-ibnmajah',
     count: 4338,
     downloadBytes: 5583102,
+    bundled: false,
   },
   {
     id: 'jami_tirmidhi',
@@ -188,6 +198,7 @@ export const HADITH_BOOKS: HadithBook[] = [
     slug: 'ara-tirmidhi',
     count: 3924,
     downloadBytes: 7120806,
+    bundled: false,
   },
   {
     id: 'sunan_nasai',
@@ -196,6 +207,7 @@ export const HADITH_BOOKS: HadithBook[] = [
     slug: 'ara-nasai',
     count: 5679,
     downloadBytes: 7152291,
+    bundled: false,
   },
   {
     id: 'sunan_abi_dawud',
@@ -204,6 +216,7 @@ export const HADITH_BOOKS: HadithBook[] = [
     slug: 'ara-abudawud',
     count: 5272,
     downloadBytes: 7345422,
+    bundled: false,
   },
   {
     id: 'sahih_muslim',
@@ -212,6 +225,7 @@ export const HADITH_BOOKS: HadithBook[] = [
     slug: 'ara-muslim',
     count: 7360,
     downloadBytes: 8685140,
+    bundled: true,
   },
   {
     id: 'sahih_bukhari',
@@ -220,6 +234,7 @@ export const HADITH_BOOKS: HadithBook[] = [
     slug: 'ara-bukhari',
     count: 7580,
     downloadBytes: 9770083,
+    bundled: false,
   },
 ];
 
@@ -265,3 +280,4 @@ export function formatBytes(bytes: number): string {
   if (bytes >= 1024) return `${toArabicDigits(Math.round(bytes / 1024))} KB`;
   return `${toArabicDigits(bytes)} بايت`;
 }
+

@@ -23,13 +23,13 @@ export function AccountSection({ accountEmail, syncState, onSyncNow, onSignOut }
           <SectionTitle icon={<Cloud size={20} />} title="الحساب والمزامنة السحابية" />
           <Card className="border border-primary-200/80 dark:border-primary-800/80 shadow-md">
             <div className="flex items-center justify-between pb-3 border-b border-primary-100 dark:border-primary-800/60">
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs text-gray-500 dark:text-gray-400">الحساب المسجل</p>
-                <p className="text-sm font-bold text-primary-900 dark:text-primary-100 mt-0.5" dir="ltr">
+                <p className="text-sm font-bold text-primary-900 dark:text-primary-100 mt-0.5 min-w-0 truncate" dir="ltr">
                   {accountEmail}
                 </p>
               </div>
-              <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
+              <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
                 syncState.status === 'synced'
                   ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
                   : syncState.status === 'syncing'

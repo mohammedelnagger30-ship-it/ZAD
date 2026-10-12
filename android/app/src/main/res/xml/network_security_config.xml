@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Allows the Capacitor WebView to make HTTPS requests to external hosts
+  (e.g. api.github.com for update checks, Supabase, CDN assets).
+  Only HTTPS is permitted — no cleartext HTTP is allowed.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

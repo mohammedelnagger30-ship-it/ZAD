@@ -129,6 +129,12 @@ export interface Settings {
   /** -1 | 0 | 1 — manual correction when the displayed Hijri date is off by a day. */
   hijriAdjustment?: number;
   locationMethod: 'manual' | 'auto';
+  /** Icon style preference: 'lucide' (default), 'feather', 'heroicons' */
+  iconStyle?: 'lucide' | 'feather' | 'heroicons';
+  /** Enable custom badge emojis */
+  customBadgesEnabled?: boolean;
+  /** Show onboarding tips on home screen */
+  showOnboardingTips?: boolean;
 }
 
 export interface DayStreak {
@@ -247,6 +253,30 @@ export class HifziDB extends Dexie {
     this.version(5).stores({
       khatmah: '++id, updatedAt',
     });
+
+    // v6: Performance improvements - add compound indexes for faster queries
+    // and search optimization for large datasets
+    this.version(6)
+      .stores({
+        // Add compound indexes for efficient filtering and sorting
+        hifzProgress: '++id, surahId, status, [surahId+status], ratedAt',
+        bookmarks: '++id, surahId, ayahNumber, [surahId+ayahNumber], createdAt',
+        hadithFavorites: '++id, hadithId, collection, [collection+hadithId], createdAt',
+        // Improve task queries with date+status+type compound index
+        tasks: '++id, date, planId, status, type, scheduledTime, [date+status], [date+status+type]',
+        // Improve prayer records queries
+        prayerRecords: '++id, date, prayer, [date+prayer], confirmedAt',
+        // Improve sunnah records queries
+        sunnahRecords: '++id, date, type, [date+type], done',
+        // Add index for plan filtering
+        plans: '++id, active, type, [active+type], createdAt',
+        // Keep existing indexes for khatmah
+        khatmah: '++id, updatedAt, startDate',
+      })
+      .upgrade(async () => {
+        // No data migration needed - only index structure changes
+        // This upgrade is purely for performance optimization
+      });
   }
 }
 
@@ -291,6 +321,9 @@ export const DEFAULT_SETTINGS: Settings = {
   cityName: 'القاهرة',
   latitude: 30.0444,
   longitude: 31.2357,
+  iconStyle: 'lucide',
+  customBadgesEnabled: true,
+  showOnboardingTips: true,
 };
 
 export async function getSettings(): Promise<Settings> {

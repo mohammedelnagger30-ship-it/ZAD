@@ -73,7 +73,7 @@ export function KhatmahCard() {
               </Button>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="grid grid-cols-3 gap-2 md:gap-3 text-center">
               <div className="rounded-2xl bg-primary-50/70 py-2 dark:bg-primary-900/30">
                 <p className="text-lg font-bold text-primary-800 dark:text-gold-400">{toArabicNumber(khatmahStatus.completed)}</p>
                 <p className="text-[10px] text-gray-500 dark:text-gray-400">صفحة مقروءة</p>
@@ -102,8 +102,8 @@ export function KhatmahCard() {
               </span>
             </div>
 
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-[11px] text-gray-500 dark:text-gray-400">
+            <div className="flex flex-wrap items-center justify-between gap-2 gap-y-1">
+              <p className="text-[11px] md:text-xs min-w-0 truncate text-gray-500 dark:text-gray-400">
                 {khatmah.targetDate
                   ? khatmahStatus.daysLeft !== null && khatmahStatus.daysLeft > 0
                     ? `باقٍ ${toArabicNumber(khatmahStatus.daysLeft)} يومًا على هدف ${khatmah.targetDate}`
@@ -119,7 +119,7 @@ export function KhatmahCard() {
                 >
                   −
                 </button>
-                <span className="min-w-[7.5rem] text-center text-xs font-bold text-primary-800 dark:text-primary-100">
+                <span className="min-w-[7.5rem] md:min-w-[9rem] text-center text-xs font-bold text-primary-800 dark:text-primary-100">
                   حتى صفحة {toArabicNumber(khatmahStatus.completed)}
                 </span>
                 <button

@@ -86,32 +86,34 @@ export function AudioDownloadManager() {
           <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
             اختر القارئ والسورة لتنزيل تلاوتها كاملة والاستماع إليها دون إنترنت. يمكنك تنزيل السور التي تحتاجها فقط.
           </p>
-          <label className="block space-y-1">
-            <span className="text-xs text-gray-600 dark:text-gray-300">القارئ</span>
-            <select
-              value={reciterId}
-              onChange={(event) => changeReciter(event.target.value)}
-              disabled={progress !== null}
-              className="w-full rounded-xl border border-primary-200 bg-white px-3 py-2.5 text-sm text-primary-800 focus:outline-hidden focus:ring-2 focus:ring-primary-500 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
-            >
-              {AUDIO_RECITERS.map((reciter) => (
-                <option key={reciter.id} value={reciter.id}>{reciter.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="block space-y-1">
-            <span className="text-xs text-gray-600 dark:text-gray-300">السورة</span>
-            <select
-              value={surahId}
-              onChange={(event) => setSurahId(Number(event.target.value))}
-              disabled={progress !== null}
-              className="w-full rounded-xl border border-primary-200 bg-white px-3 py-2.5 text-sm text-primary-800 focus:outline-hidden focus:ring-2 focus:ring-primary-500 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
-            >
-              {SURAHS.map((surah) => (
-                <option key={surah.id} value={surah.id}>سورة {surah.name} — {toArabicNumber(surah.ayahCount)} آية</option>
-              ))}
-            </select>
-          </label>
+          <div className="md:grid md:grid-cols-2 md:gap-4">
+            <label className="block space-y-1 md:max-w-none">
+              <span className="text-xs text-gray-600 dark:text-gray-300">القارئ</span>
+              <select
+                value={reciterId}
+                onChange={(event) => changeReciter(event.target.value)}
+                disabled={progress !== null}
+                className="w-full rounded-xl border border-primary-200 bg-white px-3 py-2.5 text-sm text-primary-800 focus:outline-hidden focus:ring-2 focus:ring-primary-500 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
+              >
+                {AUDIO_RECITERS.map((reciter) => (
+                  <option key={reciter.id} value={reciter.id}>{reciter.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block space-y-1 md:max-w-none">
+              <span className="text-xs text-gray-600 dark:text-gray-300">السورة</span>
+              <select
+                value={surahId}
+                onChange={(event) => setSurahId(Number(event.target.value))}
+                disabled={progress !== null}
+                className="w-full rounded-xl border border-primary-200 bg-white px-3 py-2.5 text-sm text-primary-800 focus:outline-hidden focus:ring-2 focus:ring-primary-500 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
+              >
+                {SURAHS.map((surah) => (
+                  <option key={surah.id} value={surah.id}>سورة {surah.name} — {toArabicNumber(surah.ayahCount)} آية</option>
+                ))}
+              </select>
+            </label>
+          </div>
 
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs text-gray-500 dark:text-gray-400">

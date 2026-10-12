@@ -68,12 +68,32 @@ function triggerHaptic(pattern: number | number[]) {
   }
 }
 
+// One shared audio context for every click. Building a fresh AudioContext per
+// tap exhausts the browser's context limit (6 in Chrome/WebView) after a few
+// rapid presses — every new context then starts suspended and the click sound
+// dies until the page reloads.
+let sharedAudioCtx: AudioContext | null = null;
+
+function getAudioContext(): AudioContext | null {
+  try {
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return null;
+    if (!sharedAudioCtx) sharedAudioCtx = new AudioCtx();
+    // Some WebViews keep the context suspended until an explicit resume.
+    if (sharedAudioCtx.state === 'suspended') void sharedAudioCtx.resume();
+    return sharedAudioCtx;
+  } catch {
+    return null;
+  }
+}
+
 // Web Audio click synthesizer for instant tactile audio feedback
 function playClickAudio() {
   try {
-    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
+    const ctx = getAudioContext();
+    if (!ctx) return;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
@@ -102,6 +122,11 @@ export function TasbihScreen() {
   const [justCompleted, setJustCompleted] = useState(false);
   const [isPressing, setIsPressing] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Live mirrors of the counter so rapid taps within one render cycle
+  // still see the true count (the closure values lag a frame behind).
+  const countRef = useRef(state.count);
+  const presetRef = useRef(state.presetIndex);
+  const pressTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -122,11 +147,19 @@ export function TasbihScreen() {
     return () => clearInterval(check);
   }, []);
 
+  // Keep tap-time refs in sync when the counter changes outside handleTap
+  // (reset, preset switch, midnight rollover).
+  useEffect(() => {
+    countRef.current = state.count;
+    presetRef.current = state.presetIndex;
+  }, [state.count, state.presetIndex]);
+
   const currentPreset = TASBIH_PRESETS[state.presetIndex];
   const progress = state.count / currentPreset.target;
 
   const handleTap = useCallback(() => {
-    const willComplete = state.count + 1 >= TASBIH_PRESETS[state.presetIndex].target;
+    const target = TASBIH_PRESETS[presetRef.current].target;
+    const willComplete = countRef.current + 1 >= target;
 
     // Haptics vibration pattern: strong double-pulse on cycle completion, crisp vibration on regular tap
     if (hapticEnabled) {
@@ -142,14 +175,19 @@ export function TasbihScreen() {
     }
 
     setIsPressing(true);
-    setTimeout(() => setIsPressing(false), 100);
+    clearTimeout(pressTimerRef.current);
+    pressTimerRef.current = setTimeout(() => setIsPressing(false), 100);
+
+    // Advance the mirror first so a burst of taps in the same render
+    // cycle counts every press and fires the completion pattern at the
+    // exact tap that finishes the cycle.
+    countRef.current = willComplete ? 0 : countRef.current + 1;
 
     setState((prev) => {
-      const target = TASBIH_PRESETS[prev.presetIndex].target;
       const next = prev.count + 1;
       const newTotal = prev.totalToday + 1;
 
-      return next >= target
+      return next >= TASBIH_PRESETS[prev.presetIndex].target
         ? { ...prev, count: 0, cycles: prev.cycles + 1, totalToday: newTotal }
         : { ...prev, count: next, totalToday: newTotal };
     });
@@ -157,7 +195,7 @@ export function TasbihScreen() {
     if (willComplete) {
       setJustCompleted(true);
     }
-  }, [state.count, state.presetIndex, hapticEnabled, soundEnabled]);
+  }, [hapticEnabled, soundEnabled]);
 
   const handleReset = () => {
     if (hapticEnabled) triggerHaptic(80);
@@ -177,7 +215,7 @@ export function TasbihScreen() {
   return (
     <div
       ref={containerRef}
-      className={`relative space-y-5 pb-6 flex flex-col min-h-[calc(100vh-7.5rem)] select-none ${
+      className={`relative space-y-5 pb-6 flex flex-col min-h-[calc(100vh-7.5rem)] md:min-h-[calc(100vh-4rem)] select-none ${
         fullScreenTap ? 'cursor-pointer' : ''
       }`}
       dir="rtl"
@@ -205,7 +243,7 @@ export function TasbihScreen() {
             }}
             title={hapticEnabled ? 'إيقاف الاهتزاز' : 'تفعيل الاهتزاز'}
             aria-label="تفعيل الاهتزاز"
-            className={`rounded-xl p-2 text-xs font-semibold transition ${
+            className={`rounded-xl p-3 text-xs font-semibold transition md:p-3.5 ${
               hapticEnabled
                 ? 'bg-primary-600 text-white shadow-md'
                 : 'text-gray-400 dark:text-gray-500 hover:text-primary-700'
@@ -222,7 +260,7 @@ export function TasbihScreen() {
             }}
             title={soundEnabled ? 'إيقاف الصوت' : 'تفعيل الصوت'}
             aria-label="تفعيل الصوت"
-            className={`rounded-xl p-2 text-xs font-semibold transition ${
+            className={`rounded-xl p-3 text-xs font-semibold transition md:p-3.5 ${
               soundEnabled
                 ? 'bg-primary-600 text-white shadow-md'
                 : 'text-gray-400 dark:text-gray-500 hover:text-primary-700'
@@ -234,7 +272,7 @@ export function TasbihScreen() {
       </div>
 
       {/* Preset Dhikr Selector Horizontal Strip */}
-      <div className="flex gap-2 overflow-x-auto pb-1.5 -mx-4 px-4 scrollbar-hide">
+      <div className="flex gap-2 overflow-x-auto pb-1.5 -mx-4 px-4 scrollbar-hide md:mx-0 md:px-0">
         {TASBIH_PRESETS.map((preset, i) => {
           const active = state.presetIndex === i;
           return (
@@ -245,7 +283,7 @@ export function TasbihScreen() {
                 e.stopPropagation();
                 handleSwitchPreset(i);
               }}
-              className={`shrink-0 rounded-2xl px-4 py-2 text-xs font-bold transition-all shadow-sm ${
+              className={`shrink-0 rounded-2xl px-4 py-2.5 text-xs font-bold transition-all shadow-sm md:py-3 md:text-sm ${
                 active
                   ? 'bg-gradient-to-r from-primary-700 to-primary-600 text-white shadow-primary-900/30 ring-2 ring-gold-400/50 scale-[1.02]'
                   : 'bg-white text-primary-800 hover:bg-primary-50 dark:bg-primary-900/40 dark:text-primary-100 dark:hover:bg-primary-800/60 border border-primary-100 dark:border-primary-800/80'
@@ -280,7 +318,7 @@ export function TasbihScreen() {
             <div className="absolute -inset-4 rounded-full bg-linear-to-tr from-primary-600/20 via-amber-500/20 to-primary-600/10 blur-2xl opacity-80 group-hover:opacity-100 transition-opacity" />
 
             {/* SVG Ring Progress Art */}
-            <svg width="270" height="270" viewBox="0 0 270 270" className="relative z-10 drop-shadow-xl">
+            <svg viewBox="0 0 270 270" className="relative z-10 h-auto w-[min(72vw,270px)] drop-shadow-xl md:w-[300px] lg:w-[330px]">
               <defs>
                 <linearGradient id="ringGradient" x1="0%" y1="0%" x2="100%" y2="100%">
                   <stop offset="0%" stopColor="#f59e0b" />
@@ -323,12 +361,12 @@ export function TasbihScreen() {
               </span>
 
               {/* Main Big Count Number */}
-              <p className="text-6xl font-black text-primary-900 dark:text-primary-50 tracking-tight font-sans my-1">
+              <p className="text-6xl font-black text-primary-900 dark:text-primary-50 tracking-tight font-sans my-1 md:text-7xl">
                 {state.count}
               </p>
 
               {/* Dhikr Arabic Phrase */}
-              <p className="text-base font-serif font-bold text-primary-800 dark:text-gold-300 max-w-[190px] leading-snug">
+              <p className="text-base font-serif font-bold text-primary-800 dark:text-gold-300 max-w-[68%] leading-snug">
                 {currentPreset.text}
               </p>
 
@@ -343,7 +381,7 @@ export function TasbihScreen() {
         </div>
 
         {/* Quick Mode & Reset Bar */}
-        <div className="mt-6 flex items-center justify-between w-full max-w-xs gap-3">
+        <div className="mt-6 flex items-center justify-between w-full max-w-xs gap-3 sm:max-w-sm md:max-w-md">
           <Button
             variant="secondary"
             onClick={handleReset}
@@ -373,7 +411,7 @@ export function TasbihScreen() {
 
       {/* Stats Dashboard Card */}
       <Card className="border border-primary-200/80 dark:border-primary-800/80 shadow-md bg-white/90 dark:bg-primary-950/80 backdrop-blur-xs">
-        <div className="grid grid-cols-3 gap-2 text-center divide-x divide-x-reverse divide-primary-100 dark:divide-primary-800/60">
+        <div className="grid grid-cols-3 gap-2 text-center divide-x divide-x-reverse divide-primary-100 dark:divide-primary-800/60 md:mx-auto md:max-w-xl">
           <div className="px-2">
             <div className="flex items-center justify-center gap-1 text-amber-500 mb-1">
               <Trophy size={16} />

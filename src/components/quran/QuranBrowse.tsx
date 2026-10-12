@@ -57,7 +57,7 @@ export function SurahListItem({ surah, onOpen, onHifz }: { surah: SurahMeta; onO
 // Page browser
 export function PageBrowser({ onSelectPage }: { onSelectPage: (page: number) => void }) {
   return (
-    <div className="grid grid-cols-5 gap-2">
+    <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 xl:grid-cols-16 gap-2">
       {Array.from({ length: TOTAL_QURAN_PAGES }, (_, i) => i + 1).map((page) => (
         <button
           key={page}

@@ -96,7 +96,7 @@ export function PrayerStatusSheet({
         role="dialog"
         aria-modal="true"
         aria-label={`تأكيد صلاة ${PRAYER_LABELS_AR[prayer]}`}
-        className="w-full max-w-md max-h-[90vh] overflow-y-auto overscroll-contain bg-white dark:bg-primary-900 rounded-t-3xl sm:rounded-3xl shadow-2xl animate-slide-up"
+        className="w-full max-w-md md:max-w-lg max-h-[90vh] overflow-y-auto overscroll-contain bg-white dark:bg-primary-900 rounded-t-3xl sm:rounded-3xl shadow-2xl animate-slide-up"
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-3 p-5 pb-3">

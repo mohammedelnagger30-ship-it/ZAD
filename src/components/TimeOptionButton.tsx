@@ -19,12 +19,12 @@ export function TimeOptionButton({ label, value, options, onSelect }: TimeOption
       <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
         <span>{label}</span>
       </div>
-      <div className="flex gap-1">
+      <div className="flex flex-wrap justify-end gap-1.5">
         {options.map((opt) => (
           <button
             key={opt}
             onClick={() => onSelect(opt)}
-            className={`px-2.5 py-1 rounded-lg text-xs font-medium ${
+            className={`min-h-11 px-3 py-2 rounded-lg text-xs md:text-sm font-medium ${
               value === opt
                 ? 'bg-primary-600 text-white'
                 : 'bg-gray-50 dark:bg-primary-800/30 text-gray-600 dark:text-gray-300'

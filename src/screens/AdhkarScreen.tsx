@@ -254,14 +254,14 @@ export function AdhkarScreen() {
             <button
               onClick={() => setState((previous) => ({ ...previous, fontSize: Math.max(18, previous.fontSize - 2) }))}
               aria-label="تصغير الخط"
-              className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-50 text-primary-700 dark:bg-primary-800 dark:text-primary-200"
+              className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary-50 text-primary-700 dark:bg-primary-800 dark:text-primary-200"
             >
               <span className="text-sm font-bold">أ−</span>
             </button>
             <button
               onClick={() => setState((previous) => ({ ...previous, fontSize: Math.min(32, previous.fontSize + 2) }))}
               aria-label="تكبير الخط"
-              className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-50 text-primary-700 dark:bg-primary-800 dark:text-primary-200"
+              className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary-50 text-primary-700 dark:bg-primary-800 dark:text-primary-200"
             >
               <span className="text-sm font-bold">أ+</span>
             </button>
@@ -298,7 +298,7 @@ export function AdhkarScreen() {
           )}
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-3 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
           {activeItems.map((dhikr, index) => (
               <DhikrCard
                 key={dhikr.id}
@@ -329,14 +329,14 @@ export function AdhkarScreen() {
     <div className="space-y-4 pb-5">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-primary-800 dark:text-primary-100">الأذكار</h1>
+          <h1 className="text-2xl font-bold text-primary-800 md:text-3xl dark:text-primary-100">الأذكار</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">أذكارك وأدعيتك، مع حفظ تقدمك على الجهاز</p>
         </div>
         <button
           onClick={() => setState((previous) => ({ ...previous, haptics: !previous.haptics }))}
           aria-pressed={state.haptics}
           aria-label={state.haptics ? 'إيقاف الاهتزاز عند العد' : 'تفعيل الاهتزاز عند العد'}
-          className={`flex h-10 w-10 items-center justify-center rounded-xl transition-smooth ${
+          className={`flex h-11 w-11 items-center justify-center rounded-xl transition-smooth ${
             state.haptics
               ? 'bg-primary-600 text-white'
               : 'bg-primary-50 text-primary-600 dark:bg-primary-800 dark:text-gold-400'
@@ -392,7 +392,7 @@ export function AdhkarScreen() {
       <button
         onClick={() => setFavoritesOnly((value) => !value)}
         aria-pressed={favoritesOnly}
-        className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-smooth ${
+        className={`inline-flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-smooth ${
           favoritesOnly
             ? 'bg-rose-500 text-white'
             : 'bg-primary-50 text-primary-700 dark:bg-primary-800 dark:text-primary-200'
@@ -403,7 +403,7 @@ export function AdhkarScreen() {
       </button>
 
       {query || favoritesOnly ? (
-        <div className="space-y-4">
+        <div className="space-y-4 md:grid md:grid-cols-2 md:gap-4 md:items-start md:space-y-0">
           {visibleCategories.map(({ category, items }) => (
             <section key={category.id} className="space-y-2">
               <h2 className="text-sm font-semibold text-primary-700 dark:text-primary-200">{category.title}</h2>
@@ -432,7 +432,7 @@ export function AdhkarScreen() {
           )}
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
           {ADHKAR_CATEGORIES.map((category) => {
             const Icon = ICONS[category.icon] ?? Heart;
             const done = category.items.filter((item) => (state.counts[item.id] ?? 0) >= item.count).length;
@@ -471,7 +471,7 @@ export function AdhkarScreen() {
       </Card>
 
       {notice && (
-        <div role="status" className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-primary-900 px-4 py-2.5 text-sm text-white shadow-lg">
+        <div role="status" className="fixed bottom-24 left-1/2 z-50 max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-xl bg-primary-900 px-4 py-2.5 text-center text-sm text-white shadow-lg md:bottom-8">
           {notice}
         </div>
       )}
@@ -566,7 +566,7 @@ function DhikrCard({
           {isDone ? <Check size={17} /> : toArabicNumber(index + 1)}
         </div>
         <p
-          className="quran-text flex-1 whitespace-pre-line leading-[2.1] text-primary-900 dark:text-primary-50"
+          className="quran-text flex-1 whitespace-pre-line leading-[2.1] text-primary-900 dark:text-primary-50 md:max-w-[48ch]"
           style={{ fontSize }}
         >
           {dhikr.text}
@@ -593,7 +593,7 @@ function DhikrCard({
           aria-label={dhikr.countIsSpecified === false
             ? `تسجيل قراءة الدعاء ${dhikr.id}${isDone ? ': تمت القراءة' : ''}`
             : `تسبيح ${dhikr.id}: ${toArabicNumber(count)} من ${toArabicNumber(dhikr.count)}`}
-          className={`flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl font-semibold transition-smooth active:scale-[0.99] ${
+          className={`flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl font-semibold transition-smooth active:scale-[0.99] md:mx-auto md:w-72 md:max-w-sm md:flex-none ${
             isDone
               ? 'cursor-default bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-300'
               : 'bg-primary-600 text-white hover:bg-primary-700'
@@ -630,7 +630,7 @@ function DhikrCard({
             onClick={onFavorite}
             aria-label={favorite ? 'إزالة من المفضلة' : 'إضافة إلى المفضلة'}
             aria-pressed={favorite}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-900/20"
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-900/20 md:h-11 md:w-11"
           >
             <Heart size={17} className={favorite ? 'fill-rose-500 text-rose-500' : ''} />
           </button>
@@ -638,7 +638,7 @@ function DhikrCard({
             type="button"
             onClick={onCopy}
             aria-label="نسخ الذكر ومرجعه"
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-primary-50 hover:text-primary-600 dark:hover:bg-primary-800"
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-400 hover:bg-primary-50 hover:text-primary-600 dark:hover:bg-primary-800 md:h-11 md:w-11"
           >
             <Copy size={16} />
           </button>
@@ -647,7 +647,7 @@ function DhikrCard({
             onClick={onReset}
             disabled={count === 0}
             aria-label="تصفير عدّاد الذكر"
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-40 dark:hover:bg-gray-800"
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-40 dark:hover:bg-gray-800 md:h-11 md:w-11"
           >
             <RotateCcw size={16} />
           </button>

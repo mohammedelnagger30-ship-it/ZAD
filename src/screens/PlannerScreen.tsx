@@ -163,17 +163,17 @@ export function PlannerScreen() {
 
   return (
     <div className="space-y-4 pb-4">
-      <section className="relative overflow-hidden rounded-3xl bg-linear-to-bl from-primary-700 via-primary-800 to-primary-950 p-5 text-white shadow-lg">
+      <section className="relative overflow-hidden rounded-3xl bg-linear-to-bl from-primary-700 via-primary-800 to-primary-950 p-5 md:p-7 text-white shadow-lg">
         <div className="pointer-events-none absolute -left-8 -top-10 h-40 w-40 rounded-full border border-white/10" />
         <div className="relative flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold tracking-wide text-white/70">رحلتك مع كتاب الله</p>
-            <h1 className="mt-1 text-2xl font-bold">الحفظ والمراجعة</h1>
+            <h1 className="mt-1 text-2xl md:text-3xl font-bold">الحفظ والمراجعة</h1>
             <p className="mt-2 text-sm leading-6 text-white/75">خطط يومية وسجل واضح لما حفظته وما يحتاج إلى مراجعة</p>
           </div>
           <BookOpenCheck size={30} className="mt-1 shrink-0 text-gold-300" />
         </div>
-        <div className="relative mt-5 grid grid-cols-3 gap-2">
+        <div className="relative mt-5 grid grid-cols-3 gap-2 md:gap-3">
           <ProgressStat value={memorizedSurahs} label="سورة محفوظة" />
           <ProgressStat value={partiallyMemorizedSurahs} label="قيد الحفظ" />
           <ProgressStat value={reviewedSurahs} label="تمت مراجعتها" />
@@ -245,7 +245,7 @@ export function PlannerScreen() {
               onChange={(event) => setSurahSearch(event.target.value)}
               aria-label="ابحث في سجل السور"
               placeholder="ابحث باسم السورة أو رقمها..."
-              className="min-h-12 w-full rounded-2xl border border-primary-100 bg-white py-3 pl-4 pr-11 text-sm text-primary-800 shadow-xs outline-hidden transition focus:border-primary-400 focus:ring-4 focus:ring-primary-100/70 placeholder:text-gray-400 dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-100 dark:focus:ring-primary-900/60"
+              className="min-h-12 w-full md:max-w-xl rounded-2xl border border-primary-100 bg-white py-3 pl-4 pr-11 text-sm text-primary-800 shadow-xs outline-hidden transition focus:border-primary-400 focus:ring-4 focus:ring-primary-100/70 placeholder:text-gray-400 dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-100 dark:focus:ring-primary-900/60"
             />
           </div>
           <div className="flex gap-1 overflow-x-auto rounded-xl bg-primary-50/80 p-1 dark:bg-primary-900/35">
@@ -276,7 +276,7 @@ export function PlannerScreen() {
             <p className="text-xs font-semibold text-primary-700 dark:text-primary-200">{toArabicNumber(visibleSurahs.length)} سورة</p>
           </div>
           {visibleSurahs.length ? (
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {visibleSurahs.map(({ surah, summary }) => (
                 <SurahProgressCard
                   key={surah.id}
@@ -315,7 +315,7 @@ export function PlannerScreen() {
 
       {/* Suggest plan modal */}
       {showSuggest && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4 md:pr-24 lg:pr-32 xl:pr-36">
           <div
             role="dialog"
             aria-modal="true"
@@ -434,7 +434,7 @@ function SurahProgressCard({
   const StatusIcon = status.icon;
 
   return (
-    <Card className="p-3! transition-all hover:border-primary-300 hover:shadow-md">
+    <Card className="p-3 md:p-4! lg:p-5! transition-all hover:border-primary-300 hover:shadow-md">
       <div className="flex items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary-200 bg-primary-50 text-sm font-bold text-primary-700 dark:border-primary-700 dark:bg-primary-800 dark:text-gold-300">
           {toArabicNumber(surahId)}
@@ -442,7 +442,7 @@ function SurahProgressCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <h3 className="font-bold text-primary-800 dark:text-primary-100">{name}</h3>
-            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${status.style}`}>
+            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] md:text-xs font-semibold ${status.style}`}>
               <StatusIcon size={12} />
               {status.label}
             </span>
@@ -480,7 +480,7 @@ function SurahProgressCard({
               <button
                 type="button"
                 onClick={onMarkMemorized}
-                className="rounded-lg bg-success-50 px-2.5 py-1.5 text-[11px] font-semibold text-success-700 transition hover:bg-success-100 dark:bg-success-900/25 dark:text-success-300 dark:hover:bg-success-900/40"
+                className="rounded-lg bg-success-50 px-2.5 py-1.5 text-[11px] md:text-xs font-semibold text-success-700 transition hover:bg-success-100 dark:bg-success-900/25 dark:text-success-300 dark:hover:bg-success-900/40"
               >
                 تم الحفظ
               </button>
@@ -488,7 +488,7 @@ function SurahProgressCard({
             <button
               type="button"
               onClick={onMarkReviewed}
-              className="rounded-lg bg-primary-50 px-2.5 py-1.5 text-[11px] font-semibold text-primary-700 transition hover:bg-primary-100 dark:bg-primary-800/60 dark:text-primary-200 dark:hover:bg-primary-800"
+              className="rounded-lg bg-primary-50 px-2.5 py-1.5 text-[11px] md:text-xs font-semibold text-primary-700 transition hover:bg-primary-100 dark:bg-primary-800/60 dark:text-primary-200 dark:hover:bg-primary-800"
             >
               تمت المراجعة
             </button>
@@ -511,7 +511,7 @@ function PlanCard({ plan, onDelete, onToggle }: { plan: HifzPlan; onDelete: () =
           </div>
           <h3 className="font-bold text-primary-800 dark:text-primary-100">{plan.name}</h3>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{describePortion(plan.portion)}</p>
-          <div className="flex items-center gap-3 mt-2 text-xs text-gray-500 dark:text-gray-400">
+          <div className="flex flex-wrap items-center gap-3 gap-y-1 mt-2 text-xs text-gray-500 dark:text-gray-400">
             <span className="flex items-center gap-1"><Clock size={12} /> {plan.time}</span>
             <span className="flex items-center gap-1">
               {plan.daysOfWeek.sort().map((d) => getDayNameShort(d)).join('، ')}
@@ -580,16 +580,16 @@ function CreatePlanModal({ onClose, onSave }: { onClose: () => void; onSave: (pl
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-3 sm:p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-3 sm:p-4 md:pr-24 lg:pr-32 xl:pr-36">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="create-plan-title"
-        className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-primary-100 bg-white shadow-xl animate-scale-in dark:border-primary-800 dark:bg-primary-900 sm:max-h-[calc(100dvh-2rem)]"
+        className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-lg md:max-w-2xl flex-col overflow-hidden rounded-2xl border border-primary-100 bg-white shadow-xl animate-scale-in dark:border-primary-800 dark:bg-primary-900 sm:max-h-[calc(100dvh-2rem)]"
       >
         <div className="flex shrink-0 items-center justify-between border-b border-primary-100 bg-white p-4 dark:border-primary-800 dark:bg-primary-900">
           <h2 id="create-plan-title" className="text-lg font-bold text-primary-800 dark:text-primary-100">خطة جديدة</h2>
-          <button onClick={onClose} aria-label="إغلاق" className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-primary-800">
+          <button onClick={onClose} aria-label="إغلاق" className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-primary-800">
             <X size={20} />
           </button>
         </div>

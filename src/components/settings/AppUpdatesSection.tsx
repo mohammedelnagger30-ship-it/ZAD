@@ -47,7 +47,7 @@ export function AppUpdatesSection() {
                 <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
                   ينزلّ التحديث داخل التطبيق مباشرة، ثم تضغط «تثبيت» لإتمام التحديث دون مغادرة التطبيق.
                 </p>
-                <Button variant="primary" size="sm" className="w-full font-bold" onClick={() => void startUpdateDownload()}>
+                <Button variant="primary" size="sm" className="w-full md:w-auto font-bold" onClick={() => void startUpdateDownload()}>
                   <Download size={16} /> تنزيل الإصدار {appUpdate.version}
                 </Button>
               </div>
@@ -75,7 +75,7 @@ export function AppUpdatesSection() {
                 <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
                   اكتمل تنزيل التحديث {pendingUpdate.version} وهو جاهز للتثبيت.
                 </p>
-                <Button variant="primary" size="sm" className="w-full font-bold bg-emerald-600 hover:bg-emerald-700" onClick={() => void installUpdate()}>
+                <Button variant="primary" size="sm" className="w-full md:w-auto font-bold bg-emerald-600 hover:bg-emerald-700" onClick={() => void installUpdate()}>
                   <Check size={16} /> تثبيت التحديث الآن
                 </Button>
               </div>
@@ -100,7 +100,7 @@ export function AppUpdatesSection() {
                   تعذّر التحديث: {updateError}
                 </p>
                 {appUpdate?.status === 'available' && !updating && (
-                  <Button variant="secondary" size="sm" className="w-full" onClick={() => void openUpdateInBrowserFallback()}>
+                  <Button variant="secondary" size="sm" className="w-full md:w-auto" onClick={() => void openUpdateInBrowserFallback()}>
                     تنزيل عبر المتصفح كبديل
                   </Button>
                 )}
@@ -109,7 +109,7 @@ export function AppUpdatesSection() {
             <Button
               variant="secondary"
               size="sm"
-              className="mt-3 w-full font-semibold"
+              className="mt-3 w-full md:w-auto font-semibold"
               disabled={checkingUpdate || updating}
               onClick={() => void checkUpdate()}
             >

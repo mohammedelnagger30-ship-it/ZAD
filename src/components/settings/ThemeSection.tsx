@@ -31,14 +31,14 @@ export function ThemeSection({ themeMode, onChangeTheme, colorPalette, onChangeC
                   <button
                     key={opt.mode}
                     onClick={() => onChangeTheme(opt.mode)}
-                    className={`flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl border transition-all duration-200 ${
+                    className={`flex flex-col items-center justify-center gap-1.5 py-3 md:py-4 rounded-2xl border transition-all duration-200 ${
                       active
                         ? 'border-primary-500 bg-gradient-to-b from-primary-600 to-primary-700 text-white shadow-md shadow-primary-900/20'
                         : 'border-primary-100/80 bg-gray-50/70 dark:border-primary-800/60 dark:bg-primary-900/30 text-gray-700 dark:text-gray-200 hover:bg-primary-50 dark:hover:bg-primary-800/50'
                     }`}
                   >
                     <Icon size={20} />
-                    <span className="text-xs font-bold">{opt.label}</span>
+                    <span className="text-xs md:text-sm font-bold">{opt.label}</span>
                   </button>
                 );
               })}
@@ -47,7 +47,7 @@ export function ThemeSection({ themeMode, onChangeTheme, colorPalette, onChangeC
 
           <div className="border-t border-primary-100 dark:border-primary-800/60 pt-4">
             <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2.5">نغمة ألوان الواجهة</p>
-            <div className="grid grid-cols-4 gap-2.5">
+            <div className="grid grid-cols-4 gap-2.5 md:max-w-md">
               {COLOR_PALETTES.map((palette) => {
                 const selected = colorPalette === palette.id;
                 return (

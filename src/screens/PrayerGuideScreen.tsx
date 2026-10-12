@@ -35,7 +35,7 @@ const SECTIONS = [
 ] as const;
 
 const QUOTE_FRAME =
-  'mt-3 rounded-xl border-r-[3px] border-gold-400/80 bg-primary-50/70 px-3.5 py-3 dark:border-[#cfa95c]/70 dark:bg-[#cfa95c]/[0.06]';
+  'mt-3 rounded-xl border-r-[3px] border-gold-400/80 bg-primary-50/70 px-3.5 py-3 dark:border-[#cfa95c]/70 dark:bg-[#cfa95c]/[0.06] md:text-lg lg:max-w-[62ch]';
 
 function SourceLine({ item, className = '' }: { item: PrayerGuideItem; className?: string }) {
   return (
@@ -65,7 +65,7 @@ function SectionHeading({
   tone?: 'primary' | 'error';
 }) {
   return (
-    <div className="flex items-center gap-3 pt-1">
+    <div className="flex items-center gap-3 pt-1 md:col-span-2">
       <span
         className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${
           tone === 'error'
@@ -110,7 +110,7 @@ function MovementCard({ item }: { item: PrayerGuideStep }) {
         <div className="-m-1 flex shrink-0 items-center justify-center">
           <PrayerPosture
             posture={item.posture}
-            className="h-24 w-24 text-primary-800/75 dark:text-[#cfa95c]/85"
+            className="h-24 w-24 text-primary-800/75 dark:text-[#cfa95c]/85 md:h-32 md:w-32"
             accentClassName="text-gold-600 dark:text-[#cfa95c]"
           />
         </div>
@@ -208,7 +208,7 @@ export function PrayerGuideScreen({ navigate }: PrayerGuideScreenProps) {
           <BookOpen size={13} />
           دليل الصلاة
         </p>
-        <h1 className="mt-3 text-3xl font-bold leading-tight">فقه الصلاة</h1>
+        <h1 className="mt-3 text-3xl font-bold leading-tight md:text-4xl">فقه الصلاة</h1>
         <p className="mt-1.5 text-sm leading-6 text-white/80">
           أركانها وحركاتها الصحيحة وأخطاؤها وسننها — كل نص مقتبس حرفيّاً من مصادرها
         </p>
@@ -226,7 +226,7 @@ export function PrayerGuideScreen({ navigate }: PrayerGuideScreenProps) {
       {/* Section chips */}
       <nav
         aria-label="أقسام الصفحة"
-        className="sticky top-0 z-20 -mx-4 flex gap-2 overflow-x-auto border-b border-primary-100/80 bg-white/90 px-4 py-2.5 backdrop-blur-xs dark:border-primary-800/70 dark:bg-primary-950/90"
+        className="sticky top-0 z-20 -mx-4 flex gap-2 overflow-x-auto border-b border-primary-100/80 bg-white/90 px-4 py-2.5 backdrop-blur-xs dark:border-primary-800/70 dark:bg-primary-950/90 md:mx-0 md:px-0"
       >
         {SECTIONS.map((section) => (
           <button
@@ -246,7 +246,7 @@ export function PrayerGuideScreen({ navigate }: PrayerGuideScreenProps) {
       </nav>
 
       {/* أركان الصلاة */}
-      <section id="pillars" className="scroll-mt-16 space-y-3.5">
+      <section id="pillars" className="scroll-mt-16 space-y-3.5 md:grid md:grid-cols-2 md:gap-3.5 md:space-y-0">
         <SectionHeading
           title="أركان الصلاة"
           subtitle="مع كل ركن نصّ من القرآن أو السنة"
@@ -284,7 +284,7 @@ export function PrayerGuideScreen({ navigate }: PrayerGuideScreenProps) {
           <SourceLine item={PRAYER_GUIDE_MOVEMENTS_INTRO} />
         </Card>
 
-        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
           {PRAYER_GUIDE_MOVEMENTS.map((item) => (
             <MovementCard key={item.id} item={item} />
           ))}
@@ -292,7 +292,7 @@ export function PrayerGuideScreen({ navigate }: PrayerGuideScreenProps) {
       </section>
 
       {/* أخطاء شائعة */}
-      <section id="mistakes" className="scroll-mt-16 space-y-3.5">
+      <section id="mistakes" className="scroll-mt-16 space-y-3.5 md:grid md:grid-cols-2 md:gap-3.5 md:space-y-0">
         <SectionHeading
           title="أخطاء شائعة"
           subtitle="مع كل خطأ نصٌّ يصحّحه"
@@ -311,7 +311,7 @@ export function PrayerGuideScreen({ navigate }: PrayerGuideScreenProps) {
           subtitle="مستحبّات الصلاة، ومع كل واحد مرجعه"
           icon={<Sparkles size={20} />}
         />
-        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
           {PRAYER_GUIDE_SUNAN.map((item) => (
             <SunnahCard key={item.id} item={item} />
           ))}

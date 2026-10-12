@@ -1,13 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Flame, TrendingUp, Award, BookOpen, Check, Calendar, Target } from 'lucide-react';
-import { Card, SectionHeader } from '@/components/ui';
-import { db } from '@/db/database';
+import { Flame, TrendingUp, Award, BookOpen, Check, Calendar, Target, Share2, Download } from 'lucide-react';
+import { Card, SectionHeader, Button } from '@/components/ui';
+import { db, type Settings } from '@/db/database';
 import { getStreakCount } from '@/utils/taskManager';
 import { getWeeklyPrayerStats, getMonthlyPrayerStats } from '@/utils/prayerTracker';
 import { formatDateKey, getLast30Days, todayKey, addDays } from '@/utils/dateUtils';
 import { TOTAL_QURAN_AYAHS, toArabicNumber } from '@/data/surahs';
+import { DEFAULT_BADGES, shareBadge, type CustomBadge } from '@/data/customBadges';
+import { exportProgressReport } from '@/utils/exportPDF';
 
-export function ProgressScreen() {
+interface ProgressScreenProps {
+  settings?: Settings;
+}
+
+export function ProgressScreen({ settings }: ProgressScreenProps) {
   const [streak, setStreak] = useState(0);
   const [heatmapData, setHeatmapData] = useState<Record<string, { done: number; total: number }>>({});
   const [weeklyStats, setWeeklyStats] = useState<{ total: number; ontime: number; late: number; missed: number; unconfirmed: number; percentage: number } | null>(null);
@@ -15,7 +21,20 @@ export function ProgressScreen() {
   const [memorizedAyahs, setMemorizedAyahs] = useState(0);
   const [totalTasks, setTotalTasks] = useState(0);
   const [doneTasks, setDoneTasks] = useState(0);
-  const [badges, setBadges] = useState<string[]>([]);
+  const [unlockedBadges, setUnlockedBadges] = useState<CustomBadge[]>([]);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportPDF = async () => {
+    setIsExporting(true);
+    try {
+      await exportProgressReport();
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('تعذّر تصدير تقرير التقدم');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const load = useCallback(async () => {
     const s = await getStreakCount();
@@ -52,16 +71,16 @@ export function ProgressScreen() {
     setTotalTasks(allTasks.length);
     setDoneTasks(allTasks.filter((t) => t.status === 'done').length);
 
-    // Badges
-    const earned: string[] = [];
-    if (s >= 3) earned.push('بداية موفقة');
-    if (s >= 7) earned.push('أسبوع متواصل');
-    if (s >= 30) earned.push('شهر الإلتزام');
-    if (uniqueAyahs.size >= 10) earned.push('حافظ صغير');
-    if (uniqueAyahs.size >= 100) earned.push('حافظ مجتهد');
-    if (uniqueAyahs.size >= 500) earned.push('حافظ متقن');
-    if (allTasks.filter((t) => t.status === 'done').length >= 50) earned.push('مثابر');
-    setBadges(earned);
+    // Badges with custom emoji support
+    const earned: CustomBadge[] = [];
+    if (s >= 3) earned.push(DEFAULT_BADGES[0]); // بداية موفقة
+    if (s >= 7) earned.push(DEFAULT_BADGES[1]); // أسبوع متواصل
+    if (s >= 30) earned.push(DEFAULT_BADGES[2]); // شهر الإلتزام
+    if (uniqueAyahs.size >= 10) earned.push(DEFAULT_BADGES[3]); // حافظ صغير
+    if (uniqueAyahs.size >= 100) earned.push(DEFAULT_BADGES[4]); // حافظ مجتهد
+    if (uniqueAyahs.size >= 500) earned.push(DEFAULT_BADGES[5]); // حافظ متقن
+    if (allTasks.filter((t) => t.status === 'done').length >= 50) earned.push(DEFAULT_BADGES[6]); // مثابر
+    setUnlockedBadges(earned);
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -89,17 +108,29 @@ export function ProgressScreen() {
     <div className="space-y-5 pb-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-primary-800 dark:text-primary-100">تقدّمي</h1>
-        <TrendingUp size={28} className="text-primary-600 dark:text-gold-400" />
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={handleExportPDF}
+            disabled={isExporting}
+            className="flex items-center gap-2"
+          >
+            <Download size={16} />
+            {isExporting ? 'جارٍ التصدير...' : 'تصدير تقرير'}
+          </Button>
+          <TrendingUp size={28} className="text-primary-600 dark:text-gold-400" />
+        </div>
       </div>
 
       {/* Streak hero */}
-      <div className="bg-linear-to-bl from-accent-500 to-accent-700 rounded-3xl p-5 text-white relative overflow-hidden">
+      <div className="bg-linear-to-bl from-accent-500 to-accent-700 rounded-3xl p-5 md:p-7 text-white relative overflow-hidden">
         <div className="absolute top-0 left-0 w-32 h-32 bg-white/10 rounded-full -translate-x-16 -translate-y-16" />
         <div className="relative flex items-center gap-4">
-          <Flame size={48} className="text-white" />
+          <Flame size={48} className="text-white md:scale-110" />
           <div>
             <p className="text-sm text-white/80">سلسلة الأيام المتتالية</p>
-            <h2 className="text-4xl font-bold">{toArabicNumber(streak)} <span className="text-lg">يوم</span></h2>
+            <h2 className="text-4xl md:text-5xl font-bold">{toArabicNumber(streak)} <span className="text-lg">يوم</span></h2>
           </div>
         </div>
       </div>
@@ -114,8 +145,8 @@ export function ProgressScreen() {
               {toArabicNumber(memorizedAyahs)} من {toArabicNumber(TOTAL_QURAN_AYAHS)} آية
             </p>
           </div>
-          <div className="w-20 h-20 relative">
-            <svg className="w-20 h-20 transform -rotate-90">
+          <div className="w-20 h-20 md:w-28 md:h-28 relative">
+            <svg className="w-20 h-20 md:w-28 md:h-28 transform -rotate-90" viewBox="0 0 80 80">
               <circle cx="40" cy="40" r="34" fill="none" stroke="currentColor" strokeWidth="6" className="text-gray-200 dark:text-gray-700" />
               <circle
                 cx="40" cy="40" r="34" fill="none" stroke="currentColor" strokeWidth="6"
@@ -139,7 +170,7 @@ export function ProgressScreen() {
       <Card>
         <SectionHeader title="خريطة الالتزام" icon={<Calendar size={20} />} />
         <div className="overflow-x-auto">
-          <div className="flex gap-1 min-w-max">
+          <div className="flex gap-1 md:gap-1.5 min-w-max">
             {weeks.map((week, wi) => (
               <div key={wi} className="flex flex-col gap-1">
                 {week.map((date) => {
@@ -151,7 +182,7 @@ export function ProgressScreen() {
                   return (
                     <div
                       key={date}
-                      className={`w-7 h-7 rounded-md transition-smooth ${
+                      className={`w-7 h-7 md:w-8 md:h-8 rounded-md transition-smooth ${
                         isFuture
                           ? 'bg-gray-50 dark:bg-gray-800/30'
                           : intensity === 0 && data?.total > 0
@@ -189,15 +220,15 @@ export function ProgressScreen() {
       {weeklyStats && monthlyStats && (
         <Card>
           <SectionHeader title="إحصائيات الصلاة" icon={<Award size={20} />} />
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-primary-50 dark:bg-primary-800/20 rounded-xl p-3 text-center">
+          <div className="grid grid-cols-2 gap-3 md:gap-4">
+            <div className="bg-primary-50 dark:bg-primary-800/20 rounded-xl p-3 md:p-4 text-center">
               <p className="text-xs text-gray-500 dark:text-gray-400">هذا الأسبوع</p>
               <p className="text-2xl font-bold text-primary-700 dark:text-gold-400 mt-1">{weeklyStats.percentage}%</p>
               <p className="text-xs text-gray-400 mt-1">
                 {toArabicNumber(weeklyStats.ontime)} في وقتها · {toArabicNumber(weeklyStats.missed)} فائتة
               </p>
             </div>
-            <div className="bg-gold-50 dark:bg-gold-900/20 rounded-xl p-3 text-center">
+            <div className="bg-gold-50 dark:bg-gold-900/20 rounded-xl p-3 md:p-4 text-center">
               <p className="text-xs text-gray-500 dark:text-gray-400">هذا الشهر</p>
               <p className="text-2xl font-bold text-gold-700 dark:text-gold-400 mt-1">{monthlyStats.percentage}%</p>
               <p className="text-xs text-gray-400 mt-1">
@@ -211,20 +242,20 @@ export function ProgressScreen() {
       {/* Task completion */}
       <Card>
         <SectionHeader title="إنجاز المهام" icon={<Check size={20} />} />
-        <div className="grid grid-cols-3 gap-3 text-center">
+        <div className="grid grid-cols-3 gap-3 md:gap-6 text-center">
           <div>
             <p className="text-2xl font-bold text-primary-700 dark:text-primary-200">{toArabicNumber(totalTasks)}</p>
-            <p className="text-xs text-gray-500">إجمالي</p>
+            <p className="text-xs md:text-sm text-gray-500">إجمالي</p>
           </div>
           <div>
             <p className="text-2xl font-bold text-success-600">{toArabicNumber(doneTasks)}</p>
-            <p className="text-xs text-gray-500">مكتملة</p>
+            <p className="text-xs md:text-sm text-gray-500">مكتملة</p>
           </div>
           <div>
             <p className="text-2xl font-bold text-primary-700 dark:text-gold-400">
               {totalTasks > 0 ? toArabicNumber(Math.round((doneTasks / totalTasks) * 100)) + '%' : '٠%'}
             </p>
-            <p className="text-xs text-gray-500">نسبة الإنجاز</p>
+            <p className="text-xs md:text-sm text-gray-500">نسبة الإنجاز</p>
           </div>
         </div>
       </Card>
@@ -232,18 +263,28 @@ export function ProgressScreen() {
       {/* Badges/Achievements */}
       <Card>
         <SectionHeader title="الأوسمة" icon={<Award size={20} />} />
-        {badges.length === 0 ? (
+        {unlockedBadges.length === 0 ? (
           <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-4">
             ابدأ بالحفظ والمراجعة ل تكسب أوسمة!
           </p>
         ) : (
-          <div className="grid grid-cols-3 gap-3">
-            {badges.map((badge, i) => (
-              <div key={i} className="flex flex-col items-center text-center animate-scale-in">
-                <div className="w-14 h-14 rounded-2xl bg-linear-to-bl from-gold-400 to-gold-600 flex items-center justify-center mb-1">
-                  <Award size={24} className="text-white" />
+          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-3">
+            {unlockedBadges.map((badge) => (
+              <div key={badge.id} className="flex flex-col items-center text-center animate-scale-in relative group">
+                <div className="w-14 h-14 rounded-2xl bg-linear-to-bl from-gold-400 to-gold-600 flex items-center justify-center mb-1 shadow-lg">
+                  <span className="text-2xl">{badge.emoji}</span>
                 </div>
-                <p className="text-xs font-medium text-primary-700 dark:text-primary-200">{badge}</p>
+                <p className="text-xs font-medium text-primary-700 dark:text-primary-200">{badge.name}</p>
+                {settings?.customBadgesEnabled && badge.shareable && (
+                  <button
+                    type="button"
+                    onClick={() => void shareBadge(badge)}
+                    className="absolute -top-2 -right-2 p-1.5 rounded-full bg-primary-600 text-white opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity shadow-md hover:bg-primary-700"
+                    title="مشاركة الوسام"
+                  >
+                    <Share2 size={12} />
+                  </button>
+                )}
               </div>
             ))}
           </div>

@@ -163,7 +163,7 @@ export function ContentLibrary({ showTitle = true }: { showTitle?: boolean } = {
     <div className="space-y-5 pb-4">
       <div className="flex items-center justify-between">
         {showTitle ? (
-          <h1 className="text-2xl font-bold text-primary-800 dark:text-primary-100">
+          <h1 className="text-2xl font-bold text-primary-800 dark:text-primary-100 md:text-3xl">
             مكتبة المحتوى
           </h1>
         ) : (
@@ -181,8 +181,8 @@ export function ContentLibrary({ showTitle = true }: { showTitle?: boolean } = {
               {quotaText}
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
-              المصحف كامل موجود داخل البرنامج. التفاسير والأحاديث والتلاوات تُحمَّل مرة واحدة فقط، وبعدها
-              تعمل بدون إنترنت.
+              المصحف كامل وصحيح مسلم موجودان داخل البرنامج. باقي التفاسير والأحاديث والتلاوات
+              تُحمَّل مرة واحدة فقط، وبعدها تعمل بدون إنترنت.
             </p>
             {anythingInstalled && (
               <button
@@ -202,8 +202,8 @@ export function ContentLibrary({ showTitle = true }: { showTitle?: boolean } = {
       <AudioDownloadManager />
 
       {/* ---- Tafsir ---- */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2">
+      <section className="space-y-3 md:grid md:grid-cols-2 md:items-start md:gap-4 md:space-y-0">
+        <div className="flex items-center gap-2 md:col-span-2">
           <BookOpen size={20} className="text-primary-600 dark:text-gold-400" />
           <h2 className="text-lg font-bold text-primary-800 dark:text-primary-100">التفاسير</h2>
         </div>
@@ -245,7 +245,7 @@ export function ContentLibrary({ showTitle = true }: { showTitle?: boolean } = {
                     )}
                   </div>
                   <p className="text-xs text-gray-500 dark:text-gray-400">{edition.authorAr}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mt-1">
+                  <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 leading-relaxed mt-1">
                     {edition.blurb}
                   </p>
                   <div className="flex items-center gap-3 mt-2 text-xs flex-wrap">
@@ -354,8 +354,8 @@ export function ContentLibrary({ showTitle = true }: { showTitle?: boolean } = {
       </section>
 
       {/* ---- Hadith ---- */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2">
+      <section className="space-y-3 md:grid md:grid-cols-2 md:items-start md:gap-4 md:space-y-0">
+        <div className="flex items-center gap-2 md:col-span-2">
           <BookText size={20} className="text-primary-600 dark:text-gold-400" />
           <h2 className="text-lg font-bold text-primary-800 dark:text-primary-100">
             كتب الحديث
@@ -399,6 +399,9 @@ export function ContentLibrary({ showTitle = true }: { showTitle?: boolean } = {
                     </h3>
                     {book.id === HADITH_OF_DAY_BOOK && (
                       <Badge variant="gold">الافتراضي</Badge>
+                    )}
+                    {book.bundled && (
+                      <Badge variant="neutral">مدمج مع التطبيق</Badge>
                     )}
                     {isInstalled && <Badge variant="success">محفوظ</Badge>}
                   </div>
@@ -459,7 +462,7 @@ export function ContentLibrary({ showTitle = true }: { showTitle?: boolean } = {
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-smooth"
                       >
                         <Download size={16} />
-                        تحميل
+                        {book.bundled ? 'تثبيت' : 'تحميل'}
                       </button>
                     )}
                   </div>
@@ -473,7 +476,7 @@ export function ContentLibrary({ showTitle = true }: { showTitle?: boolean } = {
       <Card className="bg-gray-50 dark:bg-gray-800/20">
         <div className="flex items-start gap-2">
           <WifiOff size={18} className="text-gray-400 dark:text-gray-500 shrink-0 mt-0.5" />
-          <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+          <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
             نصوص المصحف ({toArabicNumber(TOTAL_QURAN_AYAHS)} آية) مدمجة داخل البرنامج ولا تحتاج تحميلاً. أما التفاسير
             والأحاديث والتلاوات الصوتية فتعتمد على مصادرها وتُنزل عند الطلب — راجع ملف
             <span className="font-medium"> SOURCES.md </span>

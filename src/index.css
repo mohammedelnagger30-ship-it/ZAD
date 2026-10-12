@@ -509,6 +509,13 @@ body {
   }
 }
 
+/* A wide sheet needs proportionate margins, or the frame crowds the text at the edges. */
+@media (min-width: 768px) {
+  .mushaf-page {
+    padding: 3rem 3.6rem 4.5rem 4rem;
+  }
+}
+
 /* Focus ring for the ayah, in the page's own frame color — the reader's ayah is a
    focusable span too, and both screens now share this rule. */
 .mushaf-ayah:focus-visible {
@@ -825,6 +832,11 @@ body {
   padding-top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
   background: var(--panel);
   border-bottom: 1px solid var(--line);
+  /* On a wide screen the bar's controls stay in a readable measure
+     instead of flying to the two edges of the viewport. */
+  max-width: 56rem;
+  width: 100%;
+  margin-inline: auto;
 }
 
 .mushaf-heading {
@@ -916,6 +928,16 @@ body {
   margin-inline: auto;
 }
 
+@media (min-width: 768px) {
+  .mushaf-turn--column,
+  .mushaf-leaf--column { max-width: 48rem; }
+}
+
+@media (min-width: 1024px) {
+  .mushaf-turn--column,
+  .mushaf-leaf--column { max-width: 54rem; }
+}
+
 /*
  * The default way through the mushaf: sheets end to end, so the scroll is the page
  * turn. The gap is the shell showing between two leaves of paper, which is what
@@ -992,6 +1014,13 @@ body {
   padding: 0.55rem 0.65rem calc(env(safe-area-inset-bottom, 0px) + 0.6rem);
   background: var(--panel);
   border-top: 1px solid var(--line);
+}
+
+/* Same cap as the top bar; each row keeps its own wrapping on phones. */
+.mushaf-dock > * {
+  width: 100%;
+  max-width: 56rem;
+  margin-inline: auto;
 }
 
 .mushaf-progress {
@@ -1173,6 +1202,19 @@ body {
   outline: none;
 }
 
+/* On a wide screen the sheet stops hugging the bottom and reads as a dialog. */
+@media (min-width: 768px) {
+  .mushaf-sheet { justify-content: center; padding: 1.5rem; }
+  .mushaf-sheet__panel {
+    width: min(100%, 40rem);
+    margin-inline: auto;
+    max-height: min(80vh, 40rem);
+    border: 1px solid var(--line);
+    border-radius: 1.5rem;
+  }
+  .mushaf-sheet__body { padding-inline: 1.5rem; }
+}
+
 .mushaf-sheet__grip {
   width: 3rem;
   height: 0.3rem;
@@ -1270,7 +1312,14 @@ body {
 }
 
 .mushaf-grid--page {
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(2.6rem, 1fr));
+}
+
+/* On a desktop sheet the page picker claims every column it can hold. */
+@media (min-width: 1024px) {
+  .mushaf-grid--page {
+    grid-template-columns: repeat(16, minmax(0, 1fr));
+  }
 }
 
 .mushaf-grid--card {
@@ -1280,6 +1329,18 @@ body {
 @media (min-width: 480px) {
   .mushaf-grid--card {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) {
+  .mushaf-grid--card {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .mushaf-grid--card {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
 
@@ -1393,7 +1454,8 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 0.2rem;
-  padding: 0.6rem 0.3rem;
+  /* Tall enough that the segment reads as a control, not a label. */
+  padding: 0.75rem 0.4rem;
   border-radius: 1rem;
   background: var(--chip);
   color: var(--chip-fg);
@@ -1463,6 +1525,13 @@ body {
 .mushaf-fields {
   display: grid;
   gap: 0.6rem;
+}
+
+/* Two sliders side by side once the panel is wide enough to hold them. */
+@media (min-width: 768px) {
+  .mushaf-fields {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .mushaf-field {

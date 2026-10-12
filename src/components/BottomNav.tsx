@@ -76,9 +76,9 @@ export function BottomNav({ current, onNavigate }: BottomNavProps) {
     </nav>
     <nav
       aria-label="التنقل الرئيسي"
-      className="fixed inset-y-0 right-0 z-50 hidden w-[5.25rem] flex-col items-center border-l border-primary-100/80 bg-white/90 py-5 shadow-xs backdrop-blur-xl dark:border-primary-800/50 dark:bg-primary-950/90 md:flex"
+      className="fixed inset-y-0 right-0 z-50 hidden w-[5.25rem] flex-col items-center overflow-y-auto border-l border-primary-100/80 bg-white/90 py-5 shadow-xs backdrop-blur-xl dark:border-primary-800/50 dark:bg-primary-950/90 md:flex lg:w-24 xl:w-32"
     >
-      <div className="mb-8 flex h-11 w-11 items-center justify-center rounded-2xl bg-primary-100 text-primary-700 shadow-xs dark:bg-primary-800 dark:text-gold-400" aria-hidden="true">
+      <div className="mb-8 flex h-11 w-11 items-center justify-center rounded-2xl bg-primary-100 text-primary-700 shadow-xs dark:bg-primary-800 dark:text-gold-400 xl:h-12 xl:w-12" aria-hidden="true">
         <BookOpen size={23} />
       </div>
       <div className="flex w-full flex-col items-center gap-2 px-2">
@@ -90,7 +90,7 @@ export function BottomNav({ current, onNavigate }: BottomNavProps) {
               key={item.screen}
               onClick={() => onNavigate(item.screen)}
               aria-current={isActive ? 'page' : undefined}
-              className={`flex min-h-[4.25rem] w-full flex-col items-center justify-center gap-1.5 rounded-2xl text-[11px] transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:focus-visible:ring-gold-400 ${
+              className={`flex min-h-[4.25rem] w-full flex-col items-center justify-center gap-1.5 rounded-2xl text-[11px] transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:focus-visible:ring-gold-400 lg:gap-2 lg:text-xs xl:text-sm ${
                 isActive
                   ? 'bg-primary-50 font-bold text-primary-700 shadow-sm dark:bg-primary-800/60 dark:text-gold-400'
                   : 'text-gray-500 hover:bg-primary-50/80 dark:text-gray-400 dark:hover:bg-primary-800/40'

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from 'react';
 import type { CSSProperties } from 'react';
-import { Search, BookOpen, BookText, Layers, X } from 'lucide-react';
+import { Search, BookOpen, BookText, Layers, X, ChevronLeft } from 'lucide-react';
 import { SURAHS, JUZ_INFO, TOTAL_QURAN_PAGES, getSurah, getAyahPage, getJuzForPage, toArabicNumber, type SurahMeta } from '@/data/surahs';
 import { getAyahs, hasFullText, type AyahText } from '@/data/quranText';
 import { getHizbForPage, SAJDAH_AYAHS } from '@/data/mushafPages';
@@ -10,6 +10,7 @@ import { AudioRecitationPlayer } from '@/components/AudioRecitationPlayer';
 import { loadPreferredReciter, savePreferredReciter } from '@/data/audioReciters';
 import { MushafReader } from '@/screens/MushafReader';
 import { MushafFrameDecoration } from '@/components/mushaf/MushafPage';
+import { useViewportStep } from '@/hooks/useViewportStep';
 import { KhatmahCard } from '@/components/khatmah/KhatmahCard';
 import { AyahSpan } from '@/components/quran/AyahSpan';
 import { SurahListItem, PageBrowser } from '@/components/quran/QuranBrowse';
@@ -101,6 +102,9 @@ export function QuranScreen({ settings }: QuranScreenProps) {
   const [hideWordByWord, setHideWordByWord] = useState(false);
   const [bookmarks, setBookmarks] = useState<BookmarkType[]>([]);
   const [fontSize, setFontSize] = useState(settings.fontSize);
+  // The page typesets a step larger where there is room for a step, and follows the
+  // device when it is rotated under the reader.
+  const viewportStep = useViewportStep();
   const [tafsirAyah, setTafsirAyah] = useState<{ surahId: number; ayah: number } | null>(null);
   /** The ayah that has been pressed and has not yet been answered: meaning, or voice. */
   const [ayahChoice, setAyahChoice] = useState<number | null>(null);
@@ -151,6 +155,13 @@ export function QuranScreen({ settings }: QuranScreenProps) {
   }, [searchQuery, revelationFilter]);
 
   const ayahSearch = useMemo(() => searchAyahs(ayahQuery), [ayahQuery]);
+
+  /**
+   * When the user types in the surah-list search box we also run an ayah
+   * full-text search in parallel, so the same query surface both surah names
+   * AND matching verses without switching tabs.
+   */
+  const inlineSurahAyahSearch = useMemo(() => searchAyahs(searchQuery), [searchQuery]);
 
   const openSurah = (surah: SurahMeta) => {
     setSelectedSurah(surah);
@@ -306,7 +317,7 @@ export function QuranScreen({ settings }: QuranScreenProps) {
               >
                 <tab.icon size={20} strokeWidth={2} className={`transition-transform ${browseMode === tab.mode ? 'scale-110' : 'group-hover:scale-110'}`} />
                 <span className="text-sm font-bold">{tab.label}</span>
-                <span className="text-[10px] opacity-70">{tab.desc}</span>
+                <span className="hidden text-[10px] opacity-70 sm:block">{tab.desc}</span>
                 {browseMode === tab.mode && (
                   <div className="absolute bottom-1.5 h-1 w-8 rounded-full bg-white/50" />
                 )}
@@ -352,7 +363,7 @@ export function QuranScreen({ settings }: QuranScreenProps) {
                     key={filter.value}
                     onClick={() => setRevelationFilter(filter.value)}
                     aria-pressed={revelationFilter === filter.value}
-                    className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-300 ${
+                    className={`flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-300 ${
                       revelationFilter === filter.value
                         ? 'bg-white text-primary-700 shadow-md dark:bg-primary-800 dark:text-primary-100'
                         : 'text-gray-500 hover:bg-white/70 hover:text-primary-700 dark:text-gray-400 dark:hover:bg-primary-800/70 dark:hover:text-primary-100'
@@ -371,7 +382,7 @@ export function QuranScreen({ settings }: QuranScreenProps) {
 
             {/* Enhanced Surah List */}
             {filteredSurahs.length > 0 ? (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 {filteredSurahs.map((surah) => (
                   <SurahListItem
                     key={surah.id}
@@ -388,6 +399,64 @@ export function QuranScreen({ settings }: QuranScreenProps) {
                 </div>
                 <p className="text-lg font-bold text-primary-800 dark:text-primary-100">لم نعثر على سورة مطابقة</p>
                 <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">جرّب اسمًا أو رقمًا مختلفًا، أو غيّر نوع السور</p>
+              </div>
+            )}
+
+            {/* ── Inline ayah text results ── */}
+            {searchQuery.trim() && (
+              <div className="space-y-3">
+                {/* Divider with label */}
+                <div className="flex items-center gap-3">
+                  <div className="h-px flex-1 bg-primary-200 dark:bg-primary-800" />
+                  <span className="rounded-xl bg-primary-100 px-3 py-1 text-xs font-bold text-primary-700 dark:bg-primary-900 dark:text-primary-300">
+                    نتائج في نص القرآن
+                  </span>
+                  <div className="h-px flex-1 bg-primary-200 dark:bg-primary-800" />
+                </div>
+
+                {inlineSurahAyahSearch.results.length === 0 ? (
+                  <p className="text-center text-sm text-gray-400 dark:text-gray-500 py-4">
+                    لا توجد آيات مطابقة للنص المكتوب
+                  </p>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-end">
+                      <div className="flex items-center gap-2 rounded-2xl bg-primary-100/80 px-4 py-2 dark:bg-primary-900/40">
+                        <span className="text-xs text-gray-600 dark:text-gray-400">الآيات:</span>
+                        <span className="text-sm font-bold text-primary-700 dark:text-primary-200">
+                          {toArabicNumber(inlineSurahAyahSearch.total)}
+                        </span>
+                        {inlineSurahAyahSearch.total > inlineSurahAyahSearch.results.length && (
+                          <span className="text-[10px] text-gray-500 dark:text-gray-400">
+                            (أول {toArabicNumber(inlineSurahAyahSearch.results.length)})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="space-y-3 md:max-w-3xl">
+                      {inlineSurahAyahSearch.results.map((result) => (
+                        <button
+                          key={`${result.surahId}:${result.ayahNumber}`}
+                          type="button"
+                          onClick={() => openAyahFromSearch(result.surahId, result.ayahNumber)}
+                          className="group w-full rounded-3xl border-2 border-primary-100 bg-white p-5 text-right shadow-xs transition-all hover:-translate-y-0.5 hover:border-primary-300 hover:shadow-md dark:border-primary-800/60 dark:bg-primary-900/30 dark:hover:border-primary-700"
+                        >
+                          <p className="quran-text text-lg text-primary-900 dark:text-primary-50" dir="rtl">
+                            {result.text}
+                          </p>
+                          <p className="mt-3 flex items-center justify-between text-xs text-primary-600 dark:text-primary-300">
+                            <span>
+                              سورة {result.surahName} — الآية {toArabicNumber(result.ayahNumber)}
+                            </span>
+                            <span className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                              افتح في القارئ <ChevronLeft size={14} />
+                            </span>
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </>
@@ -420,7 +489,7 @@ export function QuranScreen({ settings }: QuranScreenProps) {
 
     return (
       <>
-      <div className="space-y-4 pb-4">
+      <div className="mx-auto max-w-[56rem] space-y-4 pb-4">
         <ReaderHeader setViewMode={setViewMode} isHifz={isHifz} setFontSize={setFontSize} />
 
         <HifzControls
@@ -486,7 +555,10 @@ export function QuranScreen({ settings }: QuranScreenProps) {
                  measure — same words per line, same page proportions. */
               <>
                 <div className="mushaf-leaf mushaf-leaf--column">
-                  <div className="mushaf-page" style={{ '--fs': `${fontSize}px` } as CSSProperties}>
+                  <div
+                    className="mushaf-page"
+                    style={{ '--fs': `${Math.round(fontSize * viewportStep)}px` } as CSSProperties}
+                  >
                     <MushafFrameDecoration />
                     <div className="mushaf-margin" aria-hidden="true">
                       <span>الجزء {toArabicNumber(getJuzForPage(currentPage))}</span>

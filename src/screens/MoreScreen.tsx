@@ -67,7 +67,7 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
       {/* Page Title */}
       <div className="flex items-center justify-between border-b border-primary-100 pb-3 dark:border-primary-800">
         <div>
-          <h1 className="text-2xl font-bold text-primary-900 dark:text-primary-50 flex items-center gap-2">
+          <h1 className="text-2xl md:text-3xl font-bold text-primary-900 dark:text-primary-50 flex items-center gap-2">
             <Sparkles size={24} className="text-amber-500" />
             جميع الأقسام والخدمات
           </h1>
@@ -78,7 +78,7 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
       </div>
 
       {/* Grid of Feature Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
         {items.map((item) => {
           const Icon = item.icon;
           return (
@@ -86,7 +86,7 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
               key={item.screen}
               type="button"
               onClick={() => navigate(item.screen)}
-              className="group text-right flex items-center gap-3.5 p-4 rounded-3xl border border-primary-100/90 bg-white/90 dark:border-primary-800/80 dark:bg-primary-950/80 shadow-md hover:shadow-xl hover:border-primary-400 dark:hover:border-primary-600 transition-all duration-200 active:scale-[0.98]"
+              className="group text-right flex items-center gap-3.5 p-4 md:p-5 rounded-3xl border border-primary-100/90 bg-white/90 dark:border-primary-800/80 dark:bg-primary-950/80 shadow-md hover:shadow-xl hover:border-primary-400 dark:hover:border-primary-600 transition-all duration-200 active:scale-[0.98]"
             >
               <div className={`h-12 w-12 rounded-2xl bg-gradient-to-br ${item.color} text-white flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform`}>
                 <Icon size={22} />
@@ -102,7 +102,7 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                <p className="text-xs text-gray-500 dark:text-gray-400 truncate sm:whitespace-normal sm:line-clamp-2 mt-0.5">
                   {item.description}
                 </p>
               </div>
@@ -139,7 +139,7 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
                 رفيقك اليومي لتلاوة وتدبر وحفظ القرآن الكريم وإتمام الأذكار والصلوات بدون إنترنت.
               </p>
               <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 mt-1.5">
-                الإصدار {import.meta.env.VITE_APP_VERSION ?? '1.18.4'} • تطوير متكامل
+                الإصدار {import.meta.env.VITE_APP_VERSION ?? '1.19.0'} • تطوير متكامل
               </p>
             </div>
           </div>

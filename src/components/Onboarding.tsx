@@ -40,12 +40,28 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     return () => removeListener?.();
   }, []);
 
-  const steps = [
+  const steps: Array<{
+    icon: React.ReactNode;
+    title: string;
+    description: string;
+    tips?: string[];
+    extra?: React.ReactNode;
+    action: () => void;
+    actionLabel: string;
+  }> = [
     // Welcome
     {
       icon: <Heart size={64} className="text-gold-500" />,
       title: 'مرحباً بك في قُرّة',
       description: 'تطبيقك الشامل لحفظ القرآن الكريم وتتبع العبادات اليومية. يعمل بالكامل بدون إنترنت.',
+      tips: [
+        '📖 القرآن الكريم مع التلاوة الصوتية',
+        '🕌 مواقيت الصلاة مع التنبيهات',
+        '📚 خطط الحفظ والمراجعة الذكية',
+        '📖 مكتبة أحاديث كاملة أوفلاين',
+        '🤲 أذكار ومسبحة إلكترونية',
+        '📊 تتبع التقدم والإحصائيات',
+      ],
       action: () => setStep(1),
       actionLabel: 'ابدأ',
     },
@@ -54,6 +70,12 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       icon: <Bell size={64} className="text-primary-600" />,
       title: 'تفعيل التنبيهات',
       description: 'تنبيهات لمواعيد الحفظ والمراجعة وأوقات الصلاة. نحتاج إذنك لإرسالها في الوقت المحدد حتى لو كان التطبيق مغلقاً.',
+      tips: [
+        '⏰ تنبيهات الأذان لكل صلاة',
+        '📝 تذكيرات المهام اليومية',
+        '🤲 تذكيرات الأذكار',
+        '🔔 تنبيهات قابلة للتخصيص',
+      ],
       action: async () => {
         setNotificationError(null);
         setRequesting(true);
@@ -81,7 +103,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       action: () => setStep(3),
       actionLabel: 'متابعة',
       extra: (
-        <div className="max-h-48 overflow-y-auto space-y-1 mb-4">
+        <div className="max-h-48 md:max-h-80 overflow-y-auto space-y-1 mb-4">
           {CITY_PRESETS.map((city) => (
             <button
               key={city.name}
@@ -124,16 +146,34 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     },
   ];
 
-  const current = steps[step];
+  const current = steps[step] as {
+    icon: React.ReactNode;
+    title: string;
+    description: string;
+    tips?: string[];
+    extra?: React.ReactNode;
+    action: () => void;
+    actionLabel: string;
+  };
 
   return (
     <div className="min-h-screen bg-linear-to-b from-primary-50 to-surface-light dark:from-primary-950 dark:to-surface-dark flex items-center justify-center p-6">
-      <div className="max-w-md w-full">
+      <div className="max-w-md sm:max-w-lg md:max-w-xl w-full">
         <div className="bg-white dark:bg-primary-900 rounded-3xl p-8 shadow-xl animate-scale-in">
           <div className="flex flex-col items-center text-center">
             <div className="mb-6 mt-2">{current.icon}</div>
-            <h1 className="text-2xl font-bold text-primary-800 dark:text-primary-100 mb-3">{current.title}</h1>
+            <h1 className="text-2xl md:text-3xl font-bold text-primary-800 dark:text-primary-100 mb-3">{current.title}</h1>
             <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed mb-6">{current.description}</p>
+            {current.tips && (
+              <div className="w-full text-right bg-primary-50 dark:bg-primary-800/30 rounded-xl p-4 mb-6">
+                <p className="text-xs font-semibold text-primary-700 dark:text-primary-200 mb-2">الميزات الرئيسية:</p>
+                <ul className="space-y-1">
+                  {current.tips.map((tip, i) => (
+                    <li key={i} className="text-xs text-gray-600 dark:text-gray-300">{tip}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
           {current.extra}
           {notificationError && step === 2 && (

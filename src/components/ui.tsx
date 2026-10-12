@@ -35,7 +35,7 @@ export function Card({ children, className = '', onClick, noPadding }: CardProps
         border border-primary-100 dark:border-primary-800/40
         transition-smooth
         ${onClick ? 'cursor-pointer hover:shadow-md hover:border-primary-300 dark:hover:border-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:focus-visible:ring-gold-400' : ''}
-        ${noPadding ? '' : 'p-4'}
+        ${noPadding ? '' : 'p-4 md:p-5'}
         ${className}
       `}
     >
@@ -55,9 +55,12 @@ export function SectionHeader({ title, icon, action }: SectionHeaderProps) {
     <div className="flex items-center justify-between mb-3">
       <div className="flex items-center gap-2">
         {icon && <span className="text-primary-600 dark:text-gold-400">{icon}</span>}
-        <h2 className="text-lg font-bold text-primary-800 dark:text-primary-100">{title}</h2>
+        <h2 className="text-lg md:text-xl font-bold text-primary-800 dark:text-primary-100">{title}</h2>
       </div>
-      {action}
+      {/* The action arrives as a bare text link; grow the BUTTON itself to a
+          finger-sized target. The negative margin keeps the header exactly where
+          it was — the extra area lands in the gaps that already surround it. */}
+      {action && <div className="flex items-center [&>button]:-my-2 [&>button]:py-2.5">{action}</div>}
     </div>
   );
 }
@@ -91,7 +94,8 @@ export function Button({
     warning: 'bg-warning-500 hover:bg-warning-600 text-white shadow-sm',
   };
   const sizes: Record<string, string> = {
-    sm: 'px-3 py-1.5 text-sm rounded-lg',
+    // sm keeps the compact look but no longer shrinks below a tappable 40px.
+    sm: 'px-3.5 py-2.5 text-sm rounded-lg',
     md: 'px-4 py-2.5 text-base rounded-xl',
     lg: 'px-6 py-3 text-lg rounded-xl',
   };
