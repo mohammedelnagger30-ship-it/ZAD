@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Play, Pause, Volume2, VolumeX, CheckCircle2, Bell, BookOpen, X, Sparkles, Clock, MapPin } from 'lucide-react';
+import { Play, Volume2, VolumeX, CheckCircle2, Bell, BookOpen, X, Sparkles, Clock, MapPin } from 'lucide-react';
 import type { Settings } from '@/db/database';
 import { getAdhanSound } from '@/data/adhanSounds';
 import { formatTime12h, getDateInTimeZone, getPrayerTimeZone } from '@/utils/prayerTimes';
@@ -19,8 +19,9 @@ export interface AzanOverlayProps {
   settings: Settings;
   isPreview?: boolean;
   /**
-   * Opened by the native adhan notification. The notification carries its own sound, so
-   * the overlay must not start a second copy of the adhan on top of it.
+   * Opened by the native adhan notification. The notification posts at the prayer
+   * instant itself and rings from its own channel, so the page must not start a second
+   * copy of the adhan on top of it (see `SYSTEM_RING_WINDOW_MS`).
    */
   fromNotification?: boolean;
   onClose: () => void;
@@ -32,6 +33,21 @@ const AFTER_AZAN_DUAA = {
   text: 'اللَّهُمَّ رَبَّ هَذِهِ الدَّعْوَةِ التَّامَّةِ، وَالصَّلاةِ الْقَائِمَةِ، آتِ مُحَمَّدًا الْوَسِيلَةَ وَالْفَضِيلَةَ، وَابْعَثْهُ مَقَامًا مَحْمُودًا الَّذِي وَعَدْتَهُ.',
   benefit: 'حلّت له شفاعتي يوم القيامة (رواة البخاري)',
 };
+
+/**
+ * How long the notification's own adhan counts as "still ringing".
+ *
+ * The prayer alert is posted at the instant itself, so an opening that arrives with it
+ * (the full-screen takeover, the banner a second later) already has the adhan in the
+ * air and the page stays quiet. A later opening — a tap on the notification minutes
+ * afterwards, a preview, the in-app timer — has no sound behind it, so the page starts
+ * it by itself.
+ *
+ * The window covers the longest voice we ship (فَجر ~3:44, مكة ~3:23): starting a
+ * second copy of the adhan while the first is still ringing would be worse than a page
+ * opened after the call already finished, which carries the words of that call anyway.
+ */
+const SYSTEM_RING_WINDOW_MS = 4 * 60_000;
 
 export function AzanOverlayModal({
   isOpen,
@@ -45,6 +61,11 @@ export function AzanOverlayModal({
   onNavigateToAdhkar,
 }: AzanOverlayProps) {
   const [isPlaying, setIsPlaying] = useState(false);
+  /** The WebView refused to start the adhan without a gesture — fallback control. */
+  const [blocked, setBlocked] = useState(false);
+  /** The prayer notification is ringing right now; the page's own audio stays out. */
+  const [systemRinging, setSystemRinging] = useState(false);
+  const [ended, setEnded] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [snoozed, setSnoozed] = useState(false);
@@ -60,13 +81,8 @@ export function AzanOverlayModal({
     ? formatTime12h(prayerTime, timeZone)
     : formatTime12h(trustedNow(), timeZone);
 
-  /**
-   * The adhan reached us as a notification, so the notification channel has already
-   * sounded it. The overlay is the page, not a second speaker.
-   */
-  const systemAlreadyPlayed = fromNotification && settings.adhanSound && !isPreview;
-
-  // Initialize and play audio
+  // Initialize and play the audio: the adhan is meant to reach the ear together with
+  // the page, without anyone pressing anything.
   useEffect(() => {
     if (!isOpen) {
       if (audioRef.current) {
@@ -74,6 +90,9 @@ export function AzanOverlayModal({
         audioRef.current.currentTime = 0;
       }
       setIsPlaying(false);
+      setBlocked(false);
+      setSystemRinging(false);
+      setEnded(false);
       setConfirmed(false);
       setSnoozed(false);
       return;
@@ -82,44 +101,99 @@ export function AzanOverlayModal({
     const audio = new Audio(audioUrl);
     audioRef.current = audio;
     audio.loop = false;
+    setBlocked(false);
+    setSystemRinging(false);
+    setEnded(false);
 
-    const handleEnded = () => setIsPlaying(false);
+    const handleEnded = () => {
+      setIsPlaying(false);
+      setEnded(true);
+    };
     audio.addEventListener('ended', handleEnded);
 
-    // Auto-play audio if enabled in settings (or preview). A notification-opened overlay
-    // skips this: Android already played this adhan from the notification channel, and a
-    // second recording starting on top of it would overlap.
-    if ((settings.adhanSound || isPreview) && !systemAlreadyPlayed) {
-      audio.play().then(() => {
-        setIsPlaying(true);
-      }).catch((err) => {
-        console.warn('Audio auto-play failed (user interaction required):', err);
-        setIsPlaying(false);
-      });
+    // Fired only by the retry path below (a first touch, or the fallback control).
+    const startOnFirstTouch = () => {
+      window.removeEventListener('pointerdown', startOnFirstTouch, true);
+      window.removeEventListener('keydown', startOnFirstTouch, true);
+      start();
+    };
+
+    const start = () => {
+      audio
+        .play()
+        .then(() => {
+          setIsPlaying(true);
+          setBlocked(false);
+        })
+        .catch((err: unknown) => {
+          // The WebView refused to start on its own. Arm a retry on the first touch, so
+          // the adhan begins the moment the screen is touched instead of waiting for a
+          // button hunt — and keep that button visible as the very last resort.
+          console.warn('Audio auto-play failed (user interaction required):', err);
+          setIsPlaying(false);
+          setBlocked(true);
+          window.addEventListener('pointerdown', startOnFirstTouch, true);
+          window.addEventListener('keydown', startOnFirstTouch, true);
+        });
+    };
+
+    /*
+     * The prayer notification is posted at the instant itself and rings from its own
+     * channel, so a page arriving together with it stays quiet — two copies of the
+     * adhan would overlap. Every other opening (preview, the in-app timer, a tap on
+     * the notification long after the prayer) arrives to silence: this page is the
+     * speaker then.
+     */
+    const systemRingingNow =
+      fromNotification &&
+      !isPreview &&
+      prayerTime != null &&
+      trustedNow().getTime() - prayerTime.getTime() < SYSTEM_RING_WINDOW_MS;
+
+    if (systemRingingNow) {
+      setSystemRinging(true);
+    } else if (settings.adhanSound || isPreview) {
+      start();
     }
 
     return () => {
       audio.removeEventListener('ended', handleEnded);
+      window.removeEventListener('pointerdown', startOnFirstTouch, true);
+      window.removeEventListener('keydown', startOnFirstTouch, true);
       audio.pause();
       audioRef.current = null;
     };
-  }, [isOpen, audioUrl, settings.adhanSound, isPreview, systemAlreadyPlayed]);
+  }, [isOpen, audioUrl, settings.adhanSound, isPreview, fromNotification, prayerTime]);
 
-  const togglePlay = () => {
-    if (!audioRef.current) return;
-    if (isPlaying) {
-      audioRef.current.pause();
-      setIsPlaying(false);
-    } else {
-      audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
-    }
-  };
+  /** Fallback control, rendered only when auto-start was refused. */
+  const startAudio = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio
+      .play()
+      .then(() => {
+        setIsPlaying(true);
+        setBlocked(false);
+      })
+      .catch(() => setBlocked(true));
+  }, []);
 
   const toggleMute = () => {
     if (!audioRef.current) return;
     audioRef.current.muted = !isMuted;
     setIsMuted(!isMuted);
   };
+
+  /** One line telling the person what the sound is doing — never «اضغط للتشغيل». */
+  const soundStatus = systemRinging
+    ? 'الأذان يُشغَّل تلقائيًا مع التنبيه'
+    : blocked
+      ? 'تعذّر التشغيل التلقائي — اضغط للتشغيل'
+      : isPlaying
+        ? 'جارٍ تشغيل الأذان الآن…'
+        : ended
+          ? 'انتهى الأذان'
+          : 'يبدأ صوت الأذان تلقائيًا…';
 
   const handleConfirmPrayer = useCallback(async () => {
     // A preview is a look at the page, never an answer: it must not write a record for
@@ -267,28 +341,28 @@ export function AzanOverlayModal({
           </div>
         </div>
 
-        {/* Audio Player Controls */}
+        {/* Adhan sound — starts by itself with the page, no button to hunt for */}
         {settings.adhanSound && (
           <div className="mb-6 rounded-2xl border border-emerald-500/20 bg-slate-900/60 p-3.5 backdrop-blur-xs">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 overflow-hidden">
-                <button
-                  type="button"
-                  onClick={togglePlay}
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-slate-950 font-bold hover:bg-amber-400 transition"
-                  aria-label={isPlaying ? 'إيقاف الأذان' : 'تشغيل الأذان'}
-                >
-                  {isPlaying ? <Pause size={22} /> : <Play size={22} className="mr-0.5" />}
-                </button>
+                {/*
+                  Rendered only when the WebView refused to auto-start the adhan: a
+                  safety net, not the normal way to hear it.
+                */}
+                {blocked && (
+                  <button
+                    type="button"
+                    onClick={startAudio}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-slate-950 font-bold hover:bg-amber-400 transition"
+                    aria-label="تشغيل الأذان"
+                  >
+                    <Play size={22} className="mr-0.5" />
+                  </button>
+                )}
                 <div className="truncate text-right">
                   <p className="text-xs font-semibold text-white truncate">{adhanSound.name}</p>
-                  <p className="text-[11px] text-emerald-400">
-                    {isPlaying
-                      ? 'جارٍ تشغيل الأذان الآن…'
-                      : systemAlreadyPlayed
-                        ? 'شُغِّل الأذان مع التنبيه — اضغط للإعادة'
-                        : 'موقوف مؤقتاً'}
-                  </p>
+                  <p className="text-[11px] text-emerald-400">{soundStatus}</p>
                 </div>
               </div>
 
@@ -302,14 +376,21 @@ export function AzanOverlayModal({
                 </div>
               )}
 
-              <button
-                type="button"
-                onClick={toggleMute}
-                className="rounded-lg p-2 text-slate-400 hover:text-white transition"
-                aria-label={isMuted ? 'إلغاء الكتم' : 'كتم الصوت'}
-              >
-                {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
-              </button>
+              {/*
+                The mute switch controls this page's own audio, so it is offered only
+                while the page is the speaker — the notification's ringing belongs to
+                Android and is stopped by dismissing the alert.
+              */}
+              {!systemRinging && (
+                <button
+                  type="button"
+                  onClick={toggleMute}
+                  className="rounded-lg p-2 text-slate-400 hover:text-white transition"
+                  aria-label={isMuted ? 'إلغاء الكتم' : 'كتم الصوت'}
+                >
+                  {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+                </button>
+              )}
             </div>
           </div>
         )}
