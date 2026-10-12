@@ -10,6 +10,7 @@ import {
   type PrayerTimeInfo,
 } from '@/utils/prayerTimes';
 import { hasNotificationPermission } from '@/utils/notifications';
+import { onAdhanOverlay } from '@/utils/adhanOverlay';
 import { onClockChange, trustedNow, trustedNowMs } from '@/utils/clock';
 import type { PrayerKey } from '@/utils/prayerTracker';
 
@@ -212,6 +213,38 @@ export function useAzanTrigger(settings: Settings | null) {
       cancelled = true;
       recSub?.remove?.();
       actSub?.remove?.();
+    };
+  }, [openAzan]);
+
+  // 1b. Native takeover path: the adhan page can now open itself while the app is
+  // closed (full-screen intent), and at the prayer instant while it is open.
+  // `adhanLaunch` is the activity being brought forward — treat it like a tap.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let cancelled = false;
+    let off: (() => void) | undefined;
+
+    void onAdhanOverlay((data, source) => {
+      if (!data?.prayerKey) return;
+      openAzan(
+        data.prayerKey as PrayerKey,
+        data.prayerName,
+        typeof data.time === 'string' ? new Date(data.time) : undefined,
+        { fromNotification: true, force: source === 'launch' },
+      );
+    })
+      .then((remove) => {
+        if (cancelled) remove();
+        else off = remove;
+      })
+      .catch((err) => {
+        console.warn('Adhan overlay listener setup failed:', err);
+      });
+
+    return () => {
+      cancelled = true;
+      off?.();
     };
   }, [openAzan]);
 

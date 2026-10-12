@@ -1,8 +1,10 @@
 package com.hifzi.app;
 
 import android.content.Intent;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.WindowManager;
 
 import com.getcapacitor.BridgeActivity;
 
@@ -24,9 +26,13 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         // Local (in-app) update installer: must be registered before the bridge is built.
         registerPlugin(AppUpdater.class);
+        // Prayer-time takeover (full-screen intent): opens the adhan page while the app
+        // is closed. Registered with the rest before the bridge is built.
+        registerPlugin(AdhanOverlay.class);
         super.onCreate(savedInstanceState);
 
         Intent intent = getIntent();
+        applyAdhanWindowFlags(intent);
         if (intent != null && ACTION_RESCHEDULE.equals(intent.getAction())) {
             Log.d(TAG, "Started to reschedule notifications after boot - closing when done");
             bootReschedulePending = true;
@@ -46,11 +52,36 @@ public class MainActivity extends BridgeActivity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        applyAdhanWindowFlags(intent);
         // singleTask: a manual launch while the boot close is pending reuses this
         // instance with a fresh (action-less) intent. Cancel the pending close so the
         // app is not shut down under the person using it.
         if (intent == null || !ACTION_RESCHEDULE.equals(intent.getAction())) {
             bootReschedulePending = false;
+        }
+    }
+
+    /**
+     * The adhan takeover arrives over the lock screen (full-screen intent), so that one
+     * launch may draw above the keyguard and wake the screen. Every other launch goes
+     * back to normal — the flags are cleared again here because singleTask reuses this
+     * instance and the window would otherwise stay unlocked-over-keyguard forever.
+     */
+    private void applyAdhanWindowFlags(Intent intent) {
+        boolean adhanLaunch = intent != null && AdhanOverlay.ACTION_ADHAN.equals(intent.getAction());
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(adhanLaunch);
+        } else if (adhanLaunch) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED);
+        } else {
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED);
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            setTurnScreenOn(adhanLaunch);
+        } else if (adhanLaunch) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON);
+        } else {
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON);
         }
     }
 }

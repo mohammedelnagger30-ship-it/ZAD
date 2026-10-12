@@ -223,6 +223,17 @@ function Save-AndroidLauncherIcons {
     }
 }
 
+# Notification large icon: the mark full-bleed on its field, square, so the
+# system's own round/squircle presentation on the content always sits on the
+# brand green. Referenced by every notification as `ic_notification_large`.
+function Save-AndroidNotificationIcon {
+    $androidResDir = Join-Path $root 'android\app\src\main\res'
+    $fgDir = Join-Path $androidResDir 'drawable-nodpi'
+    New-Item -ItemType Directory -Force -Path $fgDir | Out-Null
+    Save-Png -Bmp (New-Mark -Size 256 -Shape 'square' -Fill 'opaque') `
+             -Path (Join-Path $fgDir 'ic_notification_large.png')
+}
+
 # Adaptive icon (API 26+): full-bleed foreground the launcher masks itself,
 # over a deep-green background layer so every mask stays seamless.
 function Save-AndroidAdaptiveLayers {
@@ -272,6 +283,7 @@ Save-Icon -Size 192 -Name 'icon-192.png'
 Save-SvgIcon
 Save-AndroidLauncherIcons
 Save-AndroidAdaptiveLayers
+Save-AndroidNotificationIcon
 Save-OgImage
 $script:SourceImage.Dispose()
 'done'

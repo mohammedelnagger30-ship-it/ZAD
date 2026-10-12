@@ -7,16 +7,18 @@ export interface AdhanSound {
 
 export const ADHAN_SOUNDS: AdhanSound[] = [
   {
-    id: 'mishary_alafasy_fajr',
-    name: 'مشاري راشد العفاسي — أذان الفجر (مقام حجاز)',
-    file: 'adhan_mishary_alafasy_fajr.mp3',
-    source: 'Archive.org',
-  },
-  {
+    // The Makkah adhan (المسجد الحرام) is the app's out-of-the-box voice: first in the
+    // picker, the fallback for unknown ids, and the default a fresh install starts with.
     id: 'makkah_masjid',
     name: 'المسجد الحرام مكة — أذان',
     file: 'adhan_makkah_masjid.mp3',
     source: 'IslamDownload',
+  },
+  {
+    id: 'mishary_alafasy_fajr',
+    name: 'مشاري راشد العفاسي — أذان الفجر (مقام حجاز)',
+    file: 'adhan_mishary_alafasy_fajr.mp3',
+    source: 'Archive.org',
   },
   {
     id: 'makkah_2',
@@ -38,7 +40,8 @@ export const ADHAN_SOUNDS: AdhanSound[] = [
   },
 ];
 
-export const DEFAULT_ADHAN_SOUND_ID = ADHAN_SOUNDS[0].id;
+/** The out-of-the-box adhan: أذان المسجد الحرام بمكة, on every fresh install. */
+export const DEFAULT_ADHAN_SOUND_ID = 'makkah_masjid';
 
 export function getAdhanSound(id: string): AdhanSound {
   return ADHAN_SOUNDS.find((sound) => sound.id === id) ?? ADHAN_SOUNDS[0];

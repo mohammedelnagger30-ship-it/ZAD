@@ -6,6 +6,7 @@ import { formatTime12h, getDateInTimeZone, getPrayerTimeZone } from '@/utils/pra
 import { confirmPrayer, PRAYER_LABELS_AR, type PrayerKey } from '@/utils/prayerTracker';
 import { formatDateKey, formatArabicDate, getHijriDate } from '@/utils/dateUtils';
 import { notificationId } from '@/utils/notifications';
+import { NOTIFICATION_BRAND } from '@/utils/notificationScheduler';
 import { trustedNow } from '@/utils/clock';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
@@ -165,8 +166,7 @@ export function AzanOverlayModal({
               body: `انقضت 10 دقائق على وقت صلاة ${displayName} — لا تنسَ الصلاة`,
               schedule: { at: snoozeTime },
               channelId: 'prayer-reminder',
-              smallIcon: 'ic_notification',
-              iconColor: '#1f734e',
+              ...NOTIFICATION_BRAND,
             },
           ],
         });

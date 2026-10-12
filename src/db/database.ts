@@ -277,7 +277,7 @@ export const DEFAULT_SETTINGS: Settings = {
   fontSize: 28,
   notificationSound: true,
   adhanSound: true,
-  adhanVoiceId: 'asim_javed',
+  adhanVoiceId: 'makkah_masjid',
   randomDhikrEnabled: false,
   randomDhikrCategory: 'varied',
   randomDhikrIntervalMinutes: 60,
@@ -309,6 +309,10 @@ export async function getSettings(): Promise<Settings> {
     first.cityName === 'مكة المكرمة' &&
     first.latitude === 21.4225 &&
     first.longitude === 39.8262;
+  // Earlier versions defaulted the adhan voice to عاصم جاويد; the Makkah adhan is now the
+  // out-of-the-box voice. Migrate only that exact untouched default — a deliberately
+  // chosen voice is any other value and is preserved.
+  const isLegacyDefaultAdhan = first.adhanVoiceId === 'asim_javed';
   const settings = { ...DEFAULT_SETTINGS, ...first };
   if (isLegacyDefaultLocation) {
     Object.assign(settings, {
@@ -323,6 +327,10 @@ export async function getSettings(): Promise<Settings> {
       latitude: DEFAULT_SETTINGS.latitude,
       longitude: DEFAULT_SETTINGS.longitude,
     });
+  }
+  if (isLegacyDefaultAdhan) {
+    settings.adhanVoiceId = DEFAULT_SETTINGS.adhanVoiceId;
+    await db.settings.update(first.id!, { adhanVoiceId: DEFAULT_SETTINGS.adhanVoiceId });
   }
   return settings;
 }

@@ -35,6 +35,11 @@
         </provider>
 
         <receiver
+            android:name=".AdhanOverlayReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <receiver
             android:name=".BootReceiver"
             android:enabled="true"
             android:exported="true">
@@ -63,4 +68,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!-- Lets the adhan page take over the screen at prayer time while the app is
+         closed (full-screen intent — the mechanism alarm clocks use). -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 </manifest>
