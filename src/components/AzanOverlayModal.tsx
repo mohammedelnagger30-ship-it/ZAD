@@ -9,6 +9,7 @@ import { formatDateKey, formatArabicDate, getHijriDate } from '@/utils/dateUtils
 import { notificationId } from '@/utils/notifications';
 import { NOTIFICATION_BRAND } from '@/utils/notificationScheduler';
 import { trustedNow } from '@/utils/clock';
+import { setAdhanKeepScreenOn } from '@/utils/adhanOverlay';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 
@@ -49,6 +50,12 @@ const AFTER_AZAN_DUAA = {
  * opened after the call already finished, which carries the words of that call anyway.
  */
 const SYSTEM_RING_WINDOW_MS = 4 * 60_000;
+
+/**
+ * Hard cap on holding the screen awake with the adhan page open: the page normally
+ * releases it on close, this only covers a page left open by itself.
+ */
+const KEEP_SCREEN_ON_MAX_MS = 5 * 60_000;
 
 export function AzanOverlayModal({
   isOpen,
@@ -189,6 +196,24 @@ export function AzanOverlayModal({
       audioRef.current = null;
     };
   }, [isOpen, audioUrl, settings.adhanSound, isPreview, fromNotification, prayerTime]);
+
+  /*
+   * The takeover wakes the screen at prayer time, but Android's screen timeout would
+   * put it back to sleep while the adhan is still in the air. Hold it for as long as
+   * the page is open — released on close, and capped so a page left open by itself
+   * cannot keep the display lit all night.
+   */
+  useEffect(() => {
+    if (!isOpen) return;
+    void setAdhanKeepScreenOn(true);
+    const cap = window.setTimeout(() => {
+      void setAdhanKeepScreenOn(false);
+    }, KEEP_SCREEN_ON_MAX_MS);
+    return () => {
+      window.clearTimeout(cap);
+      void setAdhanKeepScreenOn(false);
+    };
+  }, [isOpen]);
 
   /** Fallback control, rendered only when auto-start was refused. */
   const startAudio = useCallback(() => {

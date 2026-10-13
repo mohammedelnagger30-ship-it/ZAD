@@ -15,17 +15,19 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
 /**
- * Fires at a prayer time and posts the adhan notification the system takes over the
- * screen with (full-screen intent — the mechanism alarm clocks use).
- *
- * Android forbids starting an activity from a background process, so this is the only
- * sanctioned way for a closed app to put its own page on the screen at the prayer
- * minute:
+ * Fires at a prayer time: posts the adhan notification and opens the adhan page itself —
+ * no tap expected, in either of the two ways Android allows:
  *
  * <ul>
- *   <li>device locked / idle — the intent launches {@link MainActivity} straight into the
- *       adhan page, over the keyguard;</li>
- *   <li>device in use — a heads-up banner appears, and tapping it opens the same page.</li>
+ *   <li><b>direct launch</b> — up to Android 9 a background app may start its own
+ *       activity, so {@code startActivity()} brings {@link MainActivity} forward in every
+ *       state (locked, screen off, app closed); the activity's window flags wake the
+ *       screen and draw over the keyguard. Android 10+ refuses a background start — the
+ *       attempt is logged and dropped, never fatal;</li>
+ *   <li><b>full-screen intent</b> — the notification carries one, so on every version the
+ *       system itself launches the page while the device is locked or idle, and shows a
+ *       heads-up banner when it is in use (Android 10+'s fallback for the states where
+ *       the direct launch is refused).</li>
  * </ul>
  *
  * The notification is posted to the prayer channel, whose sound is the selected adhan —
@@ -65,12 +67,14 @@ public class AdhanOverlayReceiver extends BroadcastReceiver {
 
         ensureChannel(context, channelId);
 
+        Intent launch = buildLaunchIntent(context, prayerKey, prayerName, time);
+
         // Tapping the card and the full-screen takeover open the very same page; both
         // carry the prayer so the overlay can show the right one.
         PendingIntent open = PendingIntent.getActivity(
             context,
             id,
-            buildLaunchIntent(context, prayerKey, prayerName, time),
+            launch,
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
 
@@ -94,10 +98,23 @@ public class AdhanOverlayReceiver extends BroadcastReceiver {
         try {
             NotificationManagerCompat.from(context).notify(id, notification);
         } catch (RuntimeException e) {
-            // MIUI has been known to throw here (channel/app-op quirks); the adhan page
-            // can still be opened from the banner-less notification or the next open.
+            // MIUI has been known to throw here (channel/app-op quirks); without the
+            // card there is no adhan sound either, so opening a page that believes the
+            // notification is ringing would leave the prayer in silence — the page
+            // then waits for the next open instead, as it always has.
             Log.e(TAG, "Could not post the adhan notification", e);
             return;
+        }
+
+        // Direct launch (works up to Android 9, where a background app may start its own
+        // activity): the page comes to the front in every state — locked, screen off, app
+        // closed — and the activity's window flags wake the screen over the keyguard.
+        // Android 10+ refuses this; the attempt is harmless there and the full-screen
+        // intent above is what opens the page instead.
+        try {
+            context.startActivity(launch);
+        } catch (RuntimeException e) {
+            Log.w(TAG, "Direct launch refused by the system - full-screen intent takes over", e);
         }
 
         // App in the foreground: open the page right away instead of waiting for a tap.

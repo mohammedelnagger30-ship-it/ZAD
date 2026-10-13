@@ -1,5 +1,6 @@
 package com.hifzi.app;
 
+import android.app.Activity;
 import android.app.AlarmManager;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -10,6 +11,7 @@ import android.content.SharedPreferences;
 import android.media.AudioAttributes;
 import android.net.Uri;
 import android.os.Build;
+import android.view.WindowManager;
 
 import androidx.core.content.FileProvider;
 
@@ -204,6 +206,34 @@ public class AdhanOverlay extends Plugin {
         }
         manager.createNotificationChannel(channel);
         call.resolve();
+    }
+
+    /**
+     * Hold the screen while the adhan page is showing ({@code on: true}) and hand it
+     * back when the page closes ({@code on: false}).
+     *
+     * The takeover already wakes the screen, but Android's timeout would put it back to
+     * sleep while the call is still in the air — a page nobody is touching looks dead.
+     * The flag lives on the window, so backgrounding the app releases it on its own;
+     * JS additionally caps the hold so a page left open cannot keep the display lit
+     * all night.
+     */
+    @PluginMethod
+    public void setKeepScreenOn(PluginCall call) {
+        Boolean on = call.getBoolean("on");
+        Activity activity = getActivity();
+        if (activity == null || on == null) {
+            call.reject("طلب إبقاء الشاشة مضاءة غير مكتمل.", "invalid-keep-screen-on");
+            return;
+        }
+        activity.runOnUiThread(() -> {
+            if (on) {
+                activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            } else {
+                activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            }
+            call.resolve();
+        });
     }
 
     /** Called by the receiver: a prayer arrived while the app is in the foreground. */

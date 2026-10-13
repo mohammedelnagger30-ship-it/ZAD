@@ -42,6 +42,7 @@ interface AdhanOverlayPlugin {
     description?: string;
     soundPath: string;
   }): Promise<void>;
+  setKeepScreenOn(options: { on: boolean }): Promise<void>;
   addListener(
     eventName: 'adhanReceived' | 'adhanLaunch',
     listenerFunc: (data: AdhanOverlayEvent) => void,
@@ -76,6 +77,24 @@ export async function setAdhanChannel(options: {
 }): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
   await AdhanOverlay.setChannel(options);
+}
+
+/**
+ * Hold the screen while the adhan page is up, hand it back when the page closes.
+ *
+ * The takeover wakes the screen at prayer time, but the system timeout would put it
+ * back to sleep while the adhan is still playing — a dark screen over a ringing page
+ * looks broken. The native flag only lives on the visible window (backgrounding the
+ * app releases it anyway), and the caller caps the hold so a page left open cannot
+ * keep the display lit all night.
+ */
+export async function setAdhanKeepScreenOn(on: boolean): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    await AdhanOverlay.setKeepScreenOn({ on });
+  } catch (err) {
+    console.warn('Could not update the keep-screen-on flag:', err);
+  }
 }
 
 /** Drop every armed takeover alarm. */
