@@ -1,4 +1,4 @@
-import { Calendar, BarChart3, Settings as SettingsIcon, ChevronLeft, Info, Shield, Heart, Repeat, Library, Sparkles, BookOpen } from 'lucide-react';
+import { Calendar, BarChart3, Settings as SettingsIcon, ChevronLeft, Info, Shield, Heart, Repeat, Library, Sparkles, BookOpen, Bookmark } from 'lucide-react';
 import { Card } from '@/components/ui';
 import type { ScreenName, NavParams } from '@/hooks/useApp';
 
@@ -8,6 +8,14 @@ interface MoreScreenProps {
 
 export function MoreScreen({ navigate }: MoreScreenProps) {
   const items = [
+    {
+      screen: 'bookmarks' as ScreenName,
+      label: 'محفوظاتي',
+      description: 'الآيات والصفحات التي علّمتها في المصحف، عود إليها بضغطة واحدة',
+      icon: Bookmark,
+      badge: 'جديد',
+      color: 'from-yellow-600 to-amber-700',
+    },
     {
       screen: 'adhkar' as ScreenName,
       label: 'الأذكار اليومية',
@@ -72,7 +80,7 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
             جميع الأقسام والخدمات
           </h1>
           <p className="mt-0.5 text-xs text-primary-700/80 dark:text-primary-300">
-            تصفح كافة ميزات وأقسام تطبيق سكينة
+            تصفح كافة ميزات وأقسام تطبيق قُرّة
           </p>
         </div>
       </div>
@@ -139,7 +147,7 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
                 رفيقك اليومي لتلاوة وتدبر وحفظ القرآن الكريم وإتمام الأذكار والصلوات بدون إنترنت.
               </p>
               <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 mt-1.5">
-                الإصدار {import.meta.env.VITE_APP_VERSION ?? '1.19.1'} • تطوير متكامل
+                الإصدار {import.meta.env.VITE_APP_VERSION ?? '1.19.0'} • تطوير متكامل
               </p>
             </div>
           </div>

@@ -90,6 +90,7 @@ const MoreScreen = lazyWithRetry(() => import('@/screens/MoreScreen').then((modu
 const ContentLibrary = lazyWithRetry(() => import('@/screens/ContentLibrary').then((module) => ({ default: module.ContentLibrary })));
 const AdhkarScreen = lazyWithRetry(() => import('@/screens/AdhkarScreen').then((module) => ({ default: module.AdhkarScreen })));
 const TasbihScreen = lazyWithRetry(() => import('@/screens/TasbihScreen').then((module) => ({ default: module.TasbihScreen })));
+const BookmarksScreen = lazyWithRetry(() => import('@/screens/BookmarksScreen').then((module) => ({ default: module.BookmarksScreen })));
 
 function App() {
   return (
@@ -626,7 +627,7 @@ function AppContent({
             <Suspense fallback={<ScreenLoading />}>
               {/* Selecting the active tab again remounts its screen. */}
               {screen === 'home' && <HomeScreen key={`home-${resetNonce}`} settings={settings} navigate={navigate} />}
-              {screen === 'quran' && <QuranScreen key={`quran-${resetNonce}`} settings={settings} />}
+              {screen === 'quran' && <QuranScreen key={`quran-${resetNonce}`} settings={settings} params={params} />}
               {screen === 'planner' && <PlannerScreen key={`planner-${resetNonce}`} />}
               {screen === 'prayer' && <PrayerScreen key={`prayer-${resetNonce}`} settings={settings} onSaveSettings={save} navigate={navigate} />}
               {screen === 'salah' && <PrayerGuideScreen key={`salah-${resetNonce}`} navigate={navigate} />}
@@ -651,6 +652,7 @@ function AppContent({
               {screen === 'library' && <ContentLibrary key={`library-${resetNonce}`} />}
               {screen === 'adhkar' && <AdhkarScreen key={`adhkar-${resetNonce}`} />}
               {screen === 'tasbih' && <TasbihScreen key={`tasbih-${resetNonce}`} />}
+              {screen === 'bookmarks' && <BookmarksScreen key={`bookmarks-${resetNonce}`} navigate={navigate} />}
             </Suspense>
           </div>
         </main>

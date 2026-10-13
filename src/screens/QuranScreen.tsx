@@ -25,6 +25,8 @@ import { searchAyahs } from '@/utils/ayahSearch';
 
 interface QuranScreenProps {
   settings: Settings;
+  /** Optional navigation params, e.g. `{ openSurahId, openAyah }` or `{ openPage }` from محفوظاتي. */
+  params?: Record<string, unknown>;
 }
 
 type BrowseMode = 'surah' | 'juz' | 'page' | 'ayah';
@@ -88,7 +90,7 @@ function loadSavedReaderState() {
   }
 }
 
-export function QuranScreen({ settings }: QuranScreenProps) {
+export function QuranScreen({ settings, params }: QuranScreenProps) {
   const savedState = useMemo(loadSavedReaderState, []);
   const [browseMode, setBrowseMode] = useState<BrowseMode>('surah');
   const [revelationFilter, setRevelationFilter] = useState<RevelationFilter>('all');
@@ -135,6 +137,41 @@ export function QuranScreen({ settings }: QuranScreenProps) {
   useEffect(() => {
     loadBookmarks();
   }, [loadBookmarks]);
+
+  /**
+   * Deep links from other screens — «محفوظاتي» sends `{ openSurahId, openAyah }`
+   * for an ayah bookmark or `{ openPage }` for a page bookmark. Running this after
+   * the saved-state initializer deliberately overrides it: an explicit tap on a
+   * bookmark must land on that bookmark, not on wherever the reader last was.
+   */
+  useEffect(() => {
+    if (!params) return;
+    if (typeof params.openSurahId === 'number') {
+      const surah = getSurah(params.openSurahId);
+      if (!surah) return;
+      const ayah =
+        typeof params.openAyah === 'number' && params.openAyah >= 1 && params.openAyah <= surah.ayahCount
+          ? params.openAyah
+          : 1;
+      setSelectedSurah(surah);
+      setFromAyah(ayah);
+      setToAyah(null);
+      setTafsirAyah(null);
+      setViewMode('reader');
+      return;
+    }
+    if (
+      typeof params.openPage === 'number' &&
+      Number.isInteger(params.openPage) &&
+      params.openPage >= 1 &&
+      params.openPage <= TOTAL_QURAN_PAGES
+    ) {
+      setMushafPage(params.openPage);
+      setViewMode('mushaf');
+    }
+    // Keyed on the params object identity: navigate() creates a new object per call,
+    // so re-tapping a bookmark with the same target still re-runs this.
+  }, [params]);
 
   const bookmarkedKeys = useMemo(
     () => new Set(bookmarks.map((b) => `${b.surahId}:${b.ayahNumber}`)),
