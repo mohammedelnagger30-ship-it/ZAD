@@ -229,17 +229,45 @@ export async function markMissedTasks(): Promise<void> {
 }
 
 /**
- * Consecutive days (ending today or yesterday) on which every scheduled task was done.
+ * The streak decision over an already-loaded window: `dateKeys` lists the days
+ * newest first, and `byDate` buckets the tasks of each day.
  *
- * Loads the whole lookback window in one query rather than one query per day.
+ * A day with no tasks is passed over (rest days neither count nor break); an
+ * incomplete *today* (index 0) is passed over — the run may still end today;
+ * any other incomplete day ends the streak. Split out from `getStreakCount` so
+ * the rules are testable without a database.
  */
-export async function getStreakCount(): Promise<number> {
+export function computeStreak(byDate: Map<string, DailyTask[]>, dateKeys: string[]): number {
+  let streak = 0;
+  for (let i = 0; i < dateKeys.length; i++) {
+    const dayTasks = byDate.get(dateKeys[i]);
+    if (!dayTasks || dayTasks.length === 0) continue; // rest day / no plan active
+    if (dayTasks.every((t) => t.status === 'done')) {
+      streak++;
+      continue;
+    }
+    if (i === 0) continue; // today is still in progress — the run may yet end today
+    break; // a completed day that was missed ends the streak
+  }
+  return streak;
+}
+
+/**
+ * Consecutive active days on which every scheduled task was done, ending today
+ * (once today is complete) or yesterday.
+ *
+ * The previous version counted an incomplete *today* as a broken day, so the
+ * streak read 0 all morning — and a plan with rest days (daysOfWeek) reset the
+ * chain every off-day, since a day with no tasks broke it (see computeStreak
+ * for the rules). Loads the whole lookback window in one query rather than one
+ * query per day. `now` is injectable for tests; the default is the trusted clock.
+ */
+export async function getStreakCount(now: Date = trustedNow()): Promise<number> {
   const MAX_LOOKBACK_DAYS = 365;
-  const today = trustedNow();
 
   const dateKeys: string[] = [];
   for (let i = 0; i < MAX_LOOKBACK_DAYS; i++) {
-    const date = new Date(today);
+    const date = new Date(now);
     date.setDate(date.getDate() - i);
     dateKeys.push(formatDateKey(date));
   }
@@ -252,20 +280,7 @@ export async function getStreakCount(): Promise<number> {
     else byDate.set(task.date, [task]);
   }
 
-  let streak = 0;
-  for (let i = 0; i < dateKeys.length; i++) {
-    const dayTasks = byDate.get(dateKeys[i]);
-    if (!dayTasks || dayTasks.length === 0) {
-      if (i === 0) continue; // Today might not have tasks yet
-      break;
-    }
-    if (dayTasks.every((t) => t.status === 'done')) {
-      streak++;
-    } else {
-      break;
-    }
-  }
-  return streak;
+  return computeStreak(byDate, dateKeys);
 }
 
 /**

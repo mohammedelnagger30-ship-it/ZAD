@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Moon, Sunrise, MapPin, BarChart3, Sun, Sunset, Check, X, Clock, Sparkles, BookOpen, ChevronLeft } from 'lucide-react';
 import { Card, Button, Badge, SectionHeader, EmptyState } from '@/components/ui';
 import { PrayerStatusSheet } from '@/components/PrayerStatusSheet';
@@ -13,7 +13,7 @@ import {
   getPrayerTimeZone,
   CITY_PRESETS,
 } from '@/utils/prayerTimes';
-import { usePrayerSchedule } from '@/hooks/usePrayerSchedule';
+import { useCountdownClock, usePrayerSchedule } from '@/hooks/usePrayerSchedule';
 import { trustedNow } from '@/utils/clock';
 import {
   getDayPrayerRecords,
@@ -107,8 +107,10 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
   const [showLocation, setShowLocation] = useState(false);
   // Which (day, prayer) the status sheet is open for, if any.
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
-  // Reference clock for the countdown; keeps `getTimeUntil` in sync with one timer.
-  const [now, setNow] = useState(() => trustedNow());
+  // Reference clock for the countdown: per-second only in the last minute before a
+  // prayer (see useCountdownClock) — not for the whole day.
+  const nextPrayerTargetRef = useRef<number | null>(null);
+  const now = useCountdownClock(nextPrayerTargetRef);
   const today = trustedNow();
 
   const location =
@@ -144,18 +146,21 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
 
   useEffect(() => {
     load();
-    // The screen can stay open across midnight: the day list, week grid and stats must
-    // roll over with the clock instead of showing yesterday's answers until somebody
-    // reloads the page by hand.
+  }, [load]);
+
+  // The screen can stay open across midnight: the day list, week grid and stats must
+  // roll over with the clock instead of showing yesterday's answers until somebody
+  // reloads the page by hand. A minute-level comparison of the date key is all this
+  // needs — the countdown's own cadence lives in useCountdownClock.
+  useEffect(() => {
     let dayKey = todayKey();
     const interval = setInterval(() => {
-      setNow(trustedNow());
       const currentDayKey = todayKey();
       if (currentDayKey !== dayKey) {
         dayKey = currentDayKey;
         void load();
       }
-    }, 1000);
+    }, 60_000);
     return () => clearInterval(interval);
   }, [load]);
 
@@ -169,6 +174,12 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
     timeZone: settings.timeZone,
     cityName: settings.cityName,
     now,
+  });
+
+  // The clock re-reads the ref at every wake, so pointing it at the next prayer's
+  // instant is all the coordination the countdown needs.
+  useEffect(() => {
+    nextPrayerTargetRef.current = nextPrayer?.time.getTime() ?? null;
   });
 
   const handlePick = async (status: PrayerStatus) => {

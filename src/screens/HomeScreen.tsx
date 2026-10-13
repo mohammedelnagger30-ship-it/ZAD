@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Check, X, Clock, Flame, BookOpen, Moon, Sunrise, BookText, ChevronLeft, Sparkles, Calendar, Heart, Repeat } from 'lucide-react';
 import { Card, Button, Badge, SectionHeader, EmptyState, type BadgeProps } from '@/components/ui';
 import { PrayerStatusSheet } from '@/components/PrayerStatusSheet';
@@ -9,7 +9,7 @@ import {
   formatTime12h,
   getTimeUntil,
 } from '@/utils/prayerTimes';
-import { usePrayerSchedule } from '@/hooks/usePrayerSchedule';
+import { useCountdownClock, usePrayerSchedule } from '@/hooks/usePrayerSchedule';
 import { trustedNow } from '@/utils/clock';
 import {
   getDayPrayerRecords,
@@ -42,9 +42,11 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
   const [sunnahRecords, setSunnahRecords] = useState<Record<string, boolean>>({});
   const [dailyQuranMessage, setDailyQuranMessage] = useState<DailyQuranMessage | null>(null);
   const [dailyQuranMessageError, setDailyQuranMessageError] = useState('');
-  // Drives the "time until next prayer" countdown. Stored as a timestamp (not a bare
-  // counter) so it can be handed to `getTimeUntil` as the reference clock.
-  const [now, setNow] = useState(() => trustedNow());
+  // Reference clock for the countdown: armed once, ticking per-second only in the
+  // last minute before the next prayer (see useCountdownClock) instead of
+  // re-rendering this screen every second of the day.
+  const nextPrayerTargetRef = useRef<number | null>(null);
+  const now = useCountdownClock(nextPrayerTargetRef);
   // Which prayer the confirmation sheet is open for, if any.
   const [sheetPrayer, setSheetPrayer] = useState<PrayerKey | null>(null);
   const today = trustedNow();
@@ -65,8 +67,6 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
 
   useEffect(() => {
     load();
-    const interval = setInterval(() => setNow(trustedNow()), 1000);
-    return () => clearInterval(interval);
   }, [load]);
 
   // The message is one per local day, so the work (and the whole-Quran chunk it
@@ -92,9 +92,9 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
     };
   }, [messageDayKey]);
 
-  // Prayer times for a calendar day never change while the day lasts, but the
-  // countdown tick re-renders this screen every second — hence the shared hook
-  // that pins the calculation to the city's day (see usePrayerSchedule).
+  // Prayer times for a calendar day never change while the day lasts; the shared
+  // hook pins the calculation to the city's day (see usePrayerSchedule), and the
+  // countdown clock above keeps re-renders to a minute outside the last minute.
   const { prayerTimeZone, prayerResult, nextPrayer } = usePrayerSchedule({
     latitude: settings.latitude,
     longitude: settings.longitude,
@@ -103,6 +103,13 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
     timeZone: settings.timeZone,
     cityName: settings.cityName,
     now,
+  });
+
+  // The clock re-reads the ref at every wake, so pointing it at the next prayer's
+  // instant is all the coordination the countdown needs: the clock is already
+  // per-second by then, so the flip at prayer time happens within a second.
+  useEffect(() => {
+    nextPrayerTargetRef.current = nextPrayer?.time.getTime() ?? null;
   });
 
   const [hadith, setHadith] = useState(() => hadithOfDay());

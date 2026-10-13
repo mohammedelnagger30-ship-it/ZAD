@@ -1,10 +1,12 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState, type MutableRefObject } from 'react';
 import {
   calculatePrayerTimes,
   calendarDayInZone,
   getNextPrayer,
   getPrayerTimeZone,
 } from '@/utils/prayerTimes';
+import { trustedNow } from '@/utils/clock';
+import { countdownTickDelayMs } from '@/utils/countdown';
 
 /**
  * The prayer schedule a countdown screen renders from.
@@ -81,4 +83,41 @@ export function usePrayerSchedule({
   );
 
   return { prayerTimeZone, hasLocation, prayerResult, nextPrayer };
+}
+
+/**
+ * The reference clock a countdown screen renders from.
+ *
+ * `getTimeUntil` only shows seconds in the last minute; above that the text
+ * moves once a minute. Ticking `setNow` every second anyway re-rendered the
+ * whole screen — task lists, week grids, sheets — sixty times a minute for a
+ * string that changes once. This clock arms a chain of timeouts instead
+ * (see countdownTickDelayMs): at most once a minute most of the day,
+ * per-second only inside the last FAST_TICK_MS — so the prayer passing flips
+ * `nextPrayer` within a second while the rest of the day stays quiet.
+ *
+ * The target is a ref rather than a plain value because the screens compute it
+ * *from* the very schedule this clock feeds: they point the ref at the next
+ * prayer's instant after the fact, and the chain reads it fresh at every wake.
+ */
+export function useCountdownClock(targetMsRef: MutableRefObject<number | null>): Date {
+  const [now, setNow] = useState(() => trustedNow());
+
+  useEffect(() => {
+    let timeoutId: number | undefined;
+    const wake = () => {
+      const target = targetMsRef.current;
+      const remaining = target == null ? Number.POSITIVE_INFINITY : target - trustedNow().getTime();
+      timeoutId = window.setTimeout(() => {
+        setNow(trustedNow());
+        wake();
+      }, countdownTickDelayMs(remaining));
+    };
+    wake();
+    return () => {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    };
+  }, [targetMsRef]);
+
+  return now;
 }

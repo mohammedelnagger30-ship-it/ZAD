@@ -6,7 +6,9 @@
  * mocking the database (see jest.config.js for setup).
  */
 import { jest } from '@jest/globals';
-import { describePortion } from '../taskManager';
+import { describePortion, computeStreak } from '../taskManager';
+import { formatDateKey } from '../dateUtils';
+import type { DailyTask } from '@/db/database';
 
 // Mock the surahs module
 jest.mock('@/data/surahs', () => ({
@@ -60,6 +62,81 @@ describe('taskManager', () => {
 
     it('should return raw portion for unknown surah', () => {
       expect(describePortion('surah:999')).toBe('surah:999');
+    });
+  });
+
+  describe('computeStreak', () => {
+    const NOW = new Date(2026, 2, 10, 15, 0, 0); // 2026-03-10, local time
+
+    const dayKey = (daysAgo: number) => {
+      const d = new Date(NOW);
+      d.setDate(d.getDate() - daysAgo);
+      return formatDateKey(d);
+    };
+
+    // The window getStreakCount loads: the last four days, newest first.
+    const KEYS = [0, 1, 2, 3].map(dayKey);
+
+    const task = (daysAgo: number, status: DailyTask['status']): DailyTask => ({
+      planId: 1,
+      date: dayKey(daysAgo),
+      type: 'hifz',
+      portion: 'surah:1',
+      scheduledTime: '17:00',
+      status,
+      createdAt: 0,
+    });
+
+    const bucket = (...tasks: DailyTask[]) => {
+      const byDate = new Map<string, DailyTask[]>();
+      for (const t of tasks) {
+        const list = byDate.get(t.date);
+        if (list) list.push(t);
+        else byDate.set(t.date, [t]);
+      }
+      return byDate;
+    };
+
+    it('counts the run ending yesterday while today is still in progress', () => {
+      expect(computeStreak(bucket(task(0, 'pending'), task(1, 'done')), KEYS)).toBe(1);
+    });
+
+    it('counts today once every task is done', () => {
+      expect(computeStreak(bucket(task(0, 'done'), task(1, 'done')), KEYS)).toBe(2);
+    });
+
+    it('an undone day older than yesterday ends the streak', () => {
+      expect(
+        computeStreak(bucket(task(0, 'done'), task(1, 'done'), task(2, 'pending')), KEYS),
+      ).toBe(2);
+    });
+
+    it('a missed day ends the streak', () => {
+      expect(
+        computeStreak(bucket(task(0, 'done'), task(1, 'missed'), task(2, 'done')), KEYS),
+      ).toBe(1);
+    });
+
+    it('a snoozed task counts as not done', () => {
+      expect(computeStreak(bucket(task(0, 'done'), task(1, 'snoozed')), KEYS)).toBe(1);
+    });
+
+    it('rest days without tasks pass over instead of breaking the chain', () => {
+      expect(computeStreak(bucket(task(0, 'done'), task(2, 'done')), KEYS)).toBe(2);
+    });
+
+    it('a day where only some tasks are done does not count', () => {
+      // Yesterday is partial, so the chain breaks even though day-2 was complete.
+      expect(
+        computeStreak(
+          bucket(task(0, 'pending'), task(1, 'done'), task(1, 'pending'), task(2, 'done')),
+          KEYS,
+        ),
+      ).toBe(0);
+    });
+
+    it('no tasks at all is zero', () => {
+      expect(computeStreak(new Map(), KEYS)).toBe(0);
     });
   });
 });
