@@ -146,6 +146,30 @@ interface LocalTombstone {
   modifiedAt: number;
 }
 
+/**
+ * Drops tombstones the server has acknowledged, leaving the rest intact.
+ *
+ * The delete queue can gain entries while a sync round is in flight (a deletion
+ * performed during the network round-trips) — clearing the whole queue after a
+ * successful apply silently discarded those, and the deleted row resurrected on
+ * the next pull. The queue is therefore re-read from disk after the push and only
+ * the keys the server already has (pushed this round, or superseded by a newer
+ * remote record) are removed.
+ */
+function acknowledgeTombstones(userId: string, acknowledged: Set<string>): void {
+  if (acknowledged.size === 0) return;
+  let current: LocalTombstone[];
+  try {
+    current = parseDeleteQueue(userId);
+  } catch {
+    // A malformed queue must not take the sync down with it.
+    return;
+  }
+  const remaining = current.filter((item) => !acknowledged.has(item.key));
+  if (remaining.length === current.length) return;
+  localStorage.setItem(`${DELETE_QUEUE_PREFIX}${userId}`, JSON.stringify(remaining));
+}
+
 async function fetchCloudRecords(userId: string): Promise<Map<string, CloudRecord>> {
   if (!supabase) throw new Error('إعداد الاتصال السحابي غير مكتمل.');
   const records = new Map<string, CloudRecord>();
@@ -155,6 +179,10 @@ async function fetchCloudRecords(userId: string): Promise<Map<string, CloudRecor
       .from('user_sync_records')
       .select('table_name,record_id,record_data,modified_at,is_deleted')
       .eq('user_id', userId)
+      // Postgres does not guarantee stable ordering for limit/offset queries, so
+      // paging without an explicit order can skip or repeat rows between pages.
+      // Duplicates self-heal via the map key; skipped rows were silently never synced.
+      .order('record_id', { ascending: true })
       .range(start, start + pageSize - 1);
     if (error) throw error;
     for (const row of data ?? []) {
@@ -214,7 +242,12 @@ async function getLocalRecords(): Promise<Map<string, { table: SyncTableName; ro
       const id = syncIdFor('plans', { ...plan });
       if (plan.syncId !== id) {
         plan.syncId = id;
-        await db.plans.put(plan);
+        // Silent write is mandatory here: the 'updating' hook recomputes the id from
+        // the *pre-write* row, which for a legacy plan (no syncId) generates a second,
+        // different random UUID and overwrites the one just assigned — leaving tasks
+        // pointing at planSyncId A while the plan syncs as B, which failed every apply
+        // round with "task without its plan" forever.
+        await repairSilently(() => db.plans.put(plan));
       }
       plansById.set(plan.id, id);
     }
@@ -617,7 +650,6 @@ async function applyCloudRecords(records: Map<string, CloudRecord>): Promise<voi
   } finally {
     applyingCloudChanges = false;
   }
-  localStorage.removeItem(`${DELETE_QUEUE_PREFIX}${activeUserId}`);
   if (changed) window.dispatchEvent(new Event('zad:cloud-sync-complete'));
 }
 
@@ -638,12 +670,26 @@ export async function synchronizeNow(): Promise<void> {
       ...parseDeleteQueue(userId),
     ];
     const changes = await makeCloudChanges(local, cloud, tombstones);
+    // Tombstones this round hands to the server (plus the ones the server already
+    // outranks with a newer record) are the only ones safe to forget afterwards —
+    // anything else in the queue may have been added mid-flight and must survive.
+    const acknowledgedTombstones = new Set<string>();
+    for (const change of changes) {
+      if (change.is_deleted) acknowledgedTombstones.add(`${change.table_name}:${change.record_id}`);
+    }
+    for (const tombstone of tombstones) {
+      const remote = cloud.get(tombstone.key);
+      if (remote && Date.parse(remote.modified_at) >= tombstone.modifiedAt) {
+        acknowledgedTombstones.add(tombstone.key);
+      }
+    }
     for (let start = 0; start < changes.length; start += 200) {
       const { error } = await supabase.rpc('sync_user_records', { p_records: changes.slice(start, start + 200) });
       if (error) throw error;
     }
     const latest = await fetchCloudRecords(userId);
     await applyCloudRecords(latest);
+    acknowledgeTombstones(userId, acknowledgedTombstones);
     lastSyncedAt = new Date().toISOString();
     publish('synced');
   })();

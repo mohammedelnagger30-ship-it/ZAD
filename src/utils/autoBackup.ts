@@ -4,7 +4,13 @@
  */
 
 import { db } from '@/db/database';
-import { backupData } from '@/utils/backup';
+import {
+  backupData,
+  isValidAdhkarBackup,
+  isValidBackupRow,
+  BACKUP_TABLES,
+  ADHKAR_STATE_KEY,
+} from '@/utils/backup';
 import { todayKey } from '@/utils/dateUtils';
 
 const AUTO_BACKUP_KEY = 'zad:auto-backup-config';
@@ -166,30 +172,56 @@ export function getAutoBackups(): Array<{ date: string; key: string }> {
 }
 
 /**
- * Restore from an automatic backup
+ * Restore from an automatic backup.
+ *
+ * A stored backup is the last-resort recovery path, so this never trusts it: the
+ * payload is parsed and every row is validated with the same `isValidBackupRow`
+ * rules the file importer uses *before* a single existing row is touched. The
+ * restore itself runs as one read-write transaction — if any write fails mid-way
+ * IndexedDB rolls the whole thing back, so the previous data survives instead of
+ * being replaced by a half-restored state. (This used to call `db.delete()` first,
+ * which destroyed everything before the payload was even looked at.)
  */
 export async function restoreFromBackup(key: string): Promise<boolean> {
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return false;
 
-    const backup = JSON.parse(raw);
+    const backup: unknown = JSON.parse(raw);
+    if (!backup || typeof backup !== 'object' || Array.isArray(backup)) return false;
+    const data = backup as Record<string, unknown>;
 
-    // Clear existing data
-    await db.delete();
-    await db.open();
+    // Validate every table before touching the database.
+    for (const table of BACKUP_TABLES) {
+      const rows = data[table];
+      if (rows === undefined || rows === null) continue;
+      if (!Array.isArray(rows)) return false;
+      if (!rows.every((row) => isValidBackupRow(table, row))) return false;
+    }
+    if (data.adhkar !== undefined && !isValidAdhkarBackup(data.adhkar)) return false;
 
-    // Restore data
-    if (backup.settings) await db.settings.put(backup.settings);
-    if (backup.plans) await db.plans.bulkPut(backup.plans);
-    if (backup.tasks) await db.tasks.bulkPut(backup.tasks);
-    if (backup.bookmarks) await db.bookmarks.bulkPut(backup.bookmarks);
-    if (backup.pageBookmarks) await db.pageBookmarks.bulkPut(backup.pageBookmarks);
-    if (backup.prayerRecords) await db.prayerRecords.bulkPut(backup.prayerRecords);
-    if (backup.sunnahRecords) await db.sunnahRecords.bulkPut(backup.sunnahRecords);
-    if (backup.hifzProgress) await db.hifzProgress.bulkPut(backup.hifzProgress);
-    if (backup.hadithFavorites) await db.hadithFavorites.bulkPut(backup.hadithFavorites);
-    if (backup.khatmah) await db.khatmah.bulkPut(backup.khatmah);
+    await db.transaction(
+      'rw',
+      BACKUP_TABLES.map((name) => db.table(name)),
+      async () => {
+        for (const table of BACKUP_TABLES) {
+          const rows = data[table];
+          if (!Array.isArray(rows)) continue;
+          const tableRef = db.table(table);
+          await tableRef.clear();
+          // Settings are stored as a one-row array; a missing row means "no
+          // settings in this backup" and must not put a bare array into the table.
+          const records = (rows as Record<string, unknown>[]).filter(
+            (row) => row !== undefined && row !== null,
+          );
+          if (records.length > 0) await tableRef.bulkPut(records);
+        }
+      },
+    );
+
+    if (data.adhkar !== undefined) {
+      localStorage.setItem(ADHKAR_STATE_KEY, JSON.stringify(data.adhkar));
+    }
 
     return true;
   } catch (error) {
@@ -201,7 +233,14 @@ export async function restoreFromBackup(key: string): Promise<boolean> {
 /**
  * Initialize auto-backup check on app startup
  */
+let autoBackupStarted = false;
 export function initAutoBackup(): void {
+  // Guard against double-registration: the app calls this from the settings effect,
+  // which re-runs on every settings change — without the latch each edit stacked
+  // another hourly interval on top of the previous ones.
+  if (autoBackupStarted) return;
+  autoBackupStarted = true;
+
   // Check if backup is needed on startup
   if (shouldBackup()) {
     void performAutoBackup();
