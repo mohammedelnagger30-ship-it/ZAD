@@ -58,7 +58,7 @@ export function BottomNav({ current, onNavigate }: BottomNavProps) {
               }`}
             >
               <span className={`flex h-7 w-9 items-center justify-center rounded-full transition-all duration-200 ${
-                isActive ? 'text-primary-700 dark:text-gold-300' : 'text-gray-400 group-hover:text-primary-600 dark:text-gray-500 dark:group-hover:text-primary-200'
+                isActive ? 'text-primary-700 dark:text-gold-300' : 'text-gray-500 group-hover:text-primary-600 dark:text-gray-400 dark:group-hover:text-primary-200'
               }`}>
                 <Icon size={21} strokeWidth={isActive ? 2.5 : 1.9} />
               </span>
@@ -66,7 +66,7 @@ export function BottomNav({ current, onNavigate }: BottomNavProps) {
                 className={`text-[10px] leading-none transition-colors ${
                   isActive
                     ? 'font-bold text-primary-700 dark:text-gold-300'
-                    : 'text-gray-400 dark:text-gray-500'
+                    : 'text-gray-500 dark:text-gray-400'
                 }`}
               >
                 {item.label}
