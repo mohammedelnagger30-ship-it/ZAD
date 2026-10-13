@@ -4,13 +4,11 @@
  */
 
 import { db } from '@/db/database';
-import {
-  backupData,
-  isValidAdhkarBackup,
-  isValidBackupRow,
-  BACKUP_TABLES,
-  ADHKAR_STATE_KEY,
-} from '@/utils/backup';
+// `@/utils/backup` is deliberately NOT imported statically: it pulls in the
+// adhkar corpus, which in turn pulls in the full Quran text (adhkar quotes
+// ayahs) — a 1.3 MB chain that used to sit in the main bundle for the sake of
+// an hourly job. Both callers below are async, so the module is loaded on
+// demand and the heavy data rides in a lazily-fetched chunk instead.
 import { todayKey } from '@/utils/dateUtils';
 
 const AUTO_BACKUP_KEY = 'zad:auto-backup-config';
@@ -98,6 +96,7 @@ export function shouldBackup(): boolean {
  */
 export async function performAutoBackup(): Promise<boolean> {
   try {
+    const { backupData } = await import('@/utils/backup');
     const backup = await backupData();
     const today = todayKey();
     const config = getAutoBackupConfig();
@@ -184,6 +183,8 @@ export function getAutoBackups(): Array<{ date: string; key: string }> {
  */
 export async function restoreFromBackup(key: string): Promise<boolean> {
   try {
+    const { isValidAdhkarBackup, isValidBackupRow, BACKUP_TABLES, ADHKAR_STATE_KEY } =
+      await import('@/utils/backup');
     const raw = localStorage.getItem(key);
     if (!raw) return false;
 
