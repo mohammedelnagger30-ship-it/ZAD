@@ -2,6 +2,19 @@ import { useEffect, useState, useCallback } from 'react';
 import { getSettings, updateSettings, type Settings } from '@/db/database';
 import { COLOR_PALETTES, type ColorPalette } from '@/utils/colorThemes';
 
+/**
+ * Pre-paint mirror of the theme settings in localStorage.
+ *
+ * The real values live in IndexedDB, which only async code can read — so on a
+ * cold start the page used to paint light and flip dark a beat later, every
+ * single time. index.html runs a tiny blocking script before first paint that
+ * reads these two keys and sets `html.dark` / `data-palette` right away; every
+ * path that applies the theme also rewrites the mirror here. Keep the key
+ * strings in step with that script (it cannot import this module).
+ */
+const THEME_MIRROR_KEY = 'zad:theme';
+const PALETTE_MIRROR_KEY = 'zad:palette';
+
 export function useSettings() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,6 +59,11 @@ export function useTheme() {
         const palette = COLOR_PALETTES.find((item) => item.id === s.colorPalette)?.id ?? 'emerald';
         setColorPalette(palette);
         document.documentElement.dataset.palette = palette;
+        try {
+          localStorage.setItem(PALETTE_MIRROR_KEY, palette);
+        } catch {
+          // Storage unavailable: the next cold start keeps the default palette's colors.
+        }
         document.querySelector('meta[name="theme-color"]')?.setAttribute(
           'content',
           COLOR_PALETTES.find((item) => item.id === palette)?.color ?? '#1f734e',
@@ -81,6 +99,14 @@ export function useTheme() {
     } else {
       document.documentElement.classList.remove('dark');
     }
+    // Mirror the *mode* (not the resolved value): the pre-paint script re-resolves
+    // 'system' itself, so a device that flips its own setting gets the new answer
+    // even before any React code runs.
+    try {
+      localStorage.setItem(THEME_MIRROR_KEY, mode);
+    } catch {
+      // Storage unavailable: the flash returns on the next cold start; nothing breaks.
+    }
   };
 
   const changeTheme = async (mode: 'light' | 'dark' | 'system') => {
@@ -93,6 +119,11 @@ export function useTheme() {
     await updateSettings({ colorPalette: palette });
     setColorPalette(palette);
     document.documentElement.dataset.palette = palette;
+    try {
+      localStorage.setItem(PALETTE_MIRROR_KEY, palette);
+    } catch {
+      // Storage unavailable: only the pre-paint mirror is lost.
+    }
     const themeColor = COLOR_PALETTES.find((item) => item.id === palette)?.color;
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor ?? '#1f734e');
   };

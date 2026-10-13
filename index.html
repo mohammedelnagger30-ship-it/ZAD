@@ -12,6 +12,31 @@
     <meta name="theme-color" content="#1f734e" />
     <meta name="description" content="قُررة — القرآن والصلاة والعبادة اليومية" />
     <!--
+      Pre-paint theme: `useTheme` can only read the real values from IndexedDB
+      (async), so without this the page painted light and flipped dark a beat
+      later — on every single cold start. This blocking script reads the
+      localStorage mirror the hook keeps in sync (keys: zad:theme, zad:palette)
+      and sets `html.dark` / `data-palette` before the first frame. It cannot
+      import the hook's module, so the key strings are duplicated on purpose;
+      'system' resolves against prefers-color-scheme right here.
+    -->
+    <script>
+      (function () {
+        try {
+          /* No mirror yet = a first-ever launch, whose settings row defaults to dark. */
+          var mode = localStorage.getItem('zad:theme') || 'dark';
+          var dark =
+            mode === 'dark' ||
+            (mode !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) document.documentElement.classList.add('dark');
+          var palette = localStorage.getItem('zad:palette');
+          if (palette) document.documentElement.dataset.palette = palette;
+        } catch (e) {
+          /* private mode / storage blocked: the light default renders, React fixes it up */
+        }
+      })();
+    </script>
+    <!--
       Content Security Policy. Every host the app legitimately talks to must be
       listed, or the browser silently fails the request with "Failed to fetch" —
       which the UI then shows as «تعذّر الاتصال بالمصدر» even though the network
