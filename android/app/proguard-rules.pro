@@ -1,21 +1,28 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
+# R8 rules for the release build (minifyEnabled + shrinkResources).
 #
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# capacitor-android ships a *consumer* proguard file that already keeps every
+# public class extending com.getcapacitor.Plugin along with its @PluginMethod /
+# @PermissionCallback / @ActivityCallback members — that is what protects the
+# bridge's reflective plugin loading, for bundled plugins (app, browser,
+# filesystem, local-notifications) and for the app's own two plugins below.
+# The explicit -keep rules here pin those two classes so a future Capacitor
+# upgrade that changes the bundled rules cannot silently break in-app updates
+# (AppUpdater) or the adhan overlay (AdhanOverlay).
+-keep class com.hifzi.app.AppUpdater { *; }
+-keep class com.hifzi.app.AdhanOverlay { *; }
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# Capacitor's annotation lookup reads these off the kept plugin classes; R8 full
+# mode (the AGP 8 default) strips annotations unless they are kept explicitly.
+-keepattributes *Annotation*
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Readable stack traces from the minified build: real source file names and line
+# numbers survive, which makes logcat reports from release installs debuggable
+# without keeping a mapping file around.
+-keepattributes SourceFile,LineNumberTable
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# Manifest-declared components (MainActivity, AdhanOverlayReceiver, BootReceiver)
+# are kept automatically by the AAPT-generated keep rules; no entries needed here.
+#
+# The Cordova compatibility layer is an empty shell in this project (no Cordova
+# plugins are registered), so no org.apache.cordova.** blanket keep — letting R8
+# strip the unused framework is part of the point of enabling it.

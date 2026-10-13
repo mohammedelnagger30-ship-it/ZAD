@@ -36,19 +36,44 @@ android {
     def releaseStorePassword = System.getenv('ZAD_KEYSTORE_PASSWORD') ?: signingProperties.getProperty('storePassword')
     def releaseKeyAlias = System.getenv('ZAD_KEY_ALIAS') ?: signingProperties.getProperty('keyAlias')
     def releaseKeyPassword = System.getenv('ZAD_KEY_PASSWORD') ?: signingProperties.getProperty('keyPassword')
+    // keystore.properties and *.jks are gitignored, so a fresh CI checkout has
+    // neither. Signing is therefore conditional: with the keystore present the
+    // build is signed exactly as before; without it the release build still
+    // compiles, runs R8 and packages — just unsigned. That is what lets the CI
+    // android job validate the Gradle project and the shrink rules on every
+    // push. An unsigned APK is a check artifact, not an installable update.
+    def releaseKeystoreFile = file(releaseKeystorePath)
+    def hasReleaseKeystore = releaseKeystoreFile.exists()
+    if (!hasReleaseKeystore) {
+        logger.warn("Release keystore '${releaseKeystorePath}' not found; the release build will be unsigned.")
+    }
     signingConfigs {
         release {
-            storeFile file(releaseKeystorePath)
-            storePassword releaseStorePassword
-            keyAlias releaseKeyAlias
-            keyPassword releaseKeyPassword
+            if (hasReleaseKeystore) {
+                storeFile releaseKeystoreFile
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
         }
     }
     buildTypes {
         release {
-            signingConfig signingConfigs.release
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // Signed only when a keystore is actually present (see the note above
+            // on signingConfigs); otherwise the build stays unsigned but still
+            // minifies, so CI can exercise R8 without the release secret.
+            if (hasReleaseKeystore) {
+                signingConfig signingConfigs.release
+            }
+            // R8: shrink + obfuscate the Java side, and drop unused resources.
+            // The web bundle (the bulk of the APK) is untouched; this trims the
+            // Capacitor/plugin/library code. Keep rules live in proguard-rules.pro
+            // plus capacitor-android's bundled consumer rules, which already keep
+            // every `class extends com.getcapacitor.Plugin` (covers AppUpdater and
+            // AdhanOverlay) and every manifest-declared component.
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 }

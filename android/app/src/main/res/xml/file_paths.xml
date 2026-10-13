@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Only the two paths the app actually serves through the FileProvider are kept:
+     the update APK (AppUpdater downloads into cache/) and downloaded adhan voices
+     (Capacitor Directory.DATA + adhan_store/), which a prayer channel rings. No
+     shared-storage entries: nothing in the app writes there anymore. -->
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <external-path name="my_images" path="." />
     <cache-path name="my_cache_images" path="." />
-    <external-path name="downloads" path="Download/" />
-    <!-- Downloaded adhan voices (Capacitor Directory.DATA + adhan_store/), published to
-         the system so a prayer channel can ring a voice that is not a bundled resource. -->
     <files-path name="adhans" path="adhan_store/" />
 </paths>
