@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { AlertTriangle, Pause, Play, RotateCcw, Square, Volume2 } from 'lucide-react';
+import { AlertTriangle, Check, Download, Pause, Play, RotateCcw, Square, Volume2, X } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { AUDIO_RECITERS } from '@/data/audioReciters';
 import type { SurahMeta } from '@/data/surahs';
-import { loadSurahAudio, type SurahAudioSource, type VerseTiming } from '@/utils/quranAudio';
+import { downloadSurahAudio, loadSurahAudio, type SurahAudioSource, type VerseTiming } from '@/utils/quranAudio';
+import { audioStatusInStore } from '@/utils/contentStore';
 import { toArabicNumber } from '@/data/surahs';
+import {
+  clearMediaSession,
+  setMediaPlaybackState,
+  setMediaSession,
+  updateMediaPosition,
+} from '@/utils/mediaSession';
 
 export interface AyahPlaybackControls {
   selectedAyah: number | null;
@@ -61,6 +68,71 @@ export function AudioRecitationPlayer({
    */
   const [wholeFile, setWholeFile] = useState(false);
 
+  // Offline download of this surah for this reciter — the memoriser's most
+  // common ask after hearing a surah: keep it on the device. State mirrors the
+  // store so the button reflects what is actually saved, not what was clicked.
+  const [isDownloaded, setIsDownloaded] = useState(false);
+  const [downloadState, setDownloadState] = useState<'idle' | 'downloading' | 'error'>('idle');
+  const [downloadProgress, setDownloadProgress] = useState<{ received: number; total: number } | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const downloadControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsDownloaded(false);
+    setDownloadState('idle');
+    setDownloadProgress(null);
+    setDownloadError(null);
+    audioStatusInStore(reciterId)
+      .then((surahs) => {
+        if (!cancelled) setIsDownloaded(surahs.has(surah.id));
+      })
+      .catch(() => {
+        // The store check is best-effort — the download button still works.
+      });
+    return () => {
+      cancelled = true;
+      // Leaving the surah/reciter abandons any download in flight for it.
+      downloadControllerRef.current?.abort();
+      downloadControllerRef.current = null;
+    };
+  }, [reciterId, surah.id]);
+
+  const startDownload = useCallback(async () => {
+    const controller = new AbortController();
+    downloadControllerRef.current = controller;
+    setDownloadState('downloading');
+    setDownloadError(null);
+    setDownloadProgress(null);
+    try {
+      await downloadSurahAudio(reciterId, surah.id, (progress) => {
+        setDownloadProgress({ received: progress.received, total: progress.total });
+      }, controller.signal);
+      if (downloadControllerRef.current === controller) {
+        setIsDownloaded(true);
+        setDownloadState('idle');
+        setDownloadProgress(null);
+      }
+    } catch (cause) {
+      if (controller.signal.aborted) return;
+      if (downloadControllerRef.current === controller) {
+        setDownloadState('error');
+        setDownloadError(cause instanceof Error ? cause.message : 'تعذّر تنزيل التلاوة');
+      }
+    } finally {
+      if (downloadControllerRef.current === controller) {
+        downloadControllerRef.current = null;
+      }
+    }
+  }, [reciterId, surah.id]);
+
+  const cancelDownload = useCallback(() => {
+    downloadControllerRef.current?.abort();
+    downloadControllerRef.current = null;
+    setDownloadState('idle');
+    setDownloadProgress(null);
+  }, []);
+
   // Stop playback completely
   const stop = useCallback(() => {
     const audio = audioRef.current;
@@ -74,6 +146,7 @@ export function AudioRecitationPlayer({
     repeatRemainingRef.current = 1;
     setActiveAyah(null);
     setIsPlaying(false);
+    setMediaPlaybackState('none');
   }, []);
 
   // Select an Ayah without playing
@@ -292,11 +365,63 @@ export function AudioRecitationPlayer({
     sourceUrlRef.current = null;
   }, []);
 
+  /**
+   * Publish the playing recitation as a system media session.
+   *
+   * While sound is playing, the lock screen, Bluetooth headphones and the OS
+   * media controls show the surah and reciter and can pause/resume/stop through
+   * the same element. Registered here (not inline in the play handlers) so the
+   * handlers always wrap the latest closures, and torn down the moment playback
+   * ends so no dead session lingers on the lock screen.
+   */
+  useEffect(() => {
+    if (!isPlaying) {
+      // A paused-but-loaded session stays registered so the lock screen can
+      // resume it; a player with nothing loaded has nothing to show.
+      if (activeAyah === null && !audioRef.current?.src) {
+        clearMediaSession();
+      } else {
+        setMediaPlaybackState('paused');
+      }
+      return;
+    }
+    const reciter = AUDIO_RECITERS.find((item) => item.id === reciterId);
+    setMediaSession(
+      {
+        title: `سورة ${surah.name}`,
+        artist: reciter?.name ?? 'القرآن الكريم',
+        album: 'قُرّة — تلاوة وحفظ',
+        artworkUrl: '/icons/icon-512.png',
+      },
+      {
+        onPlay: () => {
+          const audio = audioRef.current;
+          if (!audio || !audio.src) return;
+          audio
+            .play()
+            .then(() => setIsPlaying(true))
+            .catch(() => setIsPlaying(false));
+        },
+        onPause: () => {
+          audioRef.current?.pause();
+          setIsPlaying(false);
+        },
+        onStop: stop,
+      },
+    );
+    setMediaPlaybackState('playing');
+    return () => {
+      clearMediaSession();
+    };
+  }, [isPlaying, activeAyah, reciterId, surah.name, stop]);
+
   // Seamless real-time timeupdate handler
   const handleTimeUpdate = () => {
     const prepared = sourceRef.current;
     const audio = audioRef.current;
     if (!audio || !prepared) return;
+    // Keep the lock-screen position bar in step with the element.
+    updateMediaPosition(audio);
     // A whole-file recording has no ayah boundaries to track: the `ended`
     // event stops it.
     if (prepared.verseTimings.length === 0) return;
@@ -451,6 +576,54 @@ export function AudioRecitationPlayer({
               </button>
             )}
           </div>
+          {/* Offline download — "keep this surah on my phone" used to be buried in
+              ContentLibrary, three screens away from the moment someone wants it. */}
+          <div
+            aria-live="polite"
+            className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-primary-200 bg-white/60 px-3 py-2 dark:border-primary-700 dark:bg-primary-900/40"
+          >
+            {isDownloaded ? (
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-success-700 dark:text-success-400">
+                <Check size={15} aria-hidden="true" />
+                محفوظة للاستماع دون إنترنت
+              </span>
+            ) : downloadState === 'downloading' ? (
+              <>
+                <span className="text-xs font-semibold text-primary-700 dark:text-primary-200">
+                  {downloadProgress?.total
+                    ? `جارٍ التنزيل… ${Math.round(
+                        (downloadProgress.received / downloadProgress.total) * 100,
+                      )}٪`
+                    : 'جارٍ التنزيل…'}
+                </span>
+                <span className="flex-1" />
+                <button
+                  type="button"
+                  onClick={cancelDownload}
+                  className="inline-flex min-h-9 items-center gap-1 rounded-lg bg-white px-2.5 text-xs font-bold text-gray-600 shadow-sm hover:bg-gray-50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500 dark:bg-primary-800 dark:text-gray-200 dark:hover:bg-primary-700"
+                >
+                  <X size={13} aria-hidden="true" />
+                  إيقاف
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void startDownload()}
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-primary-100 px-3 text-xs font-bold text-primary-700 transition-colors hover:bg-primary-200 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500 dark:bg-primary-800 dark:text-primary-100 dark:hover:bg-primary-700"
+                >
+                  <Download size={14} aria-hidden="true" />
+                  تنزيل سورة {surah.name} للعمل دون إنترنت
+                </button>
+                {downloadState === 'error' && (
+                  <span className="text-[11px] font-medium text-error-600 dark:text-error-400">
+                    {downloadError ?? 'تعذّر التنزيل'}
+                  </span>
+                )}
+              </>
+            )}
+          </div>
           {activeAyah !== null && (
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -533,6 +706,8 @@ export function AudioRecitationPlayer({
       <audio
         ref={audioRef}
         preload="auto"
+        playsInline
+        aria-label={`تلاوة سورة ${surah.name}`}
         onEnded={handleEnded}
         onTimeUpdate={handleTimeUpdate}
         onError={() => {
