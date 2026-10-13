@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Moon, Sunrise, MapPin, Compass, BarChart3, Sun, Sunset, Check, X, Clock, Sparkles, BookOpen, ChevronLeft } from 'lucide-react';
+import { Moon, Sunrise, MapPin, BarChart3, Sun, Sunset, Check, X, Clock, Sparkles, BookOpen, ChevronLeft } from 'lucide-react';
 import { Card, Button, Badge, SectionHeader, EmptyState } from '@/components/ui';
 import { PrayerStatusSheet } from '@/components/PrayerStatusSheet';
 import { PrayerWeekGrid } from '@/components/PrayerWeekGrid';
+import { QiblaCompass } from '@/components/QiblaCompass';
 import type { Settings } from '@/db/database';
 import type { NavParams, ScreenName } from '@/hooks/useApp';
 import {
@@ -460,19 +461,12 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
         </div>
       </div>
 
-      {/* Enhanced Qibla Direction */}
-      <Card className="p-5! flex items-center gap-5 hover:shadow-lg transition-shadow">
-        <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl bg-linear-to-br from-gold-100 to-gold-200 dark:from-gold-900/30 dark:to-gold-900/50 shadow-md">
-          <Compass size={32} className="text-gold-600 dark:text-gold-400" />
-          <div className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full bg-gold-400 shadow-xs" />
-        </div>
-        <div className="flex-1">
-          <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">اتجاه القبلة</p>
-          <p className="text-2xl font-bold text-primary-800 dark:text-primary-100 mt-1">
-            {Math.round(prayerResult.qiblaDirection)}° من الشمال
-          </p>
-        </div>
-      </Card>
+      {/* Live Qibla compass — the static bearing number is now an instrument
+          the phone can actually aim with. */}
+      <QiblaCompass
+        qiblaDirection={prayerResult.qiblaDirection}
+        contextLabel={settings.cityName ? `حسب موقعك: ${settings.cityName}` : undefined}
+      />
 
       {/* Enhanced Independent Voluntary Prayers */}
       <div>
