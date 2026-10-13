@@ -20,6 +20,7 @@ export const BACKUP_TABLES = [
   'prayerRecords',
   'sunnahRecords',
   'hifzProgress',
+  'hifzReviews',
   'hadithFavorites',
   'khatmah',
 ] as const;
@@ -50,6 +51,7 @@ export async function backupData(): Promise<Record<string, unknown>> {
   data.prayerRecords = await db.prayerRecords.toArray();
   data.sunnahRecords = await db.sunnahRecords.toArray();
   data.hifzProgress = await db.hifzProgress.toArray();
+  data.hifzReviews = await db.hifzReviews.toArray();
   data.hadithFavorites = await db.hadithFavorites.toArray();
   data.khatmah = await db.khatmah.toArray();
   const adhkarState = localStorage.getItem(ADHKAR_STATE_KEY);
@@ -214,6 +216,31 @@ export function isValidBackupRow(table: BackupTable, value: unknown): value is R
         (value.ayahEnd as number) >= (value.ayahStart as number) &&
         ['memorized', 'reviewing', 'strong', 'weak'].includes(value.status as string) &&
         isFiniteNumber(value.ratedAt)
+      );
+    case 'hifzReviews':
+      return (
+        typeof value.key === 'string' &&
+        /^\d{1,3}:\d{1,3}-\d{1,3}$/.test(value.key) &&
+        Number.isInteger(value.surahId) &&
+        (value.surahId as number) >= 1 &&
+        (value.surahId as number) <= 114 &&
+        Number.isInteger(value.fromAyah) &&
+        (value.fromAyah as number) >= 1 &&
+        Number.isInteger(value.toAyah) &&
+        (value.toAyah as number) >= (value.fromAyah as number) &&
+        isFiniteNumber(value.ease) &&
+        (value.ease as number) >= 0 &&
+        (value.ease as number) <= 10 &&
+        isFiniteNumber(value.intervalDays) &&
+        (value.intervalDays as number) >= 0 &&
+        (value.intervalDays as number) <= 3650 &&
+        Number.isInteger(value.repetitions) &&
+        (value.repetitions as number) >= 0 &&
+        isFiniteNumber(value.dueAt) &&
+        ['again', 'hard', 'good', 'easy'].includes(value.lastGrade as string) &&
+        isFiniteNumber(value.lastReviewedAt) &&
+        Number.isInteger(value.lapses) &&
+        (value.lapses as number) >= 0
       );
     case 'hadithFavorites':
       return typeof value.hadithId === 'string' && typeof value.collection === 'string' && isFiniteNumber(value.createdAt);

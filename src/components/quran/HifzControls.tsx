@@ -1,4 +1,4 @@
-import { Eye, EyeOff, Layers } from 'lucide-react';
+import { Brain, Eye, EyeOff, Layers } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { type SurahMeta } from '@/data/surahs';
 
@@ -13,6 +13,8 @@ interface HifzControlsProps {
   setHideText: (hide: boolean) => void;
   hideWordByWord: boolean;
   setHideWordByWord: (hide: boolean) => void;
+  /** Opens the hifz self-test quiz for the selected ayah range. */
+  onStartTest: () => void;
 }
 
 export function HifzControls({
@@ -26,6 +28,7 @@ export function HifzControls({
   setHideText,
   hideWordByWord,
   setHideWordByWord,
+  onStartTest,
 }: HifzControlsProps) {
   return (
     <>
@@ -84,6 +87,17 @@ export function HifzControls({
                   إخفاء كلمة بكلمة
                 </button>
               </div>
+
+              {/* The self-test — the only control here that *asks* instead of showing.
+                  Its result feeds the SM-2 schedule, so the button doubles as the
+                  portion's review entry point. */}
+              <button
+                onClick={onStartTest}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary-600 text-sm font-bold text-white hover:bg-primary-700 transition-smooth focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500 md:max-w-md"
+              >
+                <Brain size={17} />
+                اختبر حفظي للنطاق المحدد
+              </button>
             </div>
           </Card>
         )}

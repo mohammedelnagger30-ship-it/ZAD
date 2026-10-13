@@ -18,6 +18,7 @@ import { AyahSearchPanel } from '@/components/quran/AyahSearchPanel';
 import { JuzGrid } from '@/components/quran/JuzGrid';
 import { ReaderHeader } from '@/components/quran/ReaderHeader';
 import { HifzControls } from '@/components/quran/HifzControls';
+import { HifzTestModal } from '@/components/quran/HifzTestModal';
 import { ReaderChoiceSheet } from '@/components/quran/ReaderChoiceSheet';
 import { ReaderNavigation } from '@/components/quran/ReaderNavigation';
 import { splitBasmala } from '@/utils/basmala';
@@ -113,6 +114,8 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
   const ayahChoicePanelRef = useRef<HTMLDivElement>(null);
   const [mushafPage, setMushafPage] = useState(savedState?.mushafPage ?? 1);
   const [reciterId, setReciterId] = useState(loadPreferredReciter);
+  /** The hifz self-test quiz for the currently selected ayah range. */
+  const [showHifzTest, setShowHifzTest] = useState(false);
 
   useEffect(() => {
     try {
@@ -540,6 +543,7 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
           setHideText={setHideText}
           hideWordByWord={hideWordByWord}
           setHideWordByWord={setHideWordByWord}
+          onStartTest={() => setShowHifzTest(true)}
         />
 
         <AudioRecitationPlayer
@@ -663,6 +667,15 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
           ayahNumber={tafsirAyah.ayah}
           onClose={() => setTafsirAyah(null)}
           onNavigateAyah={stepTafsirAyah}
+        />
+      )}
+
+      {showHifzTest && selectedSurah && (
+        <HifzTestModal
+          surah={selectedSurah}
+          fromAyah={fromAyah}
+          toAyah={toAyah ?? selectedSurah.ayahCount}
+          onClose={() => setShowHifzTest(false)}
         />
       )}
       </>

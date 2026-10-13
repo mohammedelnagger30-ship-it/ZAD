@@ -94,6 +94,38 @@ export interface HifzProgress {
   ratedAt: number;
 }
 
+export type HifzGrade = 'again' | 'hard' | 'good' | 'easy';
+
+/**
+ * One memorised range's spaced-repetition state (SM-2).
+ *
+ * Deliberately keyed by the *range* the way a hifz portion is (`surahId` +
+ * `fromAyah..toAyah`), not per ayah: a memoriser thinks in portions, the quiz
+ * tests a portion, and one state per portion keeps the schedule honest without
+ * 6000 rows of bookkeeping. Kept out of cloud sync like `khatmah` — a personal
+ * study schedule, backed up with everything else but not merged across devices.
+ */
+export interface HifzReview {
+  id?: number;
+  /** `${surahId}:${from}-${to}` — the range this state belongs to. */
+  key: string;
+  surahId: number;
+  fromAyah: number;
+  toAyah: number;
+  /** SM-2 easiness factor, starts at 2.5, floored at 1.3. */
+  ease: number;
+  /** Current spacing between reviews, in days. */
+  intervalDays: number;
+  /** Consecutive successful reviews (resets on a lapse). */
+  repetitions: number;
+  /** Epoch ms of the next due review. */
+  dueAt: number;
+  lastGrade: HifzGrade;
+  lastReviewedAt: number;
+  /** How many times this range has lapsed (graded «again»). */
+  lapses: number;
+}
+
 export interface HadithFavorite {
   id?: number;
   syncId?: string;
@@ -166,6 +198,7 @@ export class HifziDB extends Dexie {
   prayerRecords!: Table<PrayerRecord, number>;
   sunnahRecords!: Table<SunnahRecord, number>;
   hifzProgress!: Table<HifzProgress, number>;
+  hifzReviews!: Table<HifzReview, number>;
   hadithFavorites!: Table<HadithFavorite, number>;
   settings!: Table<Settings, number>;
   khatmah!: Table<KhatmahPlan, number>;
@@ -277,6 +310,13 @@ export class HifziDB extends Dexie {
         // No data migration needed - only index structure changes
         // This upgrade is purely for performance optimization
       });
+
+    // v7: hifzReviews — the spaced-repetition (SM-2) schedule behind the hifz
+    // quiz. A fresh table, so no migration: existing installs simply gain the
+    // ability to be quizzed, and every range starts unscheduled.
+    this.version(7).stores({
+      hifzReviews: '++id, key, dueAt, surahId',
+    });
   }
 }
 
