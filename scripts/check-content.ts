@@ -295,18 +295,18 @@ check(
 check(
   ((): boolean => {
     try {
-      assertPrayerRecordable(formatDateKey(testToday), false, testToday);
+      assertPrayerRecordable(formatDateKey(testToday), testToday);
     } catch {
       return false;
     }
     try {
-      assertPrayerRecordable(formatDateKey(testToday), true, testToday);
+      assertPrayerRecordable(formatDateKey(addDays(testToday, -2)), testToday);
       return false;
     } catch {
       return true;
     }
   })(),
-  'a confirmed prayer can never be changed',
+  'a prayer day stays correctable only while it is today or yesterday',
 );
 
 console.log('\n== adhkar and Quranic supplications ==');

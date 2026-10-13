@@ -11,11 +11,11 @@ import {
 import { formatDateKey, addDays } from '@/utils/dateUtils';
 
 /**
- * Phase 0/2's prayer-record invariants: confirmation is final (no undo, no
- * counter), a slot only opens for today or yesterday, the legacy combined
- * Dhuhr rawatib row reads exactly like its split halves, and the week
- * percentage treats a never-answered past prayer as a miss — silence must not
- * be rewarded.
+ * Phase 0/2's prayer-record invariants: an answer saved in its day stays
+ * correctable inside the today/yesterday window, a slot only opens for those
+ * two days, the legacy combined Dhuhr rawatib row reads exactly like its split
+ * halves, and the week percentage treats a never-answered past prayer as a
+ * miss — silence must not be rewarded.
  */
 
 const now = new Date('2026-03-10T15:00:00');
@@ -35,21 +35,21 @@ describe('canEditPrayerDate', () => {
 
 describe('assertPrayerRecordable', () => {
   it('records an unanswered prayer of today at once', () => {
-    expect(() => assertPrayerRecordable(today, false, now)).not.toThrow();
+    expect(() => assertPrayerRecordable(today, now)).not.toThrow();
   });
 
   it('records an unanswered prayer of yesterday', () => {
-    expect(() => assertPrayerRecordable(yesterday, false, now)).not.toThrow();
+    expect(() => assertPrayerRecordable(yesterday, now)).not.toThrow();
   });
 
-  it('rejects a prayer that already has a record — confirmation is final, no undo', () => {
-    expect(() => assertPrayerRecordable(today, true, now)).toThrow(
-      'تم تأكيد هذه الصلاة ولا يمكن تغييرها.',
-    );
+  it('keeps today and yesterday editable — a mis-tap can be corrected in its window', () => {
+    // Correction reuses the same rule: the day is writable, so re-answering is too.
+    expect(() => assertPrayerRecordable(today, now)).not.toThrow();
+    expect(() => assertPrayerRecordable(yesterday, now)).not.toThrow();
   });
 
-  it('rejects days outside today and yesterday', () => {
-    expect(() => assertPrayerRecordable(twoDaysAgo, false, now)).toThrow(
+  it('rejects days outside today and yesterday — the window closes with the day', () => {
+    expect(() => assertPrayerRecordable(twoDaysAgo, now)).toThrow(
       'يمكن تسجيل صلاة اليوم أو أمس فقط.',
     );
   });

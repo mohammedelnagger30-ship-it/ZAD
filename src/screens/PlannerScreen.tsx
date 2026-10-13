@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Plus, Trash2, Sparkles, Check, X, Calendar, Clock, BookOpenCheck, Search, RotateCcw, CircleDashed } from 'lucide-react';
 import { Card, Button, Badge, EmptyState } from '@/components/ui';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { db, type HifzPlan, type HifzProgress, type ProgressType } from '@/db/database';
 import { SURAHS, JUZ_INFO, getSurah, toArabicNumber, TOTAL_QURAN_PAGES } from '@/data/surahs';
 import { describePortion, suggestPlan, generateDailyTasks } from '@/utils/taskManager';
@@ -74,6 +75,8 @@ export function PlannerScreen() {
   const [showCreate, setShowCreate] = useState(false);
   const [showSuggest, setShowSuggest] = useState(false);
   const [goalText, setGoalText] = useState('');
+  /** The plan awaiting delete confirmation — a trash tap used to remove it instantly. */
+  const [planPendingDelete, setPlanPendingDelete] = useState<HifzPlan | null>(null);
   const goalSuggestion = useMemo(
     () => (goalText.trim() ? suggestPlan(goalText) : null),
     [goalText],
@@ -227,7 +230,7 @@ export function PlannerScreen() {
           <PlanCard
             key={plan.id}
             plan={plan}
-            onDelete={() => deletePlan(plan.id!)}
+            onDelete={() => setPlanPendingDelete(plan)}
             onToggle={() => toggleActive(plan)}
           />
         ))}
@@ -312,6 +315,25 @@ export function PlannerScreen() {
           }}
         />
       )}
+
+      {/* Plan deletion needs confirmation: it also regenerates today's tasks and
+          reschedules every notification, so a stray trash tap is not cheap. */}
+      <ConfirmDialog
+        open={planPendingDelete !== null}
+        destructive
+        title="حذف الخطة؟"
+        description={
+          planPendingDelete
+            ? `ستُحذف خطة «${planPendingDelete.name}» ومهامها غير المنجزة، وستُعاد جدولة التنبيهات. لا يمكن التراجع.`
+            : undefined
+        }
+        confirmLabel="حذف الخطة"
+        onConfirm={async () => {
+          if (planPendingDelete) await deletePlan(planPendingDelete.id!);
+          setPlanPendingDelete(null);
+        }}
+        onCancel={() => setPlanPendingDelete(null)}
+      />
 
       {/* Suggest plan modal */}
       {showSuggest && (
@@ -521,6 +543,8 @@ function PlanCard({ plan, onDelete, onToggle }: { plan: HifzPlan; onDelete: () =
         <div className="flex gap-1">
           <button
             onClick={onToggle}
+            aria-label={plan.active ? 'إيقاف الخطة' : 'تفعيل الخطة'}
+            aria-pressed={plan.active}
             className={`w-8 h-8 rounded-lg flex items-center justify-center transition-smooth ${
               plan.active ? 'bg-success-100 text-success-600 dark:bg-success-900/30' : 'bg-gray-100 text-gray-400 dark:bg-gray-800'
             }`}
@@ -529,6 +553,7 @@ function PlanCard({ plan, onDelete, onToggle }: { plan: HifzPlan; onDelete: () =
           </button>
           <button
             onClick={onDelete}
+            aria-label={`حذف خطة ${plan.name}`}
             className="w-8 h-8 rounded-lg bg-error-100 dark:bg-error-900/30 text-error-600 dark:text-error-400 flex items-center justify-center hover:bg-error-200 transition-smooth"
           >
             <Trash2 size={16} />

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, Button } from '@/components/ui';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { toArabicNumber, TOTAL_QURAN_PAGES } from '@/data/surahs';
 import { todayKey } from '@/utils/dateUtils';
 import { clearKhatmah, createKhatmahPlan, describeKhatmah, loadKhatmah, saveKhatmah } from '@/utils/khatmah';
@@ -14,6 +15,8 @@ import type { KhatmahPlan } from '@/db/database';
 export function KhatmahCard() {
   const [khatmah, setKhatmah] = useState<KhatmahPlan | null>(null);
   const [khatmahPickerOpen, setKhatmahPickerOpen] = useState(false);
+  /** Ending a khatmah clears all progress — one accidental tap used to do it silently. */
+  const [confirmFinishOpen, setConfirmFinishOpen] = useState(false);
 
   // The khatmah plan loads once; the card mutates it through saveKhatmah.
   useEffect(() => {
@@ -68,7 +71,7 @@ export function KhatmahCard() {
           <>
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-bold text-primary-900 dark:text-primary-100">ختمة القرآن</p>
-              <Button variant="ghost" size="sm" onClick={() => { void finishKhatmah(); }}>
+              <Button variant="ghost" size="sm" onClick={() => setConfirmFinishOpen(true)}>
                 إنهاء
               </Button>
             </div>
@@ -179,6 +182,22 @@ export function KhatmahCard() {
           </div>
         )}
       </Card>
+      <ConfirmDialog
+        open={confirmFinishOpen}
+        destructive
+        title="إنهاء الختمة الحالية؟"
+        description={
+          khatmah
+            ? `قرأت ${toArabicNumber(khatmah.currentPage)} صفحة حتى الآن. إنهاء الختمة يمسح تقدّمها نهائيًا، ويمكنك بدء ختمة جديدة بعدها.`
+            : undefined
+        }
+        confirmLabel="إنهاء الختمة"
+        onConfirm={() => {
+          void finishKhatmah();
+          setConfirmFinishOpen(false);
+        }}
+        onCancel={() => setConfirmFinishOpen(false)}
+      />
     </section>
   );
 }

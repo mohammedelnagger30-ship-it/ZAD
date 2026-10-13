@@ -25,20 +25,20 @@ export function canEditPrayerDate(date: string, now = trustedNow()): boolean {
 
 /**
  * The whole confirmation rule in one pure function so `check:content` can
- * assert it without IndexedDB: the slot must be writable, and a prayer that
- * already has a record is final. Pressing an answer saves it at once — there
- * is no countdown, no undo, and no correction afterwards.
+ * assert it without IndexedDB: the slot must be writable (today or yesterday).
+ *
+ * A prayer answered earlier today or yesterday may be corrected — a mis-tap on
+ * «ما صليتهاش» used to be permanent, skewing a week of statistics with no way
+ * back. The window itself is the finality: once the day closes, the record is
+ * read-only forever, which keeps the historical grid trustworthy without making
+ * a single tap unrecoverable.
  */
 export function assertPrayerRecordable(
   date: string,
-  hasRecord: boolean,
   now = trustedNow()
 ): void {
   if (!canEditPrayerDate(date, now)) {
     throw new Error('يمكن تسجيل صلاة اليوم أو أمس فقط.');
-  }
-  if (hasRecord) {
-    throw new Error('تم تأكيد هذه الصلاة ولا يمكن تغييرها.');
   }
 }
 
@@ -62,8 +62,13 @@ function serialize<T>(operation: () => Promise<T>): Promise<T> {
 }
 
 /**
- * Records a prayer's answer. The write is final and immediate: only a slot
- * with no record yet can be saved, and it never expires into an edit window.
+ * Records a prayer's answer for a writable day.
+ *
+ * First answer or correction both land here: an existing record is updated in
+ * place (keeping its row and sync id, so the corrected status is what reaches
+ * the cloud as a newer edit), a missing one is inserted. Days outside the
+ * window are rejected by {@link assertPrayerRecordable} — the correction
+ * window closes with the day.
  */
 export function confirmPrayer(
   date: string,
@@ -71,8 +76,18 @@ export function confirmPrayer(
   status: PrayerStatus
 ): Promise<void> {
   return serialize(async () => {
+    assertPrayerRecordable(date);
     const existing = await getPrayerRecord(date, prayer);
-    assertPrayerRecordable(date, existing != null);
+    if (existing) {
+      await db.prayerRecords.update(existing.id!, {
+        status,
+        confirmedAt: trustedNowMs(),
+        // Stamped here as well as by cloudSync's Dexie hooks: the corrected status
+        // must win the conflict against the original answer on every device.
+        syncModifiedAt: trustedNowMs(),
+      });
+      return;
+    }
     await db.prayerRecords.add({
       date,
       prayer,

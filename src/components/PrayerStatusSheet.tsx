@@ -43,8 +43,11 @@ const OPTIONS: { status: PrayerStatus; label: string; icon: typeof Check; varian
  * mistap was likely. Here every action is a full-width button with a text label, so
  * there is nothing to misread and nothing to miss.
  *
- * An answer is final: the tap saves the prayer at once, and from then on the
- * sheet only shows the saved choice — no countdown, no undo, no correction.
+ * An answer is saved immediately, and within its day it stays editable: the
+ * sheet keeps every option live so a mis-tap can be corrected on the spot —
+ * «ما صليتهاش» chosen by accident used to be permanent and skewed a week of
+ * statistics with no way back. Finality comes from the day, not the tap: once
+ * today (and yesterday, the recordable window) closes, the record is read-only.
  */
 export function PrayerStatusSheet({
   prayer,
@@ -59,7 +62,9 @@ export function PrayerStatusSheet({
   onToggleSunnah,
 }: PrayerStatusSheetProps) {
   const [actionError, setActionError] = useState('');
-  const canChange = editable && !status;
+  // Within a writable day every option stays live — the tap can be corrected.
+  // Outside it (`editable === false`) nothing is, and the banner explains why.
+  const canChange = editable;
 
   // A sheet that cannot be dismissed with the keyboard traps focus on a phone with a
   // hardware keyboard, and it leaves the page scrollable behind it.
@@ -136,7 +141,7 @@ export function PrayerStatusSheet({
             aria-live="polite"
             className="mx-5 mb-3 rounded-xl bg-success-50 px-3 py-2 text-sm font-semibold text-success-700 dark:bg-success-900/20 dark:text-success-300"
           >
-            تم التأكيد — هذا التسجيل محفوظ ولا يمكن تغييره.
+            تم التأكيد. غيّر اختيارك إذا كان خطأً — يُحفظ التصحيح فورًا.
           </p>
         )}
         {actionError && (
