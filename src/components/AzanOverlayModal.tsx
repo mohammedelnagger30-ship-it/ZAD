@@ -297,11 +297,47 @@ export function AzanOverlayModal({
       } catch (err) {
         console.error('Failed to schedule snooze notification:', err);
       }
+    } else {
+      // Web has no alarm queue, so the button used to claim «تم التذكير» while
+      // scheduling nothing. Now it arms the two real reminders a browser can give:
+      // a notification (permission is requested on this very click, which counts as
+      // the user gesture) and — the sturdier one — the adhan page itself reopening
+      // through the same event the test buttons use, which replays the call while
+      // the tab lives. If the tab is closed, no web reminder can survive; that
+      // limit is stated on the button instead of being papered over.
+      try {
+        if (typeof Notification !== 'undefined') {
+          if (Notification.permission === 'default') {
+            void Notification.requestPermission();
+          }
+          window.setTimeout(() => {
+            try {
+              if (Notification.permission === 'granted') {
+                new Notification(`تذكير صلاة ${displayName}`, {
+                  body: `انقضت 10 دقائق على وقت صلاة ${displayName} — لا تنسَ الصلاة`,
+                  icon: '/icons/icon-192.png',
+                });
+              }
+            } catch {
+              // Some browsers refuse construction; the overlay below is the main reminder.
+            }
+          }, 10 * 60000);
+        }
+      } catch {
+        // Notifications unavailable: the overlay reopening is still armed below.
+      }
+      window.setTimeout(() => {
+        window.dispatchEvent(
+          new CustomEvent('zad:trigger-azan', {
+            detail: { prayerKey, prayerName, prayerTime, isPreview: true },
+          }),
+        );
+      }, 10 * 60000);
     }
     setTimeout(() => {
       onClose();
     }, 1200);
-  }, [displayName, onClose]);
+  }, [displayName, onClose, prayerKey, prayerName, prayerTime]);
 
   const handleGoToAdhkar = () => {
     if (audioRef.current) {
@@ -516,7 +552,11 @@ export function AzanOverlayModal({
               className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-800 py-2.5 md:py-3 px-3 text-xs md:text-sm font-semibold text-slate-200 transition"
             >
               <Bell size={15} className="text-amber-400" />
-              {snoozed ? 'تم التذكير بعد 10د' : 'تذكير بعد 10 دقائق'}
+              {snoozed
+                ? Capacitor.isNativePlatform()
+                  ? 'تم التذكير بعد 10د'
+                  : 'سيصل التذكير ما دام التطبيق مفتوحًا'
+                : 'تذكير بعد 10 دقائق'}
             </button>
 
             {/* Go to Adhkar Screen */}
