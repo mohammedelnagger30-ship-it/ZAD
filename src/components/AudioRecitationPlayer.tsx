@@ -1,17 +1,24 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { AlertTriangle, Check, Download, Pause, Play, RotateCcw, Square, Volume2, X } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { AUDIO_RECITERS } from '@/data/audioReciters';
 import type { SurahMeta } from '@/data/surahs';
-import { downloadSurahAudio, loadSurahAudio, type SurahAudioSource, type VerseTiming } from '@/utils/quranAudio';
+import { downloadSurahAudio } from '@/utils/quranAudio';
 import { audioStatusInStore } from '@/utils/contentStore';
 import { toArabicNumber } from '@/data/surahs';
 import {
-  clearMediaSession,
-  setMediaPlaybackState,
-  setMediaSession,
-  updateMediaPosition,
-} from '@/utils/mediaSession';
+  getRecitationState,
+  replayAyah,
+  selectAyah,
+  setTrack,
+  startSelectedAyah,
+  stop,
+  subscribeRecitation,
+  toggleSurah,
+  updatePlaybackRate,
+  updateRepeatCount,
+  playAyahEnsured,
+} from '@/utils/recitationEngine';
 
 export interface AyahPlaybackControls {
   selectedAyah: number | null;
@@ -31,6 +38,18 @@ interface AudioRecitationPlayerProps {
   children: (controls: AyahPlaybackControls) => ReactNode;
 }
 
+/**
+ * The reader's recitation panel — a view over `@/utils/recitationEngine`.
+ *
+ * All playback lives in the engine so that leaving this screen does not stop
+ * it: the reader unmounting tears down *this component* only, while the audio
+ * element, the prepared source and the Media Session carry on (and the
+ * memoriser keeps listening from the home screen or with the phone locked).
+ * The one thing that must not survive is a *different track* — hence `setTrack`
+ * in a layout effect, which runs before the first paint so a surah change can
+ * never flash the previous surah's playing state, and is a no-op when the
+ * engine already holds this track.
+ */
 export function AudioRecitationPlayer({
   surah,
   reciterId,
@@ -38,35 +57,14 @@ export function AudioRecitationPlayer({
   onShowTafsir,
   children,
 }: AudioRecitationPlayerProps) {
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const activeAyahRef = useRef<number | null>(null);
-  const continuousRef = useRef(false);
-  const verseEndRef = useRef<number | null>(null);
-  const repeatRemainingRef = useRef(1);
-  const sourceUrlRef = useRef<string | null>(null);
-  const currentTimingRef = useRef<VerseTiming | null>(null);
+  const engine = useSyncExternalStore(subscribeRecitation, getRecitationState);
 
-  // The prepared audio lives in a ref, not state: playback is driven from event
-  // handlers whose closures would otherwise still see the old (not-yet-loaded)
-  // value on the very first press after loading finishes.
-  const sourceRef = useRef<SurahAudioSource | null>(null);
-  const loadInFlightRef = useRef<Promise<SurahAudioSource | null> | null>(null);
-  const loadControllerRef = useRef<AbortController | null>(null);
-
-  const [activeAyah, setActiveAyah] = useState<number | null>(null);
-  const [selectedAyah, setSelectedAyah] = useState<number | null>(1);
-  const [repeatCount, setRepeatCount] = useState(3);
-  const [playbackRate, setPlaybackRate] = useState(1);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // Nothing is being fetched until sound is actually asked for.
-  const [sourceLoading, setSourceLoading] = useState(false);
-  /**
-   * True once the prepared source turns out to hold no verse timings (the
-   * children-repetition muallim): the surah plays as one whole file, so the
-   * ayah-cutting UI (repeat counts, «استمع للآية») is hidden for it.
-   */
-  const [wholeFile, setWholeFile] = useState(false);
+  // Layout, not effect: a remount over a playing engine would otherwise paint
+  // one frame of the old surah's state inside the new surah's reader.
+  useLayoutEffect(() => {
+    setTrack({ surahId: surah.id, surahName: surah.name, reciterId });
+    // Deliberately no cleanup — that absence is what keeps playback alive.
+  }, [surah.id, surah.name, reciterId]);
 
   // Offline download of this surah for this reciter — the memoriser's most
   // common ask after hearing a surah: keep it on the device. State mirrors the
@@ -97,8 +95,7 @@ export function AudioRecitationPlayer({
       downloadControllerRef.current = null;
     };
   }, [reciterId, surah.id]);
-
-  const startDownload = useCallback(async () => {
+  const startDownload = async (): Promise<void> => {
     const controller = new AbortController();
     downloadControllerRef.current = controller;
     setDownloadState('downloading');
@@ -124,394 +121,25 @@ export function AudioRecitationPlayer({
         downloadControllerRef.current = null;
       }
     }
-  }, [reciterId, surah.id]);
+  };
 
-  const cancelDownload = useCallback(() => {
+  const cancelDownload = (): void => {
     downloadControllerRef.current?.abort();
     downloadControllerRef.current = null;
     setDownloadState('idle');
     setDownloadProgress(null);
-  }, []);
-
-  // Stop playback completely
-  const stop = useCallback(() => {
-    const audio = audioRef.current;
-    if (audio) {
-      audio.pause();
-    }
-    activeAyahRef.current = null;
-    continuousRef.current = false;
-    verseEndRef.current = null;
-    currentTimingRef.current = null;
-    repeatRemainingRef.current = 1;
-    setActiveAyah(null);
-    setIsPlaying(false);
-    setMediaPlaybackState('none');
-  }, []);
-
-  // Select an Ayah without playing
-  const selectAyah = useCallback((ayah: number) => {
-    setSelectedAyah(ayah);
-  }, []);
-
-  /**
-   * Fetch the surah's recitation on first request.
-   *
-   * The old version loaded it the moment a surah was opened: every opened surah
-   * downloaded the whole recitation, and offline that landed a red
-   * «تعذّر تجهيز التلاوة» banner on a reader who had only come to read. Deferred,
-   * the fetch happens behind «جار تجهيز التلاوة...» and a failure can only appear
-   * after the person pressed play themselves.
-   */
-  const ensureSource = useCallback((): Promise<SurahAudioSource | null> => {
-    if (sourceRef.current) return Promise.resolve(sourceRef.current);
-    if (loadInFlightRef.current) return loadInFlightRef.current;
-
-    const controller = new AbortController();
-    loadControllerRef.current = controller;
-    setSourceLoading(true);
-
-    const load = (async (): Promise<SurahAudioSource | null> => {
-      try {
-        const nextSource = await loadSurahAudio(reciterId, surah.id, controller.signal);
-        if (controller.signal.aborted || loadControllerRef.current !== controller) {
-          // The surah or reciter changed while this fetch was running.
-          if (nextSource.blob) URL.revokeObjectURL(nextSource.url);
-          return null;
-        }
-        if (sourceUrlRef.current?.startsWith('blob:')) {
-          URL.revokeObjectURL(sourceUrlRef.current);
-        }
-        sourceUrlRef.current = nextSource.blob ? nextSource.url : null;
-        sourceRef.current = nextSource;
-        setWholeFile(nextSource.verseTimings.length === 0);
-        setError(null);
-        return nextSource;
-      } catch (cause: unknown) {
-        if (!(cause instanceof Error && cause.name === 'AbortError')) {
-          setError(cause instanceof Error ? cause.message : 'تعذّر تجهيز التلاوة');
-        }
-        return null;
-      } finally {
-        // Only the load that still owns the slot may release it: a reciter/surah
-        // change aborts this controller and starts the next load, whose slot this
-        // stale finally must not clear.
-        if (loadControllerRef.current === controller) {
-          loadControllerRef.current = null;
-          loadInFlightRef.current = null;
-          setSourceLoading(false);
-        }
-      }
-    })();
-
-    loadInFlightRef.current = load;
-    return load;
-  }, [reciterId, surah.id]);
-
-  // Core function to start or seek playback to a specific Ayah
-  const playAyah = useCallback(
-    (ayah: number, continuous = false) => {
-      const prepared = sourceRef.current;
-      const audio = audioRef.current;
-      if (!prepared || !audio) return;
-
-      // A recording with no verse timings (the children-repetition muallim)
-      // plays as one whole surah file: any ayah press starts it from the top.
-      if (prepared.verseTimings.length === 0) {
-        setError(null);
-        activeAyahRef.current = null;
-        continuousRef.current = true;
-        currentTimingRef.current = null;
-        verseEndRef.current = null;
-        setSelectedAyah(ayah);
-        setActiveAyah(null);
-        if (audio.src !== prepared.url) {
-          audio.src = prepared.url;
-        }
-        audio.currentTime = 0;
-        audio.playbackRate = playbackRate;
-        audio
-          .play()
-          .then(() => {
-            setIsPlaying(true);
-          })
-          .catch((cause: unknown) => {
-            setIsPlaying(false);
-            setError(cause instanceof Error ? cause.message : 'تعذّر تشغيل التلاوة');
-          });
-        return;
-      }
-
-      const timing = prepared.verseTimings.find((item) => item.ayah === ayah);
-      if (!timing) {
-        setError(`توقيت الآية ${ayah} غير متاح`);
-        return;
-      }
-
-      setError(null);
-      activeAyahRef.current = ayah;
-      continuousRef.current = continuous;
-      currentTimingRef.current = timing;
-      setSelectedAyah(ayah);
-      setActiveAyah(ayah);
-
-      // In single-ayah repeat mode, record the end time for looping/stopping
-      if (!continuous) {
-        verseEndRef.current = timing.endMs / 1000;
-      } else {
-        verseEndRef.current = null;
-      }
-
-      // Ensure audio source URL is set
-      if (audio.src !== prepared.url) {
-        audio.src = prepared.url;
-      }
-
-      audio.currentTime = timing.startMs / 1000;
-      audio.playbackRate = playbackRate;
-
-      audio
-        .play()
-        .then(() => {
-          setIsPlaying(true);
-        })
-        .catch((cause: unknown) => {
-          setIsPlaying(false);
-          setError(cause instanceof Error ? cause.message : 'تعذّر تشغيل التلاوة');
-        });
-    },
-    [playbackRate]
-  );
-
-  /** Prepare the audio if needed, then hand over to `playAyah`; null aborts silently. */
-  const playAyahEnsured = useCallback(
-    async (ayah: number, continuous = false): Promise<void> => {
-      const prepared = await ensureSource();
-      if (!prepared) return;
-      playAyah(ayah, continuous);
-    },
-    [ensureSource, playAyah]
-  );
-
-  const startSelectedAyah = useCallback(async () => {
-    if (selectedAyah === null) return;
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    if (activeAyahRef.current === selectedAyah && isPlaying) {
-      audio.pause();
-      setIsPlaying(false);
-      return;
-    }
-
-    const prepared = await ensureSource();
-    if (!prepared) return;
-    repeatRemainingRef.current = repeatCount;
-    playAyah(selectedAyah, false);
-  }, [ensureSource, playAyah, repeatCount, selectedAyah, isPlaying]);
-
-  const updateRepeatCount = (count: number) => {
-    setRepeatCount(count);
-    repeatRemainingRef.current = count;
   };
 
-  const replayAyah = useCallback(async () => {
-    const ayah = activeAyahRef.current ?? selectedAyah;
-    if (ayah === null) return;
-    const prepared = await ensureSource();
-    if (!prepared) return;
-    repeatRemainingRef.current = repeatCount;
-    playAyah(ayah, false);
-  }, [ensureSource, playAyah, repeatCount, selectedAyah]);
-
-  const updatePlaybackRate = (rate: number) => {
-    setPlaybackRate(rate);
-    if (audioRef.current) {
-      audioRef.current.playbackRate = rate;
-    }
-  };
-
-  // Leaving a surah/reciter stops playback, forgets its prepared audio and aborts
-  // any fetch still running for it; the object URL goes with the change.
-  useEffect(() => {
-    loadControllerRef.current?.abort();
-    loadControllerRef.current = null;
-    loadInFlightRef.current = null;
-    sourceRef.current = null;
-    stop();
-    setError(null);
-    setWholeFile(false);
-    setSourceLoading(false);
-
-    return () => {
-      loadControllerRef.current?.abort();
-      loadControllerRef.current = null;
-      loadInFlightRef.current = null;
-      sourceRef.current = null;
-      stop();
-      if (sourceUrlRef.current?.startsWith('blob:')) {
-        URL.revokeObjectURL(sourceUrlRef.current);
-      }
-      sourceUrlRef.current = null;
-    };
-  }, [reciterId, surah.id, stop]);
-
-  // Clean up object URLs on unmount (the effect above covers surah changes; this
-  // covers the component itself being removed while the source is idle).
-  useEffect(() => () => {
-    if (sourceUrlRef.current?.startsWith('blob:')) {
-      URL.revokeObjectURL(sourceUrlRef.current);
-    }
-    sourceUrlRef.current = null;
-  }, []);
-
-  /**
-   * Publish the playing recitation as a system media session.
-   *
-   * While sound is playing, the lock screen, Bluetooth headphones and the OS
-   * media controls show the surah and reciter and can pause/resume/stop through
-   * the same element. Registered here (not inline in the play handlers) so the
-   * handlers always wrap the latest closures, and torn down the moment playback
-   * ends so no dead session lingers on the lock screen.
-   */
-  useEffect(() => {
-    if (!isPlaying) {
-      // A paused-but-loaded session stays registered so the lock screen can
-      // resume it; a player with nothing loaded has nothing to show.
-      if (activeAyah === null && !audioRef.current?.src) {
-        clearMediaSession();
-      } else {
-        setMediaPlaybackState('paused');
-      }
-      return;
-    }
-    const reciter = AUDIO_RECITERS.find((item) => item.id === reciterId);
-    setMediaSession(
-      {
-        title: `سورة ${surah.name}`,
-        artist: reciter?.name ?? 'القرآن الكريم',
-        album: 'قُرّة — تلاوة وحفظ',
-        artworkUrl: '/icons/icon-512.png',
-      },
-      {
-        onPlay: () => {
-          const audio = audioRef.current;
-          if (!audio || !audio.src) return;
-          audio
-            .play()
-            .then(() => setIsPlaying(true))
-            .catch(() => setIsPlaying(false));
-        },
-        onPause: () => {
-          audioRef.current?.pause();
-          setIsPlaying(false);
-        },
-        onStop: stop,
-      },
-    );
-    setMediaPlaybackState('playing');
-    return () => {
-      clearMediaSession();
-    };
-  }, [isPlaying, activeAyah, reciterId, surah.name, stop]);
-
-  // Seamless real-time timeupdate handler
-  const handleTimeUpdate = () => {
-    const prepared = sourceRef.current;
-    const audio = audioRef.current;
-    if (!audio || !prepared) return;
-    // Keep the lock-screen position bar in step with the element.
-    updateMediaPosition(audio);
-    // A whole-file recording has no ayah boundaries to track: the `ended`
-    // event stops it.
-    if (prepared.verseTimings.length === 0) return;
-
-    const currentMs = audio.currentTime * 1000;
-
-    // 1. Continuous Surah Playback mode (Seamless stream, no pauses between verses!)
-    if (continuousRef.current) {
-      const currentVerse = prepared.verseTimings.find(
-        (v) => currentMs >= v.startMs && currentMs < v.endMs
-      );
-
-      if (currentVerse && currentVerse.ayah !== activeAyahRef.current) {
-        activeAyahRef.current = currentVerse.ayah;
-        setActiveAyah(currentVerse.ayah);
-        setSelectedAyah(currentVerse.ayah);
-      }
-
-      // Check if we've reached the end of the last verse
-      const lastVerse = prepared.verseTimings[prepared.verseTimings.length - 1];
-      if (currentMs >= lastVerse.endMs) {
-        stop();
-      }
-      return;
-    }
-
-    // 2. Single Ayah repeat mode.
-    //
-    // `repeatRemainingRef` counts the plays left; 0 is the «مستمر» option and means
-    // "no end in sight" — loop the ayah until stopped. The old `> 1` treated 0 as
-    // "no plays left", so «مستمر» played exactly once and stopped at the verse end.
-    if (verseEndRef.current !== null && audio.currentTime >= verseEndRef.current) {
-      const remaining = repeatRemainingRef.current;
-      if (remaining === 0 || remaining > 1) {
-        if (remaining > 1) repeatRemainingRef.current = remaining - 1;
-        if (currentTimingRef.current) {
-          audio.currentTime = currentTimingRef.current.startMs / 1000;
-        }
-      } else {
-        stop();
-      }
-    }
-  };
-
-  const handleEnded = () => {
-    const prepared = sourceRef.current;
-    // A whole-file recording simply stops at its end; only a timed
-    // continuous play walks on to the next ayah by itself.
-    if (!continuousRef.current || !prepared || prepared.verseTimings.length === 0) {
-      stop();
-      return;
-    }
-    // In continuous mode, stop playback only if we've reached the last verse
-    if (activeAyahRef.current === prepared.verseTimings[prepared.verseTimings.length - 1].ayah) {
-      stop();
-    } else {
-      // If playback ended unexpectedly in continuous mode, try to continue
-      // This handles cases where the audio file might have buffering issues
-      const nextAyah = activeAyahRef.current ? activeAyahRef.current + 1 : 1;
-      if (nextAyah <= prepared.verseTimings.length) {
-        playAyah(nextAyah, true);
-      } else {
-        stop();
-      }
-    }
-  };
-
-  const toggleSurah = async () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    if (isPlaying) {
-      audio.pause();
-      setIsPlaying(false);
-      return;
-    }
-
-    if (activeAyahRef.current !== null && continuousRef.current) {
-      audio
-        .play()
-        .then(() => setIsPlaying(true))
-        .catch(() => setIsPlaying(false));
-      return;
-    }
-
-    const prepared = await ensureSource();
-    if (!prepared) return;
-    repeatRemainingRef.current = 1;
-    playAyah(selectedAyah || 1, true);
-  };
+  const {
+    activeAyah,
+    selectedAyah,
+    isPlaying,
+    sourceLoading,
+    wholeFile,
+    error,
+    playbackRate,
+    repeatCount,
+  } = engine;
 
   return (
     <>
@@ -655,7 +283,7 @@ export function AudioRecitationPlayer({
               )}
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">تكرار الآية:</span>
+              <span className="ml-1 text-xs text-gray-600 dark:text-gray-400">تكرار الآية:</span>
               {wholeFile ? (
                 <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
                   تلاوة ترديد الأطفال تُشغَّل سورةً كاملة — الشيخ يقرأ والأطفال يعيدون وراءه،
@@ -703,26 +331,6 @@ export function AudioRecitationPlayer({
           )}
         </div>
       </Card>
-      <audio
-        ref={audioRef}
-        preload="auto"
-        playsInline
-        aria-label={`تلاوة سورة ${surah.name}`}
-        onEnded={handleEnded}
-        onTimeUpdate={handleTimeUpdate}
-        onError={() => {
-          const prepared = sourceRef.current;
-          if (continuousRef.current && isPlaying && prepared) {
-            // Try to recover from errors in continuous mode
-            const nextAyah = activeAyahRef.current ? activeAyahRef.current + 1 : 1;
-            if (nextAyah <= prepared.verseTimings.length) {
-              playAyah(nextAyah, true);
-            } else {
-              stop();
-            }
-          }
-        }}
-      />
       {children({
         activeAyah,
         isPlaying,
