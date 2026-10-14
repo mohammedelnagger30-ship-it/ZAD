@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, Compass, RotateCcw } from 'lucide-react';
+import { Check, Compass, RotateCcw, X } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { toArabicNumber } from '@/data/surahs';
+import {
+  CALIBRATION_TARGET_BINS,
+  CALIBRATION_TARGET_ROTATION_DEG,
+  calibrationProgress as progressOf,
+  emptyTally,
+  isCalibrated,
+  tallyHeading,
+  type CalibrationTally,
+} from '@/utils/qiblaCalibration';
 
 interface QiblaCompassProps {
   /** Qibla bearing in degrees clockwise from true north. */
@@ -16,6 +25,11 @@ interface QiblaCompassProps {
  * makes the "aligned" state flicker and buzz constantly.
  */
 const ALIGN_TOLERANCE_DEG = 6;
+
+/*
+ * The wizard's criteria live in `@/utils/qiblaCalibration` — the two bars, what
+ * counts towards them, and the proof that neither alone is enough.
+ */
 
 type CompassState = 'idle' | 'active' | 'denied' | 'unsupported';
 
@@ -63,6 +77,15 @@ export function QiblaCompass({ qiblaDirection, contextLabel }: QiblaCompassProps
   const headingRef = useRef<number | null>(null);
   const alignedRef = useRef(false);
   const listenerRef = useRef<((event: DeviceOrientationEvent) => void) | null>(null);
+  /**
+   * The figure-8 wizard. `calibrationRef` gates whether sensor readings are
+   * counted — refs, not state, because the orientation handler runs at sensor
+   * rate and must not re-subscribe itself to stay current.
+   */
+  const [calibration, setCalibration] = useState<'idle' | 'running' | 'done'>('idle');
+  const [tally, setTally] = useState<CalibrationTally>(emptyTally);
+  const calibrationRef = useRef(false);
+  const tallyRef = useRef<CalibrationTally>(emptyTally());
 
   const handleOrientation = useCallback((event: DeviceOrientationEvent) => {
     const webkitEvent = event as WebkitDeviceOrientationEvent;
@@ -81,6 +104,15 @@ export function QiblaCompass({ qiblaDirection, contextLabel }: QiblaCompassProps
     if (previous !== null && Math.abs(angleDelta(previous, next)) < 1) return;
     headingRef.current = next;
     setHeading(next);
+    // While the wizard runs, every reading it keeps counts towards both bars:
+    // how far the phone has been turned, and how many directions it pointed
+    // through. The 1° filter above already stands in for the noise floor, so
+    // a hand trembling in place cannot climb either one.
+    if (calibrationRef.current) {
+      const step = previous === null ? 0 : Math.abs(angleDelta(previous, next));
+      tallyRef.current = tallyHeading(tallyRef.current, step, next);
+      setTally(tallyRef.current);
+    }
   }, []);
 
   const startListening = useCallback(() => {
@@ -162,6 +194,36 @@ export function QiblaCompass({ qiblaDirection, contextLabel }: QiblaCompassProps
     }
     alignedRef.current = aligned;
   }, [heading, qiblaDirection]);
+
+  /** How far between the two bars the wizard currently sits, 0–1. */
+  const calibrationProgress = progressOf(tally);
+
+  // The wizard closes itself the moment both bars are met — with the same one
+  // buzz the aligned state gets, so the phone can confirm it at arm's length.
+  useEffect(() => {
+    if (calibration !== 'running' || !isCalibrated(tally)) return;
+    calibrationRef.current = false;
+    setCalibration('done');
+    try {
+      navigator.vibrate?.(35);
+    } catch {
+      // Vibration is a nicety; some platforms refuse it.
+    }
+  }, [calibration, tally]);
+
+  const startCalibration = useCallback(() => {
+    tallyRef.current = emptyTally();
+    setTally(emptyTally());
+    calibrationRef.current = true;
+    setCalibration('running');
+  }, []);
+
+  const cancelCalibration = useCallback(() => {
+    calibrationRef.current = false;
+    tallyRef.current = emptyTally();
+    setTally(emptyTally());
+    setCalibration('idle');
+  }, []);
 
   const aligned =
     heading !== null && Math.abs(angleDelta(heading, qiblaDirection)) <= ALIGN_TOLERANCE_DEG;
@@ -320,20 +382,64 @@ export function QiblaCompass({ qiblaDirection, contextLabel }: QiblaCompassProps
                 : `اتجاه الهاتف الآن ${toArabicNumber(Math.round(heading))}°`}
           </p>
 
-          <button
-            type="button"
-            onClick={() => {
-              headingRef.current = null;
-              alignedRef.current = false;
-              setHeading(null);
-              stopListening();
-              startListening();
-            }}
-            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-primary-50 px-3 text-xs font-bold text-primary-700 hover:bg-primary-100 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500 dark:bg-primary-800 dark:text-primary-200 dark:hover:bg-primary-700"
-          >
-            <RotateCcw size={13} aria-hidden="true" />
-            إعادة المعايرة
-          </button>
+          {calibration === 'done' && (
+            <p
+              role="status"
+              className="rounded-xl bg-success-50 px-3 py-2 text-center text-xs font-bold text-success-700 dark:bg-success-900/20 dark:text-success-300"
+            >
+              اكتملت المعايرة — يمكنك توجيه الهاتف نحو القبلة الآن.
+            </p>
+          )}
+
+          {calibration === 'running' ? (
+            /* The wizard: the dial stays live behind it, so the motion being
+               measured is the motion being watched. */
+            <div className="w-full space-y-2.5" aria-live="polite">
+              <p className="text-center text-xs text-gray-500 dark:text-gray-400">
+                حرّك الهاتف ببطء على شكل ٨ — ثلاث أو أربع دورات، ثم توقّف.
+              </p>
+              <div
+                className="h-2 w-full overflow-hidden rounded-full bg-primary-100 dark:bg-primary-800"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(calibrationProgress * 100)}
+                aria-label="تقدّم المعايرة"
+              >
+                <div
+                  className="h-full rounded-full bg-gold-400 transition-[width] duration-200"
+                  style={{ width: `${Math.round(calibrationProgress * 100)}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">
+                <span>
+                  دُوران {toArabicNumber(Math.round(tally.sweptDeg))}° من{' '}
+                  {toArabicNumber(CALIBRATION_TARGET_ROTATION_DEG)}°
+                </span>
+                <span>
+                  اتجاهات {toArabicNumber(tally.bins.size)}/
+                  {toArabicNumber(CALIBRATION_TARGET_BINS)}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={cancelCalibration}
+                className="mx-auto flex min-h-9 items-center gap-1.5 rounded-lg bg-primary-50 px-3 text-xs font-bold text-primary-700 hover:bg-primary-100 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500 dark:bg-primary-800 dark:text-primary-200 dark:hover:bg-primary-700"
+              >
+                <X size={13} aria-hidden="true" />
+                إلغاء
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={startCalibration}
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-primary-50 px-3 text-xs font-bold text-primary-700 hover:bg-primary-100 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500 dark:bg-primary-800 dark:text-primary-200 dark:hover:bg-primary-700"
+            >
+              <RotateCcw size={13} aria-hidden="true" />
+              {calibration === 'done' ? 'أعد المعايرة' : 'معايرة البوصلة'}
+            </button>
+          )}
         </div>
       )}
     </Card>
