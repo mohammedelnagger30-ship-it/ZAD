@@ -10,6 +10,7 @@ import { notificationId } from '@/utils/notifications';
 import { NOTIFICATION_BRAND } from '@/utils/notificationScheduler';
 import { trustedNow } from '@/utils/clock';
 import { setAdhanKeepScreenOn } from '@/utils/adhanOverlay';
+import { useOverlayDismiss } from '@/hooks/useOverlayDismiss';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 
@@ -79,6 +80,9 @@ export function AzanOverlayModal({
   const [snoozed, setSnoozed] = useState(false);
   const [showDuaa, setShowDuaa] = useState(true);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Back on Android dismisses the adhan page. Before this, back during the
+  // adhan exited the app entirely — silencing the call mid-flight.
+  useOverlayDismiss(isOpen, onClose);
 
   const displayName = prayerName || PRAYER_LABELS_AR[prayerKey] || 'الصلاة';
   const adhanSound = getAdhanSound(settings.adhanVoiceId);

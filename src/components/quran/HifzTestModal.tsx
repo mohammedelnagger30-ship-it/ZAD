@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Brain, Check, Eye, RotateCcw, X } from 'lucide-react';
 import { Card } from '@/components/ui';
+import { useOverlayDismiss } from '@/hooks/useOverlayDismiss';
 import { toArabicNumber, type SurahMeta } from '@/data/surahs';
 import { getAyah } from '@/data/quranText';
 import {
@@ -51,6 +52,9 @@ export function HifzTestModal({ surah, fromAyah, toAyah, onClose }: HifzTestModa
   const [recallRevealed, setRecallRevealed] = useState(false);
   const [result, setResult] = useState<{ grade: HifzGrade; nextDays: number } | null>(null);
   const [saving, setSaving] = useState(false);
+  // Mounted only while open: back exits the quiz instead of navigating the
+  // reader underneath it.
+  useOverlayDismiss(true, onClose);
 
   const rangeFrom = Math.max(1, Math.min(fromAyah, surah.ayahCount));
   const rangeTo = Math.max(rangeFrom, Math.min(toAyah, surah.ayahCount));

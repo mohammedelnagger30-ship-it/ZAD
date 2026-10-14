@@ -6,6 +6,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { AuthScreen } from '@/components/AuthScreen';
 import { generateDailyTasks, markMissedTasks } from '@/utils/taskManager';
 import { rescheduleAllNotifications } from '@/utils/notificationScheduler';
+import { dismissTopOverlay } from '@/utils/overlayRegistry';
 import { onClockChange, startClockService } from '@/utils/clock';
 import { clearLocalUserData, startCloudSync, synchronizeNow, type CloudSyncState } from '@/utils/cloudSync';
 import { isSupabaseConfigured, supabase } from '@/utils/supabaseClient';
@@ -451,6 +452,10 @@ function AppContent({
     const register = async () => {
       try {
         const handle = await CapApp.addListener('backButton', () => {
+          // An open overlay — the adhan page, a sheet, a dialog — takes the
+          // press first; back during the adhan used to exit the app entirely,
+          // silencing the call mid-flight.
+          if (dismissTopOverlay()) return;
           if (screen === 'home') {
             void CapApp.exitApp();
             return;

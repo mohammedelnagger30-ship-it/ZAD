@@ -201,17 +201,32 @@ function getStoredNavigationState() {
   }
 }
 
+/** Stable identity for "no params" so the derived `params` never forces a render. */
+const EMPTY_PARAMS: NavParams = {};
+
 export function useNavigation() {
-  const restored = getStoredNavigationState();
-  const [screen, setScreen] = useState<ScreenName>(restored?.screen ?? 'home');
-  const [params, setParams] = useState<NavParams>(restored?.params ?? {});
+  // Restored once per mount: this parses localStorage, and the hook re-renders
+  // on every navigation and every params change — reading it per render burned
+  // a getItem + JSON.parse on each one. A `useState` lazy initializer runs
+  // exactly once.
+  const [restored] = useState(getStoredNavigationState);
   const [history, setHistory] = useState<ScreenName[]>(restored?.history ?? ['home']);
-  const [paramsByScreen, setParamsByScreen] = useState<Record<string, NavParams>>(restored?.paramsByScreen ?? { home: {} });
+  const [paramsByScreen, setParamsByScreen] = useState<Record<string, NavParams>>(
+    restored?.paramsByScreen ?? { home: restored?.params ?? {} },
+  );
   // Bumped only when the user re-taps the tab they are already on. Without it,
-  // setScreen(currentScreen) is a React no-op, so tapping "القرآن" while reading a
-  // surah did nothing at all and the reader stayed open. Pairing this nonce with the
-  // screen `key` in App turns a repeat tap into a reset-to-initial-state.
+  // navigating to the current screen is a React no-op, so tapping "القرآن" while
+  // reading a surah did nothing at all and the reader stayed open. Pairing this
+  // nonce with the screen `key` in App turns a repeat tap into a reset-to-initial-state.
   const [resetNonce, setResetNonce] = useState(0);
+
+  // `screen` and `params` are derived from the stack and the per-screen map, so
+  // there is no second copy of "where am I" left to fall out of sync — and
+  // goBack is a pure state update instead of calling setScreen from inside a
+  // setHistory updater (a side effect in an updater runs twice under StrictMode,
+  // and React never guaranteed it ran at all).
+  const screen = history[history.length - 1] ?? 'home';
+  const params = paramsByScreen[screen] ?? EMPTY_PARAMS;
 
   useEffect(() => {
     try {
@@ -225,34 +240,17 @@ export function useNavigation() {
   }, [history, params, paramsByScreen, screen]);
 
   const navigate = (target: ScreenName, p: NavParams = {}) => {
+    setParamsByScreen((current) => ({ ...current, [target]: p }));
+    window.scrollTo(0, 0);
     if (target === screen) {
-      setParams(p);
-      setParamsByScreen((current) => ({ ...current, [target]: p }));
       setResetNonce((n) => n + 1);
-      window.scrollTo(0, 0);
       return;
     }
-
-    setParams(p);
-    setParamsByScreen((current) => ({ ...current, [target]: p }));
-    setHistory((current) => {
-      if (current[current.length - 1] === target) return current;
-      return [...current, target];
-    });
-    setScreen(target);
-    window.scrollTo(0, 0);
+    setHistory((current) => (current[current.length - 1] === target ? current : [...current, target]));
   };
 
   const goBack = () => {
-    setHistory((current) => {
-      if (current.length <= 1) return current;
-
-      const previous = current[current.length - 2];
-      const previousParams = paramsByScreen[previous] ?? {};
-      setScreen(previous);
-      setParams(previousParams);
-      return current.slice(0, -1);
-    });
+    setHistory((current) => (current.length <= 1 ? current : current.slice(0, -1)));
   };
 
   return { screen, params, navigate, resetNonce, goBack, history };

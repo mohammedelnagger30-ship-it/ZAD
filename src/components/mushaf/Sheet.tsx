@@ -1,5 +1,6 @@
 import type { ReactNode, RefObject } from 'react';
 import { X } from 'lucide-react';
+import { useOverlayDismiss } from '@/hooks/useOverlayDismiss';
 
 interface SheetProps {
   open: boolean;
@@ -26,6 +27,10 @@ interface SheetProps {
  * mode answers them, outside it the app theme does.
  */
 export function Sheet({ open, title, onClose, panelRef, darkSurface = false, children }: SheetProps) {
+  // Registered before the early return below — hooks run unconditionally: back
+  // dismisses the sheet instead of flipping the mushaf page underneath it.
+  useOverlayDismiss(open, onClose);
+
   if (!open) return null;
 
   return (

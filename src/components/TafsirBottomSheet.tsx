@@ -20,6 +20,7 @@ import {
   type TafsirEdition,
 } from '@/data/tafsir';
 import { useInstalledContent } from '@/hooks/useContent';
+import { useOverlayDismiss } from '@/hooks/useOverlayDismiss';
 import { getSurah, toArabicNumber, TOTAL_QURAN_AYAHS } from '@/data/surahs';
 
 interface TafsirSheetProps {
@@ -43,6 +44,9 @@ export function TafsirBottomSheet({ surahId, ayahNumber, onClose, onNavigateAyah
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [showPicker, setShowPicker] = useState(false);
   const installed = useInstalledContent();
+  // Mounted only while open: back dismisses the sheet instead of navigating
+  // the reader underneath it.
+  useOverlayDismiss(true, onClose);
 
   // Downloads are keyed by edition+surah; a new request supersedes the previous one so
   // flipping quickly through ayahs cannot leave the wrong text on screen.

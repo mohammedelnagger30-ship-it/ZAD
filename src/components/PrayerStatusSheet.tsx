@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Check, Clock, X, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui';
+import { useOverlayDismiss } from '@/hooks/useOverlayDismiss';
 import {
   PRAYER_LABELS_AR,
   type PrayerKey,
@@ -80,6 +81,10 @@ export function PrayerStatusSheet({
       document.body.style.overflow = previous;
     };
   }, [onClose]);
+
+  // The sheet is mounted only while open, so it owns the back button for its
+  // whole lifetime — back dismisses it instead of navigating underneath.
+  useOverlayDismiss(true, onClose);
 
   const pick = async (value: PrayerStatus) => {
     setActionError('');

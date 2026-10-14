@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui';
+import { useOverlayDismiss } from '@/hooks/useOverlayDismiss';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -47,6 +48,9 @@ export function ConfirmDialog({
       document.body.style.overflow = previousOverflow;
     };
   }, [open]);
+
+  // Back on Android cancels instead of navigating underneath the dialog.
+  useOverlayDismiss(open, onCancel);
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
