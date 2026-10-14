@@ -139,7 +139,20 @@ export interface RecallQuestion {
   ayahNumber: number;
 }
 
-export type QuizQuestion = OrderQuestion | ChoiceQuestion | RecallQuestion;
+/**
+ * «اكتب الآية التالية»: an ayah of the portion is shown, the *next* one must be
+ * typed from memory. The only mode whose verdict is not self-declared — the
+ * attempt is measured against the mushaf by `@/utils/textMatch`.
+ */
+export interface WriteQuestion {
+  type: 'write';
+  /** The ayah shown to open the door. */
+  promptAyah: number;
+  /** The ayah to be typed. */
+  answerAyah: number;
+}
+
+export type QuizQuestion = OrderQuestion | ChoiceQuestion | RecallQuestion | WriteQuestion;
 
 /** Fisher–Yates with an injectable source of randomness (tests pass a seeded one). */
 export function shuffle<T>(items: T[], random: () => number = Math.random): T[] {
@@ -195,6 +208,26 @@ export function buildQuizQuestion(
   return { type: 'order', shuffled: shuffle(sequence, random) };
 }
 
+/**
+ * Builds the «write the next ayah» question.
+ *
+ * Any adjacent pair inside the portion will do, so long stretches test a
+ * different seam each time. A single-ay portion has no «next» to ask for and
+ * returns null — the caller falls back rather than showing the answer.
+ */
+export function buildWriteQuestion(
+  surahAyahCount: number,
+  fromAyah: number,
+  toAyah: number,
+  random: () => number = Math.random,
+): WriteQuestion | null {
+  const from = Math.max(1, Math.min(fromAyah, surahAyahCount));
+  const to = Math.max(from, Math.min(toAyah, surahAyahCount));
+  if (to - from < 1) return null;
+  const promptAyah = from + Math.floor(random() * (to - from));
+  return { type: 'write', promptAyah, answerAyah: promptAyah + 1 };
+}
+
 /** Perfect order run → «easy»; each slip costs one grade step. */
 export function gradeOrderResult(errors: number): HifzGrade {
   if (errors === 0) return 'easy';
@@ -207,6 +240,22 @@ export function gradeOrderResult(errors: number): HifzGrade {
 export function gradeChoiceResult(correct: number): HifzGrade {
   if (correct >= 3) return 'good';
   if (correct === 2) return 'hard';
+  return 'again';
+}
+
+/**
+ * Grades a written attempt by how much of the ayah survived the comparison.
+ *
+ * The thresholds sit deliberately on the forgiving side. This is typed on a
+ * phone keyboard that has no tashkeel, no pause marks and one alef, and a
+ * slipped letter must not read as a forgotten ayah — the comparison already
+ * folded those away, so what reaches this function is word survival. Only
+ * losing whole stretches walks the schedule back.
+ */
+export function gradeWriteResult(similarity: number): HifzGrade {
+  if (similarity >= 0.9) return 'easy';
+  if (similarity >= 0.75) return 'good';
+  if (similarity >= 0.55) return 'hard';
   return 'again';
 }
 

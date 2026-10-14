@@ -1,19 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Brain, Check, Eye, RotateCcw, X } from 'lucide-react';
+import { Brain, Check, Eye, Keyboard, RotateCcw, X } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { useOverlayDismiss } from '@/hooks/useOverlayDismiss';
 import { toArabicNumber, type SurahMeta } from '@/data/surahs';
 import { getAyah } from '@/data/quranText';
 import {
   buildQuizQuestion,
+  buildWriteQuestion,
   describeIntervalDays,
   gradeChoiceResult,
   gradeOrderResult,
+  gradeWriteResult,
   GRADE_LABELS_AR,
   getHifzReview,
   recordQuizResult,
   type QuizQuestion,
 } from '@/utils/spacedRepetition';
+import { recallDiff, similarityPercent, type RecallDiff } from '@/utils/textMatch';
 import type { HifzGrade } from '@/db/database';
 
 interface HifzTestModalProps {
@@ -24,6 +27,17 @@ interface HifzTestModalProps {
 }
 
 const QURAN_FONT = "font-['Amiri_Quran',_serif]";
+
+/**
+ * How the portion is questioned.
+ *
+ * «تلقائي» is the app choosing by portion size (order / next-ayah / recall) —
+ * the mode that needs no decision from someone who just opened the quiz. The
+ * others are there for the memoriser who knows what they want to be tested on:
+ * writing is the one whose verdict is not self-declared, since the attempt is
+ * measured against the mushaf rather than judged by its author.
+ */
+type TestMode = 'auto' | 'write';
 
 function preview(text: string, max = 60): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
@@ -50,6 +64,10 @@ export function HifzTestModal({ surah, fromAyah, toAyah, onClose }: HifzTestModa
   const [wrongCard, setWrongCard] = useState<number | null>(null);
   const [choicePicked, setChoicePicked] = useState<number | null>(null);
   const [recallRevealed, setRecallRevealed] = useState(false);
+  const [mode, setMode] = useState<TestMode>('auto');
+  /** Writing quiz: what the memoriser typed, and how it measured against the mushaf. */
+  const [writtenText, setWrittenText] = useState('');
+  const [diff, setDiff] = useState<RecallDiff | null>(null);
   const [result, setResult] = useState<{ grade: HifzGrade; nextDays: number } | null>(null);
   const [saving, setSaving] = useState(false);
   // Mounted only while open: back exits the quiz instead of navigating the
@@ -58,16 +76,27 @@ export function HifzTestModal({ surah, fromAyah, toAyah, onClose }: HifzTestModa
 
   const rangeFrom = Math.max(1, Math.min(fromAyah, surah.ayahCount));
   const rangeTo = Math.max(rangeFrom, Math.min(toAyah, surah.ayahCount));
+  /** «اكتب الآية التالية» needs a next ayah to exist inside the portion. */
+  const canWrite = rangeTo > rangeFrom;
 
   const dealQuestion = useCallback(() => {
-    setQuestion(buildQuizQuestion(surah.ayahCount, rangeFrom, rangeTo));
+    const next =
+      mode === 'write'
+        ? // A single-ay portion has nothing to ask for next; fall back rather
+          // than hand the answer to whoever opened writing mode.
+          buildWriteQuestion(surah.ayahCount, rangeFrom, rangeTo) ??
+          buildQuizQuestion(surah.ayahCount, rangeFrom, rangeTo)
+        : buildQuizQuestion(surah.ayahCount, rangeFrom, rangeTo);
+    setQuestion(next);
     setOrderPlaced([]);
     setOrderErrors(0);
     setWrongCard(null);
     setChoicePicked(null);
     setRecallRevealed(false);
+    setWrittenText('');
+    setDiff(null);
     setResult(null);
-  }, [surah.ayahCount, rangeFrom, rangeTo]);
+  }, [mode, surah.ayahCount, rangeFrom, rangeTo]);
 
   useEffect(() => {
     dealQuestion();
@@ -109,10 +138,42 @@ export function HifzTestModal({ surah, fromAyah, toAyah, onClose }: HifzTestModa
 
   const answerText = useMemo(() => {
     if (!question) return null;
-    if (question.type === 'choice') return getAyah(surah.id, question.answerAyah)?.text ?? null;
+    if (question.type === 'choice' || question.type === 'write') {
+      return getAyah(surah.id, question.answerAyah)?.text ?? null;
+    }
     if (question.type === 'recall') return getAyah(surah.id, question.ayahNumber)?.text ?? null;
     return null;
   }, [question, surah.id]);
+
+  /** The writing quiz's own verdict, offered but never forced. */
+  const suggestedGrade = diff ? gradeWriteResult(diff.similarity) : null;
+
+  const gradeButtons = (suggested: HifzGrade | null = null) => (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {(['again', 'hard', 'good', 'easy'] as const).map((grade) => (
+        <button
+          key={grade}
+          type="button"
+          disabled={!!result || saving}
+          onClick={() => void finish(grade)}
+          className={`relative min-h-11 rounded-xl border px-2 pt-2 text-sm font-bold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500 ${
+            grade === 'again'
+              ? 'border-error-200 bg-error-50 text-error-700 hover:bg-error-100 dark:border-error-800 dark:bg-error-900/30 dark:text-error-300'
+              : grade === 'hard'
+                ? 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+                : 'border-success-200 bg-success-50 text-success-700 hover:bg-success-100 dark:border-success-800 dark:bg-success-900/30 dark:text-success-300'
+          } ${suggested === grade ? 'ring-2 ring-gold-400 ring-offset-1 dark:ring-offset-primary-900' : ''}`}
+        >
+          {GRADE_LABELS_AR[grade]}
+          {suggested === grade && (
+            <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-gold-500 px-1.5 text-[9px] font-bold text-white">
+              الأقرب
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
 
   const handleOrderTap = (ayahNumber: number) => {
     if (result || question?.type !== 'order') return;
@@ -149,6 +210,7 @@ export function HifzTestModal({ surah, fromAyah, toAyah, onClose }: HifzTestModa
     if (!question) return '';
     if (question.type === 'order') return 'رتّب الآيات كما تُتلى';
     if (question.type === 'choice') return 'ما الآية التالية؟';
+    if (question.type === 'write') return 'اكتب الآية التالية من حفظك';
     return 'اتلوها من حفظك ثم قارن';
   }, [question]);
 
@@ -197,6 +259,38 @@ export function HifzTestModal({ surah, fromAyah, toAyah, onClose }: HifzTestModa
             </p>
           ) : (
             <>
+              {/* Which way the portion is questioned. Switching mode re-deals
+                  the question, because `dealQuestion` is keyed on the mode. */}
+              <div
+                role="group"
+                aria-label="نوع الاختبار"
+                className="flex justify-center gap-1.5 rounded-xl bg-primary-50 p-1 dark:bg-primary-900/40"
+              >
+                {(
+                  [
+                    { id: 'auto', label: 'تلقائي', icon: Brain },
+                    { id: 'write', label: 'اكتب الآية', icon: Keyboard },
+                  ] as const
+                ).map(({ id, label, icon: Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    disabled={saving || (id === 'write' && !canWrite)}
+                    aria-pressed={mode === id}
+                    title={id === 'write' && !canWrite ? 'النطاق آية واحدة — لا آية تالية تُكتب' : undefined}
+                    onClick={() => setMode(id)}
+                    className={`flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                      mode === id
+                        ? 'bg-white text-primary-700 shadow-sm dark:bg-primary-800 dark:text-gold-300'
+                        : 'text-gray-500 hover:text-primary-700 dark:text-gray-400 dark:hover:text-gold-300'
+                    }`}
+                  >
+                    <Icon size={14} aria-hidden="true" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+
               <p className="text-center text-sm font-bold text-primary-700 dark:text-gold-300">
                 {questionLabel}
               </p>
@@ -292,6 +386,85 @@ export function HifzTestModal({ surah, fromAyah, toAyah, onClose }: HifzTestModa
                 </div>
               )}
 
+              {/* ---- Writing quiz ---- */}
+              {question.type === 'write' && (
+                <div className="space-y-3">
+                  <p className={`rounded-xl border border-primary-100 bg-primary-50/60 p-3 text-center text-lg leading-loose text-primary-900 dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-50 ${QURAN_FONT}`}>
+                    {getAyah(surah.id, question.promptAyah)?.text ?? ''}
+                  </p>
+                  <label className="block space-y-1">
+                    <span className="text-xs text-gray-600 dark:text-gray-400">
+                      اكتب الآية {toArabicNumber(question.answerAyah)} — التشكيل غير مطلوب
+                    </span>
+                    <textarea
+                      value={writtenText}
+                      onChange={(event) => {
+                        // Editing invalidates a comparison that was made against
+                        // an earlier draft.
+                        setWrittenText(event.target.value);
+                        setDiff(null);
+                      }}
+                      disabled={!!diff || !!result || saving}
+                      rows={4}
+                      dir="rtl"
+                      spellCheck={false}
+                      placeholder="اكتب ما تتذكره من الآية…"
+                      className={`w-full resize-none rounded-xl border border-primary-200 bg-white p-3 text-right text-base leading-loose text-primary-900 focus:outline-hidden focus:ring-2 focus:ring-primary-500 disabled:opacity-60 dark:border-primary-700 dark:bg-primary-900/60 dark:text-primary-50 ${QURAN_FONT}`}
+                    />
+                  </label>
+
+                  {!diff && !result && (
+                    <button
+                      type="button"
+                      disabled={!writtenText.trim() || saving}
+                      onClick={() => {
+                        if (answerText !== null) setDiff(recallDiff(answerText, writtenText));
+                      }}
+                      className="mx-auto flex min-h-11 items-center gap-2 rounded-xl bg-primary-600 px-6 text-sm font-bold text-white hover:bg-primary-700 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Check size={16} aria-hidden="true" />
+                      قارن مع المصحف
+                    </button>
+                  )}
+
+                  {/* The verdict, and what it was measured against: the mushaf's
+                      own words with whatever the attempt dropped marked in it. */}
+                  {diff && (
+                    <div className="space-y-3">
+                      <p
+                        className="text-center text-sm font-bold text-primary-700 dark:text-gold-300"
+                        aria-live="polite"
+                      >
+                        المطابقة {toArabicNumber(similarityPercent(diff.similarity))}٪
+                      </p>
+                      <p className={`rounded-xl border border-primary-100 bg-primary-50/60 p-3 text-center text-base leading-loose text-primary-900 dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-50 ${QURAN_FONT}`}>
+                        {diff.expected.map((segment, index) => (
+                          <span
+                            key={index}
+                            className={
+                              segment.matched
+                                ? ''
+                                : 'rounded bg-error-100 px-1 font-bold text-error-700 dark:bg-error-900/50 dark:text-error-300'
+                            }
+                          >
+                            {segment.text}{' '}
+                          </span>
+                        ))}
+                      </p>
+                      {diff.extra.length > 0 && (
+                        <p className="text-center text-xs text-error-600 dark:text-error-400">
+                          زدت كلمات ليست في الآية: {diff.extra.join('، ')}
+                        </p>
+                      )}
+                      <p className="text-center text-sm font-semibold text-gray-600 dark:text-gray-300">
+                        سجّل كيف كانت؟
+                      </p>
+                      {gradeButtons(suggestedGrade)}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* ---- Recall quiz ---- */}
               {question.type === 'recall' && (
                 <div className="space-y-3">
@@ -318,25 +491,7 @@ export function HifzTestModal({ surah, fromAyah, toAyah, onClose }: HifzTestModa
                       <p className="text-center text-sm font-semibold text-gray-600 dark:text-gray-300">
                         كم كانت صعوبة الحفظ؟
                       </p>
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                        {(['again', 'hard', 'good', 'easy'] as const).map((grade) => (
-                          <button
-                            key={grade}
-                            type="button"
-                            disabled={!!result || saving}
-                            onClick={() => void finish(grade)}
-                            className={`min-h-11 rounded-xl border px-2 text-sm font-bold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500 ${
-                              grade === 'again'
-                                ? 'border-error-200 bg-error-50 text-error-700 hover:bg-error-100 dark:border-error-800 dark:bg-error-900/30 dark:text-error-300'
-                                : grade === 'hard'
-                                  ? 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
-                                  : 'border-success-200 bg-success-50 text-success-700 hover:bg-success-100 dark:border-success-800 dark:bg-success-900/30 dark:text-success-300'
-                            }`}
-                          >
-                            {GRADE_LABELS_AR[grade]}
-                          </button>
-                        ))}
-                      </div>
+                      {gradeButtons()}
                     </>
                   )}
                 </div>

@@ -1,9 +1,11 @@
 import { describe, it, expect } from '@jest/globals';
 import {
   buildQuizQuestion,
+  buildWriteQuestion,
   describeIntervalDays,
   gradeChoiceResult,
   gradeOrderResult,
+  gradeWriteResult,
   GRADE_QUALITY,
   initialReviewState,
   isReviewDue,
@@ -181,9 +183,55 @@ describe('buildQuizQuestion', () => {
     } else if (question.type === 'choice') {
       expect(question.answerAyah).toBeLessThanOrEqual(5);
       for (const option of question.options) expect(option).toBeLessThanOrEqual(5);
-    } else {
+    } else if (question.type === 'recall') {
       expect(question.ayahNumber).toBeLessThanOrEqual(5);
     }
+    // `buildQuizQuestion` never deals a writing question — that is asked for
+    // separately, by `buildWriteQuestion`.
+  });
+});
+
+/**
+ * «اكتب الآية التالية» — any adjacent seam of the portion, and nothing asked
+ * of a portion that has no next ayah to it.
+ */
+describe('buildWriteQuestion', () => {
+  it('always asks for an ayah that exists, one step after the prompt', () => {
+    for (let i = 0; i < 200; i++) {
+      const question = buildWriteQuestion(7, 2, 6)!;
+      expect(question.type).toBe('write');
+      expect(question.answerAyah).toBe(question.promptAyah + 1);
+      expect(question.promptAyah).toBeGreaterThanOrEqual(2);
+      expect(question.answerAyah).toBeLessThanOrEqual(6);
+    }
+  });
+
+  it('reaches every seam of the portion, not the same one twice', () => {
+    const seams = new Set<number>();
+    for (let i = 0; i < 200; i++) seams.add(buildWriteQuestion(7, 2, 6)!.promptAyah);
+    expect([...seams].sort()).toEqual([2, 3, 4, 5]);
+  });
+
+  it('sits on the first seam at the bottom of the range and the last at the top', () => {
+    expect(buildWriteQuestion(7, 2, 6, () => 0)).toEqual({ type: 'write', promptAyah: 2, answerAyah: 3 });
+    expect(buildWriteQuestion(7, 2, 6, () => 0.9999)).toEqual({
+      type: 'write',
+      promptAyah: 5,
+      answerAyah: 6,
+    });
+  });
+
+  it('clamps a window that runs past the end of the surah', () => {
+    for (let i = 0; i < 50; i++) {
+      const question = buildWriteQuestion(10, 8, 40)!;
+      expect(question.promptAyah).toBeGreaterThanOrEqual(8);
+      expect(question.answerAyah).toBeLessThanOrEqual(10);
+    }
+  });
+
+  it('has nothing to ask of a single-ay portion', () => {
+    expect(buildWriteQuestion(7, 3, 3)).toBeNull();
+    expect(buildWriteQuestion(7, 4, 2)).toBeNull();
   });
 });
 
@@ -201,5 +249,21 @@ describe('grading', () => {
     expect(gradeChoiceResult(2)).toBe('hard');
     expect(gradeChoiceResult(1)).toBe('again');
     expect(gradeChoiceResult(0)).toBe('again');
+  });
+
+  /**
+   * A written attempt is graded on word survival, and the thresholds lean
+   * forgiving on purpose — it is typed on a keyboard with no tashkeel, so a
+   * single slipped word (≈0.93 on a fifteen-word ayah) still reads as «easy»
+   * while losing a third of it walks the schedule back to tomorrow.
+   */
+  it('a written attempt is graded by how much of the ayah survived', () => {
+    expect(gradeWriteResult(1)).toBe('easy');
+    expect(gradeWriteResult(0.93)).toBe('easy');
+    expect(gradeWriteResult(0.8)).toBe('good');
+    expect(gradeWriteResult(0.6)).toBe('hard');
+    expect(gradeWriteResult(0.55)).toBe('hard');
+    expect(gradeWriteResult(0.54)).toBe('again');
+    expect(gradeWriteResult(0)).toBe('again');
   });
 });
