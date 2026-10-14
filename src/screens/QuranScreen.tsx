@@ -194,14 +194,33 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
     );
   }, [searchQuery, revelationFilter]);
 
-  const ayahSearch = useMemo(() => searchAyahs(ayahQuery), [ayahQuery]);
+  /**
+   * Both ayah searches are debounced the way the hadith screen debounces its
+   * own search: every keystroke scans all 6,236 ayahs, and the surah box runs
+   * the ayah search in parallel with its name filter — synchronous folding of
+   * that much Arabic visibly stutters on a phone. An emptied box clears at once
+   * (0ms), so backspacing never feels laggy. The 114-name filter itself stays
+   * immediate, keeping the list direct under the finger.
+   */
+  const [ayahQueryDebounced, setAyahQueryDebounced] = useState(ayahQuery);
+  const [surahQueryDebounced, setSurahQueryDebounced] = useState(searchQuery);
+  useEffect(() => {
+    const timer = setTimeout(() => setAyahQueryDebounced(ayahQuery), ayahQuery.trim() ? 220 : 0);
+    return () => clearTimeout(timer);
+  }, [ayahQuery]);
+  useEffect(() => {
+    const timer = setTimeout(() => setSurahQueryDebounced(searchQuery), searchQuery.trim() ? 220 : 0);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const ayahSearch = useMemo(() => searchAyahs(ayahQueryDebounced), [ayahQueryDebounced]);
 
   /**
    * When the user types in the surah-list search box we also run an ayah
    * full-text search in parallel, so the same query surface both surah names
    * AND matching verses without switching tabs.
    */
-  const inlineSurahAyahSearch = useMemo(() => searchAyahs(searchQuery), [searchQuery]);
+  const inlineSurahAyahSearch = useMemo(() => searchAyahs(surahQueryDebounced), [surahQueryDebounced]);
 
   const openSurah = (surah: SurahMeta) => {
     setSelectedSurah(surah);
