@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Check, X, Clock, Flame, BookOpen, Moon, Sunrise, BookText, ChevronLeft, Sparkles, Calendar, Heart, Repeat } from 'lucide-react';
 import { Card, Button, Badge, SectionHeader, EmptyState, type BadgeProps } from '@/components/ui';
 import { PrayerStatusSheet } from '@/components/PrayerStatusSheet';
-import { type DailyTask, type Settings, type TaskStatus } from '@/db/database';
+import { type DailyTask, type Settings, type StrengthRating, type TaskStatus } from '@/db/database';
 import { getTodayTasks, confirmTask, snoozeTask, unsnoozeTask, describePortion, getStreakCount } from '@/utils/taskManager';
 import { rescheduleAllNotifications } from '@/utils/notificationScheduler';
 import {
@@ -511,6 +511,29 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
   );
 }
 
+/**
+ * How the portion went, as the memoriser said when confirming it.
+ *
+ * The rating has been recorded since the first build and never once shown
+ * back — the question was asked, and the answer filed away. Beside «تم» it
+ * becomes what it was always for: yesterday's card saying which portions to
+ * lean on again, and which to expect a weak answer from.
+ *
+ * The colours are a traffic light on purpose: green held, amber is holding,
+ * red slipped.
+ */
+const STRENGTH_LABELS_AR: Record<StrengthRating, string> = {
+  weak: 'ضعيف',
+  medium: 'متوسط',
+  strong: 'قوي',
+};
+
+const STRENGTH_VARIANTS: Record<StrengthRating, BadgeProps['variant']> = {
+  weak: 'error',
+  medium: 'warning',
+  strong: 'success',
+};
+
 // Task card component with confirmation buttons
 function TaskCard({
   task,
@@ -551,6 +574,12 @@ function TaskCard({
                 : task.scheduledTime}
             </span>
             {task.status === 'done' && <Badge variant="success"><Check size={10} /> تم</Badge>}
+            {/* The answer to «كيف كان حفظك؟», finally shown back. */}
+            {task.status === 'done' && task.strength && (
+              <Badge variant={STRENGTH_VARIANTS[task.strength]}>
+                {STRENGTH_LABELS_AR[task.strength]}
+              </Badge>
+            )}
             {task.status === 'missed' && <Badge variant="error"><X size={10} /> فات</Badge>}
             {task.status === 'snoozed' && <Badge variant="warning"><Clock size={10} /> مؤجل</Badge>}
           </div>
