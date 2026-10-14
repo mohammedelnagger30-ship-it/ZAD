@@ -28,6 +28,7 @@ import { toArabicNumber } from '@/data/surahs';
 import { ADHKAR_CATEGORIES, type AdhkarCategory, type Dhikr } from '@/data/adhkar';
 import { todayKey } from '@/utils/dateUtils';
 import { normalizeArabic } from '@/utils/arabic';
+import { normalizeCompletedDays, recordCompletedDay } from '@/utils/adhkarDays';
 
 const STORAGE_KEY = 'hifzi-adhkar-state';
 const SYNC_COMPLETE_EVENT = 'zad:cloud-sync-complete';
@@ -54,6 +55,16 @@ interface AdhkarState {
   favorites: string[];
   fontSize: number;
   haptics: boolean;
+  /**
+   * Every day the daily adhkar was carried all the way through, newest last.
+   *
+   * `counts` is wiped whenever the date rolls over, so on its own it can
+   * only ever answer "did I finish *today*" — and the day it is finished is
+   * the one day it stops keeping. This list is what turns a year of
+   * scattered afternoons into a number: «أتممت أذكار ١٠ أيام» cannot be
+   * counted from a counter that forgets.
+   */
+  completedDays: string[];
 }
 
 const DEFAULT_STATE: AdhkarState = {
@@ -62,6 +73,7 @@ const DEFAULT_STATE: AdhkarState = {
   favorites: [],
   fontSize: 22,
   haptics: false,
+  completedDays: [],
 };
 
 function loadState(): { state: AdhkarState; error: string | null } {
@@ -97,6 +109,9 @@ function loadState(): { state: AdhkarState; error: string | null } {
           : [],
         fontSize: typeof stored.fontSize === 'number' ? Math.min(Math.max(stored.fontSize, 18), 32) : 22,
         haptics: stored.haptics === true,
+        // What is on disk may have come from a backup, from another device,
+        // or from a version of the app that kept no list at all.
+        completedDays: normalizeCompletedDays(stored.completedDays),
       },
       error: null,
     };
@@ -189,6 +204,28 @@ export function AdhkarScreen() {
       }),
     })).filter(({ items }) => items.length > 0);
   }, [query, favoritesOnly, state.favorites]);
+
+  /**
+   * Files the day away the moment the last daily dhikr is counted.
+   *
+   * It watches `overallProgress` rather than a save action because there is
+   * no save action — the day either happened or it did not. Returning the
+   * previous state untouched when the date is already in the list is what
+   * keeps this from looping: the bar sits at 100% across many renders, and
+   * the effect runs again on each of them.
+   */
+  useEffect(() => {
+    if (overallProgress < 1) return;
+    setState((previous) => {
+      const completedDays = recordCompletedDay(previous.completedDays, previous.day);
+      // The same array back means the day was already filed, so the state
+      // itself is left untouched — and an unchanged state is what stops this
+      // from running again on the re-render it would otherwise cause.
+      return completedDays === previous.completedDays
+        ? previous
+        : { ...previous, completedDays };
+    });
+  }, [overallProgress]);
 
   const updateCount = useCallback((dhikr: Dhikr, delta: number) => {
     const current = state.counts[dhikr.id] ?? 0;

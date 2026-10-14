@@ -1,16 +1,44 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Flame, TrendingUp, Award, BookOpen, Check, Target, Share2, Download } from 'lucide-react';
+import { Flame, TrendingUp, Award, BookOpen, Check, Target, Share2, Download, Lock } from 'lucide-react';
 import { Card, SectionHeader, Button } from '@/components/ui';
 import { db, type Settings } from '@/db/database';
 import { getStreakCount } from '@/utils/taskManager';
 import { getWeeklyPrayerStats, getMonthlyPrayerStats } from '@/utils/prayerTracker';
+import { todayKey } from '@/utils/dateUtils';
 import { TOTAL_QURAN_AYAHS, toArabicNumber } from '@/data/surahs';
-import { DEFAULT_BADGES, shareBadge, type CustomBadge } from '@/data/customBadges';
+import { shareBadge } from '@/data/customBadges';
+import { evaluateBadges, type BadgeMetrics, type BadgeProgress } from '@/utils/badgeProgress';
+import { describeKhatmah } from '@/utils/khatmah';
+import { ADHKAR_STATE_KEY } from '@/utils/backup';
+import { normalizeCompletedDays } from '@/utils/adhkarDays';
 import { exportProgressReport } from '@/utils/exportPDF';
 import { YearHeatmap } from '@/components/YearHeatmap';
 
 interface ProgressScreenProps {
   settings?: Settings;
+}
+
+/**
+ * How many days the daily adhkar was carried through, as the counters
+ * recorded them.
+ *
+ * The counters themselves only ever hold today, so this reads the list of
+ * completed days that the adhkar screen appends to. A backup that predates
+ * that list simply counts as none — the badge starts from zero rather than
+ * the screen failing over a field it might not find.
+ */
+function readAdhkarDays(): number {
+  try {
+    const raw = localStorage.getItem(ADHKAR_STATE_KEY);
+    if (!raw) return 0;
+    const parsed = JSON.parse(raw) as { completedDays?: unknown };
+    // Through the same normalizer the adhkar screen writes with, so a list
+    // merged from another device is not counted twice on this screen either.
+    return normalizeCompletedDays(parsed.completedDays).length;
+  } catch {
+    // An unreadable counter must not take the whole progress screen down.
+    return 0;
+  }
 }
 
 export function ProgressScreen({ settings }: ProgressScreenProps) {
@@ -20,7 +48,7 @@ export function ProgressScreen({ settings }: ProgressScreenProps) {
   const [memorizedAyahs, setMemorizedAyahs] = useState(0);
   const [totalTasks, setTotalTasks] = useState(0);
   const [doneTasks, setDoneTasks] = useState(0);
-  const [unlockedBadges, setUnlockedBadges] = useState<CustomBadge[]>([]);
+  const [badgeProgress, setBadgeProgress] = useState<BadgeProgress[]>([]);
   const [isExporting, setIsExporting] = useState(false);
 
   const handleExportPDF = async () => {
@@ -55,19 +83,29 @@ export function ProgressScreen({ settings }: ProgressScreenProps) {
 
     // Overall task stats
     const allTasks = await db.tasks.toArray();
+    const completedTasks = allTasks.filter((t) => t.status === 'done').length;
     setTotalTasks(allTasks.length);
-    setDoneTasks(allTasks.filter((t) => t.status === 'done').length);
+    setDoneTasks(completedTasks);
 
-    // Badges with custom emoji support
-    const earned: CustomBadge[] = [];
-    if (s >= 3) earned.push(DEFAULT_BADGES[0]); // بداية موفقة
-    if (s >= 7) earned.push(DEFAULT_BADGES[1]); // أسبوع متواصل
-    if (s >= 30) earned.push(DEFAULT_BADGES[2]); // شهر الإلتزام
-    if (uniqueAyahs.size >= 10) earned.push(DEFAULT_BADGES[3]); // حافظ صغير
-    if (uniqueAyahs.size >= 100) earned.push(DEFAULT_BADGES[4]); // حافظ مجتهد
-    if (uniqueAyahs.size >= 500) earned.push(DEFAULT_BADGES[5]); // حافظ متقن
-    if (allTasks.filter((t) => t.status === 'done').length >= 50) earned.push(DEFAULT_BADGES[6]); // مثابر
-    setUnlockedBadges(earned);
+    // Every figure the badges are measured against. Three of these had a
+    // badge named for them and nothing in this screen that could ever feed
+    // it — they were unreachable precisely because no one was shown them.
+    const prayerRecords = await db.prayerRecords.toArray();
+    const ontimePrayers = prayerRecords.filter((record) => record.status === 'ontime').length;
+
+    const plans = await db.khatmah.toArray();
+    const today = todayKey();
+    const completedKhatmahs = plans.filter((plan) => describeKhatmah(plan, today).finished).length;
+
+    const metrics: BadgeMetrics = {
+      streak: s,
+      memorizedAyahs: uniqueAyahs.size,
+      completedTasks,
+      ontimePrayers,
+      completedKhatmahs,
+      adhkarDays: readAdhkarDays(),
+    };
+    setBadgeProgress(evaluateBadges(metrics));
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -186,27 +224,75 @@ export function ProgressScreen({ settings }: ProgressScreenProps) {
       {/* Badges/Achievements */}
       <Card>
         <SectionHeader title="الأوسمة" icon={<Award size={20} />} />
-        {unlockedBadges.length === 0 ? (
-          <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-4">
-            ابدأ بالحفظ والمراجعة ل تكسب أوسمة!
+        {badgeProgress.length === 0 ? (
+          <p role="status" className="py-4 text-center text-sm text-gray-400 dark:text-gray-500">
+            جارٍ تحميل الأوسمة...
           </p>
         ) : (
-          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-3">
-            {unlockedBadges.map((badge) => (
-              <div key={badge.id} className="flex flex-col items-center text-center animate-scale-in relative group">
-                <div className="w-14 h-14 rounded-2xl bg-linear-to-bl from-gold-400 to-gold-600 flex items-center justify-center mb-1 shadow-lg">
-                  <span className="text-2xl">{badge.emoji}</span>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            {badgeProgress.map(({ badge, value, target, unlocked, fraction }) => (
+              <div
+                key={badge.id}
+                className={`group relative flex flex-col items-center rounded-2xl border p-3 text-center ${
+                  unlocked
+                    ? 'animate-scale-in border-gold-200 bg-gold-50/60 dark:border-gold-800 dark:bg-gold-900/10'
+                    : 'border-dashed border-gray-200 bg-gray-50/50 dark:border-gray-800 dark:bg-gray-900/20'
+                }`}
+              >
+                <div
+                  className={`relative mb-1.5 flex h-14 w-14 items-center justify-center rounded-2xl ${
+                    unlocked ? 'bg-linear-to-bl from-gold-400 to-gold-600 shadow-lg' : ''
+                  }`}
+                >
+                  <span className={`text-2xl ${unlocked ? '' : 'opacity-30 grayscale'}`}>
+                    {badge.emoji}
+                  </span>
+                  {!unlocked && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-gray-200 text-gray-500 ring-2 ring-white dark:bg-gray-700 dark:text-gray-300 dark:ring-gray-900"
+                    >
+                      <Lock size={11} />
+                    </span>
+                  )}
                 </div>
-                <p className="text-xs font-medium text-primary-700 dark:text-primary-200">{badge.name}</p>
-                {settings?.customBadgesEnabled && badge.shareable && (
-                  <button
-                    type="button"
-                    onClick={() => void shareBadge(badge)}
-                    className="absolute -top-2 -right-2 p-1.5 rounded-full bg-primary-600 text-white opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity shadow-md hover:bg-primary-700"
-                    title="مشاركة الوسام"
-                  >
-                    <Share2 size={12} />
-                  </button>
+
+                <p
+                  className={`text-xs font-semibold ${
+                    unlocked ? 'text-primary-800 dark:text-gold-300' : 'text-gray-500 dark:text-gray-400'
+                  }`}
+                >
+                  {badge.name}
+                </p>
+                <p className="mt-0.5 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
+                  {badge.description}
+                </p>
+
+                {unlocked ? (
+                  settings?.customBadgesEnabled && badge.shareable ? (
+                    <button
+                      type="button"
+                      onClick={() => void shareBadge(badge)}
+                      aria-label="مشاركة الوسام"
+                      className="absolute -top-2 -right-2 rounded-full bg-primary-600 p-1.5 text-white opacity-100 shadow-md transition-opacity hover:bg-primary-700 focus-visible:opacity-100 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500 md:opacity-0 md:group-hover:opacity-100"
+                    >
+                      <Share2 size={12} />
+                    </button>
+                  ) : null
+                ) : (
+                  /* A goal you cannot see is not a goal — the bar and the two
+                     numbers are what make «سعي» mean something. */
+                  <div className="mt-2 w-full">
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-800">
+                      <div
+                        className="h-full rounded-full bg-linear-to-l from-primary-500 to-gold-400 transition-all duration-500"
+                        style={{ width: `${Math.round(fraction * 100)}%` }}
+                      />
+                    </div>
+                    <p className="mt-1 text-[10px] text-gray-400 dark:text-gray-500">
+                      {toArabicNumber(value)} من {toArabicNumber(target)}
+                    </p>
+                  </div>
                 )}
               </div>
             ))}

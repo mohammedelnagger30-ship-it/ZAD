@@ -11,68 +11,77 @@ export interface CustomBadge {
   shareable: boolean;
 }
 
+/**
+ * The catalogue, and behind it what each badge asks for.
+ *
+ * The `description` is what a locked badge shows as its goal, so it has to
+ * say the same thing the threshold says — «أول يوم من الالتزام» sat under a
+ * badge that needed three days, and while nothing drew it that contradiction
+ * was harmless. Numerals are Arabic-Indic because this is now text the
+ * screen renders, beside counts the screen renders with `toArabicNumber`.
+ */
 export const DEFAULT_BADGES: CustomBadge[] = [
   {
     id: 'first-day',
     name: 'بداية موفقة',
     emoji: '🌟',
-    description: 'أول يوم من الالتزام',
+    description: '٣ أيام متتالية',
     shareable: true,
   },
   {
     id: 'week-streak',
     name: 'أسبوع متواصل',
     emoji: '🔥',
-    description: '7 أيام متتالية',
+    description: '٧ أيام متتالية',
     shareable: true,
   },
   {
     id: 'month-streak',
     name: 'شهر الإلتزام',
     emoji: '💎',
-    description: '30 يوم متتالية',
+    description: '٣٠ يومًا متتاليًا',
     shareable: true,
   },
   {
     id: 'small-hafiz',
     name: 'حافظ صغير',
     emoji: '📖',
-    description: 'حفظت 10 آيات',
+    description: 'حفظت ١٠ آيات',
     shareable: true,
   },
   {
     id: 'dedicated-hafiz',
     name: 'حافظ مجتهد',
     emoji: '🏆',
-    description: 'حفظت 100 آية',
+    description: 'حفظت ١٠٠ آية',
     shareable: true,
   },
   {
     id: 'expert-hafiz',
     name: 'حافظ متقن',
     emoji: '👑',
-    description: 'حفظت 500 آية',
+    description: 'حفظت ٥٠٠ آية',
     shareable: true,
   },
   {
     id: 'persistent',
     name: 'مثابر',
     emoji: '💪',
-    description: 'أكملت 50 مهمة',
+    description: 'أكملت ٥٠ مهمة',
     shareable: true,
   },
   {
     id: 'prayer-champion',
     name: 'بطل الصلاة',
     emoji: '🕌',
-    description: 'صليت 100 صلاة في وقتها',
+    description: 'صليت ١٠٠ صلاة في وقتها',
     shareable: true,
   },
   {
     id: 'dhikr-lover',
     name: 'محب الذكر',
     emoji: '🤲',
-    description: 'أتممت أذكار يوم 10 مرات',
+    description: 'أتممت أذكار ١٠ أيام',
     shareable: true,
   },
   {
