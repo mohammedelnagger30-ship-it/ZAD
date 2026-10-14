@@ -228,6 +228,26 @@ export function buildWriteQuestion(
   return { type: 'write', promptAyah, answerAyah: promptAyah + 1 };
 }
 
+/**
+ * Builds the listening question: one ayah of the portion, heard and recited
+ * back.
+ *
+ * Any ayah will do, endpoints included — hearing the first ayah of a range is
+ * as fair a question as hearing the last, and the choice has to be made
+ * somewhere. It comes back in the recall shape because that is what it is once
+ * heard, which is also what lets the quiz's own machinery carry it.
+ */
+export function buildListenQuestion(
+  surahAyahCount: number,
+  fromAyah: number,
+  toAyah: number,
+  random: () => number = Math.random,
+): RecallQuestion {
+  const from = Math.max(1, Math.min(fromAyah, surahAyahCount));
+  const to = Math.max(from, Math.min(toAyah, surahAyahCount));
+  return { type: 'recall', ayahNumber: from + Math.floor(random() * (to - from + 1)) };
+}
+
 /** Perfect order run → «easy»; each slip costs one grade step. */
 export function gradeOrderResult(errors: number): HifzGrade {
   if (errors === 0) return 'easy';

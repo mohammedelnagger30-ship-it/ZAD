@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Brain, Check, Eye, Keyboard, RotateCcw, X } from 'lucide-react';
+import { Brain, Check, Eye, Keyboard, RotateCcw, Volume2, X } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { useOverlayDismiss } from '@/hooks/useOverlayDismiss';
 import { toArabicNumber, type SurahMeta } from '@/data/surahs';
 import { getAyah } from '@/data/quranText';
+import { ensureSource, playAyah, stop } from '@/utils/recitationEngine';
 import {
+  buildListenQuestion,
   buildQuizQuestion,
   buildWriteQuestion,
   describeIntervalDays,
@@ -35,9 +37,11 @@ const QURAN_FONT = "font-['Amiri_Quran',_serif]";
  * the mode that needs no decision from someone who just opened the quiz. The
  * others are there for the memoriser who knows what they want to be tested on:
  * writing is the one whose verdict is not self-declared, since the attempt is
- * measured against the mushaf rather than judged by its author.
+ * measured against the mushaf rather than judged by its author, and listening
+ * is the one that puts the voice back in — an ayah heard once, recited back,
+ * which is how the portion was learned in the first place.
  */
-type TestMode = 'auto' | 'write';
+type TestMode = 'auto' | 'write' | 'audio';
 
 function preview(text: string, max = 60): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
@@ -68,6 +72,10 @@ export function HifzTestModal({ surah, fromAyah, toAyah, onClose }: HifzTestModa
   /** Writing quiz: what the memoriser typed, and how it measured against the mushaf. */
   const [writtenText, setWrittenText] = useState('');
   const [diff, setDiff] = useState<RecallDiff | null>(null);
+  /** Listening quiz: the ayah's text is held back until they have tried. */
+  const [audioRevealed, setAudioRevealed] = useState(false);
+  /** Set when the reciter's recording could not be brought up. */
+  const [audioProblem, setAudioProblem] = useState(false);
   const [result, setResult] = useState<{ grade: HifzGrade; nextDays: number } | null>(null);
   const [saving, setSaving] = useState(false);
   // Mounted only while open: back exits the quiz instead of navigating the
@@ -80,14 +88,18 @@ export function HifzTestModal({ surah, fromAyah, toAyah, onClose }: HifzTestModa
   const canWrite = rangeTo > rangeFrom;
 
   const dealQuestion = useCallback(() => {
-    const next =
-      mode === 'write'
-        ? // A single-ay portion has nothing to ask for next; fall back rather
-          // than hand the answer to whoever opened writing mode.
-          buildWriteQuestion(surah.ayahCount, rangeFrom, rangeTo) ??
-          buildQuizQuestion(surah.ayahCount, rangeFrom, rangeTo)
-        : buildQuizQuestion(surah.ayahCount, rangeFrom, rangeTo);
-    setQuestion(next);
+    setQuestion(
+      mode === 'audio'
+        ? // The listening quiz asks about one ayah of the portion — which one
+          // is the whole question, so it is handed to the builder.
+          buildListenQuestion(surah.ayahCount, rangeFrom, rangeTo)
+        : mode === 'write'
+          ? // A single-ay portion has nothing to ask for next; fall back rather
+            // than hand the answer to whoever opened writing mode.
+            buildWriteQuestion(surah.ayahCount, rangeFrom, rangeTo) ??
+            buildQuizQuestion(surah.ayahCount, rangeFrom, rangeTo)
+          : buildQuizQuestion(surah.ayahCount, rangeFrom, rangeTo),
+    );
     setOrderPlaced([]);
     setOrderErrors(0);
     setWrongCard(null);
@@ -95,6 +107,8 @@ export function HifzTestModal({ surah, fromAyah, toAyah, onClose }: HifzTestModa
     setRecallRevealed(false);
     setWrittenText('');
     setDiff(null);
+    setAudioRevealed(false);
+    setAudioProblem(false);
     setResult(null);
   }, [mode, surah.ayahCount, rangeFrom, rangeTo]);
 
@@ -206,13 +220,35 @@ export function HifzTestModal({ surah, fromAyah, toAyah, onClose }: HifzTestModa
     void finish(choicePicked === question.answerAyah ? gradeChoiceResult(3) : gradeChoiceResult(1));
   };
 
+  /**
+   * Plays the question ayah once, through the reader's own reciter.
+   *
+   * `stop` runs first because it resets the repeat counter — without it a
+   * listener who had the surah on ×3 would be asked the same ayah three times
+   * over. `ensureSource` loads the recording if the reader has not yet.
+   */
+  const playQuestionAyah = useCallback(async () => {
+    if (question?.type !== 'recall') return;
+    const loaded = await ensureSource();
+    if (!loaded) {
+      // The engine carries the reason; all this needs is to say the question
+      // could not be heard rather than leaving a dead button.
+      setAudioProblem(true);
+      return;
+    }
+    setAudioProblem(false);
+    stop();
+    playAyah(question.ayahNumber, false);
+  }, [question]);
+
   const questionLabel = useMemo(() => {
     if (!question) return '';
+    if (mode === 'audio') return 'استمع واتلُها من حفظك';
     if (question.type === 'order') return 'رتّب الآيات كما تُتلى';
     if (question.type === 'choice') return 'ما الآية التالية؟';
     if (question.type === 'write') return 'اكتب الآية التالية من حفظك';
     return 'اتلوها من حفظك ثم قارن';
-  }, [question]);
+  }, [question, mode]);
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm md:pr-24 lg:pr-32 xl:pr-36">
@@ -270,6 +306,7 @@ export function HifzTestModal({ surah, fromAyah, toAyah, onClose }: HifzTestModa
                   [
                     { id: 'auto', label: 'تلقائي', icon: Brain },
                     { id: 'write', label: 'اكتب الآية', icon: Keyboard },
+                    { id: 'audio', label: 'استمع', icon: Volume2 },
                   ] as const
                 ).map(({ id, label, icon: Icon }) => (
                   <button
@@ -465,8 +502,57 @@ export function HifzTestModal({ surah, fromAyah, toAyah, onClose }: HifzTestModa
                 </div>
               )}
 
+              {/* ---- Listening quiz ---- */}
+              {mode === 'audio' && question.type === 'recall' && (
+                <div className="space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => void playQuestionAyah()}
+                    disabled={saving}
+                    className="mx-auto flex min-h-12 items-center gap-2 rounded-xl bg-primary-600 px-6 text-sm font-bold text-white hover:bg-primary-700 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Volume2 size={18} aria-hidden="true" />
+                    {audioRevealed ? 'أعد الاستماع' : 'استمع إلى الآية'}
+                  </button>
+
+                  <p className="text-center text-xs text-gray-500 dark:text-gray-400">
+                    آية من نطاقك — استمع، ثم اتلُها من حفظك، ثم اكشف النص لتقارن.
+                  </p>
+
+                  {audioProblem && (
+                    <p className="rounded-xl border border-error-200 bg-error-50 p-3 text-center text-xs font-semibold text-error-700 dark:border-error-800 dark:bg-error-900/30 dark:text-error-300">
+                      تعذّر تشغيل التلاوة — تحقّق من القارئ أو من الاتصال ثم أعد المحاولة.
+                    </p>
+                  )}
+
+                  {!audioRevealed && (
+                    <button
+                      type="button"
+                      onClick={() => setAudioRevealed(true)}
+                      disabled={saving}
+                      className="mx-auto flex min-h-11 items-center gap-2 rounded-xl border border-primary-200 bg-white px-6 text-sm font-bold text-primary-700 hover:bg-primary-50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-primary-700 dark:bg-primary-900/50 dark:text-gold-300 dark:hover:bg-primary-800"
+                    >
+                      <Eye size={16} aria-hidden="true" />
+                      أظهر النص للمقارنة
+                    </button>
+                  )}
+
+                  {audioRevealed && (
+                    <>
+                      <p className={`rounded-xl border border-primary-100 bg-primary-50/60 p-3 text-center text-lg leading-loose text-primary-900 dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-50 ${QURAN_FONT}`}>
+                        {getAyah(surah.id, question.ayahNumber)?.text ?? ''}
+                      </p>
+                      <p className="text-center text-sm font-semibold text-gray-600 dark:text-gray-300">
+                        هل أصبت؟
+                      </p>
+                      {gradeButtons()}
+                    </>
+                  )}
+                </div>
+              )}
+
               {/* ---- Recall quiz ---- */}
-              {question.type === 'recall' && (
+              {question.type === 'recall' && mode !== 'audio' && (
                 <div className="space-y-3">
                   {!recallRevealed ? (
                     <>

@@ -1,5 +1,6 @@
 import { describe, it, expect } from '@jest/globals';
 import {
+  buildListenQuestion,
   buildQuizQuestion,
   buildWriteQuestion,
   describeIntervalDays,
@@ -232,6 +233,37 @@ describe('buildWriteQuestion', () => {
   it('has nothing to ask of a single-ay portion', () => {
     expect(buildWriteQuestion(7, 3, 3)).toBeNull();
     expect(buildWriteQuestion(7, 4, 2)).toBeNull();
+  });
+});
+
+/**
+ * «استمع واتلُها» — one ayah of the portion, and every ayah of it a fair
+ * question. Unlike writing, a single-ay portion is still answerable.
+ */
+describe('buildListenQuestion', () => {
+  it('lands on an ayah of the portion, endpoints included', () => {
+    for (let i = 0; i < 200; i++) {
+      const question = buildListenQuestion(7, 2, 6);
+      expect(question.type).toBe('recall');
+      expect(question.ayahNumber).toBeGreaterThanOrEqual(2);
+      expect(question.ayahNumber).toBeLessThanOrEqual(6);
+    }
+  });
+
+  it('reaches every ayah of the portion, not only the middle ones', () => {
+    const heard = new Set<number>();
+    for (let i = 0; i < 200; i++) heard.add(buildListenQuestion(7, 2, 6).ayahNumber);
+    expect([...heard].sort()).toEqual([2, 3, 4, 5, 6]);
+  });
+
+  it('clamps a window that runs past the surah boundary', () => {
+    for (let i = 0; i < 50; i++) {
+      expect(buildListenQuestion(10, 8, 40).ayahNumber).toBeLessThanOrEqual(10);
+    }
+  });
+
+  it('still has a question for a single-ay portion', () => {
+    expect(buildListenQuestion(7, 3, 3, () => 0.5)).toEqual({ type: 'recall', ayahNumber: 3 });
   });
 });
 
