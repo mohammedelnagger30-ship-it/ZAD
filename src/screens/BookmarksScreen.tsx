@@ -4,7 +4,7 @@ import { db, type Bookmark as BookmarkType, type PageBookmark } from '@/db/datab
 import { getSurah, toArabicNumber } from '@/data/surahs';
 import { getAyah } from '@/data/quranText';
 import { Card, EmptyState, Badge } from '@/components/ui';
-import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { useSnackbar } from '@/hooks/useSnackbar';
 import { buildBookmarksExport } from '@/utils/bookmarkExport';
 import type { ScreenName, NavParams } from '@/hooks/useApp';
 
@@ -34,9 +34,7 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   /** True while the whole collection sits on the clipboard after «تصدير». */
   const [exported, setExported] = useState(false);
-  const [pendingDelete, setPendingDelete] = useState<
-    { kind: 'ayah'; id: number; label: string } | { kind: 'page'; page: number } | null
-  >(null);
+  const { show, snackbar } = useSnackbar();
 
   const load = useCallback(async () => {
     try {
@@ -142,15 +140,68 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
     }
   };
 
-  const confirmDelete = async () => {
-    if (!pendingDelete) return;
-    if (pendingDelete.kind === 'ayah') {
-      await db.bookmarks.delete(pendingDelete.id);
-    } else {
-      await db.pageBookmarks.delete(pendingDelete.page);
-    }
-    setPendingDelete(null);
-    load();
+  /**
+   * A mark is taken back, not asked about.
+   *
+   * This screen used to put a dialog in front of every deletion, and it was
+   * the wrong question here: the row survives in memory for as long as the bar
+   * is on screen, so the answer can be given after the fact. «تراجع» costs one
+   * tap and cannot be misclicked into a loss; «أنت متأكد؟» costs a tap on
+   * every deletion and a wrong «نعم» still cannot be undone — which was the
+   * only reason the question was there.
+   *
+   * The ayah row is rebuilt field by field because the one on screen carries
+   * the surah name and the ayah text that make the list readable. Those are
+   * enrichment, not bookmarks, and Dexie would write them into the table
+   * beside the real columns, where they would ride along into every backup.
+   */
+  const removeAyahBookmark = async (bm: AyahBookmarkRow) => {
+    if (bm.id === undefined) return;
+    const row: BookmarkType = {
+      id: bm.id,
+      syncId: bm.syncId,
+      syncModifiedAt: bm.syncModifiedAt,
+      surahId: bm.surahId,
+      ayahNumber: bm.ayahNumber,
+      note: bm.note,
+      createdAt: bm.createdAt,
+    };
+    await db.bookmarks.delete(bm.id);
+    void load();
+    const label = bm.surahName
+      ? `«${bm.surahName} — الآية ${toArabicNumber(bm.ayahNumber)}»`
+      : `الآية ${toArabicNumber(bm.ayahNumber)}`;
+    show({
+      message: `حُذفت علامة ${label}.`,
+      action: {
+        label: 'تراجع',
+        onAction: () => {
+          // The original id rides along, so the row comes back exactly where
+          // it was — including its place in the sync history.
+          void db.bookmarks
+            .put(row)
+            .then(() => load())
+            .catch((error) => console.error('Failed to restore bookmark:', error));
+        },
+      },
+    });
+  };
+
+  const removePageBookmark = async (bm: PageBookmark) => {
+    await db.pageBookmarks.delete(bm.page);
+    void load();
+    show({
+      message: `حُذفت علامة الصفحة ${toArabicNumber(bm.page)}.`,
+      action: {
+        label: 'تراجع',
+        onAction: () => {
+          void db.pageBookmarks
+            .put(bm)
+            .then(() => load())
+            .catch((error) => console.error('Failed to restore page bookmark:', error));
+        },
+      },
+    });
   };
 
   if (loading) {
@@ -288,13 +339,7 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
                         </button>
                         <button
                           type="button"
-                          onClick={() =>
-                            setPendingDelete({
-                              kind: 'ayah',
-                              id: bm.id!,
-                              label: `${surah?.name} — الآية ${toArabicNumber(bm.ayahNumber)}`,
-                            })
-                          }
+                          onClick={() => void removeAyahBookmark(bm)}
                           aria-label="حذف العلامة"
                           className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-error-50 hover:text-error-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error-500 dark:text-gray-400 dark:hover:bg-error-900/30 dark:hover:text-error-300"
                         >
@@ -342,7 +387,7 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setPendingDelete({ kind: 'page', page: bm.page })}
+                  onClick={() => void removePageBookmark(bm)}
                   aria-label={`حذف علامة الصفحة ${toArabicNumber(bm.page)}`}
                   className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-error-50 hover:text-error-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error-500 dark:text-gray-400 dark:hover:bg-error-900/30 dark:hover:text-error-300"
                 >
@@ -354,21 +399,11 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
         </section>
       )}
 
-      <ConfirmDialog
-        open={pendingDelete !== null}
-        destructive
-        title="حذف العلامة؟"
-        description={
-          pendingDelete?.kind === 'ayah'
-            ? `ستُحذف علامة «${pendingDelete.label}» نهائيًا.`
-            : pendingDelete?.kind === 'page'
-              ? `ستُحذف علامة الصفحة ${toArabicNumber(pendingDelete.page)} نهائيًا.`
-              : undefined
-        }
-        confirmLabel="حذف"
-        onConfirm={confirmDelete}
-        onCancel={() => setPendingDelete(null)}
-      />
+      {/*
+        No confirmation sits in front of a deletion any more — the bar below
+        offers the way back instead, and only for as long as there is one.
+      */}
+      {snackbar}
     </div>
   );
 }
