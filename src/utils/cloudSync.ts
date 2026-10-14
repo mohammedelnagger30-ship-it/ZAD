@@ -139,6 +139,33 @@ function parseDeleteQueue(userId: string): LocalTombstone[] {
   );
 }
 
+/**
+ * The delete queue as the sync path reads it — never throwing.
+ *
+ * `parseDeleteQueue` rejects a value that is not an array (an interrupted write, a
+ * corrupt key), and synchronizeNow used to let that rejection out: one malformed
+ * localStorage entry then failed *every* sync round, forever, with no self-heal —
+ * cloud sync silently dead while the app looked otherwise healthy. The queue only
+ * remembers deletions; its contents are already unreadable by the time the shape
+ * check fails, so the entry is dropped and the round proceeds. The cost is bounded
+ * and one-sided: a record the user deleted locally can come back on the next pull
+ * (and be deleted again), where the old behaviour cost all sync, permanently.
+ *
+ * `acknowledgeTombstones` already treats a bad queue as "nothing to acknowledge";
+ * this is the same tolerance on the read side.
+ *
+ * Exported as the seam the sync-path resilience test pins down.
+ */
+export function readDeleteQueue(userId: string): LocalTombstone[] {
+  try {
+    return parseDeleteQueue(userId);
+  } catch (err) {
+    console.error('Malformed local delete queue — discarding it.', err);
+    localStorage.removeItem(`${DELETE_QUEUE_PREFIX}${userId}`);
+    return [];
+  }
+}
+
 interface LocalTombstone {
   key: string;
   table: SyncTableName;
@@ -181,7 +208,12 @@ async function fetchCloudRecords(userId: string): Promise<Map<string, CloudRecor
       .eq('user_id', userId)
       // Postgres does not guarantee stable ordering for limit/offset queries, so
       // paging without an explicit order can skip or repeat rows between pages.
-      // Duplicates self-heal via the map key; skipped rows were silently never synced.
+      // The sort must also be *unique* to be stable across pages: the table's key is
+      // (user_id, table_name, record_id), so ordering by record_id alone leaves ties
+      // between tables with no defined order — exactly the case that drops a row at a
+      // page boundary. Sorting by the full key makes the pages exact; duplicates would
+      // still self-heal via the map key, but they should no longer be needed.
+      .order('table_name', { ascending: true })
       .order('record_id', { ascending: true })
       .range(start, start + pageSize - 1);
     if (error) throw error;
@@ -663,7 +695,7 @@ export async function synchronizeNow(): Promise<void> {
     const cloud = await fetchCloudRecords(userId);
     const local = await getLocalRecords();
     const tombstones = [
-      ...parseDeleteQueue(userId),
+      ...readDeleteQueue(userId),
     ];
     const changes = await makeCloudChanges(local, cloud, tombstones);
     // Tombstones this round hands to the server (plus the ones the server already
@@ -683,7 +715,14 @@ export async function synchronizeNow(): Promise<void> {
       const { error } = await supabase.rpc('sync_user_records', { p_records: changes.slice(start, start + 200) });
       if (error) throw error;
     }
-    const latest = await fetchCloudRecords(userId);
+    // Nothing was pushed, so the records pulled a moment ago are still the server's
+    // current state — a second full pull would only re-download what we already hold.
+    // This is the common case (an idle device's round pushes nothing), so it halves
+    // the pull traffic of every 60-second tick. A concurrent write by another device
+    // is not missed: it arrives through the realtime subscription, which starts a
+    // round of its own. After a real push the refetch is required — the server is
+    // what decides the merged row and its modified_at.
+    const latest = changes.length > 0 ? await fetchCloudRecords(userId) : cloud;
     await applyCloudRecords(latest);
     acknowledgeTombstones(userId, acknowledgedTombstones);
     lastSyncedAt = new Date().toISOString();
