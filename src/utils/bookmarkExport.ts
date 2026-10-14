@@ -1,4 +1,8 @@
 import { getSurah, toArabicNumber } from '@/data/surahs';
+import { countNoun, type ArabicCountForms } from '@/utils/arabicCount';
+
+const AYAH_COUNT: ArabicCountForms = { one: 'آية', two: 'آيتان', few: 'آيات', many: 'آية' };
+const PAGE_COUNT: ArabicCountForms = { one: 'صفحة', two: 'صفحتان', few: 'صفحات', many: 'صفحة' };
 
 export interface AyahBookmarkExport {
   surahId: number;
@@ -26,16 +30,7 @@ export function buildBookmarksExport(
   const lines: string[] = ['محفوظاتي — قُرّة', ''];
 
   if (ayahs.length > 0) {
-    lines.push(
-      `${toArabicNumber(ayahs.length)} ${arabicCount(
-        ayahs.length,
-        'آية',
-        'آيتان',
-        'آيات',
-        'آية',
-      )}`,
-      '',
-    );
+    lines.push(countNoun(ayahs.length, AYAH_COUNT), '');
 
     // Grouped by surah, and each group in ayah order — the same order the
     // screen shows, so an exported list lines up with the one on the phone.
@@ -56,8 +51,13 @@ export function buildBookmarksExport(
   }
 
   if (pages.length > 0) {
+    // Two pages need the dual noun with the dual adjective — «صفحتان
+    // محفوظتان», not «صفحتان محفوظة» — while every other count takes the
+    // singular adjective that Arabic pairs with the counted noun.
+    const heading =
+      pages.length === 2 ? 'صفحتان محفوظتان' : `${countNoun(pages.length, PAGE_COUNT)} محفوظة`;
     lines.push(
-      `${toArabicNumber(pages.length)} ${arabicCount(pages.length, 'صفحة', 'صفحتان', 'صفحات', 'صفحة')} محفوظة`,
+      heading,
       [...pages].sort((a, b) => a - b)
         .map((page) => toArabicNumber(page))
         .join('، '),
@@ -66,16 +66,4 @@ export function buildBookmarksExport(
   }
 
   return lines.join('\n').trimEnd();
-}
-
-/**
- * Counts a noun the way Arabic counts it: one, two, then the plural for three
- * up to ten, and the singular again past ten — «١١ آية», not «١١ آيات».
- */
-function arabicCount(count: number, one: string, two: string, few: string, many: string): string {
-  if (count === 1) return one;
-  if (count === 2) return two;
-  const lastTwo = count % 100;
-  if (lastTwo >= 3 && lastTwo <= 10) return few;
-  return many;
 }
