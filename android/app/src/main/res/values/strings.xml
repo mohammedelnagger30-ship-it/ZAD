@@ -4,4 +4,12 @@
     <string name="title_activity_main">قُرّة</string>
     <string name="package_name">com.hifzi.app</string>
     <string name="custom_url_scheme">com.hifzi.app</string>
+    <string name="wird_widget_description">ورد اليوم والصلاة القادمة على شاشتك الرئيسية</string>
+    <!-- Shown when nothing has been pushed yet, or when the whole day's prayers
+         have gone by: the widget has no schedule of its own and will not invent
+         one, so it asks to be brought up to date instead. -->
+    <string name="wird_widget_no_prayer">افتح قُرّة لعرض مواقيت اليوم</string>
+    <!-- Shown when the snapshot describes another day — yesterday's tasks read
+         as today's would be a lie in a widget nobody opens to check. -->
+    <string name="wird_widget_stale_tasks">افتح قُرّة لتجديد واجب اليوم</string>
 </resources>

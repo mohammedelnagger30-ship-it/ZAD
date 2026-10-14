@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Same widget, deeper green: values-night resolves from the launcher's own
+         configuration, so the widget follows the phone into night without the app
+         being open to tell it to. -->
+    <color name="wird_widget_background">#12291F</color>
+    <color name="wird_widget_prayer">#EFF6F2</color>
+    <color name="wird_widget_tasks">#96B6A5</color>
+</resources>

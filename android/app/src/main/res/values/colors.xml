@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The home-screen widget's surface. A widget sits on the launcher's wallpaper
+         all day, so it carries the app's own green rather than the launcher's card
+         colour — and the night pair below is the same green at a depth that will
+         not glare in a dark room. -->
+    <color name="wird_widget_background">#1F734E</color>
+    <color name="wird_widget_prayer">#FFFFFF</color>
+    <color name="wird_widget_tasks">#D7E8DF</color>
+</resources>

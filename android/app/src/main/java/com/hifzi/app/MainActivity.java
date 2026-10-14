@@ -29,6 +29,9 @@ public class MainActivity extends BridgeActivity {
         // Prayer-time takeover (full-screen intent): opens the adhan page while the app
         // is closed. Registered with the rest before the bridge is built.
         registerPlugin(AdhanOverlay.class);
+        // Home-screen widget: takes the day's snapshot out of the WebView and hands it
+        // to the launcher. Registered with the rest before the bridge is built.
+        registerPlugin(WirdWidget.class);
         super.onCreate(savedInstanceState);
 
         Intent intent = getIntent();

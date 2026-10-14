@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  `updatePeriodMillis` cannot go below thirty minutes — the launcher ignores
+  anything finer, and the system may still defer it while dozing. That is not a
+  problem to solve here: the provider re-picks the prayer that is still ahead of
+  the clock each time it draws, so half-hourly redraws are enough for the widget
+  to walk through the day's prayers without the app being opened at all.
+
+  `previewLayout` renders the picker's preview from the real layout instead of a
+  screenshot, so the preview cannot drift from what is drawn.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/wird_widget_description"
+    android:initialLayout="@layout/wird_widget"
+    android:minHeight="110dp"
+    android:minResizeHeight="60dp"
+    android:minResizeWidth="140dp"
+    android:minWidth="250dp"
+    android:previewLayout="@layout/wird_widget"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen" />

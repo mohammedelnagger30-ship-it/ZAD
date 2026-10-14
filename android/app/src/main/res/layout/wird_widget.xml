@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The launcher draws this on its own: every view here must be one RemoteViews
+  supports (LinearLayout and TextView are; a ConstraintLayout would throw when
+  the launcher inflates it, and no app is running to catch that), and the ids
+  are the contract WirdWidgetProvider writes through.
+
+  RTL is set on the text rather than left to the device locale, because every
+  string this widget shows is Arabic and a phone set to English would lay them
+  out left-to-right with the em dash in the wrong place.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/wird_widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/wird_widget_background"
+    android:gravity="center_vertical"
+    android:orientation="vertical"
+    android:padding="14dp">
+
+    <TextView
+        android:id="@+id/wird_prayer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/wird_widget_prayer"
+        android:textDirection="rtl"
+        android:textSize="17sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/wird_tasks"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:lineSpacingExtra="3dp"
+        android:textColor="@color/wird_widget_tasks"
+        android:textDirection="rtl"
+        android:textSize="12.5sp" />
+</LinearLayout>

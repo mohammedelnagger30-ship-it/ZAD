@@ -54,6 +54,24 @@
                 <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
         </receiver>
+
+        <!-- Home-screen widget. `exported="false"` is what the platform's own
+             documentation uses for an AppWidgetProvider: the only broadcast it
+             listens for is APPWIDGET_UPDATE, which the system sends, and nothing
+             else in the world should be able to ask this app to redraw a widget.
+             The provider reads its data from SharedPreferences — never from an
+             intent — so no extras can be smuggled in through the filter. -->
+        <receiver
+            android:name=".WirdWidgetProvider"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/wird_widget_info" />
+        </receiver>
     </application>
 
     <!-- Permissions -->

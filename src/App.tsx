@@ -17,6 +17,7 @@ import type { Session } from '@supabase/supabase-js';
 import type { Settings } from '@/db/database';
 import { AzanOverlayModal } from '@/components/AzanOverlayModal';
 import { useAzanTrigger } from '@/hooks/useAzanTrigger';
+import { useWirdWidget } from '@/hooks/useWirdWidget';
 import {
   adoptDeviceTimeZone,
   currentDevicePosition,
@@ -576,6 +577,11 @@ function AppContent({
       clearInterval(interval);
     };
   }, [settings, onboarded, save]);
+
+  // The launcher's widget is drawn from the last snapshot the app left behind,
+  // so it is refreshed here rather than on any task toggle: at the settings
+  // change that moves the prayers, and whenever the person stops looking.
+  useWirdWidget(settings);
 
   // Android drops pending alarms when the app is killed or the device reboots, and the
   // armed window is finite. Re-arming on every foreground keeps the schedule honest
