@@ -429,13 +429,20 @@ export async function storageSummary(): Promise<StorageSummary> {
   let used = 0;
   if (isContentStoreAvailable()) {
     const contentDb = database();
-    const [files, audioTracks] = await Promise.all([
-      contentDb.files.toArray(),
-      contentDb.audioTracks.toArray(),
-    ]);
-    used =
-      files.reduce((sum, f) => sum + f.bytes, 0) +
-      audioTracks.reduce((sum, track) => sum + track.bytes, 0);
+    // Walk each table with a cursor, summing only the numeric `bytes` field.
+    // The old `toArray()` materialised every row — audio blobs included — into
+    // memory at once, which is hundreds of megabytes on a full device, and this
+    // runs after every download. `.each()` holds one row at a time and lets the
+    // rest be collected.
+    let filesBytes = 0;
+    await contentDb.files.each((file) => {
+      filesBytes += file.bytes;
+    });
+    let audioBytes = 0;
+    await contentDb.audioTracks.each((track) => {
+      audioBytes += track.bytes;
+    });
+    used = filesBytes + audioBytes;
   }
   let quota = 0;
   try {

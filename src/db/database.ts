@@ -317,6 +317,23 @@ export class HifziDB extends Dexie {
     this.version(7).stores({
       hifzReviews: '++id, key, dueAt, surahId',
     });
+
+    // v8: index `syncId` on every synced table. Cloud sync looks each incoming
+    // row up by its record id, and without the index every one of those lookups
+    // scanned the whole table — a merge of N records cost N full scans on every
+    // sync cycle. Each lookup is now a single B-tree probe. Index-only change,
+    // so Dexie rebuilds the indexes without touching row data.
+    this.version(8).stores({
+      settings: '++id, syncId',
+      plans: '++id, active, type, [active+type], createdAt, syncId',
+      tasks: '++id, date, planId, status, type, scheduledTime, [date+status], [date+status+type], syncId',
+      bookmarks: '++id, surahId, ayahNumber, [surahId+ayahNumber], createdAt, syncId',
+      pageBookmarks: 'page, createdAt, syncId',
+      prayerRecords: '++id, date, prayer, [date+prayer], confirmedAt, syncId',
+      sunnahRecords: '++id, date, type, [date+type], done, syncId',
+      hifzProgress: '++id, surahId, status, [surahId+status], ratedAt, syncId',
+      hadithFavorites: '++id, hadithId, collection, [collection+hadithId], createdAt, syncId',
+    });
   }
 }
 
@@ -408,18 +425,20 @@ export async function getSettings(): Promise<Settings> {
   return settings;
 }
 
-export async function updateSettings(patch: Partial<Settings>): Promise<void> {
+export async function updateSettings(patch: Partial<Settings>): Promise<Settings> {
   // Always update the canonical row — never `add`, otherwise concurrent callers
   // (onboarding + theme hook + settings screen) can each insert their own row.
+  // The merged row is returned so callers can adopt it directly: the old path
+  // wrote the patch and then re-read the whole table with getSettings(), which
+  // made every settings save one database round trip more than it needed.
   const existing = await db.settings.toArray();
-  const target =
-    existing.length === 0
-      ? SETTINGS_ROW_ID
-      : existing.reduce((min, row) => (row.id! < min.id! ? row : min)).id!;
-
   if (existing.length === 0) {
-    await db.settings.put({ ...DEFAULT_SETTINGS, ...patch, id: SETTINGS_ROW_ID });
-    return;
+    const created: Settings = { ...DEFAULT_SETTINGS, ...patch, id: SETTINGS_ROW_ID };
+    await db.settings.put(created);
+    return created;
   }
-  await db.settings.update(target, { ...patch, id: SETTINGS_ROW_ID });
+  const current = existing.reduce((min, row) => (row.id! < min.id! ? row : min));
+  const merged: Settings = { ...current, ...patch, id: SETTINGS_ROW_ID };
+  await db.settings.update(current.id!, { ...patch, id: SETTINGS_ROW_ID });
+  return merged;
 }

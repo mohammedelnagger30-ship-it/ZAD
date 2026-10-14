@@ -459,7 +459,9 @@ async function deleteLocalRecord(tableName: SyncTableName, recordId: string): Pr
     return true;
   }
   const table = db.table(tableName);
-  const row = await table.toCollection().filter((item: SyncRow) => item.syncId === recordId).first() as SyncRow | undefined;
+  // Indexed since v8: the old collection filter scanned every row of the table
+  // once per incoming record.
+  const row = await table.where('syncId').equals(recordId).first() as SyncRow | undefined;
   if (!row) return false;
   if (tableName === 'pageBookmarks' && typeof row.page === 'number') {
     await db.pageBookmarks.delete(row.page);
@@ -501,9 +503,7 @@ async function applyCloudRecords(records: Map<string, CloudRecord>): Promise<voi
           throw new Error('وصل سجل سحابي ببنية غير صالحة.');
         }
         if (!isHifzPlan(remote.record_data)) throw new Error('وصلت خطة سحابية ببنية غير صالحة.');
-        const existing = await db.plans.toCollection()
-          .filter((item) => item.syncId === remote.record_id)
-          .first();
+        const existing = await db.plans.where('syncId').equals(remote.record_id).first();
         const remoteModifiedAt = Date.parse(remote.modified_at);
         if (existing && (existing.syncModifiedAt ?? 0) >= remoteModifiedAt && !placeholder) {
           if (typeof existing.id === 'number') planIds.set(remote.record_id, existing.id);
@@ -527,9 +527,7 @@ async function applyCloudRecords(records: Map<string, CloudRecord>): Promise<voi
       }
 
       for (const remote of plans.filter((record) => record.is_deleted)) {
-        const localPlan = await db.plans.toCollection()
-          .filter((item) => item.syncId === remote.record_id)
-          .first();
+        const localPlan = await db.plans.where('syncId').equals(remote.record_id).first();
         const localHasTasks = localPlan?.id !== undefined
           && await db.tasks.where('planId').equals(localPlan.id).count() > 0;
         const hasCloudTasks = [...records.values()].some((record) =>
@@ -613,9 +611,7 @@ async function applyCloudRecords(records: Map<string, CloudRecord>): Promise<voi
           continue;
         }
         const table = db.table(tableName);
-        const existing = await table.toCollection()
-          .filter((item: SyncRow) => item.syncId === remote.record_id)
-          .first() as SyncRow | undefined;
+        const existing = await table.where('syncId').equals(remote.record_id).first() as SyncRow | undefined;
         const remoteModifiedAt = Date.parse(remote.modified_at);
         if (existing && (typeof existing.syncModifiedAt === 'number' ? existing.syncModifiedAt : 0) >= remoteModifiedAt) {
           continue;
