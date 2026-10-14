@@ -5,6 +5,7 @@ import { formatBytes } from '@/data/contentCatalog';
 import { AUDIO_RECITERS, loadPreferredReciter, savePreferredReciter } from '@/data/audioReciters';
 import { JUZ_INFO, SURAHS, toArabicNumber } from '@/data/surahs';
 import { audioStatusInStore, removeAudioReciter, removeAudioSurah, subscribeToContent } from '@/utils/contentStore';
+import { useConfirm } from '@/hooks/useConfirm';
 import { downloadSurahAudio } from '@/utils/quranAudio';
 import {
   allSurahIds,
@@ -16,6 +17,7 @@ import {
 } from '@/utils/batchDownload';
 
 export function AudioDownloadManager() {
+  const { confirm, dialog } = useConfirm();
   const [reciterId, setReciterId] = useState(loadPreferredReciter);
   const [surahId, setSurahId] = useState(1);
   const [status, setStatus] = useState<Set<number>>(new Set());
@@ -156,7 +158,14 @@ export function AudioDownloadManager() {
 
   const removeSurah = async (id: number) => {
     const surah = SURAHS.find((item) => item.id === id);
-    if (!surah || !confirm(`حذف تلاوة سورة ${surah.name} للقارئ المحدد من الجهاز؟`)) return;
+    if (!surah) return;
+    const confirmed = await confirm({
+      title: `حذف تلاوة سورة ${surah.name}`,
+      description: 'ستُحذف ملفات التلاوة من هذا الجهاز، وتُستعاد بإعادة تنزيلها متى شئت.',
+      confirmLabel: 'حذف',
+      destructive: true,
+    });
+    if (!confirmed) return;
     await removeAudioSurah(reciterId, id);
   };
 
@@ -389,7 +398,13 @@ export function AudioDownloadManager() {
               <button
                 onClick={async () => {
                   const reciter = AUDIO_RECITERS.find((item) => item.id === reciterId)!;
-                  if (confirm(`حذف كل التلاوات المحفوظة للقارئ ${reciter.name}؟`)) {
+                  const confirmed = await confirm({
+                    title: `حذف كل تلاوات ${reciter.name}`,
+                    description: `ستُحذف كل السور المحفوظة لهذا القارئ — ${toArabicNumber(status.size)} حتى الآن — من هذا الجهاز. تُستعاد بإعادة تنزيلها.`,
+                    confirmLabel: 'حذف الكل',
+                    destructive: true,
+                  });
+                  if (confirmed) {
                     await removeAudioReciter(reciterId);
                   }
                 }}
@@ -401,6 +416,7 @@ export function AudioDownloadManager() {
           )}
         </div>
       </Card>
+      {dialog}
     </section>
   );
 }

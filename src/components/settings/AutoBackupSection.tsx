@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Clock, Calendar, RefreshCw, Trash2, Upload } from 'lucide-react';
 import { Card, SectionHeader, Button } from '@/components/ui';
+import { useConfirm } from '@/hooks/useConfirm';
 import {
   getAutoBackupConfig,
   saveAutoBackupConfig,
@@ -12,6 +13,7 @@ import {
 } from '@/utils/autoBackup';
 
 export function AutoBackupSection() {
+  const { confirm, dialog } = useConfirm();
   const [autoBackupConfig, setAutoBackupConfig] = useState<AutoBackupConfig>(getAutoBackupConfig());
   const [autoBackups, setAutoBackups] = useState<Array<{ date: string; key: string }>>([]);
 
@@ -36,9 +38,17 @@ export function AutoBackupSection() {
   };
 
   const handleRestoreAutoBackup = async (key: string) => {
-    if (!confirm('هل أنت متأكد من استعادة هذه النسخة؟ سيتم استبدال جميع بياناتك الحالية.')) {
-      return;
-    }
+    // The most destructive thing the app can do to itself: the restore
+    // replaces every table, and there is nothing left afterward to restore
+    // from. So the dialog says what disappears rather than asking twice.
+    const confirmed = await confirm({
+      title: 'استعادة هذه النسخة',
+      description:
+        'سيُستبدل كل بيانات التطبيق — العلامات، الخطط، المهامّ، الإعدادات — بما في هذه النسخة، وسيُعاد تشغيل التطبيق. لا يمكن التراجع بعد الاستعادة.',
+      confirmLabel: 'استعادة',
+      destructive: true,
+    });
+    if (!confirmed) return;
 
     const success = await restoreFromBackup(key);
     if (success) {
@@ -49,10 +59,14 @@ export function AutoBackupSection() {
     }
   };
 
-  const handleDeleteAutoBackup = (key: string) => {
-    if (!confirm('هل أنت متأكد من حذف هذه النسخة الاحتياطية؟')) {
-      return;
-    }
+  const handleDeleteAutoBackup = async (key: string) => {
+    const confirmed = await confirm({
+      title: 'حذف هذه النسخة',
+      description: 'ستُحذف من الجهاز نهائيًا، ولن تبقى طريقة لاستعادتها.',
+      confirmLabel: 'حذف',
+      destructive: true,
+    });
+    if (!confirmed) return;
     localStorage.removeItem(key);
     setAutoBackups(getAutoBackups());
   };
@@ -172,7 +186,7 @@ export function AutoBackupSection() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleDeleteAutoBackup(backup.key)}
+                      onClick={() => void handleDeleteAutoBackup(backup.key)}
                       className="p-1.5 rounded-lg text-error-600 hover:bg-error-50 dark:text-error-300 dark:hover:bg-error-900/20"
                       title="حذف"
                     >
@@ -185,6 +199,7 @@ export function AutoBackupSection() {
           </div>
         )}
       </div>
+      {dialog}
     </Card>
   );
 }

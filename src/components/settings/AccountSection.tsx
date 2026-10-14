@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Cloud, LogOut, RefreshCw } from 'lucide-react';
 import { Card, Button } from '@/components/ui';
 import { SectionTitle } from '@/components/settings/SectionTitle';
+import { useConfirm } from '@/hooks/useConfirm';
 import type { CloudSyncState } from '@/utils/cloudSync';
 
 interface AccountSectionProps {
@@ -12,6 +13,7 @@ interface AccountSectionProps {
 }
 
 export function AccountSection({ accountEmail, syncState, onSyncNow, onSignOut }: AccountSectionProps) {
+  const { confirm, dialog } = useConfirm();
   const [accountActionStatus, setAccountActionStatus] = useState('');
   const [accountActionBusy, setAccountActionBusy] = useState(false);
 
@@ -78,9 +80,13 @@ export function AccountSection({ accountEmail, syncState, onSyncNow, onSignOut }
                   // Signing out uploads what is on this device and then deletes the local
                   // copy — a destructive step the button never mentioned. Say what will
                   // happen and let the user decide before anything is cleared.
-                  const proceed = window.confirm(
-                    'سيتم رفع بياناتك إلى حسابك أولاً، ثم حذفها من هذا الجهاز بعد تسجيل الخروج. بياناتك تبقى محفوظة في حسابك وتعود عند تسجيل الدخول مجدداً. هل تريد المتابعة؟',
-                  );
+                  const proceed = await confirm({
+                    title: 'تسجيل الخروج من هذا الجهاز',
+                    description:
+                      'ستُرفع بياناتك إلى حسابك أولًا، ثم تُحذف من هذا الجهاز. تبقى بياناتك محفوظة في حسابك وتعود عند تسجيل الدخول مجددًا.',
+                    confirmLabel: 'متابعة',
+                    destructive: true,
+                  });
                   if (!proceed) return;
                   setAccountActionBusy(true);
                   setAccountActionStatus('');
@@ -105,6 +111,7 @@ export function AccountSection({ accountEmail, syncState, onSyncNow, onSignOut }
           </Card>
         </section>
       )}
+      {dialog}
     </>
   );
 }

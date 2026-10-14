@@ -24,6 +24,7 @@ import { downloadHadithCollection, deleteHadithCollection } from '@/utils/hadith
 import { removeAll } from '@/utils/contentStore';
 import { toArabicNumber, TOTAL_QURAN_AYAHS } from '@/data/surahs';
 import { useHadithBookStatus, useInstalledContent, useTafsirEditionStatus } from '@/hooks/useContent';
+import { useConfirm } from '@/hooks/useConfirm';
 import { AudioDownloadManager } from '@/components/AudioDownloadManager';
 
 /** Progress of one running download, keyed by content id. */
@@ -33,6 +34,7 @@ interface Progress {
 }
 
 export function ContentLibrary({ showTitle = true }: { showTitle?: boolean } = {}) {
+  const { confirm, dialog } = useConfirm();
   const installed = useInstalledContent();
   const tafsirStatus = useTafsirEditionStatus(installed.tafsir);
   const hadithStatus = useHadithBookStatus(installed.hadith);
@@ -186,8 +188,15 @@ export function ContentLibrary({ showTitle = true }: { showTitle?: boolean } = {
             </p>
             {anythingInstalled && (
               <button
-                onClick={() => {
-                  if (confirm('حذف كل التفاسير والأحاديث والتلاوات المحمّلة؟')) void removeAll();
+                onClick={async () => {
+                  const confirmed = await confirm({
+                    title: 'حذف كل المحتوى المحمّل',
+                    description:
+                      'ستُحذف كل التفاسير والأحاديث والتلاوات المحمّلة من هذا الجهاز، ولا يُمسّ ما هو مضمَّن في البرنامج. يُعاد تحميلها متى شئت.',
+                    confirmLabel: 'حذف الكل',
+                    destructive: true,
+                  });
+                  if (confirmed) void removeAll();
                 }}
                 className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-error-50 dark:bg-error-900/20 text-error-600 dark:text-error-300 rounded-lg text-xs font-medium hover:bg-error-100 dark:hover:bg-error-900/40 transition-smooth"
               >
@@ -304,8 +313,14 @@ export function ContentLibrary({ showTitle = true }: { showTitle?: boolean } = {
                       </button>
                     ) : complete ? (
                       <button
-                        onClick={() => {
-                          if (confirm(`حذف ${edition.titleAr} من الجهاز؟`)) {
+                        onClick={async () => {
+                          const confirmed = await confirm({
+                            title: `حذف ${edition.titleAr}`,
+                            description: 'ستُحذف هذه الطبعة من هذا الجهاز، ويُعاد تحميلها متى شئت.',
+                            confirmLabel: 'حذف',
+                            destructive: true,
+                          });
+                          if (confirmed) {
                             void deleteTafsirEdition(edition.id);
                           }
                         }}
@@ -446,8 +461,14 @@ export function ContentLibrary({ showTitle = true }: { showTitle?: boolean } = {
                       </button>
                     ) : isInstalled ? (
                       <button
-                        onClick={() => {
-                          if (confirm(`حذف ${book.titleAr} من الجهاز؟`)) {
+                        onClick={async () => {
+                          const confirmed = await confirm({
+                            title: `حذف ${book.titleAr}`,
+                            description: 'ستُحذف هذه المجموعة من هذا الجهاز، ويُعاد تحميلها متى شئت.',
+                            confirmLabel: 'حذف',
+                            destructive: true,
+                          });
+                          if (confirmed) {
                             void deleteHadithCollection(book.id);
                           }
                         }}
@@ -485,6 +506,7 @@ export function ContentLibrary({ showTitle = true }: { showTitle?: boolean } = {
           </p>
         </div>
       </Card>
+      {dialog}
     </div>
   );
 }
