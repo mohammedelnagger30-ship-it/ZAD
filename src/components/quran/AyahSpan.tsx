@@ -78,9 +78,14 @@ export function AyahSpan({
 
   // The reader paints an ayah's state straight onto the span, so a chosen or kept ayah
   // keeps its wash under the pointer instead of losing it to the hover rule.
+  //
+  // The mark shows in every mode, not only memorising — it is the ayah that was saved,
+  // and it is what lets «محفوظاتي» send you here and have the place recognise where you
+  // have arrived. Hifz mode is where marking is a single tap away, not where marking
+  // exists.
   const stateStyle = selected
     ? { background: 'var(--selected-wash)' }
-    : isHifz && bookmarked
+    : bookmarked
       ? { background: 'var(--bookmark-wash)' }
       : undefined;
 

@@ -1449,6 +1449,11 @@ body {
   gap: 0.4rem;
 }
 
+/* A third answer, for the sheet that has one to give. */
+.mushaf-seg--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .mushaf-seg__item {
   display: flex;
   flex-direction: column;

@@ -657,6 +657,12 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
                   selectedSurah={selectedSurah}
                   setTafsirAyah={setTafsirAyah}
                   playAyah={playAyah}
+                  bookmarked={
+                    ayahChoice !== null && bookmarkedKeys.has(`${selectedSurah.id}:${ayahChoice}`)
+                  }
+                  onToggleBookmark={() => {
+                    if (ayahChoice !== null) toggleBookmark(selectedSurah.id, ayahChoice);
+                  }}
                   ayahChoicePanelRef={ayahChoicePanelRef}
                 />
               </>
