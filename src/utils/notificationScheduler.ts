@@ -11,6 +11,7 @@ import {
 } from '@/utils/prayerTimes';
 import { deviceClockDriftMs, toDeviceClock, trustedNow, trustedNowMs } from '@/utils/clock';
 import { generateDailyTasks, getTodayTasks } from '@/utils/taskManager';
+import { assembleNotificationQueue } from '@/utils/notificationQueue';
 import {
   scheduleAdhanOverlay,
   setAdhanChannel,
@@ -42,12 +43,18 @@ const PRAYER_NOTIFICATION_DAYS = 7;
 
 /**
  * The queue is capped at this many entries, in priority order: prayer fallback
- * alerts, today's task reminders, the hadith, and finally the dhikr filler. It
- * used to reach 100–250 entries — seven days of prayer alerts plus two days of
- * fifteen-minute dhikr slots — and Android's notification store drops the tail
- * of a batch this size, which could take the hadith or a task reminder with it.
- * Fifty is room for every prayer fallback on the horizon plus a full day of
- * tasks and dhikr; what does not fit is filler, cut from the end.
+ * alerts, today's task reminders, the hadith, the pre-prayer reminders, and
+ * finally the dhikr filler. It used to reach 100–250 entries — seven days of
+ * prayer alerts plus two days of fifteen-minute dhikr slots — and Android's
+ * notification store drops the tail of a batch this size, which could take the
+ * hadith or a task reminder with it. Fifty is room for every prayer fallback on
+ * the horizon plus a full day of tasks and dhikr; what does not fit is filler,
+ * cut from the end.
+ *
+ * Enforced in one place, at assembly — see assembleNotificationQueue. Capping
+ * only the filler was not enough: with the fallbacks appended afterwards, a day
+ * whose takeover had failed overflowed anyway, and the tail Android then dropped
+ * was the fallbacks themselves.
  */
 const MAX_SCHEDULED_NOTIFICATIONS = 50;
 
@@ -233,7 +240,14 @@ export async function rescheduleAllNotifications(): Promise<void> {
   //     error), the snapshot is put back so a failed rebuild can never silence the
   //     adhan: previously `cancelAll()` ran first and the swallowed error meant nothing
   //     was re-armed until the next successful open.
-  const queue: LocalNotificationSchema[] = [];
+  //
+  // Built as separate priority buckets rather than one array: the ceiling is applied
+  // once, at assembly (assembleNotificationQueue), and only separate buckets let the
+  // trim eat the filler while the adhan's fallbacks stay untouched at the front.
+  const prePrayerReminders: LocalNotificationSchema[] = [];
+  const taskReminders: LocalNotificationSchema[] = [];
+  const hadithReminders: LocalNotificationSchema[] = [];
+  const dhikrFiller: LocalNotificationSchema[] = [];
 
   // Channels are idempotent and independent of the queue; if this fails, the previously
   // created channels (same ids) are still in place.
@@ -324,7 +338,7 @@ export async function rescheduleAllNotifications(): Promise<void> {
         if (settings.prePrayerReminder > 0) {
           const reminderTime = new Date(prayer.time.getTime() - settings.prePrayerReminder * 60000);
           if (reminderTime.getTime() > now) {
-            queue.push({
+            prePrayerReminders.push({
               id: notificationId.reminder(slot),
               title: `صلاة ${prayer.arabicName} بعد ${settings.prePrayerReminder} دقيقة`,
               body: `استعد — وقتها ${formatTime12h(prayer.time, timeZone)}`,
@@ -351,7 +365,7 @@ export async function rescheduleAllNotifications(): Promise<void> {
     if (scheduledAt <= trustedNow()) continue;
 
     const typeText = task.type === 'hifz' ? 'الحفظ' : 'المراجعة';
-    queue.push({
+    taskReminders.push({
       id: notificationId.task(task.id ?? 0),
       title: `حان وقت ${typeText}`,
       body: `${task.portion} — وردك في ${typeText} اليوم`,
@@ -367,11 +381,15 @@ export async function rescheduleAllNotifications(): Promise<void> {
   hadithTime.setHours(9, 0, 0, 0);
   hadithTime.setDate(hadithTime.getDate() + (hadithTime < trustedNow() ? 1 : 0));
   if (hadithTime > trustedNow()) {
-    queue.push({
+    hadithReminders.push({
       id: notificationId.hadith(),
       title: 'حديث اليوم',
       body: 'حديثٌ مختار لك اليوم — اقرأه في دقيقة',
-      schedule: { at: hadithTime, allowWhileIdle: true },
+      // `hadithTime` is a *true* instant, derived from trustedNow(). Android fires
+      // when the *device* clock reaches the target, so it carries the drift like
+      // every other entry here — without it the hadith sounded drift-shifted while
+      // every prayer alarm around it was corrected.
+      schedule: { at: armedAt(hadithTime), allowWhileIdle: true },
       channelId: 'hadith',
       ...NOTIFICATION_BRAND,
     });
@@ -395,7 +413,14 @@ export async function rescheduleAllNotifications(): Promise<void> {
       const duration = (endMinute - startMinute + 1440) % 1440;
       const now = trustedNow();
       const previousMessageByCategory = new Map<DhikrReminderCategory, number>();
-      const budget = Math.max(0, MAX_SCHEDULED_NOTIFICATIONS - prayerFallbacks.length - queue.length);
+      const budget = Math.max(
+        0,
+        MAX_SCHEDULED_NOTIFICATIONS
+          - prayerFallbacks.length
+          - prePrayerReminders.length
+          - taskReminders.length
+          - hadithReminders.length,
+      );
 
       if (duration > 0 && budget > 0) {
         let armed = 0;
@@ -419,7 +444,7 @@ export async function rescheduleAllNotifications(): Promise<void> {
               .filter((index) => index !== previousIndex);
             const messageIndex = available[Math.floor(Math.random() * available.length)];
             previousMessageByCategory.set(category, messageIndex);
-            queue.push({
+            dhikrFiller.push({
               id: notificationId.dhikr(dayOffset * 1000 + slot),
               title: reminder.title,
               body: reminder.messages[messageIndex],
@@ -451,18 +476,35 @@ export async function rescheduleAllNotifications(): Promise<void> {
     console.warn('Could not snapshot the pending notification queue:', err);
   }
 
+  let overlayArmed = true;
   try {
     await scheduleAdhanOverlay(overlayAlarms);
   } catch (err) {
     // Takeover unavailable (old install, native error): keep the sound notifications.
     console.error('Adhan overlay arming failed — falling back to sound notifications.', err);
-    queue.push(...prayerFallbacks);
+    overlayArmed = false;
   }
+
+  // One assembly, one cap: the fallbacks join only when the takeover failed, and the
+  // trim eats the filler first, so a full queue drops far-future dhikr and reminders
+  // rather than the adhan or today's tasks — the previous build capped only the
+  // filler, then pushed the fallbacks last, so an over-full day had Android drop the
+  // very alerts meant to cover for the failed takeover.
+  const scheduled = assembleNotificationQueue(
+    {
+      prayerFallbacks: overlayArmed ? [] : prayerFallbacks,
+      taskReminders,
+      hadithReminders,
+      prePrayerReminders,
+      dhikrFiller,
+    },
+    MAX_SCHEDULED_NOTIFICATIONS,
+  );
 
   try {
     await cancelAllNotifications(preserveActiveSnooze);
-    if (queue.length > 0) {
-      const result = (await LocalNotifications.schedule({ notifications: queue })) as unknown as
+    if (scheduled.length > 0) {
+      const result = (await LocalNotifications.schedule({ notifications: scheduled })) as unknown as
         { warning?: unknown } | void;
       // The plugin reports a refused downgrade (e.g. the exact-alarm permission
       // vanished mid-call) as `warning` — a string on some versions, an object
