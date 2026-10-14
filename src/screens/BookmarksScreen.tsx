@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Bookmark, Trash2, BookOpen, FileText, Share2, Copy, ArrowUpRight } from 'lucide-react';
+import { Bookmark, Trash2, BookOpen, FileDown, FileText, Share2, Copy, ArrowUpRight } from 'lucide-react';
 import { db, type Bookmark as BookmarkType, type PageBookmark } from '@/db/database';
 import { getSurah, toArabicNumber } from '@/data/surahs';
 import { getAyah } from '@/data/quranText';
 import { Card, EmptyState, Badge } from '@/components/ui';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { buildBookmarksExport } from '@/utils/bookmarkExport';
 import type { ScreenName, NavParams } from '@/hooks/useApp';
 
 interface BookmarksScreenProps {
@@ -31,6 +32,8 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
   const [pageBookmarks, setPageBookmarks] = useState<PageBookmark[]>([]);
   const [loading, setLoading] = useState(true);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  /** True while the whole collection sits on the clipboard after «تصدير». */
+  const [exported, setExported] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<
     { kind: 'ayah'; id: number; label: string } | { kind: 'page'; page: number } | null
   >(null);
@@ -111,6 +114,34 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
     }
   };
 
+  /**
+   * The whole collection, as one block of text that can leave the app.
+   *
+   * Copying an ayah was always there and is no use to someone who marked forty
+   * of them: the marks lived only inside the phone, in a list that could be
+   * read but not taken anywhere. The share sheet when the device has one —
+   * a notebook, a message, a document of the year's memorising — and the
+   * clipboard when it does not.
+   */
+  const exportAll = async () => {
+    const payload = buildBookmarksExport(
+      ayahBookmarks,
+      pageBookmarks.map((page) => page.page),
+    );
+    if (!payload) return;
+    try {
+      if (navigator.share) {
+        await navigator.share({ text: payload });
+      } else {
+        await navigator.clipboard.writeText(payload);
+        setExported(true);
+        setTimeout(() => setExported(false), 2500);
+      }
+    } catch {
+      // A cancelled share sheet is not an error.
+    }
+  };
+
   const confirmDelete = async () => {
     if (!pendingDelete) return;
     if (pendingDelete.kind === 'ayah') {
@@ -135,7 +166,7 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
   return (
     <div className="space-y-5 pb-6">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-primary-100 pb-3 dark:border-primary-800">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-primary-100 pb-3 dark:border-primary-800">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-primary-900 md:text-3xl dark:text-primary-50">
             <Bookmark size={24} className="text-primary-600 dark:text-gold-400" />
@@ -147,13 +178,24 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
               : 'الآيات والصفحات التي علّمتها للرجوع إليها لاحقًا'}
           </p>
         </div>
+        {total > 0 && (
+          <button
+            type="button"
+            onClick={() => void exportAll()}
+            aria-live="polite"
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary-200 bg-white px-4 text-sm font-bold text-primary-700 transition-colors hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:border-primary-700 dark:bg-primary-900/50 dark:text-gold-300 dark:hover:bg-primary-800"
+          >
+            <FileDown size={16} />
+            {exported ? 'نُسخ كنص' : 'تصدير كنص'}
+          </button>
+        )}
       </div>
 
       {total === 0 && (
         <EmptyState
           icon={<Bookmark size={56} strokeWidth={1.2} />}
           title="لا توجد محفوظات بعد"
-          description="اضغط مطولًا على أي آية داخل المصحف لتعليمها، أو علّم صفحة كاملة من شاشة المصحف لتجدها هنا."
+          description="في وضع الحفظ اضغط على الآية مباشرة لتعليمها، وفي الوضع العادي اضغط عليها واختر «حفظ». ويمكنك علّم صفحة كاملة من شاشة المصحف لتجدها هنا."
           action={
             <button
               type="button"
