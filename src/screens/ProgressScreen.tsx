@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Flame, TrendingUp, Award, BookOpen, Check, Calendar, Target, Share2, Download } from 'lucide-react';
+import { Flame, TrendingUp, Award, BookOpen, Check, Target, Share2, Download } from 'lucide-react';
 import { Card, SectionHeader, Button } from '@/components/ui';
 import { db, type Settings } from '@/db/database';
 import { getStreakCount } from '@/utils/taskManager';
 import { getWeeklyPrayerStats, getMonthlyPrayerStats } from '@/utils/prayerTracker';
-import { formatDateKey, getLast30Days, todayKey, addDays } from '@/utils/dateUtils';
 import { TOTAL_QURAN_AYAHS, toArabicNumber } from '@/data/surahs';
 import { DEFAULT_BADGES, shareBadge, type CustomBadge } from '@/data/customBadges';
 import { exportProgressReport } from '@/utils/exportPDF';
+import { YearHeatmap } from '@/components/YearHeatmap';
 
 interface ProgressScreenProps {
   settings?: Settings;
@@ -15,7 +15,6 @@ interface ProgressScreenProps {
 
 export function ProgressScreen({ settings }: ProgressScreenProps) {
   const [streak, setStreak] = useState(0);
-  const [heatmapData, setHeatmapData] = useState<Record<string, { done: number; total: number }>>({});
   const [weeklyStats, setWeeklyStats] = useState<{ total: number; ontime: number; late: number; missed: number; unconfirmed: number; percentage: number } | null>(null);
   const [monthlyStats, setMonthlyStats] = useState<{ total: number; ontime: number; late: number; missed: number; unconfirmed: number; percentage: number } | null>(null);
   const [memorizedAyahs, setMemorizedAyahs] = useState(0);
@@ -39,18 +38,6 @@ export function ProgressScreen({ settings }: ProgressScreenProps) {
   const load = useCallback(async () => {
     const s = await getStreakCount();
     setStreak(s);
-
-    // Heatmap for last 30 days
-    const last30 = getLast30Days();
-    const heatMap: Record<string, { done: number; total: number }> = {};
-    for (const date of last30) {
-      const tasks = await db.tasks.where('date').equals(date).toArray();
-      heatMap[date] = {
-        done: tasks.filter((t) => t.status === 'done').length,
-        total: tasks.length,
-      };
-    }
-    setHeatmapData(heatMap);
 
     // Prayer stats
     setWeeklyStats(await getWeeklyPrayerStats());
@@ -86,23 +73,6 @@ export function ProgressScreen({ settings }: ProgressScreenProps) {
   useEffect(() => { load(); }, [load]);
 
   const memorizationPercent = Math.round((memorizedAyahs / TOTAL_QURAN_AYAHS) * 100);
-
-  // Generate calendar weeks for heatmap
-  const today = new Date();
-  const weeks: string[][] = [];
-  const start = addDays(today, -29);
-  // Align to start of week (Saturday in Arab world)
-  const startDay = start.getDay();
-  const adjustedStart = addDays(start, -startDay);
-  let current = adjustedStart;
-  while (current <= today) {
-    const week: string[] = [];
-    for (let i = 0; i < 7; i++) {
-      week.push(formatDateKey(current));
-      current = addDays(current, 1);
-    }
-    weeks.push(week);
-  }
 
   return (
     <div className="space-y-5 pb-4">
@@ -167,54 +137,7 @@ export function ProgressScreen({ settings }: ProgressScreenProps) {
       </Card>
 
       {/* Calendar heatmap */}
-      <Card>
-        <SectionHeader title="خريطة الالتزام" icon={<Calendar size={20} />} />
-        <div className="overflow-x-auto">
-          <div className="flex gap-1 md:gap-1.5 min-w-max">
-            {weeks.map((week, wi) => (
-              <div key={wi} className="flex flex-col gap-1">
-                {week.map((date) => {
-                  const data = heatmapData[date];
-                  const isToday = date === todayKey();
-                  const isFuture = new Date(date) > today;
-                  const ratio = data && data.total > 0 ? data.done / data.total : 0;
-                  const intensity = isFuture ? 0 : ratio;
-                  return (
-                    <div
-                      key={date}
-                      className={`w-7 h-7 md:w-8 md:h-8 rounded-md transition-smooth ${
-                        isFuture
-                          ? 'bg-gray-50 dark:bg-gray-800/30'
-                          : intensity === 0 && data?.total > 0
-                          ? 'bg-error-100 dark:bg-error-900/30'
-                          : intensity > 0 && intensity < 0.5
-                          ? 'bg-warning-200 dark:bg-warning-800/50'
-                          : intensity >= 0.5 && intensity < 1
-                          ? 'bg-primary-300 dark:bg-primary-700'
-                          : intensity === 1
-                          ? 'bg-primary-500 dark:bg-primary-500'
-                          : 'bg-gray-100 dark:bg-gray-800'
-                      } ${isToday ? 'ring-2 ring-gold-400 ring-offset-1 dark:ring-offset-primary-900' : ''}`}
-                      title={data ? `${date}: ${data.done}/${data.total}` : date}
-                    />
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="flex items-center gap-3 mt-3 text-xs text-gray-500 dark:text-gray-400">
-          <span>أقل</span>
-          <div className="flex gap-1">
-            <div className="w-3 h-3 rounded-sm bg-gray-100 dark:bg-gray-800" />
-            <div className="w-3 h-3 rounded-sm bg-error-100 dark:bg-error-900/30" />
-            <div className="w-3 h-3 rounded-sm bg-warning-200 dark:bg-warning-800/50" />
-            <div className="w-3 h-3 rounded-sm bg-primary-300 dark:bg-primary-700" />
-            <div className="w-3 h-3 rounded-sm bg-primary-500" />
-          </div>
-          <span>أكثر</span>
-        </div>
-      </Card>
+      <YearHeatmap />
 
       {/* Prayer stats */}
       {weeklyStats && monthlyStats && (
