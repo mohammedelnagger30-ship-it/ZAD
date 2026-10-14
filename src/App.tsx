@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ComponentType, useState, useEffect, useCallback } from 'react';
+import { lazy, Suspense, type ComponentType, useState, useEffect, useCallback, useMemo } from 'react';
 import { CloudOff, X } from 'lucide-react';
 import { useSettings, useTheme, useNavigation } from '@/hooks/useApp';
 import { BottomNav } from '@/components/BottomNav';
@@ -470,7 +470,9 @@ function AppContent({
   useEffect(() => {
     const onSyncComplete = () => {
       setSyncRevision((revision) => revision + 1);
-      void reloadSettings();
+      // Silent: a finished sync must refresh the settings in place, not bounce
+      // the app back to its loading screen (scroll position, playing audio…).
+      void reloadSettings({ silent: true });
     };
     window.addEventListener('zad:cloud-sync-complete', onSyncComplete);
     return () => window.removeEventListener('zad:cloud-sync-complete', onSyncComplete);
@@ -492,16 +494,43 @@ function AppContent({
     });
   }, []);
 
-  // Generate daily tasks, mark missed ones, and reschedule notifications on app open
-  useEffect(() => {
-    if (settings) {
-      generateDailyTasks();
-      markMissedTasks();
-      rescheduleAllNotifications();
-      // Initialize auto-backup system
-      initAutoBackup();
-    }
+  // Which settings actually change what is armed on the device. Everything else
+  // (font size, palette, icon style, tips…) must not pay for a queue rebuild:
+  // the effect below used to key on the whole settings object, so every slider
+  // tick re-armed 7 days × 5 prayers and regenerated the day's tasks.
+  const scheduleFingerprint = useMemo(() => {
+    if (!settings) return '';
+    return [
+      settings.calcMethod,
+      settings.asrMadhab,
+      settings.locationMethod,
+      settings.cityName,
+      settings.latitude,
+      settings.longitude,
+      settings.prePrayerReminder,
+      settings.snoozeMinutes,
+      settings.adhanSound,
+      settings.adhanVoiceId,
+      settings.notificationSound,
+      settings.randomDhikrEnabled,
+      settings.randomDhikrCategory,
+      settings.randomDhikrIntervalMinutes,
+      settings.randomDhikrStartTime,
+      settings.randomDhikrEndTime,
+    ].join('|');
   }, [settings]);
+
+  // Generate daily tasks, mark missed ones, and reschedule notifications — but
+  // only when the schedule-relevant settings change (including the first load:
+  // the fingerprint goes from '' to its real value once settings arrive).
+  useEffect(() => {
+    if (!scheduleFingerprint) return;
+    generateDailyTasks();
+    markMissedTasks();
+    rescheduleAllNotifications();
+    // Initialize auto-backup system (latched inside — runs once per session).
+    initAutoBackup();
+  }, [scheduleFingerprint]);
 
   // A trip moves the app with the phone: the new zone's own summer/winter rules
   // come free with its IANA name, a permitted GPS fix gives the real position,

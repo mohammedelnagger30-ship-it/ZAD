@@ -20,16 +20,30 @@ export function useSettings() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
+  /**
+   * `silent` refreshes the settings without touching the UI's loading state.
+   * A cloud sync finishing in the background used to call this plainly, which
+   * flipped the whole app back to its loading screen — scroll position, playing
+   * audio and all. Silent failures keep the data already on screen and only
+   * log: the initial load still reports database errors loudly, with retry.
+   */
+  const load = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent === true;
+    if (!silent) {
+      setLoading(true);
+      setError('');
+    }
     try {
       const s = await getSettings();
       setSettings(s);
     } catch (cause) {
+      if (silent) {
+        console.error('Silent settings reload failed:', cause);
+        return;
+      }
       setError(cause instanceof Error ? cause.message : 'تعذّر قراءة إعدادات التطبيق من قاعدة البيانات.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -38,8 +52,9 @@ export function useSettings() {
   }, [load]);
 
   const save = useCallback(async (patch: Partial<Settings>) => {
-    await updateSettings(patch);
-    const updated = await getSettings();
+    // updateSettings returns the row it wrote, so a save is one read + one
+    // write instead of write-then-read-again.
+    const updated = await updateSettings(patch);
     setSettings(updated);
   }, []);
 
