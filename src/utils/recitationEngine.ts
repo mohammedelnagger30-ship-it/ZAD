@@ -46,6 +46,17 @@ export interface RecitationState {
   error: string | null;
   playbackRate: number;
   repeatCount: number;
+  /**
+   * The system took the sound — an incoming call, audio-focus loss, a headset
+   * unplugged — instead of the listener pressing pause.
+   */
+  interrupted: boolean;
+  /**
+   * A recitation has been started and not stopped: the Media Session stays
+   * registered (in the paused state) so the lock screen can bring it back.
+   * Distinct from `interrupted`, which says *why* it is paused.
+   */
+  sessionOpen: boolean;
 }
 
 const INITIAL_STATE: RecitationState = {
@@ -60,6 +71,8 @@ const INITIAL_STATE: RecitationState = {
   error: null,
   playbackRate: 1,
   repeatCount: 3,
+  interrupted: false,
+  sessionOpen: false,
 };
 
 let state: RecitationState = INITIAL_STATE;
@@ -104,6 +117,8 @@ let continuousRef = false;
 let verseEndRef: number | null = null;
 let repeatRemainingRef = 1;
 let currentTimingRef: VerseTiming | null = null;
+/** What the system was last told, so a state change that alters nothing is not re-published. */
+let sessionSignature = '';
 
 /**
  * The one audio element, created lazily and never torn down.
@@ -120,6 +135,8 @@ function audioEl(): HTMLAudioElement {
   audio.addEventListener('timeupdate', handleTimeUpdate);
   audio.addEventListener('ended', handleEnded);
   audio.addEventListener('error', handleAudioError);
+  audio.addEventListener('pause', handleSystemPause);
+  audio.addEventListener('play', handleSystemPlay);
   if (typeof document !== 'undefined') document.body.appendChild(audio);
   audioElement = audio;
   return audio;
@@ -216,6 +233,74 @@ function handleAudioError(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Interruptions — a call takes the sound, the call gives it back
+// ---------------------------------------------------------------------------
+
+/**
+ * A pause this app did not ask for.
+ *
+ * Every deliberate pause here flips the intent (`isPlaying`) synchronously in
+ * the same tick as `audio.pause()`, and the element's `pause` event is queued
+ * as a task — so by the time this runs, an intent still marked "playing" can
+ * only mean someone else stopped the audio: a phone call, focus loss, a
+ * disconnected headset. `ended` is excluded because a recording that ran out
+ * is not an interruption, and resuming it would replay what has finished.
+ *
+ * The listener is told to stop showing «تُتلى الآن», but nothing is torn down:
+ * the source, the ayah and the Media Session all stay, so the recitation can
+ * pick up where it was.
+ */
+function handleSystemPause(): void {
+  const audio = audioElement;
+  if (!audio || audio.ended) return;
+  if (!state.isPlaying) return;
+  patch({ isPlaying: false, interrupted: true });
+}
+
+/** A play nobody here requested: the system handed the audio back (or we resumed). */
+function handleSystemPlay(): void {
+  if (state.interrupted) patch({ isPlaying: true, interrupted: false });
+}
+
+/**
+ * Resume an interrupted recitation, if there is anything to resume.
+ *
+ * Wired to the two signals a phone actually gives a WebView when a call ends:
+ * the page coming back to the foreground, and it regaining focus as the dialer
+ * closes. Both are checked rather than assumed — an interruption the OS never
+ * lifts (the listener deliberately left it paused) must not be resurrected by
+ * an unrelated focus event, and `interrupted` is the guard that says so.
+ */
+function resumeAfterInterruption(): void {
+  if (!state.interrupted) return;
+  const audio = audioElement;
+  if (!audio || !audio.src || audio.ended) {
+    patch({ interrupted: false });
+    return;
+  }
+  if (!audio.paused) {
+    patch({ isPlaying: true, interrupted: false });
+    return;
+  }
+  audio
+    .play()
+    .then(() => patch({ isPlaying: true, interrupted: false }))
+    .catch(() => {
+      // Still refused (an autoplay policy, say): the play button and the lock
+      // screen both remain, so the listener starts it by hand.
+    });
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') resumeAfterInterruption();
+  });
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('focus', resumeAfterInterruption);
+}
+
+// ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
 
@@ -227,7 +312,14 @@ export function stop(): void {
   verseEndRef = null;
   currentTimingRef = null;
   repeatRemainingRef = 1;
-  patch({ activeAyah: null, isPlaying: false });
+  // Stopping ends the session, unlike pausing it: the lock screen must not
+  // offer to resume a recitation the listener explicitly finished.
+  patch({ activeAyah: null, isPlaying: false, interrupted: false, sessionOpen: false });
+}
+
+/** Playback genuinely started — the moment the Media Session becomes real. */
+function markPlaying(): void {
+  patch({ isPlaying: true, sessionOpen: true });
 }
 
 /** Select an Ayah without playing */
@@ -341,7 +433,7 @@ export function playAyah(ayah: number, continuous = false): void {
     audio
       .play()
       .then(() => {
-        patch({ isPlaying: true });
+        markPlaying();
       })
       .catch((cause: unknown) => {
         patch({
@@ -382,7 +474,7 @@ export function playAyah(ayah: number, continuous = false): void {
   audio
     .play()
     .then(() => {
-      patch({ isPlaying: true });
+      markPlaying();
     })
     .catch((cause: unknown) => {
       patch({
@@ -402,11 +494,9 @@ export async function playAyahEnsured(ayah: number, continuous = false): Promise
 export async function startSelectedAyah(): Promise<void> {
   const ayah = state.selectedAyah;
   if (ayah === null) return;
-  const audio = audioEl();
 
   if (activeAyahRef === ayah && state.isPlaying) {
-    audio.pause();
-    patch({ isPlaying: false });
+    pausePlayback();
     return;
   }
 
@@ -429,15 +519,14 @@ export async function toggleSurah(): Promise<void> {
   const audio = audioEl();
 
   if (state.isPlaying) {
-    audio.pause();
-    patch({ isPlaying: false });
+    pausePlayback();
     return;
   }
 
   if (activeAyahRef !== null && continuousRef) {
     audio
       .play()
-      .then(() => patch({ isPlaying: true }))
+      .then(() => markPlaying())
       .catch(() => patch({ isPlaying: false }));
     return;
   }
@@ -485,42 +574,90 @@ export function setTrack(track: {
 // ---------------------------------------------------------------------------
 
 /**
- * Publish the playing recitation as a system media session.
+ * Publish the recitation as a system media session.
  *
  * While sound is playing, the lock screen, Bluetooth headphones and the OS
  * media controls show the surah and reciter and can drive the same element.
- * Re-run after every state change so a track change or a reciter change is
- * reflected without waiting for the next play.
+ * The card is kept alive while a recitation is merely *paused* — not just
+ * while it sounds — because that is exactly when it is needed: an interrupted
+ * one must be resumable the moment the call ends, without the listener
+ * unlocking the phone and finding the reader.
+ *
+ * The signature guard keeps a session that is already correct untouched: a
+ * reader tapping through ayahs patches state far more often than anything the
+ * system needs to hear about.
  */
 function syncMediaSession(): void {
   if (!audioElement) return;
-  if (state.isPlaying) {
-    const reciter = state.reciterId
-      ? AUDIO_RECITERS.find((item) => item.id === state.reciterId)
-      : undefined;
-    setMediaSession(
-      {
-        title: state.surahName ? `سورة ${state.surahName}` : 'تلاوة قرآنية',
-        artist: reciter?.name ?? 'القرآن الكريم',
-        album: 'قُرّة — تلاوة وحفظ',
-        artworkUrl: '/icons/icon-512.png',
-      },
-      {
-        onPlay: resumeFromSession,
-        onPause: pausePlayback,
-        onStop: stop,
-      },
-    );
-    setMediaPlaybackState('playing');
+  const signature = `${state.surahId}|${state.reciterId}|${
+    state.isPlaying ? 'playing' : state.sessionOpen ? 'paused' : 'none'
+  }`;
+  if (signature === sessionSignature) return;
+  sessionSignature = signature;
+
+  if (state.isPlaying || state.sessionOpen) {
+    registerSession();
+    setMediaPlaybackState(state.isPlaying ? 'playing' : 'paused');
     return;
   }
-  // Nothing sounding: drop the session when nothing is loaded either, otherwise
-  // leave only the paused hint (the original effect's behaviour — handlers are
-  // re-registered the moment playback resumes).
   clearMediaSession();
-  if (state.activeAyah !== null || audioElement.src) {
-    setMediaPlaybackState('paused');
+}
+
+function registerSession(): void {
+  const reciter = state.reciterId
+    ? AUDIO_RECITERS.find((item) => item.id === state.reciterId)
+    : undefined;
+  setMediaSession(
+    {
+      title: state.surahName ? `سورة ${state.surahName}` : 'تلاوة قرآنية',
+      artist: reciter?.name ?? 'القرآن الكريم',
+      album: 'قُرّة — تلاوة وحفظ',
+      artworkUrl: '/icons/icon-512.png',
+    },
+    {
+      onPlay: resumeFromSession,
+      onPause: pausePlayback,
+      onStop: stop,
+      // «السابق/التالي» on a headset or a car dashboard — the memoriser's
+      // hands are on the wheel or the mushaf, not on the screen.
+      onSeekBack: () => stepAyah(-1),
+      onSeekForward: () => stepAyah(1),
+    },
+  );
+}
+
+/**
+ * Move one ayah forward or back without leaving the screen.
+ *
+ * A skip while sounding reuses `playAyah`, so the repeat mode, the continuous
+ * walk and the highlight all follow. A skip while *paused* only moves the
+ * needle: pressing «التالي» on a headset must not start making sound the
+ * listener had put a stop to.
+ */
+function stepAyah(delta: number): void {
+  const prepared = sourceRef;
+  if (!prepared || prepared.verseTimings.length === 0) return;
+
+  const firstAyah = prepared.verseTimings[0].ayah;
+  const lastAyah = prepared.verseTimings[prepared.verseTimings.length - 1].ayah;
+  const current = activeAyahRef ?? state.selectedAyah ?? firstAyah;
+  const next = Math.min(lastAyah, Math.max(firstAyah, current + delta));
+  if (next === current) return;
+
+  if (state.isPlaying) {
+    playAyah(next, continuousRef);
+    return;
   }
+
+  const timing = prepared.verseTimings.find((item) => item.ayah === next);
+  const audio = audioElement;
+  if (!timing || !audio) return;
+  if (audio.src !== prepared.url) audio.src = prepared.url;
+  audio.currentTime = timing.startMs / 1000;
+  activeAyahRef = next;
+  currentTimingRef = timing;
+  if (!continuousRef) verseEndRef = timing.endMs / 1000;
+  patch({ activeAyah: next, selectedAyah: next });
 }
 
 /** The lock screen's play button drives the exact same code path as an on-screen tap. */
@@ -529,13 +666,19 @@ function resumeFromSession(): void {
   if (!audio || !audio.src) return;
   audio
     .play()
-    .then(() => patch({ isPlaying: true }))
+    .then(() => markPlaying())
     .catch(() => patch({ isPlaying: false }));
 }
 
-/** The lock screen's pause button. */
+/**
+ * The listener paused it — on screen or from the lock screen.
+ *
+ * Not an interruption: the session stays open (so the card survives with its
+ * handlers intact) and the intent is cleared so the element's own `pause`
+ * event, which arrives a tick later, is recognised as ours.
+ */
 function pausePlayback(): void {
   const audio = audioElement;
   if (audio && !audio.paused) audio.pause();
-  patch({ isPlaying: false });
+  patch({ isPlaying: false, interrupted: false });
 }
