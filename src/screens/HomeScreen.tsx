@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Check, X, Clock, Flame, BookOpen, Moon, Sunrise, BookText, ChevronLeft, Sparkles, Calendar, Heart, Repeat } from 'lucide-react';
+import { Check, X, Clock, Flame, BookOpen, Moon, Sunrise, BookText, ChevronLeft, Sparkles, Calendar, Heart, Repeat, Share2 } from 'lucide-react';
 import { Card, Button, Badge, SectionHeader, EmptyState, type BadgeProps } from '@/components/ui';
 import { PrayerStatusSheet } from '@/components/PrayerStatusSheet';
 import { type DailyTask, type Settings, type StrengthRating, type TaskStatus } from '@/db/database';
@@ -26,6 +26,7 @@ import { todayKey, formatArabicDate, getHijriDate, getDayName } from '@/utils/da
 // module is imported on demand in the effect below — a static import here would
 // put the full text chunk on the app's very first screen.
 import type { DailyQuranMessage } from '@/utils/dailyQuranMessage';
+import { shareAyahCard } from '@/utils/shareCard';
 import { getHadithCollection, hadithOfDay, installedCollections, HADITH_OF_DAY_BOOK } from '@/data/hadiths';
 import { toArabicNumber } from '@/data/surahs';
 import type { ScreenName, NavParams } from '@/hooks/useApp';
@@ -42,6 +43,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
   const [sunnahRecords, setSunnahRecords] = useState<Record<string, boolean>>({});
   const [dailyQuranMessage, setDailyQuranMessage] = useState<DailyQuranMessage | null>(null);
   const [dailyQuranMessageError, setDailyQuranMessageError] = useState('');
+  const [shareNotice, setShareNotice] = useState<string | null>(null);
   // Reference clock for the countdown: armed once, ticking per-second only in the
   // last minute before the next prayer (see useCountdownClock) instead of
   // re-rendering this screen every second of the day.
@@ -91,6 +93,33 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
       alive = false;
     };
   }, [messageDayKey]);
+
+  /**
+   * Sends the day's ayah as a picture.
+   *
+   * The card does the work; what is decided here is only what to say
+   * afterwards. A share sheet that opened is the feature doing its job, and a
+   * person who closed it changed their mind — neither is a message worth
+   * putting on the screen. Only the two cases that left the ayah stuck on the
+   * phone say anything.
+   */
+  const shareDailyAyah = async () => {
+    if (!dailyQuranMessage) return;
+    const outcome = await shareAyahCard({
+      surahId: dailyQuranMessage.surahId,
+      ayahText: dailyQuranMessage.text,
+      surahName: dailyQuranMessage.surahName,
+      ayahNumber: dailyQuranMessage.ayahNumber,
+    });
+    if (outcome === 'shared' || outcome === 'cancelled') return;
+
+    setShareNotice(
+      outcome === 'copied'
+        ? 'المشاركة غير متاحة هنا — نُسخت الآية بدلاً منها.'
+        : 'تعذّرت المشاركة على هذا الجهاز.',
+    );
+    setTimeout(() => setShareNotice(null), 3000);
+  };
 
   // Prayer times for a calendar day never change while the day lasts; the shared
   // hook pins the calculation to the city's day (see usePrayerSchedule), and the
@@ -286,7 +315,17 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
       <Card className="border-gold-200 bg-linear-to-bl from-gold-50 to-white dark:border-gold-800/50 dark:from-gold-900/20 dark:to-primary-900/50">
         <div className="flex items-center gap-2 text-primary-700 dark:text-gold-300">
           <Sparkles size={18} />
-          <h2 className="font-bold">رسالة اليوم من القرآن</h2>
+          <h2 className="flex-1 font-bold">رسالة اليوم من القرآن</h2>
+          {dailyQuranMessage && (
+            <button
+              type="button"
+              onClick={() => void shareDailyAyah()}
+              aria-label="مشاركة الآية كصورة"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-primary-600/70 transition-colors hover:bg-primary-100 hover:text-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-gold-400/80 dark:hover:bg-primary-800/40 dark:hover:text-gold-200"
+            >
+              <Share2 size={16} />
+            </button>
+          )}
         </div>
         {dailyQuranMessage ? (
           <>
@@ -296,9 +335,15 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
             <p className="mt-2 text-xs md:text-sm text-gray-500 dark:text-gray-400">
               سورة {dailyQuranMessage.surahName} — الآية {toArabicNumber(dailyQuranMessage.ayahNumber)}
             </p>
-            <p className="mt-1 text-[11px] md:text-sm text-gray-400 dark:text-gray-500">
-              آية للتدبر من نص المصحف؛ لا تُعرض كتفسير للآية.
-            </p>
+            {shareNotice ? (
+              <p role="status" className="mt-1 text-[11px] md:text-sm text-success-700 dark:text-success-300">
+                {shareNotice}
+              </p>
+            ) : (
+              <p className="mt-1 text-[11px] md:text-sm text-gray-400 dark:text-gray-500">
+                آية للتدبر من نص المصحف؛ لا تُعرض كتفسير للآية.
+              </p>
+            )}
           </>
         ) : (
           <p role="status" className="mt-3 text-sm text-error-700 dark:text-error-300">

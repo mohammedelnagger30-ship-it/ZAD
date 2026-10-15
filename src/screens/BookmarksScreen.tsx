@@ -6,6 +6,7 @@ import { getAyah } from '@/data/quranText';
 import { Card, EmptyState, Badge } from '@/components/ui';
 import { useSnackbar } from '@/hooks/useSnackbar';
 import { buildBookmarksExport } from '@/utils/bookmarkExport';
+import { shareAyahCard, shareTextOrCopy } from '@/utils/shareCard';
 import type { ScreenName, NavParams } from '@/hooks/useApp';
 
 interface BookmarksScreenProps {
@@ -87,7 +88,9 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
   const ayahKey = (bm: AyahBookmarkRow) => `${bm.surahId}:${bm.ayahNumber}`;
 
   const copyAyah = async (bm: AyahBookmarkRow) => {
-    if (!bm.text) return;
+    // Both are needed and neither may be interpolated as "undefined": the text
+    // is what is copied and the name is what says where the ayah came from.
+    if (!bm.text || !bm.surahName) return;
     const payload = `﴿${bm.text}﴾\n${bm.surahName} — الآية ${toArabicNumber(bm.ayahNumber)}`;
     try {
       await navigator.clipboard.writeText(payload);
@@ -98,18 +101,26 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
     }
   };
 
+  /**
+   * Shares the ayah as a picture, with the words behind it.
+   *
+   * The card is drawn first and the system sheet takes the image; a device
+   * that will not take an image gets the text instead, and one with no sheet
+   * at all gets the clipboard and the very same «تم النسخ» the copy button
+   * shows. Those two cases are the only ones that leave the ayah stuck on the
+   * phone, so they are the only ones that say anything on screen.
+   */
   const shareAyah = async (bm: AyahBookmarkRow) => {
-    if (!bm.text) return;
-    const payload = `﴿${bm.text}﴾\n${bm.surahName} — الآية ${toArabicNumber(bm.ayahNumber)}`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ text: payload });
-      } else {
-        await copyAyah(bm);
-      }
-    } catch {
-      // A cancelled share sheet is not an error.
-    }
+    if (!bm.text || !bm.surahName) return;
+    const outcome = await shareAyahCard({
+      surahId: bm.surahId,
+      ayahText: bm.text,
+      surahName: bm.surahName,
+      ayahNumber: bm.ayahNumber,
+    });
+    if (outcome !== 'copied') return;
+    setCopiedKey(ayahKey(bm));
+    setTimeout(() => setCopiedKey(null), 2500);
   };
 
   /**
@@ -127,16 +138,12 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
       pageBookmarks.map((page) => page.page),
     );
     if (!payload) return;
-    try {
-      if (navigator.share) {
-        await navigator.share({ text: payload });
-      } else {
-        await navigator.clipboard.writeText(payload);
-        setExported(true);
-        setTimeout(() => setExported(false), 2500);
-      }
-    } catch {
-      // A cancelled share sheet is not an error.
+    // The sheet, or the clipboard beneath it. Only the clipboard path announces
+    // itself: a copy that says nothing is a copy the person never learns happened.
+    const outcome = await shareTextOrCopy(payload);
+    if (outcome === 'copied') {
+      setExported(true);
+      setTimeout(() => setExported(false), 2500);
     }
   };
 
