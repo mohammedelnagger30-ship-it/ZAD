@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The adhan voices and the notification tap sound are addressed by NAME at
+  runtime: Capacitor's channel builder resolves `sound: 'adhan_….mp3'` through
+  getIdentifier("raw"), which R8's resource shrinker cannot see — it keeps only
+  compile-time references, so without this file it strips every voice, and the
+  prayer channels would arm, ring "successfully", and stay silent. tools:keep
+  pins them (and any future adhan_*) regardless of how minify/shrink evolves.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@raw/adhan_*,@raw/notification" />
