@@ -36,5 +36,9 @@ describe('isValidBackupRow', () => {
     expect(BACKUP_TABLES).toContain('settings');
     expect(BACKUP_TABLES).toContain('khatmah');
     expect(BACKUP_TABLES).toContain('hadithFavorites');
+    // The spaced-repetition schedule, and the one a second hand-written copy
+    // of the exporter once dropped: an export that omitted it left the import
+    // reporting success over a database still holding the old intervals.
+    expect(BACKUP_TABLES).toContain('hifzReviews');
   });
 });

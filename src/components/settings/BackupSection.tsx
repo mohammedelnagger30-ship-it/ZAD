@@ -7,6 +7,7 @@ import {
   ADHKAR_STATE_KEY,
   BACKUP_TABLES,
   IGNORED_BACKUP_KEYS,
+  backupData,
   isValidAdhkarBackup,
   isValidBackupRow,
   type BackupTable,
@@ -24,21 +25,15 @@ export function BackupSection() {
 
   const handleExport = useCallback(async () => {
     try {
-      const data: Record<string, unknown> = {
-        _exportDate: new Date().toISOString(),
-      };
-      data.settings = [await db.settings.get(1)];
-      data.plans = await db.plans.toArray();
-      data.tasks = await db.tasks.toArray();
-      data.bookmarks = await db.bookmarks.toArray();
-      data.pageBookmarks = await db.pageBookmarks.toArray();
-      data.prayerRecords = await db.prayerRecords.toArray();
-      data.sunnahRecords = await db.sunnahRecords.toArray();
-      data.hifzProgress = await db.hifzProgress.toArray();
-      data.hadithFavorites = await db.hadithFavorites.toArray();
-      data.khatmah = await db.khatmah.toArray();
-      const adhkarState = localStorage.getItem(ADHKAR_STATE_KEY);
-      if (adhkarState) data.adhkar = JSON.parse(adhkarState) as unknown;
+      // The builder the automatic backup already uses — not a second copy of
+      // it. This *was* a second copy, written out table by table, and it had
+      // drifted in exactly the way `backup.ts` warns about: it never wrote
+      // `hifzReviews`, so an export silently dropped the whole spaced-repetition
+      // schedule while the importer — which skips any table the file does not
+      // carry — left the stale rows behind and reported a successful restore.
+      // A backup that says it succeeded and does not contain what it claims to
+      // is worse than one that fails loudly.
+      const data = await backupData();
 
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
