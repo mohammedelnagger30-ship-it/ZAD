@@ -6,17 +6,18 @@ import android.content.Intent;
 import android.util.Log;
 
 /**
- * Boot receiver to reschedule prayer notifications after device reboot.
+ * Re-arms the adhan after the events that wipe a package's alarms.
  *
- * Android drops pending alarms when the device is rebooted, so the only way the adhan
- * survives a reboot is to bring the app up once so its JS scheduler re-arms the queue.
- * The activity is started with {@link MainActivity#ACTION_RESCHEDULE} and closes itself
- * again once the bridge has loaded.
+ * Android drops pending alarms on reboot, and several OEM skins drop them on
+ * update as well. This receiver used to start the whole app so the JS scheduler
+ * could rebuild the queue — but Android 10+ refuses background activity starts,
+ * so on precisely the phones that need it most that path silently did nothing,
+ * and the adhan stayed off until the next manual open.
  *
- * Modern Android blocks background activity starts from receivers; when that happens
- * the {@code startActivity} below fails, is logged, and the next manual app open
- * re-arms the queue instead — the failure mode is "adhan late until next open", never
- * a crash.
+ * Now the last armed batch is restored straight from storage: no WebView to
+ * load, no visible launch, no permission to hope for. The periodic
+ * {@link AdhanHealJob} is registered here too, so even a cleaner that strikes
+ * later is still answered within hours.
  */
 public class BootReceiver extends BroadcastReceiver {
     private static final String TAG = "BootReceiver";
@@ -28,26 +29,14 @@ public class BootReceiver extends BroadcastReceiver {
         }
 
         String action = intent.getAction();
-        Log.d(TAG, "Boot receiver triggered: " + action);
+        if (Intent.ACTION_BOOT_COMPLETED.equals(action) ||
+            "android.intent.action.QUICKBOOT_POWERON".equals(action) ||
+            "com.htc.intent.action.QUICKBOOT_POWERON".equals(action) ||
+            Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
 
-        if (action.equals(Intent.ACTION_BOOT_COMPLETED) ||
-            action.equals("android.intent.action.QUICKBOOT_POWERON") ||
-            action.equals("com.htc.intent.action.QUICKBOOT_POWERON")) {
-
-            Log.d(TAG, "Starting application to reschedule notifications");
-
-            try {
-                Intent launchIntent = new Intent(context, MainActivity.class);
-                // The action must travel with the intent. An intent built from the
-                // class alone arrives with action=null, so MainActivity never matched
-                // its boot check and never called finish() — the app used to pop up
-                // on every reboot and stay open.
-                launchIntent.setAction(MainActivity.ACTION_RESCHEDULE);
-                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                context.startActivity(launchIntent);
-            } catch (Exception e) {
-                Log.e(TAG, "Failed to start app on boot", e);
-            }
+            boolean healed = AdhanOverlay.healIfMissing(context);
+            AdhanHealJob.register(context);
+            Log.d(TAG, "Re-armed after " + action + " (re-armed: " + healed + ")");
         }
     }
 }

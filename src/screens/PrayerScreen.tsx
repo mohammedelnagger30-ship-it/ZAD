@@ -4,6 +4,7 @@ import { Card, Button, Badge, SectionHeader, EmptyState } from '@/components/ui'
 import { PrayerStatusSheet } from '@/components/PrayerStatusSheet';
 import { PrayerWeekGrid } from '@/components/PrayerWeekGrid';
 import { QiblaCompass } from '@/components/QiblaCompass';
+import { DeviceProtectionBanner } from '@/components/DeviceProtectionBanner';
 import type { Settings } from '@/db/database';
 import type { NavParams, ScreenName } from '@/hooks/useApp';
 import {
@@ -286,6 +287,9 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
       </div>
 
       <GuideBanner navigate={navigate} />
+
+      {/* Only when the device itself can silence the adhan — nothing to show otherwise. */}
+      <DeviceProtectionBanner />
 
       {/* Enhanced Next Prayer Highlight */}
       {nextPrayer && (

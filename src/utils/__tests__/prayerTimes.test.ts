@@ -101,9 +101,35 @@ describe('zoneOffsetMs', () => {
     expect(offsets).toEqual([3 * 3_600_000, 2 * 3_600_000]);
   });
 
-  it('still follows the platform for zones the bundle does not carry', () => {
+  it('still answers Riyadh and UTC', () => {
     expect(zoneOffsetMs('Asia/Riyadh', new Date('2026-10-15T12:00:00Z'))).toBe(3 * 3_600_000);
     expect(zoneOffsetMs('UTC', new Date('2026-10-15T12:00:00Z'))).toBe(0);
+  });
+
+  it('answers for every country from the bundled database, engine or no engine', () => {
+    const offsets = withBrokenPlatformFormatter(() => [
+      zoneOffsetMs('America/New_York', new Date('2026-07-15T12:00:00Z')), // EDT
+      zoneOffsetMs('Europe/Paris', new Date('2026-07-15T12:00:00Z')), // CEST
+      zoneOffsetMs('Africa/Casablanca', new Date('2026-07-15T12:00:00Z')), // +01 year-round
+      zoneOffsetMs('Asia/Amman', new Date('2026-07-15T12:00:00Z')), // Jordan: +03 since 2022
+      zoneOffsetMs('Asia/Tokyo', new Date('2026-07-15T12:00:00Z')), // +09
+    ]);
+    expect(offsets).toEqual([
+      -4 * 3_600_000,
+      2 * 3_600_000,
+      1 * 3_600_000,
+      3 * 3_600_000,
+      9 * 3_600_000,
+    ]);
+  });
+
+  it('switches at the exact European and American boundaries of 2026', () => {
+    // Europe: DST ends Sun Oct 25 03:00 CEST (= 01:00 UTC).
+    expect(zoneOffsetMs('Europe/Paris', new Date('2026-10-25T00:59:00Z'))).toBe(2 * 3_600_000);
+    expect(zoneOffsetMs('Europe/Paris', new Date('2026-10-25T01:00:00Z'))).toBe(1 * 3_600_000);
+    // America: DST ends Sun Nov 1 02:00 EDT (= 06:00 UTC).
+    expect(zoneOffsetMs('America/New_York', new Date('2026-11-01T05:59:00Z'))).toBe(-4 * 3_600_000);
+    expect(zoneOffsetMs('America/New_York', new Date('2026-11-01T06:00:00Z'))).toBe(-5 * 3_600_000);
   });
 });
 
@@ -118,9 +144,14 @@ describe('formatTime12h', () => {
 
   it('survives a platform formatter that throws', () => {
     expect(withBrokenPlatformFormatter(() => formatTime12h(isha, 'Africa/Cairo'))).toBe('7:42 م');
+    // Paris in October (still CEST, +02 until the 25th): a city no Egyptian rule
+    // covers, on an engine that knows nothing — the bundled database still
+    // renders its wall clock.
+    expect(withBrokenPlatformFormatter(() => formatTime12h(isha, 'Europe/Paris'))).toBe('6:42 م');
+    expect(withBrokenPlatformFormatter(() => formatTime12h(new Date('2026-10-25T02:30:00Z'), 'Europe/Paris'))).toBe('3:30 ص');
   });
 
-  it('still follows the platform for zones the bundle does not carry', () => {
+  it('renders fixed-offset zones from the bundled database', () => {
     expect(formatTime12h(isha, 'Asia/Riyadh')).toBe('7:42 م'); // fixed +03
     expect(formatTime12h(isha, 'Asia/Dubai')).toBe('8:42 م'); // fixed +04
     expect(formatTime12h(isha, 'UTC')).toBe('4:42 م');

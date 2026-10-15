@@ -43,6 +43,8 @@ interface AdhanOverlayPlugin {
     soundPath: string;
   }): Promise<void>;
   setKeepScreenOn(options: { on: boolean }): Promise<void>;
+  protectionStatus(): Promise<ProtectionStatus>;
+  openProtectionSettings(options: { target: ProtectionTarget }): Promise<void>;
   addListener(
     eventName: 'adhanReceived' | 'adhanLaunch',
     listenerFunc: (data: AdhanOverlayEvent) => void,
@@ -50,6 +52,22 @@ interface AdhanOverlayPlugin {
 }
 
 const AdhanOverlay = registerPlugin<AdhanOverlayPlugin>('AdhanOverlay');
+
+/**
+ * Whether anything on the device can hold the adhan back — the device's own
+ * answers, read natively, because a WebView cannot see any of them.
+ */
+export interface ProtectionStatus {
+  /** Notifications allowed for this app in the system settings. */
+  notificationsEnabled: boolean;
+  /** Android 12+ exact-alarm permission: without it prayers ring in batches. */
+  exactAlarmsAllowed: boolean;
+  /** Battery optimisation exempted — otherwise doze may postpone a prayer. */
+  ignoringBatteryOptimizations: boolean;
+}
+
+/** Which system screen a fix should open. */
+export type ProtectionTarget = 'notifications' | 'exact' | 'battery' | 'autostart';
 
 /**
  * Replace the armed takeover alarms with this batch (empty = cancel all).
@@ -104,6 +122,37 @@ export async function cancelAdhanOverlay(): Promise<void> {
     await AdhanOverlay.cancelAll();
   } catch (err) {
     console.warn('Could not cancel the adhan overlay alarms:', err);
+  }
+}
+
+/**
+ * The device's own verdict on whether the adhan can ring: notifications open,
+ * exact alarms allowed, battery optimisation lifted. `null` on the web (or when
+ * the native side is missing) — callers hide themselves then, because there is
+ * no device to speak of.
+ */
+export async function getProtectionStatus(): Promise<ProtectionStatus | null> {
+  if (!Capacitor.isNativePlatform()) return null;
+  try {
+    return await AdhanOverlay.protectionStatus();
+  } catch (err) {
+    console.warn('Could not read the protection status:', err);
+    return null;
+  }
+}
+
+/**
+ * Open the system screen that lifts one of the restrictions
+ * {@link getProtectionStatus} reports. The native side falls back to the app
+ * details page whenever a ROM does not carry the screen asked for, so this
+ * never dead-ends.
+ */
+export async function openProtectionSettings(target: ProtectionTarget): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    await AdhanOverlay.openProtectionSettings({ target });
+  } catch (err) {
+    console.warn('Could not open the protection settings:', err);
   }
 }
 

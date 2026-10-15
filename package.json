@@ -33,6 +33,8 @@
     "@capacitor/core": "^8.5.2",
     "@capacitor/filesystem": "^8.1.4",
     "@capacitor/local-notifications": "^8.3.1",
+    "@js-joda/core": "^6.3.0",
+    "@js-joda/timezone": "^3.1.0",
     "@supabase/supabase-js": "^2.117.2",
     "adhan": "^4.4.6",
     "dexie": "^4.4.6",

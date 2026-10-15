@@ -52,8 +52,18 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
                 <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+                <!-- Updates wipe pending alarms on several OEM skins; the same
+                     silent re-arm covers them as it covers a reboot. -->
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+
+        <!-- Periodic self-heal: restores the adhan alarms when an OEM cleaner
+             drops them without announcing it. -->
+        <service
+            android:name=".AdhanHealJob"
+            android:permission="android.permission.BIND_JOB_SERVICE"
+            android:exported="true" />
 
         <!-- Home-screen widget. `exported="false"` is what the platform's own
              documentation uses for an AppWidgetProvider: the only broadcast it
@@ -93,6 +103,9 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!-- Powers the one-tap battery-exemption prompt: the system only raises it
+         for apps holding this, and a postponed adhan is a missed adhan. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Lets the adhan page take over the screen at prayer time while the app is
          closed (full-screen intent — the mechanism alarm clocks use). -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />

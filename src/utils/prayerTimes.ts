@@ -8,6 +8,13 @@ import {
   Madhab,
 } from 'adhan';
 import { trustedNow, trustedNowMs } from '@/utils/clock';
+// The app's own copy of the IANA time-zone database. WebView engines never update
+// once the phone ships, so the platform's rules rot: a 2018 engine believes Egypt
+// never restored summer time, and every zone the calendar touches would drift an
+// hour whenever its country changed the rules. Shipping the database inside the
+// bundle makes the answer identical on every engine, everywhere, forever.
+import { Instant, ZoneId, ZonedDateTime } from '@js-joda/core';
+import '@js-joda/timezone';
 
 export interface PrayerTimeInfo {
   name: string;
@@ -218,6 +225,10 @@ export function getIqamahTime(
 }
 
 function isTimeZone(value: string): boolean {
+  // The bundled database is asked first: it knows zones an old engine's ICU
+  // would reject outright (or spell differently), so a valid city is never
+  // discarded just because the phone's engine predates it.
+  if (tzDatabaseZoneOffsetMs(value, new Date()) !== null) return true;
   try {
     new Intl.DateTimeFormat('en', { timeZone: value });
     return true;
@@ -236,17 +247,20 @@ export interface CalendarDay {
 /**
  * The UTC offset `timeZone` observes at the instant `at`.
  *
- * The platform's ICU answers for most zones — but not, reliably, for the one
- * the prayer table leans on hardest. A phone can leave the factory with a
- * WebView whose engine never updates, and those engines still carry pre-2023
- * tzdata, where Egypt's restored summer time simply does not exist: every
- * prayer would then render an hour off for half the year, and a reader who
- * compares against the official times would see the app as wrong. The rules
- * this calendar actually depends on are therefore carried inside the app, and
- * only zones the bundle says nothing about fall back to the platform.
+ * Three layers, most trustworthy first:
+ *
+ *  1. the handwritten rules the app carries for the zones this calendar was
+ *     shipped against (Egypt — field-proven on engines as old as WebView 70);
+ *  2. the IANA database shipped inside the bundle — correct for *every* zone on
+ *     *every* engine, which is what makes a phone from any factory, any country
+ *     and any vintage show the same wall clock;
+ *  3. the platform's own ICU, only where both the bundle and the database fail
+ *     to recognise the name (a zone added after the bundle shipped, say).
  */
 export function zoneOffsetMs(timeZone: string, at: Date): number {
-  return bundledZoneOffsetMs(timeZone, at) ?? platformZoneOffsetMs(timeZone, at);
+  return bundledZoneOffsetMs(timeZone, at)
+    ?? tzDatabaseZoneOffsetMs(timeZone, at)
+    ?? platformZoneOffsetMs(timeZone, at);
 }
 
 const HOUR_MS = 3_600_000;
@@ -278,11 +292,33 @@ function egyptOffsetMs(at: Date): number | null {
   return at.getTime() >= dstStarts && at.getTime() < dstEnds ? 3 * HOUR_MS : 2 * HOUR_MS;
 }
 
-/** Offset rules the app carries itself, `null` wherever the platform must answer. */
+/** Offset rules the app carries itself, `null` wherever the database must answer. */
 function bundledZoneOffsetMs(timeZone: string, at: Date): number | null {
   // 'Egypt' is the zone's legacy alias; both name the same rules.
   if (timeZone === 'Africa/Cairo' || timeZone === 'Egypt') return egyptOffsetMs(at);
   return null;
+}
+
+/**
+ * The offset the bundled IANA database reports for `timeZone`.
+ *
+ * Every rule for every zone ships inside the bundle, so this answers identically
+ * on a 2018 WebView and on last year's — the layer that makes the app portable
+ * beyond Egypt: a Moroccan, Jordanian or travelling reader gets their own
+ * country's transitions, including ones the platform's stale data has never
+ * heard of. An unrecognised name throws and is treated as "the database says
+ * nothing", handing the question to the platform.
+ */
+function tzDatabaseZoneOffsetMs(timeZone: string, at: Date): number | null {
+  try {
+    const zoned = ZonedDateTime.ofInstant(
+      Instant.ofEpochMilli(at.getTime()),
+      ZoneId.of(timeZone),
+    );
+    return zoned.offset().totalSeconds() * 1000;
+  } catch {
+    return null;
+  }
 }
 
 /**

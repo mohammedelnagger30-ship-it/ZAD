@@ -5,14 +5,18 @@ import android.app.AlarmManager;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.media.AudioAttributes;
 import android.net.Uri;
 import android.os.Build;
+import android.os.PowerManager;
+import android.provider.Settings;
 import android.view.WindowManager;
 
+import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.FileProvider;
 
 import com.getcapacitor.JSArray;
@@ -25,6 +29,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 import org.json.JSONArray;
 import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.io.File;
 
@@ -50,6 +55,13 @@ public class AdhanOverlay extends Plugin {
     private static final String TAG = "AdhanOverlay";
     private static final String PREFS = "adhan_overlay";
     private static final String KEY_ARMED_IDS = "armedIds";
+    /**
+     * The last batch JS armed, verbatim. Android wipes a package's alarms on
+     * reboot, on update and whenever an OEM cleaner feels lucky — this copy is
+     * what lets {@link BootReceiver} and {@link AdhanHealJob} put them back
+     * with no WebView and no user action.
+     */
+    private static final String KEY_ARMED_BATCH = "armedBatch";
 
     /** The live plugin instance, so the receiver can reach JS while the app is open. */
     private static volatile AdhanOverlay active;
@@ -98,53 +110,28 @@ public class AdhanOverlay extends Plugin {
             return;
         }
 
-        cancelArmed(alarmManager);
-
-        JSONArray armedIds = new JSONArray();
-        boolean canExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S
-            || alarmManager.canScheduleExactAlarms();
-
+        JSONArray batch;
         try {
-            for (int i = 0; i < alarms.length(); i += 1) {
-                JSObject alarm = new JSObject(alarms.getJSONObject(i).toString());
-                int id = alarm.getInt("id");
-                long at = alarm.getLong("at");
-                String channelId = alarm.getString("channelId");
-                String prayerKey = alarm.getString("prayerKey");
-                if (channelId == null || prayerKey == null || at <= 0L) continue;
-
-                Intent intent = new Intent(context, AdhanOverlayReceiver.class);
-                intent.setAction(ACTION_ADHAN);
-                intent.putExtra(AdhanOverlayReceiver.EXTRA_ID, id);
-                intent.putExtra(AdhanOverlayReceiver.EXTRA_CHANNEL_ID, channelId);
-                intent.putExtra(AdhanOverlayReceiver.EXTRA_TITLE, alarm.getString("title"));
-                intent.putExtra(AdhanOverlayReceiver.EXTRA_BODY, alarm.getString("body"));
-                intent.putExtra(AdhanOverlayReceiver.EXTRA_PRAYER_KEY, prayerKey);
-                intent.putExtra(AdhanOverlayReceiver.EXTRA_PRAYER_NAME, alarm.getString("prayerName"));
-                intent.putExtra(AdhanOverlayReceiver.EXTRA_TIME, alarm.getString("time"));
-
-                PendingIntent pending = PendingIntent.getBroadcast(
-                    context, id, intent,
-                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-                );
-
-                // The JS side hands over a device-clock instant (drift-compensated, the
-                // same convention the notification plugin uses): Android alarms always
-                // fire against the device clock, so no further correction belongs here.
-                if (canExact) {
-                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending);
-                } else {
-                    alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending);
-                }
-                armedIds.put(id);
-            }
+            batch = new JSONArray(alarms.toString());
         } catch (JSONException e) {
             Logger.error(TAG, "Could not read the adhan alarm batch", e);
             call.reject("بيانات تنبيهات الأذان غير صالحة.", "invalid-alarms");
             return;
         }
 
-        prefs().edit().putString(KEY_ARMED_IDS, armedIds.toString()).apply();
+        cancelArmed(alarmManager);
+        try {
+            armBatch(context, alarmManager, batch);
+        } catch (JSONException e) {
+            Logger.error(TAG, "Could not arm the adhan alarm batch", e);
+            call.reject("بيانات تنبيهات الأذان غير صالحة.", "invalid-alarms");
+            return;
+        }
+
+        // Kept so the device can restore this exact batch itself after a reboot,
+        // an update or an OEM cleanup — see healIfMissing().
+        prefs(context).edit().putString(KEY_ARMED_BATCH, batch.toString()).apply();
+        AdhanHealJob.register(context);
         call.resolve();
     }
 
@@ -152,6 +139,119 @@ public class AdhanOverlay extends Plugin {
     public void cancelAll(PluginCall call) {
         cancelArmed((AlarmManager) getContext().getSystemService(Context.ALARM_SERVICE));
         call.resolve();
+    }
+
+    /**
+     * Re-arms the stored batch when the alarms it created are gone.
+     *
+     * Reboots and app updates wipe a package's alarms, and several OEM skins
+     * (MIUI, EMUI, ColorOS and relatives) drop them whenever they "clean" the
+     * process out of memory — no broadcast announces any of it, and until the
+     * person happened to open the app the adhan would simply stay silent. This
+     * puts the batch back straight from storage: no WebView, no visible launch,
+     * no user action. A user's own force-stop remains unreachable by design
+     * (Android sleeps the app until the person opens it again), and the next
+     * open re-arms everything anyway.
+     *
+     * @return true when a re-arm actually happened.
+     */
+    static boolean healIfMissing(Context context) {
+        JSONArray batch = storedBatch(context);
+        if (batch == null) return false;
+
+        AlarmManager alarmManager =
+            (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+        if (alarmManager == null) return false;
+
+        long now = System.currentTimeMillis();
+        int next = -1;
+        try {
+            for (int i = 0; i < batch.length(); i += 1) {
+                JSONObject alarm = batch.getJSONObject(i);
+                if (alarm.optLong("at", 0L) > now) {
+                    next = i;
+                    break;
+                }
+            }
+            if (next < 0) return false; // the stored window is spent; the next open rebuilds it
+
+            // Only the soonest alarm is probed: the set is armed and dropped as one,
+            // so one survivor proves the rest.
+            int id = batch.getJSONObject(next).optInt("id", -1);
+            if (id < 0) return false;
+            Intent probe = new Intent(context, AdhanOverlayReceiver.class);
+            probe.setAction(ACTION_ADHAN);
+            PendingIntent armed = PendingIntent.getBroadcast(
+                context, id, probe, PendingIntent.FLAG_NO_CREATE | PendingIntent.FLAG_IMMUTABLE);
+            if (armed != null) return false; // still armed — nothing to do
+
+            armBatch(context, alarmManager, batch);
+            Logger.info(TAG, "Adhan alarms were missing - re-armed the stored batch");
+            return true;
+        } catch (JSONException e) {
+            Logger.error(TAG, "Stored adhan batch is unreadable", e);
+            return false;
+        }
+    }
+
+    /**
+     * Arms one batch and records its ids for {@link #cancelArmed}. Alarms whose
+     * instant has already passed are skipped: re-arming one would ring the adhan
+     * on the spot.
+     *
+     * The instants arrive device-clock-side and drift-compensated (the same
+     * convention the notification plugin uses): Android alarms always fire
+     * against the device clock, so no further correction belongs here.
+     */
+    private static void armBatch(
+        Context context, AlarmManager alarmManager, JSONArray batch
+    ) throws JSONException {
+        boolean canExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S
+            || alarmManager.canScheduleExactAlarms();
+        long now = System.currentTimeMillis();
+
+        JSONArray armedIds = new JSONArray();
+        for (int i = 0; i < batch.length(); i += 1) {
+            JSObject alarm = new JSObject(batch.getJSONObject(i).toString());
+            int id = alarm.getInt("id");
+            long at = alarm.getLong("at");
+            String channelId = alarm.getString("channelId");
+            String prayerKey = alarm.getString("prayerKey");
+            if (channelId == null || prayerKey == null || at <= 0L || at <= now) continue;
+
+            Intent intent = new Intent(context, AdhanOverlayReceiver.class);
+            intent.setAction(ACTION_ADHAN);
+            intent.putExtra(AdhanOverlayReceiver.EXTRA_ID, id);
+            intent.putExtra(AdhanOverlayReceiver.EXTRA_CHANNEL_ID, channelId);
+            intent.putExtra(AdhanOverlayReceiver.EXTRA_TITLE, alarm.getString("title"));
+            intent.putExtra(AdhanOverlayReceiver.EXTRA_BODY, alarm.getString("body"));
+            intent.putExtra(AdhanOverlayReceiver.EXTRA_PRAYER_KEY, prayerKey);
+            intent.putExtra(AdhanOverlayReceiver.EXTRA_PRAYER_NAME, alarm.getString("prayerName"));
+            intent.putExtra(AdhanOverlayReceiver.EXTRA_TIME, alarm.getString("time"));
+
+            PendingIntent pending = PendingIntent.getBroadcast(
+                context, id, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+            );
+
+            if (canExact) {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending);
+            } else {
+                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending);
+            }
+            armedIds.put(id);
+        }
+        prefs(context).edit().putString(KEY_ARMED_IDS, armedIds.toString()).apply();
+    }
+
+    private static JSONArray storedBatch(Context context) {
+        String raw = prefs(context).getString(KEY_ARMED_BATCH, null);
+        if (raw == null) return null;
+        try {
+            return new JSONArray(raw);
+        } catch (JSONException e) {
+            return null;
+        }
     }
 
     /**
@@ -236,6 +336,99 @@ public class AdhanOverlay extends Plugin {
         });
     }
 
+    /**
+     * Whether anything sits between this app and a ringing phone: notifications
+     * switched off in the system, exact-alarm permission revoked (Android 12+),
+     * or battery optimisation free to postpone everything until morning. The JS
+     * side turns this into a banner whose fixes are one tap each — no reader
+     * should have to know which of their phone's settings screens is the one
+     * keeping the adhan silent.
+     */
+    @PluginMethod
+    public void protectionStatus(PluginCall call) {
+        Context context = getContext();
+        JSObject out = new JSObject();
+
+        out.put("notificationsEnabled",
+            NotificationManagerCompat.from(context).areNotificationsEnabled());
+
+        AlarmManager alarmManager =
+            (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+        out.put("exactAlarmsAllowed", alarmManager != null
+            && (Build.VERSION.SDK_INT < Build.VERSION_CODES.S
+                || alarmManager.canScheduleExactAlarms()));
+
+        boolean ignoringBattery = false;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+            ignoringBattery = powerManager != null
+                && powerManager.isIgnoringBatteryOptimizations(context.getPackageName());
+        }
+        out.put("ignoringBatteryOptimizations", ignoringBattery);
+
+        call.resolve(out);
+    }
+
+    /**
+     * Opens the system screen that fixes a problem {@link #protectionStatus}
+     * reports — the notification settings, the battery-exemption prompt, the
+     * exact-alarm settings, or MIUI's autostart screen. Anything the ROM does
+     * not have falls through to the app details page, which every Android
+     * ships, so a tap never ends in a dead end.
+     */
+    @PluginMethod
+    public void openProtectionSettings(PluginCall call) {
+        String target = call.getString("target");
+        Context context = getContext();
+
+        try {
+            context.startActivity(protectionIntent(target));
+        } catch (ActivityNotFoundException | SecurityException e) {
+            try {
+                context.startActivity(appDetailsIntent());
+            } catch (Exception fallback) {
+                call.reject("تعذّر فتح إعدادات الجهاز.", "settings-unavailable");
+                return;
+            }
+        }
+        call.resolve();
+    }
+
+    private Intent protectionIntent(String target) {
+        Context context = getContext();
+        if ("notifications".equals(target)) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                return new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.getPackageName());
+            }
+            return appDetailsIntent();
+        }
+        if ("exact".equals(target)) {
+            return new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                .setData(Uri.parse("package:" + context.getPackageName()));
+        }
+        if ("battery".equals(target)) {
+            // The system's own exemption prompt — the only route that does not
+            // send the reader hunting through three settings screens.
+            return new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                .setData(Uri.parse("package:" + context.getPackageName()));
+        }
+        if ("autostart".equals(target)) {
+            // MIUI's autostart screen: the one switch that decides whether this
+            // app may ring at all on Xiaomi phones. Not every ROM has one, and
+            // the fallback below is what keeps that harmless.
+            return new Intent("miui.intent.action.OP_AUTO_START")
+                .setPackage("com.miui.securitycenter");
+        }
+        return appDetailsIntent();
+    }
+
+    private Intent appDetailsIntent() {
+        return new Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.parse("package:" + getContext().getPackageName()));
+    }
+
     /** Called by the receiver: a prayer arrived while the app is in the foreground. */
     static void dispatchReceived(JSObject data) {
         AdhanOverlay plugin = active;
@@ -245,15 +438,15 @@ public class AdhanOverlay extends Plugin {
     }
 
     private void cancelArmed(AlarmManager alarmManager) {
+        Context context = getContext();
         JSONArray stored;
         try {
-            stored = new JSONArray(prefs().getString(KEY_ARMED_IDS, "[]"));
+            stored = new JSONArray(prefs(context).getString(KEY_ARMED_IDS, "[]"));
         } catch (JSONException e) {
             stored = new JSONArray();
         }
         if (alarmManager == null) return;
 
-        Context context = getContext();
         for (int i = 0; i < stored.length(); i += 1) {
             int id = stored.optInt(i, -1);
             if (id < 0) continue;
@@ -268,7 +461,7 @@ public class AdhanOverlay extends Plugin {
                 pending.cancel();
             }
         }
-        prefs().edit().remove(KEY_ARMED_IDS).apply();
+        prefs(context).edit().remove(KEY_ARMED_IDS).apply();
     }
 
     private void consumeLaunchIntent(Intent intent, boolean retained) {
@@ -302,7 +495,7 @@ public class AdhanOverlay extends Plugin {
         intent.removeExtra(AdhanOverlayReceiver.EXTRA_TIME);
     }
 
-    private SharedPreferences prefs() {
-        return getContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+    private static SharedPreferences prefs(Context context) {
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 }
