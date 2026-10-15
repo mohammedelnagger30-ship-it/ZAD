@@ -51,10 +51,17 @@ async function fetchWithTimeout(url: string, options: RequestInit): Promise<Resp
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } catch (cause) {
+    // The whole `try` block is one call to `fetch`, so anything thrown here
+    // means no answer ever came back — the timeout, no network, DNS, a
+    // blocked connection. They are all one outcome from where the user stands:
+    // the check did not happen. This app promises to work without a network,
+    // so an absent one is a state rather than a fault, and it is *coded* here
+    // so the caller can tell it apart instead of reading a browser's English
+    // wording («Failed to fetch») and putting that on the screen.
     if (cause instanceof Error && cause.name === 'AbortError') {
-      throw new Error('انتهت مهلة التحقق من التحديثات — تحقق من اتصالك بالإنترنت.');
+      throw codedError('انتهت مهلة التحقق من التحديثات — تحقّق من اتصالك بالإنترنت.', 'unreachable');
     }
-    throw cause;
+    throw codedError('تعذّر الوصول إلى خادم التحديثات — تحقّق من اتصالك بالإنترنت.', 'unreachable');
   } finally {
     clearTimeout(timer);
   }
@@ -62,15 +69,18 @@ async function fetchWithTimeout(url: string, options: RequestInit): Promise<Resp
 
 async function fetchUpdateCheck(): Promise<AppUpdateCheck> {
   // Retry once on network failure (common on mobile right after app launch).
+  // Everything else is already an answer — an HTTP status, a rate limit, a
+  // malformed release — and asking a second time gets the same one. The policy
+  // keys on the error's code rather than on its wording: the wording is for
+  // whoever reads it on screen, and branching on text means the sentence can
+  // never be translated.
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       return await fetchUpdateCheckOnce();
     } catch (cause) {
       lastError = cause;
-      // Don't retry on HTTP-level errors (403, 429, etc.) — only network failures.
-      if (cause instanceof Error && cause.message.startsWith('GitHub returned HTTP')) throw cause;
-      if (cause instanceof Error && cause.message.startsWith('تم تجاوز')) throw cause;
+      if (getErrorCode(cause) !== 'unreachable') throw cause;
       if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 1500));
     }
   }
@@ -86,10 +96,18 @@ async function fetchUpdateCheckOnce(): Promise<AppUpdateCheck> {
   if (response.status === 403 || response.status === 429) {
     throw new Error('تم تجاوز حد طلبات التحقق مؤقتًا — أعد المحاولة بعد دقائق.');
   }
-  if (!response.ok) throw new Error(`GitHub returned HTTP ${response.status}.`);
+  if (!response.ok) throw new Error(`رفض خادم التحديثات الطلب (رمز ${response.status}).`);
 
-  const release: unknown = await response.json();
-  if (!release || typeof release !== 'object') throw new Error('GitHub returned an invalid release record.');
+  // A proxy error page or an HTML wall arrives as a body that is not JSON at
+  // all, and `json()` reports that in English — caught here so it never
+  // becomes text on someone's screen.
+  let release: unknown;
+  try {
+    release = await response.json();
+  } catch {
+    throw new Error('ردّ خادم التحديثات غير صالح.');
+  }
+  if (!release || typeof release !== 'object') throw new Error('ردّ خادم التحديثات غير صالح.');
   const data = release as {
     tag_name?: unknown;
     draft?: unknown;
@@ -100,8 +118,10 @@ async function fetchUpdateCheckOnce(): Promise<AppUpdateCheck> {
     return { status: 'no-release' };
   }
   const releaseVersion = data.tag_name.replace(/^v/, '');
-  if (!/^\d+\.\d+\.\d+$/.test(releaseVersion)) throw new Error('Release tag must use vMAJOR.MINOR.PATCH.');
-  if (!Array.isArray(data.assets)) throw new Error('GitHub release has no asset list.');
+  if (!/^\d+\.\d+\.\d+$/.test(releaseVersion)) {
+    throw new Error(`سجل التحديثات يحمل رقم إصدار غير صالح: ${releaseVersion}`);
+  }
+  if (!Array.isArray(data.assets)) throw new Error('سجل التحديثات بلا قائمة ملفات.');
   const asset = data.assets.find((item): item is { name: string; browser_download_url: string } =>
     !!item &&
     typeof item === 'object' &&
@@ -110,7 +130,7 @@ async function fetchUpdateCheckOnce(): Promise<AppUpdateCheck> {
     'browser_download_url' in item &&
     typeof item.browser_download_url === 'string'
   );
-  if (!asset) throw new Error(`Release ${releaseVersion} is missing its APK.`);
+  if (!asset) throw new Error(`الإصدار ${releaseVersion} بلا ملف APK.`);
 
   const { version: installedVersion } = await App.getInfo();
   if (compareVersions(releaseVersion, installedVersion.replace(/^v/, '')) <= 0) {

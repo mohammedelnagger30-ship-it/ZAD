@@ -21,6 +21,16 @@ export interface AppUpdateController {
   update: AppUpdateCheck | null;
   /** True while the GitHub release check is running. */
   checking: boolean;
+  /**
+   * The last check could not get an answer — no network, or the server did
+   * not respond. Kept apart from `error` on purpose: this app works without a
+   * network by design, so *not being able to ask* is a state rather than a
+   * fault, and saying «تعذّر التحقق» over the whole screen every time someone
+   * opens the app on the bus tells them nothing they can act on. The banner
+   * ignores this; the updates card states it, in grey, for whoever came
+   * looking for exactly that information.
+   */
+  unreachableNotice: string;
   /** Human readable failure for the last update action. */
   error: string;
   /** True while the APK is streaming into the app. */
@@ -46,6 +56,7 @@ export function useAppUpdate(): AppUpdateController {
   const [update, setUpdate] = useState<AppUpdateCheck | null>(null);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
+  const [unreachableNotice, setUnreachableNotice] = useState('');
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState<UpdateProgress | null>(null);
   const [pending, setPending] = useState<PendingUpdate | null>(() => readPendingUpdate());
@@ -60,6 +71,7 @@ export function useAppUpdate(): AppUpdateController {
     if (!Capacitor.isNativePlatform()) return;
     setChecking(true);
     setError('');
+    setUnreachableNotice('');
     try {
       const result = await checkForAppUpdate();
       if (result.status === 'current') {
@@ -69,7 +81,14 @@ export function useAppUpdate(): AppUpdateController {
       }
       setUpdate(result);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'تعذّر التحقق من التحديثات.');
+      // Which of the two this is depends on whether an answer ever arrived,
+      // and they are reported in different languages for that reason: one is
+      // something that went wrong, the other is something that never started.
+      if (getErrorCode(cause) === 'unreachable') {
+        setUnreachableNotice(cause instanceof Error ? cause.message : 'تعذّر الوصول إلى خادم التحديثات.');
+      } else {
+        setError(cause instanceof Error ? cause.message : 'تعذّر التحقق من التحديثات.');
+      }
     } finally {
       setChecking(false);
     }
@@ -188,6 +207,7 @@ export function useAppUpdate(): AppUpdateController {
   return {
     update,
     checking,
+    unreachableNotice,
     error,
     downloading,
     progress,

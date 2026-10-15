@@ -8,6 +8,7 @@ export function AppUpdatesSection() {
   const {
     update: appUpdate,
     checking: checkingUpdate,
+    unreachableNotice,
     error: updateError,
     downloading: updating,
     progress: updateProgress,
@@ -92,6 +93,14 @@ export function AppUpdatesSection() {
             {updateInstallHint && !updating && (
               <p role="status" className="mt-2 text-xs text-primary-600 dark:text-primary-300">
                 {updateInstallHint}
+              </p>
+            )}
+            {/* Grey, not red: they came to this card looking for update news, and
+                "we could not ask" is news. It is also what the launch banner
+                stays silent about — see useAppUpdate.unreachableNotice. */}
+            {unreachableNotice && !updating && (
+              <p role="status" className="text-xs text-gray-500 dark:text-gray-400">
+                {unreachableNotice}
               </p>
             )}
             {updateError && (
