@@ -170,6 +170,53 @@ export function getPrayerTimeZone(timeZone?: string, cityName?: string): string 
     ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
+/* ------------------------------------------------------------------ *
+ * Iqamah (الإقامة) — the جماعة's own minute, offset from the adhan.
+ * ------------------------------------------------------------------ */
+
+/** The five prayers an iqamah offset is addressed by (sunrise has none). */
+export type IqamahPrayerKey = 'fajr' | 'dhuhr' | 'asr' | 'maghrib' | 'isha';
+
+/**
+ * Minutes each prayer's iqamah follows its adhan, by common mosque custom:
+ * fajr given longer to gather, maghrib straight behind the call, the rest ten.
+ * Per-prayer because a single global number never matches any real mosque.
+ */
+export const DEFAULT_IQAMAH_OFFSETS: Record<IqamahPrayerKey, number> = {
+  fajr: 20,
+  dhuhr: 10,
+  asr: 10,
+  maghrib: 5,
+  isha: 10,
+};
+
+/**
+ * Anything past two hours is a typo, not a جماعة — clamped here rather than at
+ * the input, so a bad stored row can never schedule tomorrow's iqamah today.
+ */
+const IQAMAH_MAX_MINUTES = 120;
+
+/**
+ * The iqamah instant for one prayer: its adhan plus the offset in force,
+ * falling back per key to {@link DEFAULT_IQAMAH_OFFSETS} — a partially saved
+ * offsets row (or none at all, on installs from before the field existed)
+ * still yields every prayer's proper minute. Unknown keys (sunrise) get 0,
+ * which callers never ask for anyway.
+ */
+export function getIqamahTime(
+  prayerTime: Date,
+  prayerKey: string,
+  offsets?: Partial<Record<string, number>> | null,
+): Date {
+  const raw = offsets?.[prayerKey];
+  const fallback = (DEFAULT_IQAMAH_OFFSETS as Record<string, number>)[prayerKey] ?? 0;
+  const minutes = typeof raw === 'number' && Number.isFinite(raw)
+    ? Math.trunc(raw)
+    : fallback;
+  const bounded = Math.min(Math.max(minutes, 0), IQAMAH_MAX_MINUTES);
+  return new Date(prayerTime.getTime() + bounded * 60_000);
+}
+
 function isTimeZone(value: string): boolean {
   try {
     new Intl.DateTimeFormat('en', { timeZone: value });

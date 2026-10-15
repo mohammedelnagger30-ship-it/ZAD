@@ -33,6 +33,8 @@ export const NOTIFICATION_ID_BASE = {
   hadith: 4_000_000,
   /** Random dhikr reminders. */
   dhikr: 5_000_000,
+  /** Iqamah alerts (الإقامة) — the جماعة's own minute after the adhan. */
+  iqamah: 6_000_000,
   /** Adhan-overlay snoozes — the only ids that survive a rebuild. */
   snooze: 9_000_000,
 } as const;
@@ -50,6 +52,7 @@ export const notificationId = {
   task: (taskId: number) => idFor(NOTIFICATION_ID_BASE.task, taskId),
   hadith: (slot = 0) => idFor(NOTIFICATION_ID_BASE.hadith, slot),
   dhikr: (slot: number) => idFor(NOTIFICATION_ID_BASE.dhikr, slot),
+  iqamah: (slot: number) => idFor(NOTIFICATION_ID_BASE.iqamah, slot),
   /**
    * Snooze ids embed the second within the reserved range instead of the wall clock:
    * two snoozes rarely collide, a collision merely replaces the older reminder, and the

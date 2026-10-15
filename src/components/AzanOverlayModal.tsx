@@ -3,7 +3,7 @@ import { Play, Volume2, VolumeX, CheckCircle2, Bell, BookOpen, X, Sparkles, Cloc
 import type { Settings } from '@/db/database';
 import { getAdhanSound } from '@/data/adhanSounds';
 import { resolveAdhanPlayUrl } from '@/utils/adhanStore';
-import { formatTime12h, getDateInTimeZone, getPrayerTimeZone } from '@/utils/prayerTimes';
+import { formatTime12h, getDateInTimeZone, getIqamahTime, getPrayerTimeZone } from '@/utils/prayerTimes';
 import { confirmPrayer, PRAYER_LABELS_AR, type PrayerKey } from '@/utils/prayerTracker';
 import { formatDateKey, formatArabicDate, getHijriDate } from '@/utils/dateUtils';
 import { notificationId } from '@/utils/notifications';
@@ -113,6 +113,12 @@ export function AzanOverlayModal({
   const displayTime = prayerTime
     ? formatTime12h(prayerTime, timeZone)
     : formatTime12h(trustedNow(), timeZone);
+  // The جماعة follows the call by the reader's mosque offset — shown so the
+  // page answers "when does the prayer *start*?" without leaving it. Previews
+  // without a real instant show no iqamah rather than a fabricated one.
+  const iqamahTime = prayerTime
+    ? formatTime12h(getIqamahTime(prayerTime, prayerKey, settings.iqamahOffsets), timeZone)
+    : null;
 
   // Initialize and play the audio: the adhan is meant to reach the ear together with
   // the page, without anyone pressing anything.
@@ -417,6 +423,12 @@ export function AzanOverlayModal({
             <Clock size={20} className="text-amber-400" />
             {displayTime}
           </p>
+          {iqamahTime && (
+            <p className="mt-1.5 flex items-center justify-center gap-2 text-sm font-semibold text-emerald-300">
+              <Clock size={15} className="text-emerald-400" />
+              الإقامة {iqamahTime}
+            </p>
+          )}
 
           {/* Location & Date */}
           <div className="mt-3 flex flex-wrap items-center justify-center gap-3 text-xs text-slate-300">

@@ -10,6 +10,8 @@ import { dismissTopOverlay } from '@/utils/overlayRegistry';
 import { onClockChange, startClockService } from '@/utils/clock';
 import { clearLocalUserData, startCloudSync, synchronizeNow, type CloudSyncState } from '@/utils/cloudSync';
 import { isSupabaseConfigured, supabase } from '@/utils/supabaseClient';
+import { trackAppOpen } from '@/utils/analytics';
+import { isAdminAccount } from '@/utils/adminStats';
 import { useAppUpdate } from '@/hooks/useAppUpdate';
 import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
@@ -94,6 +96,8 @@ const AdhkarScreen = lazyWithRetry(() => import('@/screens/AdhkarScreen').then((
 const TasbihScreen = lazyWithRetry(() => import('@/screens/TasbihScreen').then((module) => ({ default: module.TasbihScreen })));
 const BookmarksScreen = lazyWithRetry(() => import('@/screens/BookmarksScreen').then((module) => ({ default: module.BookmarksScreen })));
 const SearchScreen = lazyWithRetry(() => import('@/screens/SearchScreen').then((module) => ({ default: module.SearchScreen })));
+// Only an allow-listed account ever mounts this, so it stays out of the first paint.
+const AdminScreen = lazyWithRetry(() => import('@/components/AdminScreen').then((module) => ({ default: module.AdminScreen })));
 
 function App() {
   return (
@@ -524,6 +528,9 @@ function AppContent({
       settings.randomDhikrIntervalMinutes,
       settings.randomDhikrStartTime,
       settings.randomDhikrEndTime,
+      // The iqamah offsets move every iqamah alert; without them in the key,
+      // editing a جماعة minute would not re-arm a single notification.
+      JSON.stringify(settings.iqamahOffsets ?? null),
     ].join('|');
   }, [settings]);
 
@@ -612,6 +619,12 @@ function AppContent({
     }
     localStorage.setItem(ONBOARDED_KEY, 'true');
     setOnboarded(true);
+    // The first session's own arming moment. The open-time attempt above ran
+    // *before* the permission existed (onboarding asks for it mid-flow), and the
+    // settings fingerprint need not move at all — keeping the default city
+    // changes nothing in it — so nothing would arm the adhan until the next
+    // app open. The permission is granted by now; arm the queue here.
+    void rescheduleAllNotifications();
   }, [save]);
 
   if (loading || onboarded === null) {

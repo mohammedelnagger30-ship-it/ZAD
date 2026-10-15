@@ -1,4 +1,5 @@
 import Dexie, { type Table } from 'dexie';
+import { DEFAULT_IQAMAH_OFFSETS, type IqamahPrayerKey } from '@/utils/prayerTimes';
 
 // ---- Types ----
 
@@ -167,6 +168,13 @@ export interface Settings {
   customBadgesEnabled?: boolean;
   /** Show onboarding tips on home screen */
   showOnboardingTips?: boolean;
+  /**
+   * Minutes each prayer's iqamah follows its adhan (الجماعة), per mosque
+   * custom. Optional so pre-iqamah rows read as defaults — `getSettings`
+   * spreads DEFAULT_SETTINGS over whatever is stored, and `getIqamahTime`
+   * falls back per key for a partially saved object.
+   */
+  iqamahOffsets?: Partial<Record<IqamahPrayerKey, number>>;
 }
 
 export interface DayStreak {
@@ -381,6 +389,7 @@ export const DEFAULT_SETTINGS: Settings = {
   iconStyle: 'lucide',
   customBadgesEnabled: true,
   showOnboardingTips: true,
+  iqamahOffsets: { ...DEFAULT_IQAMAH_OFFSETS },
 };
 
 export async function getSettings(): Promise<Settings> {

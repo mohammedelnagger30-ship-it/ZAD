@@ -19,18 +19,22 @@ import type { LocalNotificationSchema } from '@capacitor/local-notifications';
  *     path failed;
  *  2. today's task reminders (hifz / review);
  *  3. the hadith of the day;
- *  4. pre-prayer reminders, soonest first as generated;
- *  5. the dhikr filler.
+ *  4. iqamah alerts (الإقامة) — the جماعة's minute, ahead of the purely advisory
+ *     pre-prayer reminders because it is when the prayer actually starts;
+ *  5. pre-prayer reminders, soonest first as generated;
+ *  6. the dhikr filler.
  *
  * Trimming therefore eats the filler first, then the far-future pre-prayer
- * reminders, and never reaches the adhan or today's tasks. Each bucket's own order
- * is preserved, so what survives of any bucket is its soonest entries.
+ * reminders, then — only under heavier overflow — later iqamah alerts, and never
+ * reaches the adhan or today's tasks. Each bucket's own order is preserved, so
+ * what survives of any bucket is its soonest entries.
  */
 export interface NotificationQueueParts {
   /** Armed only when `scheduleAdhanOverlay` failed; empty otherwise. */
   prayerFallbacks: LocalNotificationSchema[];
   taskReminders: LocalNotificationSchema[];
   hadithReminders: LocalNotificationSchema[];
+  iqamahAlerts: LocalNotificationSchema[];
   prePrayerReminders: LocalNotificationSchema[];
   dhikrFiller: LocalNotificationSchema[];
 }
@@ -50,6 +54,7 @@ export function assembleNotificationQueue(
     ...parts.prayerFallbacks,
     ...parts.taskReminders,
     ...parts.hadithReminders,
+    ...parts.iqamahAlerts,
     ...parts.prePrayerReminders,
     ...parts.dhikrFiller,
   ].slice(0, limit);

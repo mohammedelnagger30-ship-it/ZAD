@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Moon, Sunrise, MapPin, BarChart3, Sun, Sunset, Check, X, Clock, Sparkles, BookOpen, ChevronLeft } from 'lucide-react';
+import { Moon, Sunrise, MapPin, BarChart3, Sun, Sunset, Check, X, Clock, Sparkles, BookOpen, ChevronLeft, Minus, Plus } from 'lucide-react';
 import { Card, Button, Badge, SectionHeader, EmptyState } from '@/components/ui';
 import { PrayerStatusSheet } from '@/components/PrayerStatusSheet';
 import { PrayerWeekGrid } from '@/components/PrayerWeekGrid';
@@ -11,6 +11,9 @@ import {
   formatTime12h,
   getTimeUntil,
   getPrayerTimeZone,
+  getIqamahTime,
+  DEFAULT_IQAMAH_OFFSETS,
+  type IqamahPrayerKey,
   CITY_PRESETS,
 } from '@/utils/prayerTimes';
 import { useCountdownClock, usePrayerSchedule } from '@/hooks/usePrayerSchedule';
@@ -105,6 +108,8 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
   const [grid, setGrid] = useState<DayPrayerGrid[]>([]);
   const [stats, setStats] = useState<PrayerStats | null>(null);
   const [showLocation, setShowLocation] = useState(false);
+  // The جماعة minutes editor — lives beside the table that shows its result.
+  const [showIqamahEditor, setShowIqamahEditor] = useState(false);
   // Which (day, prayer) the status sheet is open for, if any.
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
   // Reference clock for the countdown: per-second only in the last minute before a
@@ -253,6 +258,14 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
     );
   }
 
+  // Today's adhan instants, keyed for the iqamah editor's live preview: each
+  // row shows what its offset lands on *today*, not just a bare minute count.
+  const iqamahPreview = Object.fromEntries(
+    prayerResult.prayers
+      .filter((prayer) => prayer.name !== 'sunrise')
+      .map((prayer) => [prayer.name, prayer.time]),
+  ) as Partial<Record<IqamahPrayerKey, Date>>;
+
   return (
     <div className="space-y-6 pb-6">
       {/* Enhanced Header */}
@@ -324,7 +337,20 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
 
       {/* Enhanced Prayer Times List */}
       <div>
-        <SectionHeader title="صلوات اليوم" icon={<Moon size={20} />} />
+        <SectionHeader
+          title="صلوات اليوم"
+          icon={<Moon size={20} />}
+          action={
+            <button
+              type="button"
+              onClick={() => setShowIqamahEditor(true)}
+              className="flex items-center gap-1.5 rounded-xl border border-primary-200 bg-white px-3 py-1.5 text-xs font-bold text-primary-700 transition hover:border-primary-400 hover:bg-primary-50 dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-200 dark:hover:border-primary-600"
+            >
+              <Clock size={14} />
+              مواعيد الإقامة
+            </button>
+          }
+        />
         <div className="mb-4 rounded-2xl bg-primary-50 dark:bg-primary-900/30 p-4 border border-primary-100 dark:border-primary-800">
           <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
             تظهر السنة الراتبة بجوار فرضها: ركعتان قبل الفجر، وست للظهر (أربع قبلًا واثنتان بعدًا)، وركعتان بعد المغرب وركعتان بعد العشاء.
@@ -352,7 +378,26 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-lg font-bold text-primary-800 dark:text-primary-100">{prayer.arabicName}</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{formatTime12h(prayer.time, timeZone)}</p>
+                  {/* The row *is* the table the reader asked for: أذان and
+                      إقامة side by side. Sunrise has no جماعة, so it keeps its
+                      single time. */}
+                  <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">
+                    {isSunrise ? (
+                      formatTime12h(prayer.time, timeZone)
+                    ) : (
+                      <>
+                        الأذان {formatTime12h(prayer.time, timeZone)}
+                        <span className="mx-1 text-gray-300 dark:text-gray-600">•</span>
+                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                          الإقامة{' '}
+                          {formatTime12h(
+                            getIqamahTime(prayer.time, prayer.name, settings.iqamahOffsets),
+                            timeZone,
+                          )}
+                        </span>
+                      </>
+                    )}
+                  </p>
                 </div>
                 {isSunrise ? (
                   <Badge variant="gold"><Sun size={12} /> شروق</Badge>
@@ -583,6 +628,20 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
       {/* Location picker modal */}
       {showLocation && <LocationPicker onPick={handleLocationPick} onAuto={handleAutoLocation} />}
 
+      {showIqamahEditor && (
+        <IqamahEditor
+          settings={settings}
+          todayTimes={iqamahPreview}
+          onSave={(offsets) => {
+            // Saved through the shared settings path, whose schedule fingerprint
+            // now includes these offsets — the queue re-arms on the spot.
+            onSaveSettings({ iqamahOffsets: offsets });
+            setShowIqamahEditor(false);
+          }}
+          onClose={() => setShowIqamahEditor(false)}
+        />
+      )}
+
       {/* Prayer confirmation */}
       {sheet && (
         <PrayerStatusSheet
@@ -655,6 +714,114 @@ function LocationPicker({ onPick, onAuto }: { onPick: (lat: number, lng: number,
               <span className="text-sm text-primary-800 dark:text-primary-100">{city.name}</span>
             </button>
           ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+/**
+ * The جماعة's minute per prayer, edited beside the table that reads it.
+ * Each row previews today's resulting wall-clock time — the number and its
+ * consequence are one glance apart — and saving goes through the shared
+ * settings path, whose schedule fingerprint re-arms the iqamah alerts.
+ */
+function IqamahEditor({
+  settings,
+  todayTimes,
+  onSave,
+  onClose,
+}: {
+  settings: Settings;
+  todayTimes: Partial<Record<IqamahPrayerKey, Date>>;
+  onSave: (offsets: Record<IqamahPrayerKey, number>) => void;
+  onClose: () => void;
+}) {
+  const timeZone = getPrayerTimeZone(settings.timeZone, settings.cityName);
+  const [draft, setDraft] = useState<Record<IqamahPrayerKey, number>>(() => ({
+    ...DEFAULT_IQAMAH_OFFSETS,
+    ...settings.iqamahOffsets,
+  }));
+
+  const rows: { key: IqamahPrayerKey; label: string }[] = [
+    { key: 'fajr', label: 'الفجر' },
+    { key: 'dhuhr', label: 'الظهر' },
+    { key: 'asr', label: 'العصر' },
+    { key: 'maghrib', label: 'المغرب' },
+    { key: 'isha', label: 'العشاء' },
+  ];
+
+  const setMinutes = (key: IqamahPrayerKey, minutes: number) => {
+    const clamped = Math.min(Math.max(Math.round(minutes) || 0, 0), 120);
+    setDraft((prev) => ({ ...prev, [key]: clamped }));
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-4" dir="rtl">
+      <Card className="w-full max-w-md max-h-[85vh] overflow-y-auto animate-slide-up p-4!">
+        <div className="mb-4">
+          <h2 className="text-lg font-bold text-primary-800 dark:text-primary-100">مواعيد الإقامة</h2>
+          <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+            الدقائق بعد الأذان التي تُقام فيها الصلاة في مسجدك — يصدر تنبيه في نفس الميعاد.
+          </p>
+        </div>
+
+        <div className="space-y-2.5">
+          {rows.map((row) => (
+            <div
+              key={row.key}
+              className="flex items-center justify-between gap-3 rounded-2xl border border-primary-100 bg-white px-4 py-3 dark:border-primary-800 dark:bg-primary-900/40"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-primary-800 dark:text-primary-100">{row.label}</p>
+                {todayTimes[row.key] && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    اليوم: الإقامة {formatTime12h(getIqamahTime(todayTimes[row.key]!, row.key, draft), timeZone)}
+                  </p>
+                )}
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setMinutes(row.key, draft[row.key] - 5)}
+                  aria-label={`إنقاص إقامة ${row.label}`}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary-200 text-primary-700 transition hover:bg-primary-50 disabled:opacity-40 dark:border-primary-700 dark:text-primary-200 dark:hover:bg-primary-800/40"
+                  disabled={draft[row.key] <= 0}
+                >
+                  <Minus size={14} />
+                </button>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  max={120}
+                  value={draft[row.key]}
+                  onChange={(e) => setMinutes(row.key, Number(e.target.value))}
+                  aria-label={`دقائق إقامة ${row.label} بعد الأذان`}
+                  className="w-12 rounded-lg border border-primary-200 bg-gray-50 py-1 text-center text-sm font-bold text-primary-800 dark:border-primary-700 dark:bg-primary-800/30 dark:text-primary-100"
+                />
+                <button
+                  type="button"
+                  onClick={() => setMinutes(row.key, draft[row.key] + 5)}
+                  aria-label={`زيادة إقامة ${row.label}`}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary-200 text-primary-700 transition hover:bg-primary-50 disabled:opacity-40 dark:border-primary-700 dark:text-primary-200 dark:hover:bg-primary-800/40"
+                  disabled={draft[row.key] >= 120}
+                >
+                  <Plus size={14} />
+                </button>
+                <span className="w-10 text-xs text-gray-400 dark:text-gray-500">دقيقة</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 flex gap-2">
+          <Button variant="primary" onClick={() => onSave(draft)} className="flex-1">
+            حفظ
+          </Button>
+          <Button variant="secondary" onClick={onClose}>
+            إلغاء
+          </Button>
         </div>
       </Card>
     </div>

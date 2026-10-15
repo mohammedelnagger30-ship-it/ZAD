@@ -7,6 +7,7 @@ import {
   calculatePrayerTimesForDay,
   calendarDayInZone,
   formatTime12h,
+  getIqamahTime,
   getPrayerTimeZone,
 } from '@/utils/prayerTimes';
 import { deviceClockDriftMs, toDeviceClock, trustedNow, trustedNowMs } from '@/utils/clock';
@@ -43,13 +44,13 @@ const PRAYER_NOTIFICATION_DAYS = 7;
 
 /**
  * The queue is capped at this many entries, in priority order: prayer fallback
- * alerts, today's task reminders, the hadith, the pre-prayer reminders, and
- * finally the dhikr filler. It used to reach 100–250 entries — seven days of
- * prayer alerts plus two days of fifteen-minute dhikr slots — and Android's
+ * alerts, today's task reminders, the hadith, the iqamah alerts, the pre-prayer
+ * reminders, and finally the dhikr filler. It used to reach 100–250 entries — seven
+ * days of prayer alerts plus two days of fifteen-minute dhikr slots — and Android's
  * notification store drops the tail of a batch this size, which could take the
  * hadith or a task reminder with it. Fifty is room for every prayer fallback on
- * the horizon plus a full day of tasks and dhikr; what does not fit is filler,
- * cut from the end.
+ * the horizon plus a full day of tasks, the iqamah alerts and dhikr; what does not
+ * fit is filler, cut from the end.
  *
  * Enforced in one place, at assembly — see assembleNotificationQueue. Capping
  * only the filler was not enough: with the fallbacks appended afterwards, a day
@@ -168,6 +169,18 @@ export async function createNotificationChannels(settings: Settings): Promise<vo
     visibility: 1,
   });
   await LocalNotifications.createChannel({
+    // The جماعة's own alert: high importance so it heads-up over whatever is on
+    // screen, with a short tap sound — never the adhan voice, which already had
+    // its minute and must not ring twice.
+    id: 'iqamah',
+    name: 'إقامة الصلاة',
+    description: 'تنبيه عند دخول وقت الإقامة',
+    importance: 4,
+    sound: 'notification.wav',
+    vibration: true,
+    visibility: 1,
+  });
+  await LocalNotifications.createChannel({
     id: 'hifz',
     name: 'الحفظ',
     description: 'تذكيرات حفظ القرآن',
@@ -245,6 +258,7 @@ export async function rescheduleAllNotifications(): Promise<void> {
   // once, at assembly (assembleNotificationQueue), and only separate buckets let the
   // trim eat the filler while the adhan's fallbacks stay untouched at the front.
   const prePrayerReminders: LocalNotificationSchema[] = [];
+  const iqamahAlerts: LocalNotificationSchema[] = [];
   const taskReminders: LocalNotificationSchema[] = [];
   const hadithReminders: LocalNotificationSchema[] = [];
   const dhikrFiller: LocalNotificationSchema[] = [];
@@ -301,6 +315,30 @@ export async function rescheduleAllNotifications(): Promise<void> {
       for (const prayer of dayPrayers.prayers) {
         const slot = armSlot++;
         if (prayer.name === 'sunrise') continue;
+
+        // The iqamah (الإقامة) is armed on its own clock, ahead of the adhan's
+        // own fate: a prayer whose adhan has already passed but whose جماعة is
+        // still minutes away still gets its «حان وقت الإقامة» at the right
+        // minute. Its extra.type is 'iqamah', so the takeover listeners — which
+        // read only type 'prayer' — leave the adhan page alone.
+        const iqamahAt = getIqamahTime(prayer.time, prayer.name, settings.iqamahOffsets);
+        if (iqamahAt.getTime() > now) {
+          iqamahAlerts.push({
+            id: notificationId.iqamah(slot),
+            title: `حان وقت إقامة ${prayer.arabicName}`,
+            body: `${formatTime12h(iqamahAt, timeZone)} — حان وقت الجماعة`,
+            schedule: { at: armedAt(iqamahAt), allowWhileIdle: true },
+            channelId: 'iqamah',
+            ...NOTIFICATION_BRAND,
+            extra: {
+              type: 'iqamah',
+              prayerKey: prayer.name,
+              prayerName: prayer.arabicName,
+              time: iqamahAt.toISOString(),
+            },
+          });
+        }
+
         if (prayer.time.getTime() <= now) continue;
 
         const title = `حان وقت صلاة ${prayer.arabicName}`;
@@ -418,6 +456,7 @@ export async function rescheduleAllNotifications(): Promise<void> {
         MAX_SCHEDULED_NOTIFICATIONS
           - prayerFallbacks.length
           - prePrayerReminders.length
+          - iqamahAlerts.length
           - taskReminders.length
           - hadithReminders.length,
       );
@@ -495,6 +534,7 @@ export async function rescheduleAllNotifications(): Promise<void> {
       prayerFallbacks: overlayArmed ? [] : prayerFallbacks,
       taskReminders,
       hadithReminders,
+      iqamahAlerts,
       prePrayerReminders,
       dhikrFiller,
     },

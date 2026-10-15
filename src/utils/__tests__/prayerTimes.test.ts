@@ -6,6 +6,8 @@ import {
   getPrayerTimeZone,
   getNextPrayer,
   getTimeUntil,
+  getIqamahTime,
+  DEFAULT_IQAMAH_OFFSETS,
 } from '@/utils/prayerTimes';
 
 /**
@@ -107,5 +109,37 @@ describe('getTimeUntil', () => {
     const now = new Date('2026-03-15T12:00:00');
     // 'بعد ٣٠ دقيقة' at minute range, 'خلال …' once the last minute is entered.
     expect(getTimeUntil(target, now)).toMatch(/^(بعد|خلال) /);
+  });
+});
+
+describe('getIqamahTime', () => {
+  const adhan = new Date('2026-03-15T12:00:00Z');
+
+  it('falls back per prayer to the defaults when nothing is saved', () => {
+    expect(getIqamahTime(adhan, 'fajr').getTime()).toBe(adhan.getTime() + 20 * 60_000);
+    expect(getIqamahTime(adhan, 'maghrib').getTime()).toBe(adhan.getTime() + 5 * 60_000);
+    expect(getIqamahTime(adhan, 'dhuhr').getTime()).toBe(adhan.getTime() + 10 * 60_000);
+    expect(getIqamahTime(adhan, 'isha').getTime()).toBe(adhan.getTime() + 10 * 60_000);
+    expect(getIqamahTime(adhan, 'asr').getTime()).toBe(adhan.getTime() + 10 * 60_000);
+  });
+
+  it('honours a saved row per key, tolerating a partial one', () => {
+    // A partially saved offsets row (or a pre-iqamah install merging in) must
+    // still give every prayer its minute — keys missing fall back individually.
+    expect(getIqamahTime(adhan, 'dhuhr', { dhuhr: 15 }).getTime()).toBe(adhan.getTime() + 15 * 60_000);
+    expect(getIqamahTime(adhan, 'fajr', { dhuhr: 15 }).getTime()).toBe(adhan.getTime() + 20 * 60_000);
+    expect(getIqamahTime(adhan, 'fajr', null).getTime()).toBe(adhan.getTime() + 20 * 60_000);
+  });
+
+  it('clamps a bad stored minute into a schedulable range', () => {
+    // Past two hours is a typo, not a جماعة — and negatives never move behind
+    // the adhan itself.
+    expect(getIqamahTime(adhan, 'fajr', { fajr: 900 }).getTime()).toBe(adhan.getTime() + 120 * 60_000);
+    expect(getIqamahTime(adhan, 'fajr', { fajr: -30 }).getTime()).toBe(adhan.getTime());
+    expect(getIqamahTime(adhan, 'fajr', { fajr: Number.NaN }).getTime()).toBe(
+      adhan.getTime() + DEFAULT_IQAMAH_OFFSETS.fajr * 60_000,
+    );
+    // Fractional saves truncate rather than drift.
+    expect(getIqamahTime(adhan, 'asr', { asr: 7.8 }).getTime()).toBe(adhan.getTime() + 7 * 60_000);
   });
 });
