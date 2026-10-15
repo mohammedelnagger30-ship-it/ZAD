@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BookOpen, LockKeyhole, Mail, RefreshCcw, Sun, Moon, Monitor, Sparkles, KeyRound } from 'lucide-react';
+import { BookOpen, LockKeyhole, Mail, RefreshCcw, Sun, Moon, Monitor, Sparkles } from 'lucide-react';
 import { supabase } from '@/utils/supabaseClient';
 import { useTheme } from '@/hooks/useApp';
 import { COLOR_PALETTES, type ColorPalette } from '@/utils/colorThemes';
@@ -39,31 +39,6 @@ export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenPro
       setMessage('تم إرسال رابط التأكيد مرة أخرى. راجع بريدك الإلكتروني، وتأكد من مجلد الرسائل غير المرغوبة.');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'تعذّر إرسال رابط التأكيد.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const resetPassword = async () => {
-    if (!supabase) {
-      setError('إعداد الاتصال السحابي غير مكتمل.');
-      return;
-    }
-    if (!email.trim()) {
-      setError('أدخل بريدك الإلكتروني أولاً ليتم إرسال رابط إعادة التعيين.');
-      return;
-    }
-
-    setBusy(true);
-    setError('');
-    setMessage('');
-
-    try {
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim());
-      if (resetError) throw resetError;
-      setMessage('تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك. افتح الرابط واختر كلمة مرور جديدة، ثم عد وسجّل الدخول. راجع مجلد الرسائل غير المرغوبة إن لم يظهر.');
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'تعذّر إرسال رابط إعادة التعيين.');
     } finally {
       setBusy(false);
     }
@@ -241,17 +216,6 @@ export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenPro
             )}
           </button>
         </form>
-
-        {mode === 'sign-in' && (
-          <button
-            type="button"
-            onClick={resetPassword}
-            disabled={busy}
-            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-primary-200 bg-primary-50 px-4 py-2.5 text-xs font-semibold text-primary-800 transition hover:bg-primary-100 disabled:opacity-60 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-200"
-          >
-            <KeyRound size={14} /> نسيت كلمة المرور؟
-          </button>
-        )}
 
         {mode === 'sign-up' && email.trim() && (
           <button
