@@ -93,6 +93,7 @@ const ContentLibrary = lazyWithRetry(() => import('@/screens/ContentLibrary').th
 const AdhkarScreen = lazyWithRetry(() => import('@/screens/AdhkarScreen').then((module) => ({ default: module.AdhkarScreen })));
 const TasbihScreen = lazyWithRetry(() => import('@/screens/TasbihScreen').then((module) => ({ default: module.TasbihScreen })));
 const BookmarksScreen = lazyWithRetry(() => import('@/screens/BookmarksScreen').then((module) => ({ default: module.BookmarksScreen })));
+const SearchScreen = lazyWithRetry(() => import('@/screens/SearchScreen').then((module) => ({ default: module.SearchScreen })));
 
 function App() {
   return (
@@ -690,9 +691,10 @@ function AppContent({
               )}
               {screen === 'more' && <MoreScreen key={`more-${resetNonce}`} navigate={navigate} />}
               {screen === 'library' && <ContentLibrary key={`library-${resetNonce}`} />}
-              {screen === 'adhkar' && <AdhkarScreen key={`adhkar-${resetNonce}`} />}
+              {screen === 'adhkar' && <AdhkarScreen key={`adhkar-${resetNonce}`} params={params} />}
               {screen === 'tasbih' && <TasbihScreen key={`tasbih-${resetNonce}`} />}
               {screen === 'bookmarks' && <BookmarksScreen key={`bookmarks-${resetNonce}`} navigate={navigate} />}
+              {screen === 'search' && <SearchScreen key={`search-${resetNonce}`} navigate={navigate} />}
             </Suspense>
           </div>
         </main>

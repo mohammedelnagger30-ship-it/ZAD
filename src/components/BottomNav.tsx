@@ -26,6 +26,7 @@ const MORE_TAB_SCREENS: ScreenName[] = [
   'library',
   'salah',
   'bookmarks',
+  'search',
 ];
 
 interface BottomNavProps {

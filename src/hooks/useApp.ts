@@ -161,6 +161,7 @@ const SCREEN_NAMES = [
   'adhkar',
   'tasbih',
   'bookmarks',
+  'search',
 ] as const;
 
 export type ScreenName = (typeof SCREEN_NAMES)[number];

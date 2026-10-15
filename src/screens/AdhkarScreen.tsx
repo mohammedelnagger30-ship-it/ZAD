@@ -129,8 +129,17 @@ function vibrate(enabled: boolean, completed: boolean) {
   }
 }
 
-export function AdhkarScreen() {
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+interface AdhkarScreenProps {
+  /** Deep links: a search result sends `{ categoryId }` to open that category directly. */
+  params?: Record<string, unknown>;
+}
+
+export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
+  // Read once, on mount: a deep link must land on the category, and re-reading
+  // it later would throw the reader back out of the category they opened.
+  const [activeCategory, setActiveCategory] = useState<string | null>(() =>
+    typeof params?.categoryId === 'string' ? params.categoryId : null,
+  );
   const [query, setQuery] = useState('');
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [initialState] = useState(loadState);

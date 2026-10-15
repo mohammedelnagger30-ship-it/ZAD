@@ -143,9 +143,10 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
 
   /**
    * Deep links from other screens — «محفوظاتي» sends `{ openSurahId, openAyah }`
-   * for an ayah bookmark or `{ openPage }` for a page bookmark. Running this after
-   * the saved-state initializer deliberately overrides it: an explicit tap on a
-   * bookmark must land on that bookmark, not on wherever the reader last was.
+   * for an ayah bookmark or `{ openPage }` for a page bookmark, and the search
+   * screen adds `openTafsir` to land with the commentary already open. Running
+   * this after the saved-state initializer deliberately overrides it: an
+   * explicit tap must land on what was tapped, not on wherever the reader was.
    */
   useEffect(() => {
     if (!params) return;
@@ -159,7 +160,9 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
       setSelectedSurah(surah);
       setFromAyah(ayah);
       setToAyah(null);
-      setTafsirAyah(null);
+      // A search result asking for the commentary lands with the sheet already
+      // open; a plain bookmark still closes whatever was showing before it.
+      setTafsirAyah(params.openTafsir === true ? { surahId: surah.id, ayah } : null);
       setViewMode('reader');
       return;
     }

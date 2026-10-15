@@ -1,4 +1,4 @@
-import { Calendar, BarChart3, Settings as SettingsIcon, ChevronLeft, Info, Shield, Heart, Repeat, Library, Sparkles, BookOpen, Bookmark } from 'lucide-react';
+import { Calendar, BarChart3, Settings as SettingsIcon, ChevronLeft, Info, Shield, Heart, Repeat, Library, Sparkles, BookOpen, Bookmark, Search } from 'lucide-react';
 import { Card } from '@/components/ui';
 import type { ScreenName, NavParams } from '@/hooks/useApp';
 
@@ -8,6 +8,14 @@ interface MoreScreenProps {
 
 export function MoreScreen({ navigate }: MoreScreenProps) {
   const items = [
+    {
+      screen: 'search' as ScreenName,
+      label: 'البحث الشامل',
+      description: 'ابحث في الآيات والأحاديث والأذكار ونصوص التفسير في نتيجة واحدة',
+      icon: Search,
+      badge: 'شامل',
+      color: 'from-teal-600 to-teal-700',
+    },
     {
       screen: 'bookmarks' as ScreenName,
       label: 'محفوظاتي',
