@@ -1,4 +1,4 @@
-import { describe, it, expect } from '@jest/globals';
+import { describe, it, expect, jest } from '@jest/globals';
 import {
   calculatePrayerTimes,
   calendarDayInZone,
@@ -7,6 +7,8 @@ import {
   getNextPrayer,
   getTimeUntil,
   getIqamahTime,
+  formatTime12h,
+  zoneOffsetMs,
   DEFAULT_IQAMAH_OFFSETS,
 } from '@/utils/prayerTimes';
 
@@ -15,7 +17,24 @@ import {
  * numbers must never produce Invalid Dates (an NaN time used to reach the adhan
  * window comparisons and fire a silent bogus azan), the high-latitude rule must
  * be explicit, and a zone's calendar day must be read from the zone.
+ *
+ * The zone tests also pin the engine-independence of the Cairo rules: a phone
+ * whose WebView tzdata predates 2023 must still see the official times.
  */
+
+/** Simulate an engine whose ICU throws (or predates the rules we carry). */
+function withBrokenPlatformFormatter<T>(run: () => T): T {
+  const spy = jest
+    .spyOn(Intl.DateTimeFormat.prototype, 'formatToParts')
+    .mockImplementation(() => {
+      throw new Error('engine tzdata predates 2023');
+    });
+  try {
+    return run();
+  } finally {
+    spy.mockRestore();
+  }
+}
 
 describe('calendarDayInZone', () => {
   it('reads the city day, not the device day', () => {
@@ -30,6 +49,81 @@ describe('calendarDayInZone', () => {
     for (let i = 0; i < 5; i++) {
       expect(calendarDayInZone(instant, 'Africa/Cairo')).toEqual(first);
     }
+  });
+
+  it('crosses Cairo midnight by the rules, not by the engine', () => {
+    // 21:30 UTC during summer time is already the next day in Cairo (+03);
+    // a pre-2023 ICU would still read +02 and call it the 15th.
+    expect(calendarDayInZone(new Date('2026-10-15T21:30:00Z'), 'Africa/Cairo')).toEqual({
+      year: 2026,
+      month: 10,
+      day: 16,
+    });
+    expect(calendarDayInZone(new Date('2026-10-15T20:30:00Z'), 'Africa/Cairo')).toEqual({
+      year: 2026,
+      month: 10,
+      day: 15,
+    });
+    expect(calendarDayInZone(new Date('2026-10-15T21:30:00Z'), 'Africa/Cairo')).toEqual(
+      withBrokenPlatformFormatter(() =>
+        calendarDayInZone(new Date('2026-10-15T21:30:00Z'), 'Africa/Cairo'),
+      ),
+    );
+  });
+});
+
+describe('zoneOffsetMs', () => {
+  it('carries Egypt’s summer time itself, engine or no engine', () => {
+    expect(zoneOffsetMs('Africa/Cairo', new Date('2026-01-15T12:00:00Z'))).toBe(2 * 3_600_000);
+    expect(zoneOffsetMs('Africa/Cairo', new Date('2026-07-15T12:00:00Z'))).toBe(3 * 3_600_000);
+    expect(zoneOffsetMs('Egypt', new Date('2026-07-15T12:00:00Z'))).toBe(3 * 3_600_000);
+  });
+
+  it('switches at the exact Egyptian boundaries of 2026', () => {
+    // DST begins Fri Apr 24 00:00 EET (= Apr 23 22:00 UTC) and ends
+    // Fri Oct 30 00:00 EEST (= Oct 29 21:00 UTC).
+    expect(zoneOffsetMs('Africa/Cairo', new Date('2026-04-23T21:59:00Z'))).toBe(2 * 3_600_000);
+    expect(zoneOffsetMs('Africa/Cairo', new Date('2026-04-23T22:00:00Z'))).toBe(3 * 3_600_000);
+    expect(zoneOffsetMs('Africa/Cairo', new Date('2026-10-29T20:59:00Z'))).toBe(3 * 3_600_000);
+    expect(zoneOffsetMs('Africa/Cairo', new Date('2026-10-29T21:00:00Z'))).toBe(2 * 3_600_000);
+  });
+
+  it('leaves the years before the restoration to the platform', () => {
+    // Egypt had no summer time from 2015 to 2022 — every engine agrees on +02.
+    expect(zoneOffsetMs('Africa/Cairo', new Date('2021-07-15T12:00:00Z'))).toBe(2 * 3_600_000);
+  });
+
+  it('answers for Cairo even when the platform formatter throws', () => {
+    const offsets = withBrokenPlatformFormatter(() => [
+      zoneOffsetMs('Africa/Cairo', new Date('2026-10-15T12:00:00Z')),
+      zoneOffsetMs('Africa/Cairo', new Date('2026-01-15T12:00:00Z')),
+    ]);
+    expect(offsets).toEqual([3 * 3_600_000, 2 * 3_600_000]);
+  });
+
+  it('still follows the platform for zones the bundle does not carry', () => {
+    expect(zoneOffsetMs('Asia/Riyadh', new Date('2026-10-15T12:00:00Z'))).toBe(3 * 3_600_000);
+    expect(zoneOffsetMs('UTC', new Date('2026-10-15T12:00:00Z'))).toBe(0);
+  });
+});
+
+describe('formatTime12h', () => {
+  const isha = new Date('2026-10-15T16:42:00Z'); // tonight's isha instant
+
+  it('renders the official Cairo wall time whatever the engine knows', () => {
+    expect(formatTime12h(isha, 'Africa/Cairo')).toBe('7:42 م'); // summer time: +03
+    expect(formatTime12h(new Date('2026-01-15T10:00:00Z'), 'Africa/Cairo')).toBe('12:00 م');
+    expect(formatTime12h(new Date('2026-01-15T02:30:00Z'), 'Africa/Cairo')).toBe('4:30 ص');
+  });
+
+  it('survives a platform formatter that throws', () => {
+    expect(withBrokenPlatformFormatter(() => formatTime12h(isha, 'Africa/Cairo'))).toBe('7:42 م');
+  });
+
+  it('still follows the platform for zones the bundle does not carry', () => {
+    expect(formatTime12h(isha, 'Asia/Riyadh')).toBe('7:42 م'); // fixed +03
+    expect(formatTime12h(isha, 'Asia/Dubai')).toBe('8:42 م'); // fixed +04
+    expect(formatTime12h(isha, 'UTC')).toBe('4:42 م');
   });
 });
 

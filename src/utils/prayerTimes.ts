@@ -234,35 +234,113 @@ export interface CalendarDay {
 }
 
 /**
- * Which calendar day `date` falls on *in* `timeZone` — the city's day, not the device's.
+ * The UTC offset `timeZone` observes at the instant `at`.
+ *
+ * The platform's ICU answers for most zones — but not, reliably, for the one
+ * the prayer table leans on hardest. A phone can leave the factory with a
+ * WebView whose engine never updates, and those engines still carry pre-2023
+ * tzdata, where Egypt's restored summer time simply does not exist: every
+ * prayer would then render an hour off for half the year, and a reader who
+ * compares against the official times would see the app as wrong. The rules
+ * this calendar actually depends on are therefore carried inside the app, and
+ * only zones the bundle says nothing about fall back to the platform.
+ */
+export function zoneOffsetMs(timeZone: string, at: Date): number {
+  return bundledZoneOffsetMs(timeZone, at) ?? platformZoneOffsetMs(timeZone, at);
+}
+
+const HOUR_MS = 3_600_000;
+
+/**
+ * Summer time in Egypt, restored in 2023 and repeating: it begins local
+ * midnight on the last Friday of April (00:00 at +02 → 01:00 at +03) and ends
+ * local midnight on the morning of that Friday in October (00:00 at +03 →
+ * 23:00 the previous day at +02). Expressed in UTC both boundaries are that
+ * same Friday, two and three hours before its UTC midnight.
+ *
+ * Years before 2023 answer nothing here — the platform's own data is right for
+ * those — so `null` hands the question back to it.
+ */
+function egyptOffsetMs(at: Date): number | null {
+  const year = at.getUTCFullYear();
+  if (year < 2023) return null;
+
+  const lastFridayIn = (monthIndex: number): number => {
+    // Day 0 of the following month is the last day of this one; walk it back
+    // to Friday (5) by however many days it sits past it.
+    const lastOfMonth = new Date(Date.UTC(year, monthIndex + 1, 0));
+    lastOfMonth.setUTCDate(lastOfMonth.getUTCDate() - ((lastOfMonth.getUTCDay() - 5 + 7) % 7));
+    return lastOfMonth.getTime();
+  };
+
+  const dstStarts = lastFridayIn(3) - 2 * HOUR_MS;
+  const dstEnds = lastFridayIn(9) - 3 * HOUR_MS;
+  return at.getTime() >= dstStarts && at.getTime() < dstEnds ? 3 * HOUR_MS : 2 * HOUR_MS;
+}
+
+/** Offset rules the app carries itself, `null` wherever the platform must answer. */
+function bundledZoneOffsetMs(timeZone: string, at: Date): number | null {
+  // 'Egypt' is the zone's legacy alias; both name the same rules.
+  if (timeZone === 'Africa/Cairo' || timeZone === 'Egypt') return egyptOffsetMs(at);
+  return null;
+}
+
+/**
+ * The offset the platform itself believes for `timeZone`.
  *
  * The formatter is cached per zone: the countdown re-renders its screen every
- * second, and constructing an `Intl.DateTimeFormat` per call is far too dear for
- * something whose answer changes once a day.
+ * second, and constructing an `Intl.DateTimeFormat` per call is far too dear.
+ * `hour12: false` rather than `hourCycle` — engines this old predate the latter.
  */
-const zoneFormatterCache = new Map<string, Intl.DateTimeFormat>();
+const zoneOffsetFormatterCache = new Map<string, Intl.DateTimeFormat>();
 
-function zoneDayFormatter(timeZone: string): Intl.DateTimeFormat {
-  let formatter = zoneFormatterCache.get(timeZone);
+function platformZoneOffsetMs(timeZone: string, at: Date): number {
+  let formatter = zoneOffsetFormatterCache.get(timeZone);
   if (!formatter) {
-    formatter = new Intl.DateTimeFormat('en-US', {
+    formatter = new Intl.DateTimeFormat('en-GB', {
       timeZone,
       year: 'numeric',
       month: 'numeric',
       day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      second: 'numeric',
+      hour12: false,
     });
-    zoneFormatterCache.set(timeZone, formatter);
+    zoneOffsetFormatterCache.set(timeZone, formatter);
   }
-  return formatter;
+
+  const values: Record<string, string> = {};
+  for (const { type, value } of formatter.formatToParts(at)) values[type] = value;
+
+  // Wall-clock in the zone, read as if it were UTC; measured against the true
+  // instant the difference *is* the offset. Seconds are part of both sides so
+  // they cancel, and only sub-second fields would be left over — hence the
+  // milliseconds stripped from the instant.
+  const wallClock = Date.UTC(
+    Number(values.year),
+    Number(values.month) - 1,
+    Number(values.day),
+    Number(values.hour) % 24,
+    Number(values.minute),
+    Number(values.second),
+  );
+  return wallClock - (at.getTime() - at.getMilliseconds());
 }
 
+/**
+ * Which calendar day `date` falls on *in* `timeZone` — the city's day, not the device's.
+ *
+ * The day comes from the zone's offset ({@link zoneOffsetMs}), never from how the
+ * engine happens to format: a stale ICU must not be able to push a prayer to
+ * the wrong side of midnight either.
+ */
 export function calendarDayInZone(date: Date, timeZone: string): CalendarDay {
-  const parts = zoneDayFormatter(timeZone).formatToParts(date);
-  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  const shifted = new Date(date.getTime() + zoneOffsetMs(timeZone, date));
   return {
-    year: Number(values.year),
-    month: Number(values.month),
-    day: Number(values.day),
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
   };
 }
 
@@ -293,18 +371,24 @@ export function getDateInTimeZone(date: Date, timeZone: string): Date {
   return calendarDayToDate(calendarDayInZone(date, timeZone));
 }
 
+/**
+ * `5:30 ص` / `12:42 م` — the prayer times the reader actually sees.
+ *
+ * The wall clock is derived from the zone's own offset ({@link zoneOffsetMs})
+ * and the UTC fields of the shifted instant, so an engine whose tzdata predates
+ * Egypt's summer time cannot render the table an hour behind the official
+ * times. Formatting by offset and reading UTC is the same arithmetic a
+ * formatter does internally — it just starts from rules the app controls.
+ */
 export function formatTime12h(
   date: Date,
   timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone,
 ): string {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  }).formatToParts(date);
-  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
-  return `${values.hour}:${values.minute} ${values.dayPeriod === 'PM' ? 'م' : 'ص'}`;
+  const shifted = new Date(date.getTime() + zoneOffsetMs(timeZone, date));
+  const hour24 = shifted.getUTCHours();
+  const hour12 = hour24 % 12 || 12;
+  const minute = String(shifted.getUTCMinutes()).padStart(2, '0');
+  return `${hour12}:${minute} ${hour24 < 12 ? 'ص' : 'م'}`;
 }
 
 /**
