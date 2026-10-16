@@ -20,6 +20,7 @@ import {
 } from '@/utils/spacedRepetition';
 import { recallDiff, similarityPercent, type RecallDiff } from '@/utils/textMatch';
 import type { HifzGrade } from '@/db/database';
+import { rescheduleAllNotifications } from '@/utils/notificationScheduler';
 
 interface HifzTestModalProps {
   surah: SurahMeta;
@@ -143,6 +144,9 @@ export function HifzTestModal({ surah, fromAyah, toAyah, onClose }: HifzTestModa
         const nextDays = Math.max(0, Math.round((row.dueAt - row.lastReviewedAt) / (24 * 60 * 60 * 1000)));
         setResult({ grade, nextDays });
         setExisting({ lastGrade: grade, intervalDays: nextDays });
+        void rescheduleAllNotifications().catch((error: unknown) => {
+          console.error('Could not reschedule the next Quran review reminder:', error);
+        });
       } finally {
         setSaving(false);
       }

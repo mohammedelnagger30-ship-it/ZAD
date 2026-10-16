@@ -5,7 +5,9 @@ import { JumpSheet } from '@/components/mushaf/JumpSheet';
 import { OptionsSheet } from '@/components/mushaf/OptionsSheet';
 import { MushafHeader } from '@/components/mushaf/MushafHeader';
 import { MushafDock } from '@/components/mushaf/MushafDock';
+import { MushafScrollControl } from '@/components/mushaf/MushafScrollControl';
 import { AyahVoiceSheet } from '@/components/mushaf/AyahVoiceSheet';
+import { WordAnalysisSheet, type SelectedQuranWord } from '@/components/mushaf/WordAnalysisSheet';
 import { useAyahVoice } from '@/hooks/useAyahVoice';
 import { useViewportStep } from '@/hooks/useViewportStep';
 import {
@@ -19,6 +21,8 @@ import {
   LEAF_CHUNK,
   LEAF_WINDOW,
   LEAF_HEADROOM,
+  AUTO_SCROLL_MIN,
+  AUTO_SCROLL_MAX,
   clampNumber,
   loadPrefs,
   type MushafPrefs,
@@ -27,6 +31,8 @@ import {
   type SheetName,
 } from '@/components/mushaf/readerConfig';
 import { TafsirBottomSheet } from '@/components/TafsirBottomSheet';
+import { useWordMeanings } from '@/hooks/useContent';
+import { getWordMeanings } from '@/utils/wordMeaningsService';
 import {
   getSurah,
   getAyahPage,
@@ -56,8 +62,16 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
   const [jumpTarget, setJumpTarget] = useState<JumpTarget>('surah');
   const [pageField, setPageField] = useState('');
   const [turnDir, setTurnDir] = useState<'next' | 'prev'>('next');
+  const [autoScrollActive, setAutoScrollActive] = useState(false);
   const [bookmarkedPages, setBookmarkedPages] = useState<Set<number>>(() => new Set<number>());
+  const bookmarkedPagesRef = useRef(bookmarkedPages);
+  const bookmarkTouchedPagesRef = useRef(new Set<number>());
+  const bookmarkWritesRef = useRef(new Map<number, Promise<void>>());
+  const [bookmarkError, setBookmarkError] = useState<string | null>(null);
   const [tafsirAyah, setTafsirAyah] = useState<{ surahId: number; ayahNumber: number } | null>(null);
+  const [selectedWord, setSelectedWord] = useState<SelectedQuranWord | null>(null);
+  const { installed: wordMeaningsInstalled } = useWordMeanings();
+  const wordLookupRef = useRef(0);
   // ---- Page‑read progress tracking ----
   const [readPages, setReadPages] = useState<Set<number>>(() => {
     try {
@@ -133,6 +147,8 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
   /** A jump whose sheet is not mounted yet, landed the moment the stack has it. */
   const pendingLeafRef = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const previousFrameTimeRef = useRef<number | null>(null);
   const sheetPanelRef = useRef<HTMLDivElement>(null);
   /** The ayah's own panel: it can sit under the tafsir, which takes the focus. */
   const ayahPanelRef = useRef<HTMLDivElement>(null);
@@ -296,10 +312,18 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
     db.pageBookmarks
       .toArray()
       .then((rows) => {
-        if (!cancelled) setBookmarkedPages(new Set(rows.map((r) => r.page)));
+        if (cancelled) return;
+        const loaded = new Set(rows.map((r) => r.page));
+        for (const page of bookmarkTouchedPagesRef.current) {
+          if (bookmarkedPagesRef.current.has(page)) loaded.add(page);
+          else loaded.delete(page);
+        }
+        bookmarkedPagesRef.current = loaded;
+        setBookmarkedPages(loaded);
       })
-      .catch(() => {
-        /* A failed read only costs the bookmark marks, so it must not break the reader. */
+      .catch((error: unknown) => {
+        console.error('تعذر تحميل علامات صفحات المصحف:', error);
+        if (!cancelled) setBookmarkError('تعذر تحميل العلامات المحفوظة.');
       });
     return () => {
       cancelled = true;
@@ -405,6 +429,48 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
     }
   }, [applyLeaves, onPageChange, prependLeaves, totalPages]);
 
+  useEffect(() => {
+    if (!autoScrollActive || orientation !== 'vertical' || sheet || tafsirAyah || ayahChoice) {
+      if (animationFrameRef.current !== null) cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+      previousFrameTimeRef.current = null;
+      return;
+    }
+
+    const advance = (time: number) => {
+      const box = scrollRef.current;
+      if (!box) return;
+      const previous = previousFrameTimeRef.current ?? time;
+      const elapsed = Math.min(time - previous, 64);
+      previousFrameTimeRef.current = time;
+      box.scrollTop += (elapsed * prefs.autoScrollSpeed) / 1000;
+
+      if (
+        currentPageRef.current >= totalPages &&
+        box.scrollTop + box.clientHeight >= box.scrollHeight - 2
+      ) {
+        setAutoScrollActive(false);
+        return;
+      }
+      animationFrameRef.current = requestAnimationFrame(advance);
+    };
+
+    animationFrameRef.current = requestAnimationFrame(advance);
+    return () => {
+      if (animationFrameRef.current !== null) cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+      previousFrameTimeRef.current = null;
+    };
+  }, [autoScrollActive, orientation, prefs.autoScrollSpeed, sheet, tafsirAyah, ayahChoice, totalPages]);
+
+  useEffect(() => {
+    if (orientation !== 'vertical') setAutoScrollActive(false);
+  }, [orientation]);
+
+  useEffect(() => {
+    if (sheet || tafsirAyah || ayahChoice) setAutoScrollActive(false);
+  }, [sheet, tafsirAyah, ayahChoice]);
+
   // A turned sheet opens at its head. The stack never joins in: there, scrolling is
   // the reading, and pulling it back to the top on every crossing would be a jump.
   useEffect(() => {
@@ -439,6 +505,9 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
     voiceEngaged,
     voicePhase,
     voiceError,
+    voiceTime,
+    playbackRate,
+    repeatCount,
     voiceAudioRef,
     setVoicePlaying,
     reciterId,
@@ -448,8 +517,11 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
     handleVoiceScope,
     closeAyahChoice,
     resetVoice,
-    finishVoice,
     handleVoiceTime,
+    handleVoiceEnded,
+    handleVoiceRate,
+    handleRepeatCount,
+    seekVoice,
     voicePrimaryLabel,
     voicePrimaryDisabled,
     voiceHint,
@@ -468,6 +540,30 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
       // heard in stays what the reader chose, because that is what they listen by.
     },
     [resetVoice],
+  );
+  const handleWordPress = useCallback(
+    async (surahId: number, ayahNumber: number, word: string, wordPosition: number) => {
+      const surahName = getSurah(surahId)?.name;
+      if (!surahName) return;
+      const lookupId = ++wordLookupRef.current;
+      if (!wordMeaningsInstalled) {
+        handleAyahPress(surahId, ayahNumber);
+        return;
+      }
+      try {
+        const meanings = await getWordMeanings(surahId, ayahNumber, wordPosition);
+        if (lookupId !== wordLookupRef.current) return;
+        if (meanings.length > 0) {
+          setSelectedWord({ surahId, surahName, ayahNumber, word, wordPosition });
+        } else {
+          handleAyahPress(surahId, ayahNumber);
+        }
+      } catch (cause) {
+        console.error('Unable to look up a tapped Quran word:', cause);
+        if (lookupId === wordLookupRef.current) handleAyahPress(surahId, ayahNumber);
+      }
+    },
+    [handleAyahPress, wordMeaningsInstalled],
   );
 
   // Focus lands in the sheet that just opened, and Escape gives it back.
@@ -498,6 +594,9 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
         if (tafsirAyah) {
           setTafsirAyah(null);
           event.preventDefault();
+        } else if (selectedWord) {
+          setSelectedWord(null);
+          event.preventDefault();
         } else if (ayahChoice) {
           closeAyahChoice();
           event.preventDefault();
@@ -508,7 +607,7 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
         return;
       }
 
-      if (sheet || tafsirAyah || ayahChoice || typing) return;
+      if (sheet || tafsirAyah || selectedWord || ayahChoice || typing) return;
       // In an RTL layout the left arrow advances, matching the reading direction; in
       // the stack the down arrow does the same job under the thumb.
       const step = event.shiftKey ? PAGE_KEYBOARD_STEP : 1;
@@ -524,7 +623,7 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [currentPage, goToPage, orientation, sheet, tafsirAyah, ayahChoice, closeAyahChoice]);
+  }, [currentPage, goToPage, orientation, sheet, tafsirAyah, selectedWord, ayahChoice, closeAyahChoice]);
 
   // Page turns by swipe. Bound to the scroller (not to the sheet inside it), so a
   // gesture started on the margin counts too and a vertical scroll never turns a page.
@@ -566,18 +665,54 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
   };
 
   const toggleBookmark = useCallback((page: number) => {
-    setBookmarkedPages((prev) => {
-      const updated = new Set(prev);
-      if (updated.has(page)) {
-        updated.delete(page);
-        void db.pageBookmarks.delete(page).catch(() => {});
-      } else {
-        updated.add(page);
-        void db.pageBookmarks.put({ page, createdAt: Date.now() }).catch(() => {});
-      }
-      return updated;
-    });
+    const shouldBookmark = !bookmarkedPagesRef.current.has(page);
+    const updated = new Set(bookmarkedPagesRef.current);
+    if (shouldBookmark) updated.add(page);
+    else updated.delete(page);
+    bookmarkedPagesRef.current = updated;
+    bookmarkTouchedPagesRef.current.add(page);
+    setBookmarkedPages(updated);
+    setBookmarkError(null);
+
+    const previousWrite = bookmarkWritesRef.current.get(page) ?? Promise.resolve();
+    const write = previousWrite
+      .catch(() => undefined)
+      .then(async () => {
+        if (shouldBookmark) {
+          await db.pageBookmarks.put({ page, createdAt: Date.now() });
+        } else {
+          await db.pageBookmarks.delete(page);
+        }
+      })
+      .catch(async (error: unknown) => {
+        console.error('تعذر حفظ علامة صفحة المصحف:', error);
+        if (bookmarkWritesRef.current.get(page) !== write) return;
+        setBookmarkError('تعذر حفظ العلامة. حاول مرة أخرى.');
+        try {
+          const record = await db.pageBookmarks.get(page);
+          if (bookmarkWritesRef.current.get(page) !== write) return;
+          const reconciled = new Set(bookmarkedPagesRef.current);
+          if (record) reconciled.add(page);
+          else reconciled.delete(page);
+          bookmarkedPagesRef.current = reconciled;
+          setBookmarkedPages(reconciled);
+        } catch (readError: unknown) {
+          console.error('تعذر التحقق من علامة صفحة المصحف:', readError);
+        }
+      })
+      .finally(() => {
+        if (bookmarkWritesRef.current.get(page) === write) {
+          bookmarkWritesRef.current.delete(page);
+        }
+      });
+    bookmarkWritesRef.current.set(page, write);
   }, []);
+
+  const changeAutoScrollSpeed = useCallback((speed: number) => {
+    updatePrefs({
+      autoScrollSpeed: clampNumber(speed, AUTO_SCROLL_MIN, AUTO_SCROLL_MAX, prefs.autoScrollSpeed),
+    });
+  }, [prefs.autoScrollSpeed, updatePrefs]);
 
   /** Step the open tafsir sheet to a neighbouring ayah, crossing surah and page breaks. */
   const stepTafsirAyah = useCallback(
@@ -628,7 +763,7 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
   );
   const mode = prefs.mode;
   /** The ayah under discussion, held on the page while either of its sheets is open. */
-  const activeReadingAyah = tafsirAyah ?? ayahChoice;
+  const activeReadingAyah = tafsirAyah ?? ayahChoice ?? selectedWord;
 
   // Bring what the reader is already on into view when the jump sheet opens: the
   // surah carrying this page in the list, or the page in the grid. Both mark
@@ -666,6 +801,11 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
         sheet={sheet}
         setSheet={setSheet} progressInfo={progressInfo}
       />
+      {bookmarkError && (
+        <p className="mushaf-bookmark-error" role="alert">
+          {bookmarkError}
+        </p>
+      )}
 
       {/* ── The page ───────────────────────────────────────────────────── */}
       <div
@@ -684,12 +824,16 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
               <MushafLeaf
                 key={page}
                 page={page}
+                readingPosition={page === currentPage}
+                bookmarked={bookmarkedPages.has(page)}
                 fontSize={effectiveFontSize}
                 night={mode === 'night'}
                 lineHeight={1.9 + (prefs.lineSpacing - 1) * 0.55}
                 letterSpacing={0.01 + Math.max(0, prefs.lineSpacing - 1) * 0.01}
                 wordSpacing={prefs.wordSpacing}
+                wordMeaningsInstalled={wordMeaningsInstalled}
                 onAyahPress={handleAyahPress}
+                onWordPress={handleWordPress}
                 activeAyah={activeReadingAyah}
               />
             ))}
@@ -702,17 +846,34 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
           >
             <MushafPage
               page={currentPage}
+              readingPosition
+              bookmarked={bookmarkedPages.has(currentPage)}
               fontSize={effectiveFontSize}
               night={mode === 'night'}
               lineHeight={1.9 + (prefs.lineSpacing - 1) * 0.55}
               letterSpacing={0.01 + Math.max(0, prefs.lineSpacing - 1) * 0.01}
               wordSpacing={prefs.wordSpacing}
+              wordMeaningsInstalled={wordMeaningsInstalled}
               onAyahPress={handleAyahPress}
+              onWordPress={handleWordPress}
               activeAyah={activeReadingAyah}
             />
           </div>
         )}
+        <WordAnalysisSheet
+          selectedWord={selectedWord}
+          onClose={() => setSelectedWord(null)}
+        />
       </div>
+
+      {orientation === 'vertical' && (
+        <MushafScrollControl
+          active={autoScrollActive}
+          speed={prefs.autoScrollSpeed}
+          onToggle={() => setAutoScrollActive((active) => !active)}
+          onSpeedChange={changeAutoScrollSpeed}
+        />
+      )}
 
       <MushafDock
         currentPage={currentPage}
@@ -769,13 +930,19 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
         handleVoiceReciter={handleVoiceReciter}
         replayVoice={replayVoice}
         voicePhase={voicePhase}
+        voiceTime={voiceTime}
+        playbackRate={playbackRate}
+        repeatCount={repeatCount}
+        handleVoiceRate={handleVoiceRate}
+        handleRepeatCount={handleRepeatCount}
+        seekVoice={seekVoice}
         voicePrimaryDisabled={voicePrimaryDisabled}
         voicePrimaryLabel={voicePrimaryLabel}
         voiceError={voiceError}
         voiceAudioRef={voiceAudioRef}
         setVoicePlaying={setVoicePlaying}
         handleVoiceTime={handleVoiceTime}
-        finishVoice={finishVoice}
+        handleVoiceEnded={handleVoiceEnded}
       />
 
       {/* Rendered last so it stacks over the reader's own sheets. */}
@@ -793,12 +960,16 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
 
 interface MushafLeafProps {
   page: number;
+  readingPosition: boolean;
+  bookmarked: boolean;
   fontSize: number;
   night: boolean;
   lineHeight: number;
   letterSpacing: number;
   wordSpacing: number;
+  wordMeaningsInstalled: boolean;
   onAyahPress: (surahId: number, ayahNumber: number) => void;
+  onWordPress: (surahId: number, ayahNumber: number, word: string, wordPosition: number) => void;
   activeAyah: { surahId: number; ayahNumber: number } | null;
 }
 
@@ -808,13 +979,10 @@ interface MushafLeafProps {
  * sheets themselves, so a leaf whose props have not changed is not re-rendered. It
  * carries `data-page` because that is what the scroll maths reads to know where it is.
  */
-const MushafLeaf = memo(function MushafLeaf({ page, ...sheet }: MushafLeafProps) {
+const MushafLeaf = memo(function MushafLeaf({ page, readingPosition, bookmarked, ...sheet }: MushafLeafProps) {
   return (
     <div className="mushaf-leaf mushaf-leaf--column" data-page={page}>
-      <MushafPage page={page} {...sheet} />
+      <MushafPage page={page} readingPosition={readingPosition} bookmarked={bookmarked} {...sheet} />
     </div>
   );
 });
-
-
-

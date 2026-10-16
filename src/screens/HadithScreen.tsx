@@ -513,7 +513,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
           setViewMode(managerReturnView);
           void refreshInstalled();
         }} />
-        <ContentLibrary showTitle={false} />
+        <ContentLibrary showTitle={false} initialSection="hadith" />
       </div>
     );
   }

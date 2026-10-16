@@ -1,30 +1,24 @@
 /**
- * Travel between timezones.
+ * Keep an automatically selected Egyptian location current.
  *
- * The reader moves — a flight, a border, a SIM waking up in another country — and
- * the app must follow without being asked: prayer times for where the phone now
- * stands, with that zone's own summer/winter rules. Those rules need no branch of
- * their own: the IANA name carries them, and the platform's ICU applies them to
- * each date (an October transition included).
+ * Prayer times stay on Egypt's calculation and Cairo timezone. A device timezone
+ * change may refresh an automatic location only when its permitted GPS fix remains
+ * inside Egypt; travel outside the supported scope leaves the saved location intact.
  *
- * Adoption is deliberately conservative about *what* may follow the zone:
- *   - a real GPS fix, when permission for one was already granted — never a
- *     permission dialog opened unasked;
- *   - failing that, a preset city whose timezone is the device's — coordinates
- *     and all, labelled as that city;
- *   - failing that, nothing — moving only the zone would wear a new clock on old
- *     coordinates and call it a new place.
+ * Adoption is deliberately conservative:
+ *   - use a real GPS fix only when its permission was already granted;
+ *   - otherwise use an Egyptian preset matching the device zone;
+ *   - never move a pinned city or adopt coordinates outside Egypt.
  *
  * A city the reader pinned on purpose (the displayed zone no longer matches
  * where the device was) is never moved; trips just record where the phone has
  * been, so the baseline is ready if they later choose to follow it again.
  *
- * The zone the device reports is tracked across checks rather than compared to
- * the settings: settings express *intent* (a pinned city must survive travel),
- * the tracked zone expresses *movement* (only a change of it is a trip).
+ * Device-zone tracking throttles GPS refreshes to actual device-zone changes;
+ * the foreground refresher also updates the saved fix periodically.
  */
 import type { Settings } from '@/db/database';
-import { CITY_PRESETS, getPrayerTimeZone } from './prayerTimes';
+import { CITY_PRESETS, getPrayerTimeZone, isEgyptianLocation } from './prayerTimes';
 
 /** The zone the device last reported, so a change in it can be noticed. */
 const LAST_DEVICE_TIME_ZONE_KEY = 'zad:last-device-tz';
@@ -124,7 +118,7 @@ export interface TimeZoneAdoptionIO {
  * silently swallowed.
  */
 export async function adoptDeviceTimeZone(
-  settings: Pick<Settings, 'timeZone' | 'cityName'>,
+  settings: Pick<Settings, 'timeZone' | 'cityName' | 'locationMethod'>,
   previousDeviceZone: string | null,
   deviceZone: string,
   io: TimeZoneAdoptionIO,
@@ -137,14 +131,20 @@ export async function adoptDeviceTimeZone(
   }
   if (deviceZone === previousDeviceZone) return null;
 
-  if (followsPreviousZone(settings, previousDeviceZone)) {
+  if (
+    settings.locationMethod === 'auto' &&
+    followsPreviousZone(settings, previousDeviceZone)
+  ) {
     const fix = await io.position();
-    const patch: (Partial<Settings> & { cityName: string }) | null = fix
+    const patch: (Partial<Settings> & { cityName: string }) | null = fix && isEgyptianLocation(
+      fix.latitude,
+      fix.longitude,
+    )
       ? {
-          cityName: 'موقعي الحالي',
+          cityName: 'موقعي داخل مصر',
           latitude: fix.latitude,
           longitude: fix.longitude,
-          timeZone: deviceZone,
+          timeZone: 'Africa/Cairo',
           locationMethod: 'auto',
         }
       : presetAdoption(deviceZone);

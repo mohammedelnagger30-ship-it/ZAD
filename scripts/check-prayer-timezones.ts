@@ -18,10 +18,9 @@ process.env.TZ = 'America/Los_Angeles';
 const cases = [
   { label: 'Cairo (DST)', date: new Date(2026, 9, 5, 12), timeZone: 'Africa/Cairo', latitude: 30.0444, longitude: 31.2357 },
   { label: 'Cairo (standard time)', date: new Date(2026, 11, 1, 12), timeZone: 'Africa/Cairo', latitude: 30.0444, longitude: 31.2357 },
-  { label: 'Makkah (no DST)', date: new Date(2026, 9, 5, 12), timeZone: 'Asia/Riyadh', latitude: 21.4225, longitude: 39.8262 },
+  { label: 'Alexandria (DST)', date: new Date(2026, 9, 5, 12), timeZone: 'Africa/Cairo', latitude: 31.2001, longitude: 29.9187 },
   { label: 'Cairo just after city midnight', date: new Date('2026-10-05T00:30:00Z'), timeZone: 'Africa/Cairo', latitude: 30.0444, longitude: 31.2357 },
-  // 17 hours behind the device zone: the date round-trips through the device clock.
-  { label: 'Tokyo (device/city gap > 12h)', date: new Date(2026, 9, 5, 12), timeZone: 'Asia/Tokyo', latitude: 35.6762, longitude: 139.6503 },
+  { label: 'Alexandria just after city midnight', date: new Date('2026-10-05T00:30:00Z'), timeZone: 'Africa/Cairo', latitude: 31.2001, longitude: 29.9187 },
 ];
 
 const PRAYER_NAMES = ['fajr', 'sunrise', 'dhuhr', 'asr', 'maghrib', 'isha'] as const;

@@ -35,6 +35,8 @@ export const NOTIFICATION_ID_BASE = {
   dhikr: 5_000_000,
   /** Iqamah alerts (الإقامة) — the جماعة's own minute after the adhan. */
   iqamah: 6_000_000,
+  /** Spaced-repetition reminders for memorised ayah ranges. */
+  hifzReview: 7_000_000,
   /** Adhan-overlay snoozes — the only ids that survive a rebuild. */
   snooze: 9_000_000,
 } as const;
@@ -53,6 +55,7 @@ export const notificationId = {
   hadith: (slot = 0) => idFor(NOTIFICATION_ID_BASE.hadith, slot),
   dhikr: (slot: number) => idFor(NOTIFICATION_ID_BASE.dhikr, slot),
   iqamah: (slot: number) => idFor(NOTIFICATION_ID_BASE.iqamah, slot),
+  hifzReview: (slot: number) => idFor(NOTIFICATION_ID_BASE.hifzReview, slot),
   /**
    * Snooze ids embed the second within the reserved range instead of the wall clock:
    * two snoozes rarely collide, a collision merely replaces the older reminder, and the
@@ -156,6 +159,10 @@ export async function requestExactAlarms(): Promise<boolean> {
 export type NotificationWarning =
   /** Exact alarms revoked: prayer alarms cannot be re-armed right now. */
   | 'exact-alarm-denied'
+  /** Prayer channels could not be prepared; the existing alarm queue was left intact. */
+  | 'channel-failed'
+  /** The queue was rebuilt successfully after a prior warning. */
+  | 'schedule-ready'
   /** The platform scheduled the queue inexact (late firing in sleep mode). */
   | 'scheduled-inexact'
   /** Rebuild failed and the previous queue was restored. */

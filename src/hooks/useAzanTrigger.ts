@@ -291,7 +291,10 @@ export function useAzanTrigger(settings: Settings | null) {
 
       let times;
       try {
-        times = calculatePrayerTimes(latitude, longitude, trustedNow(), calcMethod, asrMadhab, timeZone);
+        times = calculatePrayerTimes(
+          latitude, longitude, trustedNow(), calcMethod, asrMadhab, timeZone,
+          settings.prayerTimeAdjustments,
+        );
       } catch (err) {
         console.warn('Prayer time calculation failed:', err);
         return;
@@ -330,7 +333,10 @@ export function useAzanTrigger(settings: Settings | null) {
 
       let next: PrayerTimeInfo | null = null;
       try {
-        next = getNextPrayer(latitude, longitude, calcMethod, asrMadhab, timeZone);
+        next = getNextPrayer(
+          latitude, longitude, calcMethod, asrMadhab, timeZone,
+          settings.prayerTimeAdjustments,
+        );
       } catch (err) {
         console.warn('Could not schedule the next adhan:', err);
       }

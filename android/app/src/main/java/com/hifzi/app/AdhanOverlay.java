@@ -164,29 +164,29 @@ public class AdhanOverlay extends Plugin {
         if (alarmManager == null) return false;
 
         long now = System.currentTimeMillis();
-        int next = -1;
+        boolean hasFutureAlarm = false;
+        boolean hasMissingAlarm = false;
         try {
             for (int i = 0; i < batch.length(); i += 1) {
                 JSONObject alarm = batch.getJSONObject(i);
-                if (alarm.optLong("at", 0L) > now) {
-                    next = i;
-                    break;
-                }
-            }
-            if (next < 0) return false; // the stored window is spent; the next open rebuilds it
+                if (alarm.optLong("at", 0L) <= now) continue;
+                hasFutureAlarm = true;
 
-            // Only the soonest alarm is probed: the set is armed and dropped as one,
-            // so one survivor proves the rest.
-            int id = batch.getJSONObject(next).optInt("id", -1);
-            if (id < 0) return false;
-            Intent probe = new Intent(context, AdhanOverlayReceiver.class);
-            probe.setAction(ACTION_ADHAN);
-            PendingIntent armed = PendingIntent.getBroadcast(
-                context, id, probe, PendingIntent.FLAG_NO_CREATE | PendingIntent.FLAG_IMMUTABLE);
-            if (armed != null) return false; // still armed — nothing to do
+                int id = alarm.optInt("id", -1);
+                if (id < 0) {
+                    Logger.warn(TAG, "Stored future adhan alarm has no valid id");
+                    return false;
+                }
+                Intent probe = new Intent(context, AdhanOverlayReceiver.class);
+                probe.setAction(ACTION_ADHAN);
+                PendingIntent armed = PendingIntent.getBroadcast(
+                    context, id, probe, PendingIntent.FLAG_NO_CREATE | PendingIntent.FLAG_IMMUTABLE);
+                if (armed == null) hasMissingAlarm = true;
+            }
+            if (!hasFutureAlarm || !hasMissingAlarm) return false;
 
             armBatch(context, alarmManager, batch);
-            Logger.info(TAG, "Adhan alarms were missing - re-armed the stored batch");
+            Logger.info(TAG, "One or more future adhan alarms were missing - re-armed the stored batch");
             return true;
         } catch (JSONException e) {
             Logger.error(TAG, "Stored adhan batch is unreadable", e);
@@ -358,6 +358,12 @@ public class AdhanOverlay extends Plugin {
             && (Build.VERSION.SDK_INT < Build.VERSION_CODES.S
                 || alarmManager.canScheduleExactAlarms()));
 
+        NotificationManager notificationManager =
+            (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        out.put("fullScreenIntentAllowed", notificationManager != null
+            && (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+                || notificationManager.canUseFullScreenIntent()));
+
         boolean ignoringBattery = false;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
@@ -406,6 +412,14 @@ public class AdhanOverlay extends Plugin {
         if ("exact".equals(target)) {
             return new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
                 .setData(Uri.parse("package:" + context.getPackageName()));
+        }
+        if ("full-screen".equals(target)) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                return new Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT)
+                    .setData(Uri.parse("package:" + context.getPackageName()));
+            }
+            return new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, context.getPackageName());
         }
         if ("battery".equals(target)) {
             // The system's own exemption prompt — the only route that does not

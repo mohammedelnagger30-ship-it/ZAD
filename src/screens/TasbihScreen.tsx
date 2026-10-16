@@ -114,8 +114,15 @@ function playClickAudio() {
   }
 }
 
-export function TasbihScreen() {
-  const [state, setState] = useState<TasbihState>(loadState);
+export function TasbihScreen({ params }: { params?: Record<string, unknown> } = {}) {
+  const [state, setState] = useState<TasbihState>(() => {
+    const savedState = loadState();
+    const presetIndex = params?.presetIndex;
+    if (typeof presetIndex !== 'number' || !Number.isInteger(presetIndex) || !TASBIH_PRESETS[presetIndex]) {
+      return savedState;
+    }
+    return { ...savedState, presetIndex, count: 0 };
+  });
   const [hapticEnabled, setHapticEnabled] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [fullScreenTap, setFullScreenTap] = useState(false);

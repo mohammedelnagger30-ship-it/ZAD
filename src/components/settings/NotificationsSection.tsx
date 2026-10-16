@@ -57,7 +57,9 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
    * back off (see `NOTIFICATION_WARNING_EVENT`), so the fix — one tap into the system
    * page — sits exactly where the sound settings are.
    */
-  const [exactAlarmNotice, setExactAlarmNotice] = useState<'' | 'denied' | 'inexact' | 'failed'>('');
+  const [exactAlarmNotice, setExactAlarmNotice] = useState<
+    '' | 'denied' | 'inexact' | 'failed' | 'channel-failed'
+  >('');
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
     let alive = true;
@@ -69,6 +71,8 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
       if (type === 'exact-alarm-denied') setExactAlarmNotice('denied');
       else if (type === 'scheduled-inexact') setExactAlarmNotice('inexact');
       else if (type === 'schedule-failed') setExactAlarmNotice('failed');
+      else if (type === 'channel-failed') setExactAlarmNotice('channel-failed');
+      else if (type === 'schedule-ready') setExactAlarmNotice('');
     };
     window.addEventListener(NOTIFICATION_WARNING_EVENT, onWarning);
     return () => {
@@ -254,9 +258,20 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
                   ? 'تنبيهات الأذان الدقيقة موقوفة من إعدادات الجهاز — الأذان قد يتأخر دقائق أثناء السكون.'
                   : exactAlarmNotice === 'inexact'
                     ? 'شُغّلت تنبيهات هذا الدور بنظام تقريبي — الأذان قد يتأخر دقائق أثناء السكون.'
-                    : 'تعذّرت جدولة تنبيهات هذا الدور، وعادت التنبيهات السابقة إلى مكانها؛ ستُعاد المحاولة عند فتح التطبيق.'}
+                    : exactAlarmNotice === 'channel-failed'
+                      ? 'تعذّر تجهيز قناة صوت الأذان؛ أبقينا التنبيهات السابقة كما هي لتجنب جدولة أذان صامت.'
+                      : 'تعذّرت جدولة تنبيهات هذا الدور، وعادت التنبيهات السابقة إلى مكانها؛ ستُعاد المحاولة عند فتح التطبيق.'}
               </p>
-              {exactAlarmNotice !== 'failed' && (
+              {exactAlarmNotice === 'channel-failed' ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => void rescheduleAllNotifications()}
+                  className="font-semibold text-xs"
+                >
+                  إعادة محاولة تجهيز التنبيهات
+                </Button>
+              ) : exactAlarmNotice !== 'failed' ? (
                 <Button
                   size="sm"
                   variant="secondary"
@@ -269,7 +284,7 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
                 >
                   فتح إعدادات تنبيهات الأذان الدقيقة
                 </Button>
-              )}
+              ) : null}
             </div>
           )}
 
@@ -312,7 +327,7 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
                 {!selectedAdhanReady && (
                   <div className="space-y-2 rounded-2xl border border-primary-100 bg-white/70 p-3 dark:border-primary-800/80 dark:bg-primary-900/20">
                     <div className="flex items-center gap-2">
-                      <span className="flex-1 text-[11px] md:text-xs font-semibold text-primary-900 dark:text-primary-100">
+                      <span className="flex-1 text-[0.6875rem] md:text-xs font-semibold text-primary-900 dark:text-primary-100">
                         {selectedAdhan.name}
                         {selectedAdhan.remote ? ` — ${adhanSizeLabel(selectedAdhan.remote.sizeBytes)}` : ''}
                       </span>
@@ -320,7 +335,7 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
                         <button
                           type="button"
                           onClick={cancelAdhanDownload}
-                          className="rounded-lg bg-amber-100 px-2.5 py-1 text-[11px] md:text-xs font-bold text-amber-800 dark:bg-amber-900/50 dark:text-amber-200"
+                          className="rounded-lg bg-amber-100 px-2.5 py-1 text-[0.6875rem] md:text-xs font-bold text-amber-800 dark:bg-amber-900/50 dark:text-amber-200"
                         >
                           {adhanProgress && adhanProgress.total > 0
                             ? `${Math.floor((adhanProgress.received / adhanProgress.total) * 100)}٪ — إيقاف`
@@ -330,13 +345,13 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
                         <button
                           type="button"
                           onClick={() => void downloadAdhan(selectedAdhan)}
-                          className="flex items-center gap-1 rounded-lg bg-primary-600 px-2.5 py-1 text-[11px] md:text-xs font-bold text-white hover:bg-primary-700"
+                          className="flex items-center gap-1 rounded-lg bg-primary-600 px-2.5 py-1 text-[0.6875rem] md:text-xs font-bold text-white hover:bg-primary-700"
                         >
                           <Download size={12} /> تنزيل
                         </button>
                       )}
                     </div>
-                    <p className="text-[10px] md:text-xs text-primary-700 dark:text-primary-300">
+                    <p className="text-[0.625rem] md:text-xs text-primary-700 dark:text-primary-300">
                       يُنزَّل مرة واحدة فيصير صالحًا للأذان وصفحة الصلاة والإشعار بلا إنترنت — وحتى يكتمل التنزيل يواصل إشعار الصلاة بصوت المسجد الحرام.
                     </p>
                   </div>
@@ -344,13 +359,13 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
 
                 {selectedAdhanReady && !selectedAdhan.bundled && (
                   <div className="flex items-center gap-2 rounded-2xl border border-primary-100 bg-white/70 px-3 py-2.5 dark:border-primary-800/80 dark:bg-primary-900/20">
-                    <span className="flex-1 text-[11px] md:text-xs font-semibold text-primary-900 dark:text-primary-100">
+                    <span className="flex-1 text-[0.6875rem] md:text-xs font-semibold text-primary-900 dark:text-primary-100">
                       {selectedAdhan.name} — مُنزَّل على الجهاز
                     </span>
                     <button
                       type="button"
                       onClick={() => void removeAdhan(selectedAdhan)}
-                      className="flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1 text-[11px] md:text-xs font-bold text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/40"
+                      className="flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1 text-[0.6875rem] md:text-xs font-bold text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/40"
                     >
                       <Trash2 size={12} /> حذف
                     </button>

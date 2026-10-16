@@ -21,13 +21,14 @@ import type { LocalNotificationSchema } from '@capacitor/local-notifications';
  *  3. the hadith of the day;
  *  4. iqamah alerts (الإقامة) — the جماعة's minute, ahead of the purely advisory
  *     pre-prayer reminders because it is when the prayer actually starts;
- *  5. pre-prayer reminders, soonest first as generated;
- *  6. the dhikr filler.
+ *  5. spaced-repetition review alerts, soonest first;
+ *  6. pre-prayer reminders, soonest first as generated;
+ *  7. the dhikr filler.
  *
  * Trimming therefore eats the filler first, then the far-future pre-prayer
- * reminders, then — only under heavier overflow — later iqamah alerts, and never
- * reaches the adhan or today's tasks. Each bucket's own order is preserved, so
- * what survives of any bucket is its soonest entries.
+ * reminders, then spaced reviews, then — only under heavier overflow — later
+ * iqamah alerts, and never reaches the adhan or today's tasks. Each bucket's own
+ * order is preserved, so what survives of any bucket is its soonest entries.
  */
 export interface NotificationQueueParts {
   /** Armed only when `scheduleAdhanOverlay` failed; empty otherwise. */
@@ -35,6 +36,7 @@ export interface NotificationQueueParts {
   taskReminders: LocalNotificationSchema[];
   hadithReminders: LocalNotificationSchema[];
   iqamahAlerts: LocalNotificationSchema[];
+  hifzReviewReminders: LocalNotificationSchema[];
   prePrayerReminders: LocalNotificationSchema[];
   dhikrFiller: LocalNotificationSchema[];
 }
@@ -55,6 +57,7 @@ export function assembleNotificationQueue(
     ...parts.taskReminders,
     ...parts.hadithReminders,
     ...parts.iqamahAlerts,
+    ...parts.hifzReviewReminders,
     ...parts.prePrayerReminders,
     ...parts.dhikrFiller,
   ].slice(0, limit);
@@ -81,6 +84,7 @@ export function dhikrFillerBudget(
     taskReminders: LocalNotificationSchema[];
     hadithReminders: LocalNotificationSchema[];
     iqamahAlerts: LocalNotificationSchema[];
+    hifzReviewReminders: LocalNotificationSchema[];
     prePrayerReminders: LocalNotificationSchema[];
   },
   max: number,
@@ -91,6 +95,7 @@ export function dhikrFillerBudget(
     limit
       - certainlyArmed.prePrayerReminders.length
       - certainlyArmed.iqamahAlerts.length
+      - certainlyArmed.hifzReviewReminders.length
       - certainlyArmed.taskReminders.length
       - certainlyArmed.hadithReminders.length,
   );

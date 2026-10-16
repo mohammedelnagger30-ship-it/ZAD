@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { App as CapacitorApp } from '@capacitor/app';
 import type { PluginListenerHandle } from '@capacitor/core';
-import { BellOff, BatteryWarning, TimerOff, Rocket, ExternalLink } from 'lucide-react';
+import { BellOff, BatteryWarning, TimerOff, Rocket, ExternalLink, Maximize } from 'lucide-react';
 import {
   getProtectionStatus,
   openProtectionSettings,
@@ -92,6 +92,16 @@ export function DeviceProtectionBanner() {
       fix: 'السماح بالمنبهات',
       target: 'exact',
       icon: TimerOff,
+    });
+  }
+  if (!status.fullScreenIntentAllowed) {
+    issues.push({
+      key: 'full-screen',
+      label: 'فتح صفحة الأذان بملء الشاشة غير مسموح',
+      hint: 'سيظهر إشعار الأذان، لكن قد لا تفتح صفحته تلقائيًا عند قفل الهاتف',
+      fix: 'السماح بملء الشاشة',
+      target: 'full-screen',
+      icon: Maximize,
     });
   }
   if (!status.ignoringBatteryOptimizations) {

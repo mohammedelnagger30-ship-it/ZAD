@@ -1,4 +1,4 @@
-// Download state for tafsir, hadith and recitation audio.
+// Download state for tafsir, hadith, word meanings and recitation audio.
 //
 // `contentStore` notifies subscribers whenever something is written or deleted, so these
 // hooks re-read the store instead of polling or guessing. That is what keeps the library
@@ -14,6 +14,7 @@ import {
   tafsirSurahsInStore,
   type StorageSummary,
 } from '@/utils/contentStore';
+import { isWordMeaningsInstalled } from '@/utils/wordMeaningsService';
 import { TAFSIR_EDITIONS, HADITH_BOOKS } from '@/data/contentCatalog';
 import { AUDIO_RECITERS } from '@/data/audioReciters';
 
@@ -24,6 +25,8 @@ export interface InstalledContent {
   hadith: Set<string>;
   /** Surahs downloaded per reciter. */
   audio: Record<string, Set<number>>;
+  /** True once the whole word-meanings dump is on the device. */
+  wordMeanings: boolean;
   /** Measured bytes on the device. */
   storage: StorageSummary;
   /** True while the store is being read for the first time. */
@@ -36,21 +39,24 @@ export function useInstalledContent(): InstalledContent {
     tafsir: {},
     hadith: new Set(),
     audio: {},
+    wordMeanings: false,
     storage: { used: 0, quota: 0 },
     loading: true,
   });
 
   const read = useCallback(async () => {
-    const [tafsir, hadith, audioRows, storage] = await Promise.all([
+    const [tafsir, hadith, audioRows, wordMeanings, storage] = await Promise.all([
       Promise.all(TAFSIR_EDITIONS.map(async (e) => [e.id, await tafsirSurahsInStore(e.id)] as const)),
       hadithBooksInStore(),
       Promise.all(AUDIO_RECITERS.map(async (reciter) => [reciter.id, await audioStatusInStore(reciter.id)] as const)),
+      isWordMeaningsInstalled(),
       storageSummary(),
     ]);
     setState({
       tafsir: Object.fromEntries(tafsir),
       hadith,
       audio: Object.fromEntries(audioRows),
+      wordMeanings,
       storage,
       loading: false,
     });
@@ -113,4 +119,37 @@ export function useHadithBookStatus(installed: Set<string>): HadithBookStatus[] 
     installed: installed.has(book.id),
     downloadBytes: book.downloadBytes,
   }));
+}
+
+export interface WordMeaningsState {
+  installed: boolean;
+  loading: boolean;
+}
+
+/**
+ * Whether the word-meanings dump is on the device.
+ *
+ * Its own hook rather than a field of `useInstalledContent`: the word sheet asks this
+ * question alone, on every tap, and it should not have to read every tafsir edition and
+ * sum the storage table to answer it.
+ */
+export function useWordMeanings(): WordMeaningsState {
+  const [state, setState] = useState<WordMeaningsState>({ installed: false, loading: true });
+
+  useEffect(() => {
+    let cancelled = false;
+    const read = () => {
+      void isWordMeaningsInstalled().then((installed) => {
+        if (!cancelled) setState({ installed, loading: false });
+      });
+    };
+    read();
+    const unsubscribe = subscribeToContent(read);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
+
+  return state;
 }

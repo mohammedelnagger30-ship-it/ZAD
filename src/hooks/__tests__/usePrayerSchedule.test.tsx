@@ -19,7 +19,7 @@
  * `trustedNow()` internally — advancing it is the only way to ask what the hook
  * answers at a chosen instant without waiting for the real one to arrive.
  */
-import { act } from 'react';
+import { act, useMemo } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { ReactElement } from 'react';
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
@@ -77,7 +77,19 @@ describe('usePrayerSchedule', () => {
   let latest: Schedule | undefined;
 
   /** `location: null` exercises the no-coordinate branch through a real render. */
-  function Harness({ now, location }: { now: Date; location: typeof LOCATION | null }) {
+  function Harness({
+    now,
+    location,
+    dhuhrCorrection = 0,
+  }: {
+    now: Date;
+    location: typeof LOCATION | null;
+    dhuhrCorrection?: number;
+  }) {
+    const prayerTimeAdjustments = useMemo(
+      () => ({ dhuhr: dhuhrCorrection }),
+      [dhuhrCorrection],
+    );
     latest = usePrayerSchedule({
       latitude: location?.latitude ?? null,
       longitude: location?.longitude ?? null,
@@ -85,6 +97,7 @@ describe('usePrayerSchedule', () => {
       asrMadhab: 'standard',
       timeZone: 'Africa/Cairo',
       cityName: 'القاهرة',
+      prayerTimeAdjustments,
       now,
     });
     return null;
@@ -106,10 +119,20 @@ describe('usePrayerSchedule', () => {
   });
 
   /** Renders the hook at one instant and returns what it answered. */
-  async function showAt(instantMs: number, location: typeof LOCATION | null = LOCATION): Promise<Schedule> {
+  async function showAt(
+    instantMs: number,
+    location: typeof LOCATION | null = LOCATION,
+    dhuhrCorrection = 0,
+  ): Promise<Schedule> {
     trustedMs = instantMs;
     await act(async () => {
-      root.render(<Harness now={new Date(instantMs)} location={location} /> as ReactElement);
+      root.render(
+        <Harness
+          now={new Date(instantMs)}
+          location={location}
+          dhuhrCorrection={dhuhrCorrection}
+        /> as ReactElement,
+      );
     });
     return latest!;
   }
@@ -156,6 +179,16 @@ describe('usePrayerSchedule', () => {
     // The moment a prayer crosses, the derived view does move on.
     const crossing = await showAt(DHUHR_AT + MINUTE);
     expect(crossing.prayerResult).not.toBe(later.prayerResult);
+  });
+
+  it('recalculates displayed and upcoming times when a mosque correction changes', async () => {
+    const original = await showAt(DHUHR_AT - 10 * MINUTE);
+    const corrected = await showAt(DHUHR_AT - 10 * MINUTE, LOCATION, 3);
+    const originalDhuhr = original.prayerResult!.prayers.find((p) => p.name === 'dhuhr')!;
+    const correctedDhuhr = corrected.prayerResult!.prayers.find((p) => p.name === 'dhuhr')!;
+
+    expect(correctedDhuhr.time.getTime() - originalDhuhr.time.getTime()).toBe(3 * MINUTE);
+    expect(corrected.nextPrayer!.time.getTime() - original.nextPrayer!.time.getTime()).toBe(3 * MINUTE);
   });
 
   it('leaves the schedule empty when there is no location', async () => {

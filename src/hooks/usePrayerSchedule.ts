@@ -4,6 +4,7 @@ import {
   calendarDayInZone,
   getNextPrayer,
   getPrayerTimeZone,
+  type PrayerTimeAdjustments,
 } from '@/utils/prayerTimes';
 import { trustedNow } from '@/utils/clock';
 import { countdownTickDelayMs } from '@/utils/countdown';
@@ -25,6 +26,7 @@ export interface PrayerScheduleInput {
   asrMadhab: 'standard' | 'hanafi';
   timeZone?: string;
   cityName?: string;
+  prayerTimeAdjustments?: PrayerTimeAdjustments;
   now: Date;
 }
 
@@ -35,6 +37,7 @@ export function usePrayerSchedule({
   asrMadhab,
   timeZone,
   cityName,
+  prayerTimeAdjustments,
   now,
 }: PrayerScheduleInput) {
   const prayerTimeZone = getPrayerTimeZone(timeZone, cityName);
@@ -53,10 +56,16 @@ export function usePrayerSchedule({
   const dayResult = useMemo(
     () =>
       hasLocation && cityDayKey
-        ? calculatePrayerTimes(latitude!, longitude!, now, calcMethod, asrMadhab, prayerTimeZone)
+        ? calculatePrayerTimes(
+            latitude!, longitude!, now, calcMethod, asrMadhab, prayerTimeZone,
+            prayerTimeAdjustments,
+          )
         : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [hasLocation, cityDayKey, latitude, longitude, calcMethod, asrMadhab, prayerTimeZone],
+    [
+      hasLocation, cityDayKey, latitude, longitude, calcMethod, asrMadhab,
+      prayerTimeZone, prayerTimeAdjustments,
+    ],
   );
 
   // `passed` is the one field `calculatePrayerTimes` fills in from the clock rather
@@ -97,7 +106,10 @@ export function usePrayerSchedule({
   const nextPrayer = useMemo(
     () =>
       hasLocation
-        ? getNextPrayer(latitude!, longitude!, calcMethod, asrMadhab, prayerTimeZone)
+        ? getNextPrayer(
+            latitude!, longitude!, calcMethod, asrMadhab, prayerTimeZone,
+            prayerTimeAdjustments,
+          )
         : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
@@ -109,6 +121,7 @@ export function usePrayerSchedule({
       calcMethod,
       asrMadhab,
       prayerTimeZone,
+      prayerTimeAdjustments,
     ],
   );
 

@@ -1,4 +1,5 @@
-// Downloadable content store — tafsir, hadith text and Quran audio kept on the device.
+// Downloadable content store — tafsir, hadith text, word meanings and Quran audio kept
+// on the device.
 //
 // The Quran text is bundled with the app (see `data/quranText.ts`), and so is
 // the essential hadith collection, صحيح مسلم (see `public/hadith/`, read by
@@ -15,9 +16,9 @@ import Dexie, { type Table } from 'dexie';
 
 /** One cached file. `text` holds the raw JSON exactly as downloaded. */
 export interface ContentFile {
-  /** `tafsir:<edition>:<surah>` or `hadith:<collection>`. */
+  /** `tafsir:<edition>:<surah>`, `hadith:<collection>` or `meanings:<source>:<surah>`. */
   key: string;
-  kind: 'tafsir' | 'hadith';
+  kind: 'tafsir' | 'hadith' | 'meanings';
   /** Edition or collection id, without the kind prefix. */
   group: string;
   /** Surah number for tafsir files; 0 for whole-collection files. */
@@ -35,6 +36,14 @@ export interface AudioTrack {
   blob: Blob;
   bytes: number;
   verseTimings: Array<{ ayah: number; startMs: number; endMs: number }>;
+  savedAt: number;
+}
+
+export interface AudioTrackInfo {
+  key: string;
+  reciterId: string;
+  surah: number;
+  bytes: number;
   savedAt: number;
 }
 
@@ -96,6 +105,24 @@ export async function audioStatusInStore(reciterId: string): Promise<Set<number>
   return new Set(tracks.map((track) => track.surah));
 }
 
+/** Read the downloaded-audio catalogue without retaining all audio blobs in memory. */
+export async function listAudioTrackInfo(): Promise<AudioTrackInfo[]> {
+  if (!isContentStoreAvailable()) return [];
+  const tracks: AudioTrackInfo[] = [];
+  await database().audioTracks.each((track) => {
+    tracks.push({
+      key: track.key,
+      reciterId: track.reciterId,
+      surah: track.surah,
+      bytes: track.bytes,
+      savedAt: track.savedAt,
+    });
+  });
+  return tracks.sort(
+    (a, b) => a.reciterId.localeCompare(b.reciterId) || a.surah - b.surah,
+  );
+}
+
 export async function readAudioTrack(
   reciterId: string,
   surah: number,
@@ -149,7 +176,7 @@ export function notifyContentChanged(): void {
 // ---------------------------------------------------------------------------
 
 /** All cached files for a kind, newest first. */
-export async function listFiles(kind?: 'tafsir' | 'hadith'): Promise<ContentFile[]> {
+export async function listFiles(kind?: 'tafsir' | 'hadith' | 'meanings'): Promise<ContentFile[]> {
   if (!isContentStoreAvailable()) return [];
   const all = kind
     ? await database().files.where('kind').equals(kind).toArray()
@@ -199,7 +226,7 @@ export async function isDownloaded(key: string): Promise<boolean> {
 export async function writeText(
   key: string,
   text: string,
-  meta: { kind: 'tafsir' | 'hadith'; group: string; surah: number },
+  meta: { kind: 'tafsir' | 'hadith' | 'meanings'; group: string; surah: number },
 ): Promise<number> {
   const bytes = byteLength(text);
   await database().files.put({
@@ -215,8 +242,11 @@ export async function writeText(
   return bytes;
 }
 
-/** Removes every cached file of one group (an edition or a collection). */
-export async function removeGroup(kind: 'tafsir' | 'hadith', group: string): Promise<number> {
+/** Removes every cached file of one group (an edition, a collection or a source). */
+export async function removeGroup(
+  kind: 'tafsir' | 'hadith' | 'meanings',
+  group: string,
+): Promise<number> {
   if (!isContentStoreAvailable()) return 0;
   const count = await database().files.where('[kind+group]').equals([kind, group]).delete();
   notify();
@@ -425,6 +455,76 @@ export async function downloadAndStore(
 
   onProgress?.({ received, total: declared || received });
   return writeText(key, text, meta);
+}
+
+/**
+ * Downloads `url` as raw bytes, reporting progress as they arrive.
+ *
+ * The word-meanings dump ships compressed (gzip, ~730 KB for ~2.6 MB of JSON), and it is
+ * the only content the app fetches as bytes rather than text: decoding it before it is
+ * decompressed would produce mojibake, and the decompression itself is what turns it
+ * into something `writeText` can store.
+ */
+export async function downloadBinary(
+  url: string,
+  onProgress?: (progress: DownloadProgress) => void,
+  signal?: AbortSignal,
+): Promise<Uint8Array> {
+  let response: Response;
+  try {
+    response = await fetch(url, { signal, mode: 'cors', redirect: 'follow' });
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') throw err;
+    throw new ContentDownloadError('تعذّر الاتصال بالإنترنت', err);
+  }
+
+  if (!response.ok) {
+    throw new ContentDownloadError(
+      response.status === 404
+        ? 'المحتوى غير متوفر في المصدر'
+        : `فشل التحميل (${response.status})`,
+    );
+  }
+
+  if (!response.body) {
+    const buffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    onProgress?.({ received: bytes.length, total: bytes.length });
+    return bytes;
+  }
+
+  const declared = Number(response.headers.get('content-length') ?? 0);
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        chunks.push(value);
+        received += value.length;
+        onProgress?.({ received, total: declared });
+      }
+    }
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') throw err;
+    throw new ContentDownloadError('انقطع التحميل', err);
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (received === 0) throw new ContentDownloadError('الملف المنزَّل فارغ');
+  onProgress?.({ received, total: declared || received });
+
+  const joined = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    joined.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return joined;
 }
 
 // ---------------------------------------------------------------------------

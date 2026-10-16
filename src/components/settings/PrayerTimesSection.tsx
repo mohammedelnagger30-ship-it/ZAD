@@ -1,7 +1,6 @@
 import { MapPin } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { SectionTitle } from '@/components/settings/SectionTitle';
-import { CALC_METHODS, CALC_METHOD_NAMES_AR } from '@/utils/prayerTimes';
 import { type Settings } from '@/db/database';
 
 interface PrayerTimesSectionProps {
@@ -17,18 +16,13 @@ export function PrayerTimesSection({ settings, onSaveSettings }: PrayerTimesSect
         <SectionTitle icon={<MapPin size={20} />} title="حساب مواقيت الصلاة" />
         <Card className="border border-primary-200/80 dark:border-primary-800/80 shadow-md space-y-4">
           <div>
-            <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5 block">طريقة الحساب المعتمدة</label>
-            <select
-              value={settings.calcMethod}
-              onChange={(e) => onSaveSettings({ calcMethod: e.target.value })}
-              className="w-full md:max-w-md bg-gray-50 dark:bg-primary-900/50 border border-primary-200 dark:border-primary-700 rounded-xl py-2.5 px-3 text-sm text-primary-900 dark:text-primary-100 font-semibold focus:outline-hidden focus:ring-2 focus:ring-primary-500"
-            >
-              {CALC_METHODS.map((m) => (
-                <option key={m} value={m}>
-                  {CALC_METHOD_NAMES_AR[m]}
-                </option>
-              ))}
-            </select>
+            <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5 block">طريقة الحساب المعتمدة لمصر</label>
+            <div className="w-full md:max-w-md rounded-xl border border-primary-200 bg-gray-50 px-3 py-2.5 text-sm font-semibold text-primary-900 dark:border-primary-700 dark:bg-primary-900/50 dark:text-primary-100">
+              الهيئة المصرية العامة للمساحة
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+              تُحسب المواقيت على الجهاز دون إنترنت، باستخدام آخر موقع مصري محفوظ. عند توفر GPS داخل مصر يُحدّث التطبيق الموقع تلقائيًا.
+            </p>
           </div>
 
           <div>
@@ -65,7 +59,7 @@ export function PrayerTimesSection({ settings, onSaveSettings }: PrayerTimesSect
                 {settings.cityName || 'غير محدد'}
               </span>
               <span className="text-xs text-gray-500 dark:text-gray-400">
-                ({settings.latitude?.toFixed(2)}, {settings.longitude?.toFixed(2)})
+                ({settings.latitude?.toFixed(4)}, {settings.longitude?.toFixed(4)})
               </span>
             </div>
           </div>

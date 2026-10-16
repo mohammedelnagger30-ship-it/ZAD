@@ -1,10 +1,8 @@
 /**
- * Travel across timezone boundaries.
+ * Automatic prayer locations stay within Egypt across device-zone changes.
  *
- * The contract under test: a zone change moves the app only when it still
- * follows the phone — by a permitted GPS fix, else by the preset that owns the
- * zone — never moves a city pinned deliberately, records the new zone either
- * way so a trip is decided once, and refuses to lose a trip whose save failed.
+ * The contract under test: only an already-permitted Egyptian GPS fix may update
+ * automatic coordinates; foreign fixes and presets leave the cached place intact.
  */
 import { jest } from '@jest/globals';
 import type { Settings } from '@/db/database';
@@ -37,7 +35,11 @@ function makeIO(overrides: IOOverrides = {}): TimeZoneAdoptionIO {
   };
 }
 
-const cairoSettings = { timeZone: 'Africa/Cairo', cityName: 'القاهرة' };
+const cairoSettings = {
+  timeZone: 'Africa/Cairo',
+  cityName: 'القاهرة',
+  locationMethod: 'auto' as const,
+};
 
 describe('followsPreviousZone', () => {
   it('is true while the displayed zone is the device’s old zone', () => {
@@ -75,33 +77,51 @@ describe('adoptDeviceTimeZone', () => {
     expect(io.writePreviousZone).toHaveBeenCalledWith('Asia/Riyadh');
   });
 
-  it('adopts a permitted GPS fix as the current position in the new zone', async () => {
-    const io = makeIO({ position: async () => ({ latitude: 51.5074, longitude: -0.1278 }) });
+  it('does not move a manually selected Egyptian city', async () => {
+    const io = makeIO({
+      position: async () => ({ latitude: 31.2001, longitude: 29.9187 }),
+    });
+    const result = await adoptDeviceTimeZone(
+      { ...cairoSettings, locationMethod: 'manual' },
+      'Africa/Cairo',
+      'Europe/London',
+      io,
+    );
+    expect(result).toBeNull();
+    expect(io.save).not.toHaveBeenCalled();
+    expect(io.writePreviousZone).toHaveBeenCalledWith('Europe/London');
+  });
+
+  it('adopts a permitted GPS fix only when it remains inside Egypt', async () => {
+    const io = makeIO({ position: async () => ({ latitude: 30.0444, longitude: 31.2357 }) });
     const result = await adoptDeviceTimeZone(cairoSettings, 'Africa/Cairo', 'Europe/London', io);
-    expect(result).toBe('موقعي الحالي');
+    expect(result).toBe('موقعي داخل مصر');
     expect(io.save).toHaveBeenCalledWith({
-      cityName: 'موقعي الحالي',
-      latitude: 51.5074,
-      longitude: -0.1278,
-      timeZone: 'Europe/London',
+      cityName: 'موقعي داخل مصر',
+      latitude: 30.0444,
+      longitude: 31.2357,
+      timeZone: 'Africa/Cairo',
       locationMethod: 'auto',
     });
     expect(io.writePreviousZone).toHaveBeenCalledWith('Europe/London');
-    expect(io.notify).toHaveBeenCalledWith('موقعي الحالي');
+    expect(io.notify).toHaveBeenCalledWith('موقعي داخل مصر');
   });
 
-  it('falls back to the preset owning the zone when no fix is permitted', async () => {
+  it('does not adopt a foreign GPS fix', async () => {
+    const io = makeIO({ position: async () => ({ latitude: 51.5074, longitude: -0.1278 }) });
+    const result = await adoptDeviceTimeZone(cairoSettings, 'Africa/Cairo', 'Europe/London', io);
+    expect(result).toBeNull();
+    expect(io.save).not.toHaveBeenCalled();
+    expect(io.notify).not.toHaveBeenCalled();
+    expect(io.writePreviousZone).toHaveBeenCalledWith('Europe/London');
+  });
+
+  it('does not fall back to a preset outside Egypt', async () => {
     const io = makeIO(); // position: null (permission not granted)
     const result = await adoptDeviceTimeZone(cairoSettings, 'Africa/Cairo', 'Europe/London', io);
-    expect(result).toBe('لندن');
-    expect(io.save).toHaveBeenCalledWith({
-      cityName: 'لندن',
-      latitude: 51.5074,
-      longitude: -0.1278,
-      timeZone: 'Europe/London',
-      locationMethod: 'manual',
-    });
-    expect(io.notify).toHaveBeenCalledWith('لندن');
+    expect(result).toBeNull();
+    expect(io.save).not.toHaveBeenCalled();
+    expect(io.notify).not.toHaveBeenCalled();
     expect(io.writePreviousZone).toHaveBeenCalledWith('Europe/London');
   });
 
@@ -115,6 +135,7 @@ describe('adoptDeviceTimeZone', () => {
 
   it('keeps the old baseline when the save fails, so the trip is retried', async () => {
     const io = makeIO({
+      position: async () => ({ latitude: 30.0444, longitude: 31.2357 }),
       save: async () => {
         throw new Error('disk full');
       },
@@ -147,8 +168,8 @@ describe('zone bookkeeping', () => {
     const seen: string[] = [];
     const onAdopted = (event: Event) => seen.push((event as CustomEvent<string>).detail);
     window.addEventListener(TIME_ZONE_ADOPTION_EVENT, onAdopted);
-    notifyTimeZoneAdoption('لندن');
+    notifyTimeZoneAdoption('موقعي داخل مصر');
     window.removeEventListener(TIME_ZONE_ADOPTION_EVENT, onAdopted);
-    expect(seen).toEqual(['لندن']);
+    expect(seen).toEqual(['موقعي داخل مصر']);
   });
 });

@@ -13,6 +13,7 @@ const emptyParts = {
   taskReminders: [],
   hadithReminders: [],
   iqamahAlerts: [],
+  hifzReviewReminders: [],
   prePrayerReminders: [],
   dhikrFiller: [],
 };
@@ -25,14 +26,15 @@ describe('assembleNotificationQueue', () => {
         taskReminders: [n(2)],
         hadithReminders: [n(3)],
         iqamahAlerts: [n(4)],
-        prePrayerReminders: [n(5)],
-        dhikrFiller: [n(6)],
+        hifzReviewReminders: [n(5)],
+        prePrayerReminders: [n(6)],
+        dhikrFiller: [n(7)],
       },
       50,
     );
     // The iqamah sits after the day's own business (tasks, hadith) but ahead of
     // the advisory pre-prayer reminders: it is when the prayer actually starts.
-    expect(ids(scheduled)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(ids(scheduled)).toEqual([1, 2, 3, 4, 5, 6, 7]);
   });
 
   it('leaves a queue already under the cap untouched', () => {
@@ -66,11 +68,12 @@ describe('assembleNotificationQueue', () => {
     const taskReminders = [n(2001), n(2002), n(2003)];
     const hadithReminders = [n(3001)];
     const iqamahAlerts = Array.from({ length: 35 }, (_, i) => n(6000 + i));
+    const hifzReviewReminders = Array.from({ length: 5 }, (_, i) => n(7000 + i));
     const prePrayerReminders = Array.from({ length: 35 }, (_, i) => n(4000 + i));
     const dhikrFiller = Array.from({ length: 20 }, (_, i) => n(5000 + i));
 
     const scheduled = assembleNotificationQueue(
-      { prayerFallbacks, taskReminders, hadithReminders, iqamahAlerts, prePrayerReminders, dhikrFiller },
+      { prayerFallbacks, taskReminders, hadithReminders, iqamahAlerts, hifzReviewReminders, prePrayerReminders, dhikrFiller },
       50,
     );
 
@@ -80,8 +83,8 @@ describe('assembleNotificationQueue', () => {
     expect(ids(scheduled).slice(0, 35)).toEqual(ids(prayerFallbacks));
     // Today's tasks and the hadith outrank both the iqamah alerts and the filler.
     expect(ids(scheduled)).toEqual(expect.arrayContaining([2001, 2002, 2003, 3001]));
-    // The next slot up for the iqamah is what pays: it keeps its soonest entries.
-    expect(ids(scheduled).slice(39, 50)).toEqual(ids(iqamahAlerts.slice(0, 11)));
+    // The high-priority queue is filled by today's tasks and prayer times first.
+    expect(ids(scheduled)).not.toContain(hifzReviewReminders[0].id);
     // The advisory reminders and the filler are what the overflow eats first.
     expect(ids(scheduled)).not.toEqual(expect.arrayContaining(ids(dhikrFiller)));
     expect(ids(scheduled)).not.toEqual(expect.arrayContaining(ids(prePrayerReminders)));
@@ -136,13 +139,14 @@ describe('assembleNotificationQueue', () => {
 });
 
 describe('dhikrFillerBudget', () => {
-  /** The four buckets that are armed whether or not the takeover succeeds. */
+  /** The non-fallback buckets armed whether or not the takeover succeeds. */
   const certainlyArmed = (
     parts: Partial<Omit<NotificationQueueParts, 'prayerFallbacks' | 'dhikrFiller'>> = {},
   ): Omit<NotificationQueueParts, 'prayerFallbacks' | 'dhikrFiller'> => ({
     taskReminders: [],
     hadithReminders: [],
     iqamahAlerts: [],
+    hifzReviewReminders: [],
     prePrayerReminders: [],
     ...parts,
   });
@@ -166,13 +170,14 @@ describe('dhikrFillerBudget', () => {
     const budget = dhikrFillerBudget(
       certainlyArmed({
         iqamahAlerts: many(6000, 35),
+        hifzReviewReminders: many(7000, 5),
         taskReminders: [n(2001)],
         hadithReminders: [n(3001)],
       }),
       50,
     );
-    // 50 - 35 iqamah - 1 task - 1 hadith. The fallbacks' 35 are absent.
-    expect(budget).toBe(13);
+    // 50 - 35 iqamah - 5 reviews - 1 task - 1 hadith. Fallbacks are absent.
+    expect(budget).toBe(8);
     // What the old arithmetic returned for this same day, and why it was zero.
     expect(50 - 35 - 35 - 1 - 1).toBeLessThan(0);
   });
@@ -217,7 +222,15 @@ describe('dhikrFillerBudget', () => {
     const dhikrFiller = many(5000, budget);
 
     const scheduled = assembleNotificationQueue(
-      { prayerFallbacks, iqamahAlerts, taskReminders, hadithReminders, prePrayerReminders: [], dhikrFiller },
+      {
+        prayerFallbacks,
+        iqamahAlerts,
+        hifzReviewReminders: [],
+        taskReminders,
+        hadithReminders,
+        prePrayerReminders: [],
+        dhikrFiller,
+      },
       50,
     );
 

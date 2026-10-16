@@ -12,6 +12,8 @@ import { getSurah } from '@/data/surahs';
 export const ZOOM_STEP = 0.1;
 export const ZOOM_MIN = 0.8;
 export const ZOOM_MAX = 2;
+export const AUTO_SCROLL_MIN = 10;
+export const AUTO_SCROLL_MAX = 80;
 /** Pages are the smallest useful jump target; below this the text stops being readable. */
 export const PAGE_KEYBOARD_STEP = 10;
 export const SWIPE_DISTANCE = 50;
@@ -53,6 +55,7 @@ export interface MushafPrefs {
   readingScale: number;
   lineSpacing: number;
   wordSpacing: number;
+  autoScrollSpeed: number;
   /** Kept here because a reader who listens to surahs keeps hearing surahs. */
   scope: VoiceScope;
 }
@@ -64,6 +67,7 @@ export const DEFAULT_PREFS: MushafPrefs = {
   readingScale: 1,
   lineSpacing: 1,
   wordSpacing: 0,
+  autoScrollSpeed: 25,
   scope: 'ayah',
 };
 
@@ -140,6 +144,12 @@ export function loadPrefs(): MushafPrefs {
       readingScale: clampNumber(parsed.readingScale, 0.85, 1.35, DEFAULT_PREFS.readingScale),
       lineSpacing: clampNumber(parsed.lineSpacing, 0.9, 1.35, DEFAULT_PREFS.lineSpacing),
       wordSpacing: clampNumber(parsed.wordSpacing, 0, 0.3, DEFAULT_PREFS.wordSpacing),
+      autoScrollSpeed: clampNumber(
+        parsed.autoScrollSpeed,
+        AUTO_SCROLL_MIN,
+        AUTO_SCROLL_MAX,
+        DEFAULT_PREFS.autoScrollSpeed,
+      ),
       // Saved before the option existed, so it opens the way it reads by default.
       scope: parsed.scope === 'surah' ? 'surah' : 'ayah',
     };

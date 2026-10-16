@@ -26,7 +26,7 @@ import { searchAyahs } from '@/utils/ayahSearch';
 
 interface QuranScreenProps {
   settings: Settings;
-  /** Optional navigation params, e.g. `{ openSurahId, openAyah }` or `{ openPage }` from محفوظاتي. */
+  /** Optional navigation params for reader deep links and the hifz test. */
   params?: Record<string, unknown>;
 }
 
@@ -57,6 +57,7 @@ function loadSavedReaderState() {
       fromAyah?: unknown;
       toAyah?: unknown;
       mushafPage?: unknown;
+      hasMushafPosition?: unknown;
     };
 
     const isInt = (value: unknown): value is number =>
@@ -85,7 +86,15 @@ function loadSavedReaderState() {
         ? parsed.mushafPage
         : 1;
 
-    return { viewMode: resolvedViewMode, surah, fromAyah, toAyah, mushafPage };
+    return {
+      viewMode: resolvedViewMode,
+      surah,
+      fromAyah,
+      toAyah,
+      mushafPage,
+      hasMushafPosition:
+        parsed.hasMushafPosition === true || viewMode === 'mushaf' || mushafPage > 1,
+    };
   } catch {
     return null;
   }
@@ -113,6 +122,7 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
   const [ayahChoice, setAyahChoice] = useState<number | null>(null);
   const ayahChoicePanelRef = useRef<HTMLDivElement>(null);
   const [mushafPage, setMushafPage] = useState(savedState?.mushafPage ?? 1);
+  const [hasMushafPosition, setHasMushafPosition] = useState(savedState?.hasMushafPosition ?? false);
   const [reciterId, setReciterId] = useState(loadPreferredReciter);
   /** The hifz self-test quiz for the currently selected ayah range. */
   const [showHifzTest, setShowHifzTest] = useState(false);
@@ -125,12 +135,13 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
         fromAyah,
         toAyah,
         mushafPage,
+        hasMushafPosition,
       };
       localStorage.setItem(QURAN_READER_STORAGE_KEY, JSON.stringify(payload));
     } catch {
       // LocalStorage is best-effort and must never break the reader.
     }
-  }, [fromAyah, mushafPage, selectedSurah, toAyah, viewMode]);
+  }, [fromAyah, hasMushafPosition, mushafPage, selectedSurah, toAyah, viewMode]);
 
   const loadBookmarks = useCallback(async () => {
     const bms = await db.bookmarks.toArray();
@@ -157,13 +168,22 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
         typeof params.openAyah === 'number' && params.openAyah >= 1 && params.openAyah <= surah.ayahCount
           ? params.openAyah
           : 1;
+      const requestedEnd = params.openToAyah;
+      const endAyah =
+        typeof requestedEnd === 'number' &&
+        Number.isInteger(requestedEnd) &&
+        requestedEnd >= ayah &&
+        requestedEnd <= surah.ayahCount
+          ? requestedEnd
+          : null;
       setSelectedSurah(surah);
       setFromAyah(ayah);
-      setToAyah(null);
+      setToAyah(endAyah);
       // A search result asking for the commentary lands with the sheet already
       // open; a plain bookmark still closes whatever was showing before it.
       setTafsirAyah(params.openTafsir === true ? { surahId: surah.id, ayah } : null);
-      setViewMode('reader');
+      setViewMode(params.openHifzTest === true ? 'hifz' : 'reader');
+      setShowHifzTest(params.openHifzTest === true);
       return;
     }
     if (
@@ -173,6 +193,7 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
       params.openPage <= TOTAL_QURAN_PAGES
     ) {
       setMushafPage(params.openPage);
+      setHasMushafPosition(true);
       setViewMode('mushaf');
     }
     // Keyed on the params object identity: navigate() creates a new object per call,
@@ -264,7 +285,13 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
 
   const openPage = (page: number) => {
     setMushafPage(page);
+    setHasMushafPosition(true);
     setViewMode('mushaf');
+  };
+
+  const updateMushafPage = (page: number) => {
+    setMushafPage(page);
+    setHasMushafPosition(true);
   };
 
   /** Step through ayahs while the tafsir sheet is open, rolling over into the next surah. */
@@ -336,7 +363,9 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
               className="group inline-flex min-h-12 items-center gap-2.5 rounded-2xl bg-white px-5 py-3 text-base font-bold text-primary-800 shadow-lg transition-all hover:scale-105 hover:bg-primary-50 hover:shadow-xl focus-visible:outline-hidden focus-visible:ring-4 focus-visible:ring-white/50"
             >
               <BookText size={20} className="group-hover:scale-110 transition-transform" />
-              {mushafPage > 1 ? `متابعة القراءة · الصفحة ${toArabicNumber(mushafPage)}` : 'افتح المصحف'}
+              {hasMushafPosition
+                ? `متابعة من موضعك · الصفحة ${toArabicNumber(mushafPage)}`
+                : 'افتح المصحف'}
             </button>
             <div className="flex items-center gap-2">
               <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-2.5 backdrop-blur-xs">
@@ -717,11 +746,10 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
         settings={settings}
         initialPage={mushafPage}
         onClose={() => setViewMode('list')}
-        onPageChange={setMushafPage}
+        onPageChange={updateMushafPage}
       />
     );
   }
 
   return null;
 }
-

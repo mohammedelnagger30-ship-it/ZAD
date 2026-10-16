@@ -40,7 +40,7 @@ export function PrayerWeekGrid({ grid, onEdit }: PrayerWeekGridProps) {
         {FIVE_PRAYERS.map((key) => (
           <span
             key={key}
-            className="text-center text-[11px] md:text-xs font-semibold text-gray-500 dark:text-gray-400"
+            className="text-center text-[0.6875rem] md:text-xs font-semibold text-gray-500 dark:text-gray-400"
           >
             {PRAYER_LABELS_AR[key]}
           </span>
@@ -67,7 +67,7 @@ export function PrayerWeekGrid({ grid, onEdit }: PrayerWeekGridProps) {
               >
                 {day.isToday ? 'اليوم' : day.dayName}
               </span>
-              <span className="text-[10px] md:text-xs text-gray-400 dark:text-gray-500 tabular-nums">
+              <span className="text-[0.625rem] md:text-xs text-gray-400 dark:text-gray-500 tabular-nums">
                 {day.dayNumber}
               </span>
             </div>
@@ -227,7 +227,7 @@ function Legend() {
   return (
     <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3 pt-2.5 border-t border-primary-100 dark:border-primary-800/50">
       {items.map((i) => (
-        <span key={i.label} className="inline-flex items-center gap-1.5 text-[11px] md:text-xs text-gray-500 dark:text-gray-400">
+        <span key={i.label} className="inline-flex items-center gap-1.5 text-[0.6875rem] md:text-xs text-gray-500 dark:text-gray-400">
           <span className={`w-3.5 h-3.5 shrink-0 ${i.cls}`} />
           {i.label}
         </span>

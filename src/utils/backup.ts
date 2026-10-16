@@ -128,7 +128,7 @@ export function isValidBackupRow(table: BackupTable, value: unknown): value is R
           ].includes(key)
         ) &&
         (value.theme === undefined || ['light', 'dark', 'system'].includes(value.theme as string)) &&
-        (value.colorPalette === undefined || ['emerald', 'ocean', 'plum', 'sand'].includes(value.colorPalette as string)) &&
+        (value.colorPalette === undefined || ['emerald', 'ocean', 'plum', 'sand', 'olive', 'rose'].includes(value.colorPalette as string)) &&
         (value.fontSize === undefined || isFiniteNumber(value.fontSize)) &&
         (value.notificationSound === undefined || typeof value.notificationSound === 'boolean') &&
         (value.adhanSound === undefined || typeof value.adhanSound === 'boolean') &&

@@ -5,8 +5,8 @@
  * that are never cut. Measuring is passed in rather than taken from a canvas
  * because a canvas is the one thing a test cannot make.
  */
-import { describe, it, expect } from '@jest/globals';
-import { composeSharePayload, wrapLines } from '@/utils/shareCard';
+import { describe, it, expect, jest } from '@jest/globals';
+import { composeSharePayload, shareAyahCard, wrapLines } from '@/utils/shareCard';
 
 /** One unit per character: widths become counts, which are easy to reason about. */
 const measure = (line: string) => line.length;
@@ -74,5 +74,36 @@ describe('composeSharePayload', () => {
         ayahNumber: 45,
       }),
     ).toContain('الآية ٤٥');
+  });
+});
+
+describe('shareAyahCard', () => {
+  it('shares the prepared image file directly from the tap', async () => {
+    const shareDescriptor = Object.getOwnPropertyDescriptor(navigator, 'share');
+    const canShareDescriptor = Object.getOwnPropertyDescriptor(navigator, 'canShare');
+    const share = jest.fn(async (_data: ShareData) => {});
+    Object.defineProperty(navigator, 'share', { configurable: true, value: share });
+    Object.defineProperty(navigator, 'canShare', {
+      configurable: true,
+      value: jest.fn(() => true),
+    });
+
+    try {
+      const outcome = await shareAyahCard(
+        { surahId: 1, ayahText: 'بِسْمِ اللَّهِ', surahName: 'الفاتحة', ayahNumber: 1 },
+        { blob: new Blob(['png'], { type: 'image/png' }) },
+      );
+
+      expect(outcome).toBe('shared');
+      expect(share).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'آية اليوم',
+        files: [expect.objectContaining({ name: 'ayah-1-1.png', type: 'image/png' })],
+      }));
+    } finally {
+      if (shareDescriptor) Object.defineProperty(navigator, 'share', shareDescriptor);
+      else Reflect.deleteProperty(navigator, 'share');
+      if (canShareDescriptor) Object.defineProperty(navigator, 'canShare', canShareDescriptor);
+      else Reflect.deleteProperty(navigator, 'canShare');
+    }
   });
 });

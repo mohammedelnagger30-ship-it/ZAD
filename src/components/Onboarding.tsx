@@ -1,5 +1,5 @@
 ﻿import { useEffect, useState } from 'react';
-import { Bell, MapPin, BookOpen, Check, ChevronLeft, Heart } from 'lucide-react';
+import { Bell, MapPin, BookOpen, Check, ChevronLeft, Heart, Search } from 'lucide-react';
 import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { Button } from '@/components/ui';
@@ -15,6 +15,7 @@ interface OnboardingProps {
 export function Onboarding({ onComplete }: OnboardingProps) {
   const [step, setStep] = useState(0);
   const [selectedCity, setSelectedCity] = useState<string>('القاهرة');
+  const [citySearch, setCitySearch] = useState('');
   const [notifGranted, setNotifGranted] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [notificationError, setNotificationError] = useState<string | null>(null);
@@ -102,15 +103,29 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     {
       icon: <MapPin size={64} className="text-primary-600" />,
       title: 'حدد موقعك',
-      description: 'القاهرة محددة افتراضياً لحساب مواقيت الصلاة واتجاه القبلة. يمكنك اختيار مدينة أخرى أو ترك القاهرة كما هي.',
+      description: 'اختر مدينتك لضبط مواقيت الصلاة بدقة. القاهرة محددة افتراضياً، ويمكنك البحث بين مدن ومحافظات مصر.',
       action: () => setStep(3),
       actionLabel: 'متابعة',
       extra: (
-        <div className="max-h-48 md:max-h-80 overflow-y-auto space-y-1 mb-4">
-          {CITY_PRESETS.map((city) => (
+        <div className="w-full mb-4">
+          <label className="relative mb-2 block">
+            <Search size={17} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-primary-500" />
+            <input
+              type="search"
+              value={citySearch}
+              onChange={(event) => setCitySearch(event.target.value)}
+              placeholder="ابحث عن مدينتك..."
+              aria-label="ابحث عن مدينة"
+              className="w-full rounded-xl border border-primary-200 bg-white py-2.5 pr-10 pl-3 text-sm text-primary-900 outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-200 dark:border-primary-700 dark:bg-primary-950 dark:text-primary-100"
+            />
+          </label>
+          <div role="radiogroup" aria-label="المدن المصرية" className="max-h-48 md:max-h-80 overflow-y-auto space-y-1">
+          {CITY_PRESETS.filter((city) => city.name.includes(citySearch.trim())).map((city) => (
             <button
               key={city.name}
               onClick={() => setSelectedCity(city.name)}
+              role="radio"
+              aria-checked={selectedCity === city.name}
               className={`w-full text-right p-3 rounded-xl flex items-center justify-between transition-smooth ${
                 selectedCity === city.name
                   ? 'bg-primary-600 text-white'
@@ -121,6 +136,10 @@ export function Onboarding({ onComplete }: OnboardingProps) {
               {selectedCity === city.name && <Check size={16} />}
             </button>
           ))}
+          {CITY_PRESETS.every((city) => !city.name.includes(citySearch.trim())) && (
+            <p className="py-4 text-center text-sm text-gray-500">لا توجد مدينة بهذا الاسم.</p>
+          )}
+          </div>
         </div>
       ),
     },

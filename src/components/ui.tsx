@@ -30,11 +30,13 @@ export function Card({ children, className = '', onClick, noPadding }: CardProps
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
       className={`
-        bg-white dark:bg-primary-900/40
+        bg-panel dark:bg-raised
         rounded-2xl shadow-sm
-        border border-primary-100 dark:border-primary-800/40
+        border border-primary-100/80 dark:border-primary-800/60
         transition-smooth
-        ${onClick ? 'cursor-pointer hover:shadow-md hover:border-primary-300 dark:hover:border-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:focus-visible:ring-gold-400' : ''}
+        ${onClick
+          ? 'cursor-pointer hover:shadow-md hover:border-primary-300 dark:hover:border-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:focus-visible:ring-gold-400'
+          : 'motion-safe:transition-all duration-200 hover:shadow-md hover:border-primary-200/80 dark:hover:border-primary-700/80'}
         ${noPadding ? '' : 'p-4 md:p-5'}
         ${className}
       `}

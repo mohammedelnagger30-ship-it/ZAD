@@ -130,17 +130,22 @@ export function isWirdWidgetAvailable(): boolean {
 }
 
 function upcomingPrayers(settings: Settings, now: Date): WirdWidgetPrayer[] {
-  const { latitude, longitude, calcMethod, asrMadhab, timeZone, cityName } = settings;
+  const {
+    latitude, longitude, calcMethod, asrMadhab, timeZone, cityName, prayerTimeAdjustments,
+  } = settings;
   if (latitude == null || longitude == null) return [];
 
   const zone = getPrayerTimeZone(timeZone, cityName);
-  const today = calculatePrayerTimes(latitude, longitude, now, calcMethod, asrMadhab, zone);
+  const today = calculatePrayerTimes(
+    latitude, longitude, now, calcMethod, asrMadhab, zone, prayerTimeAdjustments,
+  );
   const tomorrow = calculatePrayerTimesForDay(
     latitude,
     longitude,
     addCalendarDays(calendarDayInZone(now, zone), 1),
     calcMethod,
     asrMadhab,
+    prayerTimeAdjustments,
   );
 
   return composeWirdPrayers({

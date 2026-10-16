@@ -96,6 +96,17 @@ export function JumpSheet({
             </button>
           </form>
 
+          <div className="mushaf-page-legend" aria-label="دليل علامات الصفحات">
+            <span className="mushaf-page-legend__item">
+              <span className="mushaf-page-legend__current" aria-hidden="true">١</span>
+              موضع القراءة الحالي
+            </span>
+            <span className="mushaf-page-legend__item">
+              <span className="mushaf-cell__dot" aria-hidden="true" />
+              صفحة محفوظة
+            </span>
+          </div>
+
           <div className="mushaf-grid mushaf-grid--page">
             {pageNumbers.map((p) => (
               <button

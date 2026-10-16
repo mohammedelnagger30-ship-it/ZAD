@@ -240,18 +240,23 @@ export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenPro
           </p>
         )}
 
-        <button
-          type="button"
-          onClick={() => {
-            setMode((current) => (current === 'sign-in' ? 'sign-up' : 'sign-in'));
-            setError('');
-            setMessage('');
-            if (mode === 'sign-in') setPassword('');
-          }}
-          className="mt-5 w-full text-center text-xs font-semibold text-primary-700 hover:text-primary-800 dark:text-gold-300 dark:hover:text-gold-200 transition underline"
-        >
-          {mode === 'sign-up' ? 'لديك حساب بالفعل؟ سجّل الدخول' : 'مستخدم جديد؟ أنشئ حسابًا سحابياً'}
-        </button>
+        <div className="mt-5 flex items-center justify-center">
+          <button
+            type="button"
+            onClick={() => {
+              setMode((current) => (current === 'sign-in' ? 'sign-up' : 'sign-in'));
+              setError('');
+              setMessage('');
+              if (mode === 'sign-in') setPassword('');
+            }}
+            className="group inline-flex items-center gap-1.5 rounded-full bg-primary-50/90 px-4 py-2 text-xs font-semibold text-primary-700 transition-all duration-200 hover:bg-primary-100 hover:scale-[1.02] active:scale-95 dark:bg-primary-900/50 dark:text-gold-300 dark:hover:bg-primary-800/60 border border-primary-200/70 dark:border-primary-700/60 shadow-2xs cursor-pointer"
+          >
+            <span className="opacity-80">{mode === 'sign-up' ? 'لديك حساب بالفعل؟' : 'مستخدم جديد؟'}</span>
+            <span className="font-bold text-primary-900 dark:text-white transition-colors group-hover:text-primary-600 dark:group-hover:text-gold-200">
+              {mode === 'sign-up' ? 'سجّل الدخول' : 'إنشاء حساب جديد'}
+            </span>
+          </button>
+        </div>
 
         {/* The account is an extra, not the door: the app is offline-first, and
             signing in is the one thing here that needs the network. Anyone without

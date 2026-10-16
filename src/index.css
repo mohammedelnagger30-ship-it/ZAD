@@ -17,14 +17,15 @@
  * v3's preflight painted every uncolored border gray-200; v4 switched the
  * default to currentColor. The ~150 call sites that rely on the old look are
  * restored by this base rule — utilities still beat base, so every explicit
- * border-* color keeps winning.
+ * border-* color keeps winning. The value is the warm gray-200 the theme now
+ * defines, so an uncolored rule reads as paper's own edge, not as a cold line.
  */
 @layer base {
   *,
   ::after,
   ::before,
   ::backdrop {
-    border-color: #e5e7eb;
+    border-color: #ece4d6;
   }
 }
 
@@ -52,28 +53,47 @@
   --color-primary-900: rgb(var(--primary-900));
   --color-primary-950: rgb(var(--primary-950));
 
-  --color-gold-50: #fefce8;
-  --color-gold-100: #fdf8c4;
-  --color-gold-200: #fbef8d;
-  --color-gold-300: #f9e055;
-  --color-gold-400: #f0c83a;
-  --color-gold-500: #d4a017;
-  --color-gold-600: #b07d12;
-  --color-gold-700: #8c5d14;
-  --color-gold-800: #744a17;
-  --color-gold-900: #623e17;
-  --color-gold-950: #3a2308;
+  /*
+   * The app's neutrals are warm — a paper-and-ink register rather than the stock
+   * cool gray. Tinting the gray scale from the active primary ramp carries each
+   * palette through existing bg-/text-/border-gray-* call sites without per-screen
+   * overrides. The muted-text tone stays close to its original contrast-safe value.
+   */
+  --color-white: #fffdf9;
+  --color-gray-50: color-mix(in srgb, #fbf8f3 72%, rgb(var(--primary-50)) 28%);
+  --color-gray-100: color-mix(in srgb, #f5f0e8 72%, rgb(var(--primary-100)) 28%);
+  --color-gray-200: color-mix(in srgb, #ece4d6 78%, rgb(var(--primary-200)) 22%);
+  --color-gray-300: color-mix(in srgb, #dbd0bd 86%, rgb(var(--primary-300)) 14%);
+  --color-gray-400: color-mix(in srgb, #a99c85 90%, rgb(var(--primary-400)) 10%);
+  --color-gray-500: color-mix(in srgb, #786c58 92%, rgb(var(--primary-600)) 8%);
+  --color-gray-600: color-mix(in srgb, #5f5443 90%, rgb(var(--primary-700)) 10%);
+  --color-gray-700: color-mix(in srgb, #4a4133 88%, rgb(var(--primary-800)) 12%);
+  --color-gray-800: color-mix(in srgb, #2f2921 84%, rgb(var(--primary-900)) 16%);
+  --color-gray-900: color-mix(in srgb, #201b14 80%, rgb(var(--primary-900)) 20%);
+  --color-gray-950: color-mix(in srgb, #14100b 76%, rgb(var(--primary-950)) 24%);
 
-  --color-accent-50: #fef7ee;
-  --color-accent-100: #fdedd6;
-  --color-accent-200: #fad7ac;
-  --color-accent-300: #f6ba77;
-  --color-accent-400: #f1923f;
-  --color-accent-500: #ed761e;
-  --color-accent-600: #de5d16;
-  --color-accent-700: #b84414;
-  --color-accent-800: #933718;
-  --color-accent-900: #762f17;
+  --color-gold-50: rgb(var(--accent-50));
+  --color-gold-100: rgb(var(--accent-100));
+  --color-gold-200: rgb(var(--accent-200));
+  --color-gold-300: rgb(var(--accent-300));
+  --color-gold-400: rgb(var(--accent-400));
+  --color-gold-500: rgb(var(--accent-500));
+  --color-gold-600: rgb(var(--accent-600));
+  --color-gold-700: rgb(var(--accent-700));
+  --color-gold-800: rgb(var(--accent-800));
+  --color-gold-900: rgb(var(--accent-900));
+  --color-gold-950: rgb(var(--accent-900));
+
+  --color-accent-50: rgb(var(--accent-50));
+  --color-accent-100: rgb(var(--accent-100));
+  --color-accent-200: rgb(var(--accent-200));
+  --color-accent-300: rgb(var(--accent-300));
+  --color-accent-400: rgb(var(--accent-400));
+  --color-accent-500: rgb(var(--accent-500));
+  --color-accent-600: rgb(var(--accent-600));
+  --color-accent-700: rgb(var(--accent-700));
+  --color-accent-800: rgb(var(--accent-800));
+  --color-accent-900: rgb(var(--accent-900));
 
   --color-success-50: #f0fdf4;
   --color-success-100: #dcfce7;
@@ -110,6 +130,8 @@
 
   --color-surface-light: rgb(var(--surface-light));
   --color-surface-dark: rgb(var(--surface-dark));
+  --color-panel: var(--surface-panel);
+  --color-raised: var(--surface-raised);
 
   --animate-fade-in: fadeIn 0.3s ease-out;
   --animate-slide-up: slideUp 0.4s ease-out;
@@ -117,6 +139,11 @@
   --animate-scale-in: scaleIn 0.2s ease-out;
   --animate-pulse-soft: pulseSoft 2s ease-in-out infinite;
   --animate-shimmer: shimmer 2s linear infinite;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-float-slow: floatSlow 8s ease-in-out infinite;
+  --animate-flame: flameGlow 2.5s ease-in-out infinite;
+  --animate-ping-soft: pingSoft 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+  --animate-mesh: gradientFlow 10s ease infinite;
 
   @keyframes fadeIn {
     0% { opacity: 0; }
@@ -142,6 +169,28 @@
     0% { background-position: -200% 0; }
     100% { background-position: 200% 0; }
   }
+  @keyframes float {
+    0%, 100% { transform: translateY(0px) scale(1); }
+    50% { transform: translateY(-7px) scale(1.04); }
+  }
+  @keyframes floatSlow {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(5px, -8px) scale(1.06); }
+  }
+  @keyframes flameGlow {
+    0%, 100% { transform: scale(1); filter: drop-shadow(0 0 2px rgba(245, 158, 11, 0.4)); }
+    50% { transform: scale(1.1); filter: drop-shadow(0 0 7px rgba(239, 68, 68, 0.65)); }
+  }
+  @keyframes pingSoft {
+    0% { transform: scale(0.95); opacity: 0.75; }
+    50% { transform: scale(1.6); opacity: 0; }
+    100% { transform: scale(1.6); opacity: 0; }
+  }
+  @keyframes gradientFlow {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
 }
 
 @font-face {
@@ -165,8 +214,33 @@
   --primary-800: 23 72 51;
   --primary-900: 20 59 43;
   --primary-950: 10 33 24;
-  --surface-light: 248 250 249;
+  --accent-50: 254 247 238;
+  --accent-100: 253 237 214;
+  --accent-200: 250 215 172;
+  --accent-300: 246 186 119;
+  --accent-400: 241 146 63;
+  --accent-500: 184 68 20;
+  --accent-600: 147 55 24;
+  --accent-700: 118 47 23;
+  --accent-800: 98 39 20;
+  --accent-900: 80 32 18;
+  --surface-light: 239 247 241;
   --surface-dark: 15 26 20;
+  --surface-panel: color-mix(in srgb, rgb(var(--surface-light)) 72%, rgb(var(--primary-100)) 28%);
+  --surface-raised: color-mix(in srgb, rgb(var(--surface-light)) 42%, var(--color-white) 58%);
+  /* Signature brand blend + ambient glow. Every surface that wants the palette's
+     story — hero headers, active states, splash glows — reads these two tokens
+     instead of hard-coding a hue, so a palette swap repaints the whole app. */
+  --brand-from: #1f734e;
+  --brand-to: #b84414;
+  --brand-gradient: linear-gradient(135deg, #1f734e 0%, #2f8f64 45%, #b84414 100%);
+  --brand-glow: rgba(31, 115, 78, 0.22);
+  --brand-glow-strong: rgba(184, 68, 20, 0.18);
+}
+
+html.dark {
+  --surface-panel: color-mix(in srgb, rgb(var(--surface-dark)) 76%, rgb(var(--primary-800)) 24%);
+  --surface-raised: color-mix(in srgb, rgb(var(--surface-dark)) 64%, rgb(var(--primary-800)) 36%);
 }
 
 :root[data-palette='ocean'] {
@@ -181,8 +255,25 @@
   --primary-800: 23 67 85;
   --primary-900: 20 55 70;
   --primary-950: 10 32 43;
-  --surface-light: 246 250 252;
+  /* Sunset copper against deep sea: the warm accent is what makes ocean
+     unmistakable next to emerald, instead of a second teal. */
+  --accent-50: 251 243 232;
+  --accent-100: 246 228 200;
+  --accent-200: 237 198 143;
+  --accent-300: 226 164 92;
+  --accent-400: 208 127 46;
+  --accent-500: 180 83 9;
+  --accent-600: 148 64 10;
+  --accent-700: 119 51 13;
+  --accent-800: 98 43 15;
+  --accent-900: 82 39 14;
+  --surface-light: 238 247 251;
   --surface-dark: 12 21 27;
+  --brand-from: #1d6782;
+  --brand-to: #b45309;
+  --brand-gradient: linear-gradient(135deg, #1d6782 0%, #2b8aa5 45%, #b45309 100%);
+  --brand-glow: rgba(29, 103, 130, 0.22);
+  --brand-glow-strong: rgba(180, 83, 9, 0.18);
 }
 
 :root[data-palette='plum'] {
@@ -197,8 +288,24 @@
   --primary-800: 71 43 80;
   --primary-900: 57 36 63;
   --primary-950: 34 20 37;
-  --surface-light: 251 248 252;
+  /* Antique gold on royal velvet: the classic regal pairing. */
+  --accent-50: 251 246 233;
+  --accent-100: 245 234 197;
+  --accent-200: 234 212 141;
+  --accent-300: 221 189 85;
+  --accent-400: 201 154 46;
+  --accent-500: 150 102 10;
+  --accent-600: 122 82 9;
+  --accent-700: 99 67 11;
+  --accent-800: 82 56 9;
+  --accent-900: 70 48 11;
+  --surface-light: 247 240 250;
   --surface-dark: 24 17 27;
+  --brand-from: #6d407b;
+  --brand-to: #96660a;
+  --brand-gradient: linear-gradient(135deg, #6d407b 0%, #9a6fb0 45%, #96660a 100%);
+  --brand-glow: rgba(109, 64, 123, 0.24);
+  --brand-glow-strong: rgba(150, 102, 10, 0.18);
 }
 
 :root[data-palette='sand'] {
@@ -213,8 +320,272 @@
   --primary-800: 80 70 35;
   --primary-900: 64 57 31;
   --primary-950: 37 33 17;
-  --surface-light: 251 250 245;
+  /* Oasis teal springing out of bronze dunes. */
+  --accent-50: 239 250 251;
+  --accent-100: 215 239 242;
+  --accent-200: 176 222 228;
+  --accent-300: 124 196 208;
+  --accent-400: 63 163 179;
+  --accent-500: 14 116 144;
+  --accent-600: 14 96 120;
+  --accent-700: 16 79 99;
+  --accent-800: 19 66 82;
+  --accent-900: 18 56 71;
+  --surface-light: 249 245 233;
   --surface-dark: 25 23 17;
+  --brand-from: #7f6d32;
+  --brand-to: #0e7490;
+  --brand-gradient: linear-gradient(135deg, #7f6d32 0%, #a68c3f 45%, #0e7490 100%);
+  --brand-glow: rgba(127, 109, 50, 0.24);
+  --brand-glow-strong: rgba(14, 116, 144, 0.18);
+}
+
+:root[data-palette='olive'] {
+  --primary-50: 245 247 240;
+  --primary-100: 231 236 220;
+  --primary-200: 210 220 187;
+  --primary-300: 181 199 143;
+  --primary-400: 141 164 94;
+  --primary-500: 105 131 63;
+  --primary-600: 88 107 61;
+  --primary-700: 70 86 51;
+  --primary-800: 57 69 43;
+  --primary-900: 46 56 37;
+  --primary-950: 25 31 20;
+  --accent-50: 251 246 235;
+  --accent-100: 246 234 207;
+  --accent-200: 237 213 162;
+  --accent-300: 222 184 111;
+  --accent-400: 199 145 64;
+  --accent-500: 145 88 37;
+  --accent-600: 120 70 34;
+  --accent-700: 100 59 31;
+  --accent-800: 84 51 29;
+  --accent-900: 70 43 24;
+  --surface-light: 242 247 234;
+  --surface-dark: 19 23 16;
+  --brand-from: #586b3d;
+  --brand-to: #a83a2e;
+  --brand-gradient: linear-gradient(135deg, #586b3d 0%, #7d9159 45%, #a83a2e 100%);
+  --brand-glow: rgba(88, 107, 61, 0.24);
+  --brand-glow-strong: rgba(168, 58, 46, 0.18);
+}
+
+:root[data-palette='rose'] {
+  --primary-50: 252 244 246;
+  --primary-100: 248 229 233;
+  --primary-200: 239 202 211;
+  --primary-300: 225 164 179;
+  --primary-400: 204 116 139;
+  --primary-500: 174 79 103;
+  --primary-600: 163 65 88;
+  --primary-700: 135 51 72;
+  --primary-800: 112 44 61;
+  --primary-900: 92 39 52;
+  --primary-950: 52 20 29;
+  --accent-50: 253 245 242;
+  --accent-100: 250 232 224;
+  --accent-200: 243 208 194;
+  --accent-300: 231 174 151;
+  --accent-400: 211 133 107;
+  --accent-500: 169 82 64;
+  --accent-600: 141 65 52;
+  --accent-700: 117 56 47;
+  --accent-800: 98 49 43;
+  --accent-900: 82 42 37;
+  --surface-light: 251 241 244;
+  --surface-dark: 27 17 20;
+  --brand-from: #a34158;
+  --brand-to: #1f6f4a;
+  --brand-gradient: linear-gradient(135deg, #a34158 0%, #cc7489 45%, #1f6f4a 100%);
+  --brand-glow: rgba(163, 65, 88, 0.24);
+  --brand-glow-strong: rgba(31, 111, 74, 0.18);
+}
+
+:root[data-palette='midnight'] {
+  --primary-50: 237 242 250;
+  --primary-100: 220 230 244;
+  --primary-200: 185 205 232;
+  --primary-300: 138 172 215;
+  --primary-400: 85 133 191;
+  --primary-500: 50 100 162;
+  --primary-600: 30 58 95;
+  --primary-700: 25 47 78;
+  --primary-800: 22 38 62;
+  --primary-900: 18 31 50;
+  --primary-950: 10 18 30;
+  --accent-50: 254 248 235;
+  --accent-100: 252 238 204;
+  --accent-200: 248 217 150;
+  --accent-300: 242 192 96;
+  --accent-400: 230 162 42;
+  --accent-500: 161 98 7;
+  --accent-600: 133 77 14;
+  --accent-700: 113 63 18;
+  --accent-800: 92 51 18;
+  --accent-900: 78 44 19;
+  --surface-light: 237 242 250;
+  --surface-dark: 10 16 26;
+  --brand-from: #1e3a5f;
+  --brand-to: #a16207;
+  --brand-gradient: linear-gradient(135deg, #1e3a5f 0%, #2d5a8a 45%, #a16207 100%);
+  --brand-glow: rgba(30, 58, 95, 0.22);
+  --brand-glow-strong: rgba(161, 98, 7, 0.18);
+}
+
+:root[data-palette='ruby'] {
+  --primary-50: 252 238 241;
+  --primary-100: 248 220 226;
+  --primary-200: 240 185 197;
+  --primary-300: 228 140 160;
+  --primary-400: 210 90 118;
+  --primary-500: 180 50 75;
+  --primary-600: 155 27 48;
+  --primary-700: 128 22 40;
+  --primary-800: 104 20 35;
+  --primary-900: 85 18 30;
+  --primary-950: 48 10 17;
+  --accent-50: 236 250 250;
+  --accent-100: 210 240 241;
+  --accent-200: 170 224 226;
+  --accent-300: 118 200 204;
+  --accent-400: 62 170 176;
+  --accent-500: 13 115 119;
+  --accent-600: 12 96 100;
+  --accent-700: 14 79 82;
+  --accent-800: 16 65 68;
+  --accent-900: 15 55 58;
+  --surface-light: 252 240 243;
+  --surface-dark: 26 12 16;
+  --brand-from: #9b1b30;
+  --brand-to: #0d7377;
+  --brand-gradient: linear-gradient(135deg, #9b1b30 0%, #c44055 45%, #0d7377 100%);
+  --brand-glow: rgba(155, 27, 48, 0.22);
+  --brand-glow-strong: rgba(13, 115, 119, 0.18);
+}
+
+:root[data-palette='amber'] {
+  --primary-50: 250 246 233;
+  --primary-100: 244 237 208;
+  --primary-200: 234 220 164;
+  --primary-300: 220 198 112;
+  --primary-400: 200 170 60;
+  --primary-500: 168 138 24;
+  --primary-600: 146 104 10;
+  --primary-700: 118 84 12;
+  --primary-800: 96 70 14;
+  --primary-900: 78 58 16;
+  --primary-950: 44 32 8;
+  --accent-50: 238 236 255;
+  --accent-100: 224 222 254;
+  --accent-200: 199 196 253;
+  --accent-300: 165 158 251;
+  --accent-400: 129 114 245;
+  --accent-500: 67 56 202;
+  --accent-600: 55 48 163;
+  --accent-700: 49 46 130;
+  --accent-800: 42 40 106;
+  --accent-900: 36 35 86;
+  --surface-light: 250 247 237;
+  --surface-dark: 24 22 14;
+  --brand-from: #92680a;
+  --brand-to: #4338ca;
+  --brand-gradient: linear-gradient(135deg, #92680a 0%, #b8860b 45%, #4338ca 100%);
+  --brand-glow: rgba(146, 104, 10, 0.22);
+  --brand-glow-strong: rgba(67, 56, 202, 0.18);
+}
+
+:root[data-palette='forest'] {
+  --primary-50: 240 245 235;
+  --primary-100: 226 236 216;
+  --primary-200: 198 218 182;
+  --primary-300: 160 194 140;
+  --primary-400: 114 162 92;
+  --primary-500: 74 124 46;
+  --primary-600: 45 80 22;
+  --primary-700: 38 66 20;
+  --primary-800: 32 54 18;
+  --primary-900: 27 44 16;
+  --primary-950: 14 24 8;
+  --accent-50: 252 238 244;
+  --accent-100: 248 220 232;
+  --accent-200: 240 190 212;
+  --accent-300: 228 152 186;
+  --accent-400: 208 108 152;
+  --accent-500: 170 58 108;
+  --accent-600: 139 34 82;
+  --accent-700: 114 28 68;
+  --accent-800: 94 24 57;
+  --accent-900: 78 22 48;
+  --surface-light: 241 247 236;
+  --surface-dark: 16 22 12;
+  --brand-from: #2d5016;
+  --brand-to: #8b2252;
+  --brand-gradient: linear-gradient(135deg, #2d5016 0%, #4a7c2e 45%, #8b2252 100%);
+  --brand-glow: rgba(45, 80, 22, 0.22);
+  --brand-glow-strong: rgba(139, 34, 82, 0.18);
+}
+
+:root[data-palette='slate'] {
+  --primary-50: 241 243 246;
+  --primary-100: 226 231 237;
+  --primary-200: 200 210 222;
+  --primary-300: 163 181 200;
+  --primary-400: 120 145 172;
+  --primary-500: 84 110 140;
+  --primary-600: 71 85 105;
+  --primary-700: 58 70 86;
+  --primary-800: 47 57 70;
+  --primary-900: 38 47 58;
+  --primary-950: 22 28 36;
+  --accent-50: 251 243 232;
+  --accent-100: 246 228 200;
+  --accent-200: 237 198 143;
+  --accent-300: 226 164 92;
+  --accent-400: 208 127 46;
+  --accent-500: 194 65 12;
+  --accent-600: 154 52 18;
+  --accent-700: 124 45 22;
+  --accent-800: 103 40 23;
+  --accent-900: 87 36 22;
+  --surface-light: 242 244 248;
+  --surface-dark: 14 17 22;
+  --brand-from: #475569;
+  --brand-to: #c2410c;
+  --brand-gradient: linear-gradient(135deg, #475569 0%, #64748b 45%, #c2410c 100%);
+  --brand-glow: rgba(71, 85, 105, 0.22);
+  --brand-glow-strong: rgba(194, 65, 12, 0.18);
+}
+
+:root[data-palette='lavender'] {
+  --primary-50: 243 240 255;
+  --primary-100: 232 226 254;
+  --primary-200: 212 204 252;
+  --primary-300: 183 170 248;
+  --primary-400: 149 130 240;
+  --primary-500: 124 58 237;
+  --primary-600: 109 40 210;
+  --primary-700: 91 33 176;
+  --primary-800: 76 28 148;
+  --primary-900: 64 24 124;
+  --primary-950: 36 14 72;
+  --accent-50: 243 250 235;
+  --accent-100: 228 242 210;
+  --accent-200: 200 230 170;
+  --accent-300: 163 210 118;
+  --accent-400: 120 182 65;
+  --accent-500: 77 124 15;
+  --accent-600: 62 100 12;
+  --accent-700: 52 82 14;
+  --accent-800: 44 68 16;
+  --accent-900: 38 58 15;
+  --surface-light: 244 241 255;
+  --surface-dark: 20 16 32;
+  --brand-from: #7c3aed;
+  --brand-to: #4d7c0f;
+  --brand-gradient: linear-gradient(135deg, #7c3aed 0%, #a78bfa 45%, #4d7c0f 100%);
+  --brand-glow: rgba(124, 58, 237, 0.22);
+  --brand-glow-strong: rgba(77, 124, 15, 0.18);
 }
 
 /*
@@ -228,39 +599,88 @@
  * and these values must not reach in there to outrank the mode's own.
  */
 :root {
-  --panel: #ffffff;
+  --panel: rgb(var(--surface-light));
   --line: rgb(var(--primary-100));
   --fg: rgb(var(--primary-900));
-  --fg-muted: rgb(107 114 128);
+  --fg-muted: rgb(120 108 88);
   --chip: rgb(var(--primary-50));
   --chip-fg: rgb(var(--primary-700));
-  --accent: rgb(var(--primary-600));
+  --accent: rgb(var(--accent-500));
   --on-accent: #ffffff;
 }
 
 /* The app's dark theme, so a sheet raised outside the shell answers to it. */
 html.dark {
-  --panel: #101c16;
+  --panel: rgb(var(--surface-dark));
   --line: rgb(var(--primary-800));
   --fg: rgb(var(--primary-100));
-  --fg-muted: rgb(156 163 175);
+  --fg-muted: rgb(190 183 167);
   --chip: rgb(var(--primary-900));
   --chip-fg: rgb(var(--primary-200));
-  --accent: rgb(var(--primary-500));
+  --accent: rgb(var(--accent-500));
 }
 
 * {
   -webkit-tap-highlight-color: transparent;
 }
 
+@layer base {
+  @media (prefers-reduced-motion: no-preference) {
+    button,
+    a,
+    input,
+    select,
+    textarea,
+    [role='button'] {
+      transition:
+        color 160ms ease,
+        background-color 160ms ease,
+        border-color 160ms ease,
+        box-shadow 180ms ease,
+        opacity 160ms ease;
+    }
+
+    button:active:not(:disabled),
+    [role='button']:active {
+      transform: scale(0.985);
+    }
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [role='button']:focus-visible {
+    outline: 2px solid rgb(var(--accent-500));
+    outline-offset: 2px;
+  }
+
+  html.dark :is(button, a, input, select, textarea, [role='button']):focus-visible {
+    outline-color: rgb(var(--accent-300));
+  }
+}
+
 html {
   font-family: 'Cairo', 'Tajawal', sans-serif;
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
 }
 
 body {
   font-family: 'Cairo', 'Tajawal', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Painted on the page itself so the overscroll area at the top and foot of a
+     phone keeps the theme's paper rather than flashing the browser's white. */
+  background-color: rgb(var(--surface-light));
+}
+
+html.dark body {
+  background-color: rgb(var(--surface-dark));
 }
 
 #root {
@@ -326,7 +746,10 @@ body {
      only to restate them for the whole page to agree with itself. */
   --selected-wash: rgba(15, 23, 42, 0.12);
   --bookmark-wash: rgba(15, 23, 42, 0.07);
+  --meaning-word: #946200;
+  --meaning-underline: rgba(148, 98, 0, 0.72);
   --frame-on: #ffffff;
+  --spine: rgba(87, 83, 78, 0.11);
   --fs: 26px;
   /* The reader's default line height (its spacing formula at 100%), so a page that
      passes no spacing of its own — the surah view — typesets exactly as the reader. */
@@ -335,21 +758,14 @@ body {
   position: relative;
   width: 100%;
   min-height: 20rem;
-  padding: 2.4rem 2.8rem 4rem 3.15rem;
+  padding: 2.4rem 2.8rem 4.6rem 3.15rem;
   border-radius: 1rem;
   color: var(--ink);
   background-color: var(--paper);
   background-image:
     radial-gradient(130% 78% at 50% 0%, rgba(255, 255, 255, 0.5), transparent 62%),
     radial-gradient(110% 68% at 50% 100%, rgba(87, 83, 78, 0.06), transparent 64%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.2), transparent 32%),
-    repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent calc(var(--fs) * 1.7),
-      rgba(87, 83, 78, 0.045) calc(var(--fs) * 1.7),
-      rgba(87, 83, 78, 0.045) calc(var(--fs) * 1.74)
-    );
+    linear-gradient(180deg, rgba(255, 255, 255, 0.2), transparent 32%);
   box-shadow:
     0 32px 60px -32px rgba(15, 23, 42, 0.45),
     0 10px 22px rgba(15, 23, 42, 0.1),
@@ -366,6 +782,19 @@ body {
   pointer-events: none;
 }
 
+.mushaf-page::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  top: 0.4rem;
+  right: 0;
+  bottom: 0.4rem;
+  width: 0.55rem;
+  border-radius: 0 1rem 1rem 0;
+  background: linear-gradient(90deg, transparent, var(--spine));
+  pointer-events: none;
+}
+
 .mushaf-page--night {
   --paper: #191510;
   --ink: #ede3cd;
@@ -374,7 +803,10 @@ body {
   --wash: rgba(207, 169, 92, 0.1);
   --selected-wash: rgba(207, 169, 92, 0.3);
   --bookmark-wash: rgba(207, 169, 92, 0.16);
+  --meaning-word: #f2c66d;
+  --meaning-underline: rgba(242, 198, 109, 0.82);
   --frame-on: #171008;
+  --spine: rgba(207, 169, 92, 0.12);
 
   /*
    * The light sheet's sheen is a highlight bouncing off paper. Inherited unchanged on a
@@ -389,14 +821,7 @@ body {
   background-image:
     radial-gradient(130% 78% at 50% 0%, rgba(207, 169, 92, 0.1), transparent 62%),
     radial-gradient(110% 68% at 50% 100%, rgba(207, 169, 92, 0.05), transparent 64%),
-    linear-gradient(180deg, rgba(237, 227, 205, 0.05), transparent 32%),
-    repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent calc(var(--fs) * 1.7),
-      rgba(207, 169, 92, 0.05) calc(var(--fs) * 1.7),
-      rgba(207, 169, 92, 0.05) calc(var(--fs) * 1.74)
-    );
+    linear-gradient(180deg, rgba(237, 227, 205, 0.05), transparent 32%);
   box-shadow:
     0 26px 55px -22px rgba(0, 0, 0, 0.85),
     0 3px 8px rgba(0, 0, 0, 0.45),
@@ -422,6 +847,118 @@ body {
   position: absolute;
   inset: 0.34rem;
   border: 1px solid var(--frame-soft);
+}
+
+.mushaf-ribbon {
+  position: absolute;
+  z-index: 3;
+  top: 1.15rem;
+  right: 0.16rem;
+  width: 0.7rem;
+  height: 1.8rem;
+  background: linear-gradient(180deg, #d1a34b, #9d7125);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 82%, 0 100%);
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.2));
+  pointer-events: none;
+}
+
+.mushaf-page-bookmark {
+  position: absolute;
+  z-index: 3;
+  top: 1.05rem;
+  left: 1.05rem;
+  display: grid;
+  width: 1.7rem;
+  height: 1.7rem;
+  place-items: center;
+  border: 1px solid var(--frame-soft);
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--frame);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.12);
+  pointer-events: none;
+}
+
+.mushaf-bookmark-error {
+  flex: 0 0 auto;
+  margin: 0.35rem 0.75rem 0;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--danger, #b42318);
+  border-radius: 0.7rem;
+  background: var(--danger-soft, #fef3f2);
+  color: var(--danger, #b42318);
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.mushaf-page--night .mushaf-ribbon {
+  background: linear-gradient(180deg, #f0cf79, #b88936);
+}
+
+.mushaf-scroll-control {
+  position: absolute;
+  z-index: 20;
+  top: 50%;
+  left: max(0.25rem, calc((100vw - 54rem) / 2 - 2.9rem));
+  display: flex;
+  width: 2.5rem;
+  min-height: 10.5rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  padding: 0.45rem 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: 1.15rem;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  box-shadow: 0 8px 24px rgb(15 23 42 / 0.16);
+  transform: translateY(-50%);
+  backdrop-filter: blur(12px);
+}
+
+.mushaf-scroll-control__toggle {
+  display: grid;
+  width: 1.9rem;
+  height: 1.9rem;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 0.7rem;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.mushaf-scroll-control__toggle[aria-pressed='true'] {
+  background: var(--gold);
+  color: var(--on-gold);
+}
+
+.mushaf-scroll-control__speed {
+  position: relative;
+  display: flex;
+  min-height: 7.1rem;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--fg-muted);
+}
+
+.mushaf-scroll-control__speed > span {
+  font-size: 0.65rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+
+.mushaf-scroll-control__range {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5.9rem;
+  height: 1.2rem;
+  margin: 0;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 
 /* Corner rosettes sit over the rules like small illuminated seals. */
@@ -500,7 +1037,7 @@ body {
    two screens never drift apart. Only the narrow screen keeps its own tighter margins. */
 @media (max-width: 480px) {
   .mushaf-page {
-    padding: 1.8rem 1.35rem 3rem 2.2rem;
+    padding: 1.8rem 1.35rem 4.6rem 3rem;
   }
 
   .mushaf-margin {
@@ -512,19 +1049,11 @@ body {
 /* A wide sheet needs proportionate margins, or the frame crowds the text at the edges. */
 @media (min-width: 768px) {
   .mushaf-page {
-    padding: 3rem 3.6rem 4.5rem 4rem;
+    padding: 3rem 3.6rem 5.2rem 4rem;
   }
 }
 
-/* Focus ring for the ayah, in the page's own frame color — the reader's ayah is a
-   focusable span too, and both screens now share this rule. */
-.mushaf-ayah:focus-visible {
-  outline: 2px solid var(--frame);
-  outline-offset: 2px;
-}
-
 .mushaf-ayah {
-  cursor: pointer;
   border-radius: 0.2rem;
 }
 
@@ -535,26 +1064,73 @@ body {
 .mushaf-ayah-tail {
   white-space: nowrap;
 }
-.mushaf-ayah:hover {
+.mushaf-word {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.mushaf-word:hover,
+.mushaf-word:focus-visible {
   background: var(--wash);
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
+  border-radius: 0.15rem;
+}
+.mushaf-word--has-meaning {
+  color: var(--meaning-word);
+  text-decoration: underline dotted var(--meaning-underline);
+  text-underline-offset: 0.12em;
+  text-decoration-thickness: 1px;
+}
+.mushaf-word:focus-visible,
+button.mushaf-ayah-mark:focus-visible {
+  outline: 2px solid var(--frame);
+  outline-offset: 2px;
 }
 
-/* The end-of-ayah medallion. `em` here would resolve against this element's own reduced
-   font-size, so every dimension is expressed in terms of the page's --fs instead. */
-.mushaf-ayah-mark {
+/* Use the bundled Quran font's printed ayah-end sign so its numeral and ornament stay
+   together and scale with the page without changing the ayah's line rhythm. */
+button.mushaf-ayah-mark {
   position: relative;
   isolation: isolate;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: calc(var(--fs) * 1.15);
-  height: calc(var(--fs) * 1.15);
-  margin: 0 0.16em;
-  border: 1px solid var(--frame);
-  border-radius: 9999px;
+  width: calc(var(--fs) * 1.45);
+  height: calc(var(--fs) * 1.45);
+  margin: 0 0.12em;
+  border: 0;
+  border-radius: 50%;
   color: var(--frame);
+  background: transparent;
+  line-height: 1;
+  vertical-align: middle;
+  user-select: none;
+  padding: 0;
+  font-family: inherit;
+}
+
+button.mushaf-ayah-mark {
+  cursor: pointer;
+  transition: transform 140ms ease, color 160ms ease;
+}
+
+/* Inline markers in the surah reader and saved-ayah list keep their compact
+   text treatment; only the page-turning Mushaf uses the printed ayah-end glyph. */
+span.mushaf-ayah-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5em;
+  height: 1.5em;
+  margin: 0 0.12em;
+  border: 1px solid var(--frame);
+  border-radius: 50%;
   background:
     radial-gradient(circle at center, var(--paper) 0 52%, transparent 54%),
     linear-gradient(135deg, var(--wash), transparent 48%, var(--wash));
@@ -562,27 +1138,48 @@ body {
     inset 0 0 0 2px var(--paper),
     inset 0 0 0 3px var(--frame-soft),
     0 1px 2px rgba(15, 23, 42, 0.12);
-  font-size: calc(var(--fs) * 0.37);
+  color: var(--frame);
+  font-size: 0.58em;
   font-weight: 700;
   line-height: 1;
   vertical-align: middle;
   user-select: none;
+  cursor: default;
 }
-.mushaf-ayah-mark::before {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  inset: 21%;
-  border: 1px solid var(--frame-soft);
-  border-radius: 0.12rem;
-  transform: rotate(45deg);
+
+.mushaf-ayah-mark__glyph {
+  display: inline-block;
+  color: inherit;
+  font-family: 'Amiri Quran', 'Amiri', serif;
+  font-size: calc(var(--fs) * 0.8);
+  font-weight: 400;
+  line-height: 1;
+  white-space: nowrap;
+  direction: rtl;
+  unicode-bidi: isolate;
+  transform: translateY(-0.02em);
+  text-shadow: 0 0.5px 0 var(--paper);
 }
+
+button.mushaf-ayah-mark:hover {
+  transform: scale(1.06);
+}
+
+button.mushaf-ayah-mark:active {
+  transform: scale(0.96);
+}
+
 /* The medallion struck solid while its ayah holds the recitation: the frame's own gold
    filled, with the sheet's ink on it — white on night gold measured 2.2:1, the ink on the
    same gold measures 8.5:1. Placed after the base rule so the fill wins the tie. */
 .mushaf-ayah-mark--active {
   color: var(--frame-on);
   background: var(--frame);
+}
+
+button.mushaf-ayah-mark:focus-visible {
+  outline: 2px solid var(--frame);
+  outline-offset: 2px;
 }
 
 /*
@@ -670,26 +1267,38 @@ body {
   color: var(--frame);
 }
 
-/* Folio: the page number in a medallion at the foot of the page. */
+/* The folio is set into the lower frame, with enough clear paper above it for the text. */
 .mushaf-folio {
   position: absolute;
-  bottom: 1.1rem;
+  z-index: 2;
+  bottom: 0.42rem;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 2.15rem;
-  height: 2.15rem;
-  border: 1.2px solid var(--frame);
-  border-radius: 9999px;
-  background: linear-gradient(180deg, var(--paper), rgba(87, 83, 78, 0.05));
-  box-shadow: inset 0 0 0 1px rgba(87, 83, 78, 0.2), 0 2px 7px rgba(15, 23, 42, 0.08);
+  min-width: 2.65rem;
+  height: 1.55rem;
+  padding: 0 0.45rem;
+  border: 1px solid var(--frame);
+  border-radius: 0.55rem;
+  background: var(--paper);
+  box-shadow: 0 0 0 0.22rem var(--paper), inset 0 0 0 1px var(--frame-soft);
   font-family: 'Cairo', sans-serif;
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   font-weight: 700;
   color: var(--frame);
 }
+.mushaf-folio::before,
+.mushaf-folio::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 1.1rem;
+  border-top: 1px solid var(--frame-soft);
+}
+.mushaf-folio::before { right: calc(100% + 0.45rem); }
+.mushaf-folio::after { left: calc(100% + 0.45rem); }
 
 /* ============================================================
    Mushaf reader chrome — the frame around the sheet.
@@ -1386,6 +1995,40 @@ body {
   box-shadow: 0 0 0 1px rgb(0 0 0 / 0.12);
 }
 
+.mushaf-page-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 1rem;
+  margin: 0.75rem 0 0.55rem;
+}
+
+.mushaf-page-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--fg-muted);
+  font-size: 0.68rem;
+}
+
+.mushaf-page-legend__current {
+  display: inline-flex;
+  width: 1rem;
+  height: 1rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.3rem;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 0.6rem;
+  font-weight: 800;
+}
+
+.mushaf-page-legend .mushaf-cell__dot {
+  position: static;
+  display: inline-block;
+  flex: 0 0 auto;
+}
+
 /* The surah's own number, parked in the corner so the ordered list can be read
    as an order rather than as a wall of names. */
 .mushaf-cell__index {
@@ -1489,16 +2132,193 @@ body {
   color: var(--fg-muted);
 }
 
+.mushaf-word-analysis__word {
+  margin: 0;
+  color: var(--fg);
+  font-family: 'Amiri Quran', 'Amiri', serif;
+  font-size: 2rem;
+  line-height: 1.7;
+  text-align: center;
+}
+
+.mushaf-word-analysis__location,
+.mushaf-word-analysis__credit {
+  margin: 0.2rem 0 0;
+  color: var(--fg-muted);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+/* The rule under the word/location header: the meaning block is the sheet's one
+   answer, so it opens on its own line rather than running into the header. */
+.mushaf-word-analysis__section {
+  margin-top: 0.9rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.mushaf-word-analysis__section:first-of-type {
+  margin-top: 0.7rem;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.mushaf-word-analysis__heading {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.mushaf-word-analysis__books {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.55rem;
+}
+
+.mushaf-word-analysis__book {
+  padding: 0.4rem 0.55rem;
+  font-size: 0.72rem;
+}
+
+.mushaf-word-analysis__download {
+  width: 100%;
+  margin-top: 0.6rem;
+}
+
+.mushaf-word-analysis__progress {
+  margin-top: 0.6rem;
+}
+
+/* The phrase the book explains, shown as the book writes it. */
+.mushaf-word-analysis__phrase {
+  margin: 0.6rem 0 0;
+  font-family: 'Amiri Quran', 'Amiri', serif;
+  font-size: 1.05rem;
+  line-height: 1.9;
+  color: var(--fg-muted);
+  text-align: center;
+}
+
+.mushaf-word-analysis__meaning {
+  margin: 0.4rem 0 0;
+  padding: 0.6rem 0.7rem;
+  border-radius: 0.9rem;
+  background: var(--chip);
+  color: var(--chip-fg);
+  font-size: 0.92rem;
+  line-height: 2;
+}
+
+.mushaf-word-analysis__book-credit {
+  margin: 0.4rem 0 0;
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  text-align: center;
+}
+
 /* The ayah's voice, once «التلاوة» is taken: the length it is heard in — one ayah,
    or the whole surah — the reciter it is read in, and the transport that carries it:
    play or pause, and the replay that runs it again. It sits under its own rule so
    the choice above stays the answer. */
 .mushaf-voice {
+  --voice-frame: color-mix(in srgb, var(--accent) 48%, var(--fg));
+  --voice-frame-soft: color-mix(in srgb, var(--voice-frame) 34%, transparent);
   display: grid;
-  gap: 0.55rem;
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--line);
+  gap: 0.8rem;
+  margin-top: 0.65rem;
+  padding: 0.9rem;
+  border: 1px solid var(--voice-frame);
+  border-radius: 0.85rem;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 55%, transparent), transparent 42%),
+    var(--surface);
+  box-shadow:
+    inset 0 0 0 3px var(--surface),
+    inset 0 0 0 4px var(--voice-frame-soft),
+    0 8px 22px rgb(0 0 0 / 0.06);
+}
+
+.mushaf-voice__now-playing {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.mushaf-voice__rosette {
+  display: grid;
+  width: 2.35rem;
+  height: 2.35rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--voice-frame);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, var(--surface) 0 51%, transparent 53%),
+    linear-gradient(135deg, var(--voice-frame-soft), transparent 48%, var(--voice-frame-soft));
+  box-shadow: inset 0 0 0 2px var(--surface), inset 0 0 0 3px var(--voice-frame-soft);
+  color: var(--voice-frame);
+  font-family: 'Amiri', serif;
+  font-size: 1.45rem;
+  line-height: 1;
+}
+
+.mushaf-voice__track {
+  display: grid;
+  min-width: 0;
+  gap: 0.12rem;
+}
+
+.mushaf-voice__track strong {
+  overflow: hidden;
+  color: var(--fg);
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mushaf-voice__track small {
+  color: var(--fg-muted);
+  font-size: 0.72rem;
+}
+
+.mushaf-voice__status {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--chip-fg);
+  font-size: 0.63rem;
+  font-weight: 700;
+}
+
+.mushaf-voice__status.is-loading {
+  background: var(--accent-soft);
+  color: var(--fg);
+}
+
+.mushaf-voice__scope {
+  margin: 0;
+}
+
+.mushaf-voice__ayah {
+  --fs: 28px;
+  --paper: var(--surface);
+  --ink: var(--fg);
+  --frame: var(--voice-frame);
+  --frame-soft: var(--voice-frame-soft);
+  --wash: var(--accent-soft);
+  margin: 0;
+  padding: 0.45rem 0.25rem;
+  text-align: justify;
+  text-align-last: center;
+}
+
+.mushaf-voice__ayah .mushaf-ayah-mark {
+  cursor: default;
 }
 
 .mushaf-voice__reciter {
@@ -1510,8 +2330,158 @@ body {
   color: var(--fg-muted);
 }
 
-.mushaf-voice__reciter > span {
+.mushaf-voice__reciter > span,
+.mushaf-voice__settings label > span {
   flex: 0 0 auto;
+}
+
+.mushaf-voice__timeline {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.mushaf-voice__seek {
+  width: 100%;
+  height: 1.15rem;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  direction: rtl;
+}
+
+.mushaf-voice__seek::-webkit-slider-runnable-track {
+  height: 0.28rem;
+  border-radius: 999px;
+  background: linear-gradient(to left, var(--accent) var(--voice-progress), var(--line) var(--voice-progress));
+}
+
+.mushaf-voice__seek::-moz-range-track {
+  height: 0.28rem;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.mushaf-voice__seek::-moz-range-progress {
+  height: 0.28rem;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.mushaf-voice__seek::-webkit-slider-thumb {
+  width: 0.85rem;
+  height: 0.85rem;
+  margin-top: -0.29rem;
+  appearance: none;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 1px 5px rgb(0 0 0 / 0.25);
+}
+
+.mushaf-voice__seek::-moz-range-thumb {
+  width: 0.68rem;
+  height: 0.68rem;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 1px 5px rgb(0 0 0 / 0.25);
+}
+
+.mushaf-voice__seek:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.mushaf-voice__time {
+  display: flex;
+  justify-content: space-between;
+  color: var(--fg-muted);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.mushaf-voice__transport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.mushaf-voice__replay,
+.mushaf-voice__transport-spacer {
+  display: grid;
+  width: 2.65rem;
+  height: 2.65rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--chip);
+  color: var(--chip-fg);
+  transition: background-color 0.18s ease, opacity 0.18s ease, transform 0.1s ease;
+}
+
+.mushaf-voice__replay:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.mushaf-voice__replay:active:not(:disabled),
+.mushaf-voice__play:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.mushaf-voice__replay:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.mushaf-voice__play {
+  display: inline-flex;
+  min-width: 8rem;
+  min-height: 2.9rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0 1rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 0.82rem;
+  font-weight: 800;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 28%, transparent);
+  transition: opacity 0.18s ease, transform 0.1s ease;
+}
+
+.mushaf-voice__play:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.mushaf-voice__settings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.mushaf-voice__settings label {
+  display: grid;
+  min-width: 0;
+  gap: 0.32rem;
+  color: var(--fg-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.mushaf-voice__settings .mushaf-select {
+  width: 100%;
+  font-size: 0.72rem;
+}
+
+.mushaf-voice__repeat-note {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 0.7rem;
+  text-align: center;
 }
 
 .mushaf-select {

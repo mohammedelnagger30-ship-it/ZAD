@@ -52,7 +52,8 @@ export function MushafHeader({
           <button
             className="mushaf-iconbtn mushaf-iconbtn--gold"
             onClick={() => toggleBookmark(currentPage)}
-            aria-label={isBookmarked ? 'إزالة العلامة من هذه الصفحة' : 'حفظ هذه الصفحة'}
+            aria-label={isBookmarked ? 'إلغاء حفظ هذه الصفحة' : 'حفظ هذه الصفحة'}
+            title={isBookmarked ? 'الصفحة محفوظة في العلامات' : 'إضافة الصفحة إلى العلامات المحفوظة'}
             aria-pressed={isBookmarked}
           >
             <Bookmark size={17} className={isBookmarked ? 'fill-current' : ''} />

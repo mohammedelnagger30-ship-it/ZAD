@@ -1,14 +1,42 @@
-import { useMemo, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { Bookmark } from 'lucide-react';
 import { getSurah, getSurahsForPage, getJuzForPage, toArabicNumber } from '@/data/surahs';
 import { getPageMeta, getHizbForPage } from '@/data/mushafPages';
 import { getAyahs } from '@/data/quranText';
 import { splitBasmala } from '@/utils/basmala';
+import { getSurahWordMeanings } from '@/utils/wordMeaningsService';
 
 interface PageAyah {
   surahId: number;
   surahName: string;
   ayahNumber: number;
   text: string;
+}
+
+const EMPTY_WORD_MEANINGS = new Map<string, Set<number>>();
+
+interface MushafWordButtonProps {
+  ayah: PageAyah;
+  word: string;
+  wordIndex: number;
+  meaningWords: ReadonlyMap<string, ReadonlySet<number>>;
+  onWordPress?: MushafPageProps['onWordPress'];
+}
+
+function MushafWordButton({ ayah, word, wordIndex, meaningWords, onWordPress }: MushafWordButtonProps) {
+  const hasMeaning = meaningWords.get(`${ayah.surahId}:${ayah.ayahNumber}`)?.has(wordIndex) ?? false;
+  const action = hasMeaning ? 'اضغط لمعرفة معنى الكلمة' : 'اضغط لخيارات الآية';
+  return (
+    <button
+      type="button"
+      className={`mushaf-word${hasMeaning ? ' mushaf-word--has-meaning' : ''}`}
+      aria-label={`${action}: ${word} في سورة ${ayah.surahName}، الآية ${toArabicNumber(ayah.ayahNumber)}`}
+      title={action}
+      onClick={() => onWordPress?.(ayah.surahId, ayah.ayahNumber, word, wordIndex + 1)}
+    >
+      {word}
+    </button>
+  );
 }
 
 /**
@@ -23,6 +51,8 @@ type Segment =
 
 export interface MushafPageProps {
   page: number;
+  readingPosition?: boolean;
+  bookmarked?: boolean;
   /** Resolved Quran font size in px; the reader's zoom is folded in before this point. */
   fontSize: number;
   night: boolean;
@@ -30,8 +60,10 @@ export interface MushafPageProps {
   lineHeight?: number;
   letterSpacing?: number;
   wordSpacing?: number;
+  wordMeaningsInstalled?: boolean;
   onAyahPress?: (surahId: number, ayahNumber: number) => void;
-  /** The ayah whose tafsir is open, so the page can show which one it is. */
+  onWordPress?: (surahId: number, ayahNumber: number, word: string, wordPosition: number) => void;
+  /** The ayah currently selected in the reader, so the page can highlight it. */
   activeAyah?: { surahId: number; ayahNumber: number } | null;
 }
 
@@ -64,12 +96,16 @@ export function MushafFrameDecoration() {
 
 export function MushafPage({
   page,
+  readingPosition = false,
+  bookmarked = false,
   fontSize,
   night,
   lineHeight = 1.9,
   letterSpacing = 0.01,
   wordSpacing = 0,
+  wordMeaningsInstalled = false,
   onAyahPress,
+  onWordPress,
   activeAyah,
 }: MushafPageProps) {
   const pageMeta = getPageMeta(page);
@@ -123,6 +159,51 @@ export function MushafPage({
     return out;
   }, [page]);
 
+  const [loadedMeaningData, setLoadedMeaningData] = useState<{
+    page: number;
+    words: Map<string, Set<number>>;
+  }>({ page: 0, words: new Map() });
+  const surahIds = useMemo(
+    () => [
+      ...new Set(
+        segments.flatMap((segment) =>
+          segment.kind === 'text' ? segment.ayahs.map((ayah) => ayah.surahId) : [],
+        ),
+      ),
+    ],
+    [segments],
+  );
+
+  useEffect(() => {
+    if (!wordMeaningsInstalled) return;
+    let cancelled = false;
+    void Promise.all(
+      surahIds.map(async (surahId) => [surahId, await getSurahWordMeanings(surahId)] as const),
+    ).then((surahs) => {
+      if (cancelled) return;
+      const next = new Map<string, Set<number>>();
+      for (const [surahId, ayahs] of surahs) {
+        for (const [ayahNumber, hits] of ayahs) {
+          const wordIndexes = new Set(hits.map((hit) => hit.wordIndex));
+          if (wordIndexes.size > 0) next.set(`${surahId}:${ayahNumber}`, wordIndexes);
+        }
+      }
+      setLoadedMeaningData({ page, words: next });
+    }).catch((cause: unknown) => {
+      if (cancelled) return;
+      console.error('Unable to load word-meaning markers for mushaf page:', cause);
+      setLoadedMeaningData({ page, words: new Map() });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [page, surahIds, wordMeaningsInstalled]);
+
+  const meaningWords =
+    wordMeaningsInstalled && loadedMeaningData.page === page
+      ? loadedMeaningData.words
+      : EMPTY_WORD_MEANINGS;
+
   const pageStyle = {
     '--fs': `${fontSize}px`,
     '--lh': `${lineHeight}`,
@@ -134,6 +215,24 @@ export function MushafPage({
     <div className={`mushaf-page${night ? ' mushaf-page--night' : ''}`} style={pageStyle}>
       {/* Ornamental frame. Decorative only, so it is hidden from assistive tech. */}
       <MushafFrameDecoration />
+      {readingPosition && (
+        <span
+          className="mushaf-ribbon mushaf-ribbon--resume"
+          role="img"
+          aria-label="موضع القراءة الحالي"
+          title="موضع القراءة الحالي"
+        />
+      )}
+      {bookmarked && (
+        <span
+          className="mushaf-page-bookmark"
+          role="img"
+          aria-label={`صفحة ${toArabicNumber(page)} محفوظة في العلامات`}
+          title="صفحة محفوظة"
+        >
+          <Bookmark size={15} fill="currentColor" strokeWidth={1.8} aria-hidden="true" />
+        </span>
+      )}
 
       <div className="mushaf-margin" aria-hidden="true">
         <span>الجزء {toArabicNumber(juz)}</span>
@@ -172,31 +271,41 @@ export function MushafPage({
               // The last word carries the medallion inside one unbreakable tail, so the
               // two are always cut from the line together.
               const words = ayah.text.split(' ');
-              const head = words.slice(0, -1).join(' ');
-              const tail = words[words.length - 1];
               return (
                 <span key={`${ayah.surahId}:${ayah.ayahNumber}`}>
                   <span
                     className="mushaf-ayah"
-                    role="button"
-                    tabIndex={0}
-                    title="اضغط لعرض التفسير أو التلاوة"
-                    aria-label={`آية ${toArabicNumber(ayah.ayahNumber)} من سورة ${ayah.surahName} — اضغط لعرض التفسير أو التلاوة`}
-                    onClick={() => onAyahPress?.(ayah.surahId, ayah.ayahNumber)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        onAyahPress?.(ayah.surahId, ayah.ayahNumber);
-                      }
-                    }}
                     style={isActive ? { background: 'var(--wash)' } : undefined}
                   >
-                    {head ? `${head} ` : null}
-                    <span className="mushaf-ayah-tail">
-                      {tail}
-                      <span className="mushaf-ayah-mark" aria-hidden="true">
-                        {toArabicNumber(ayah.ayahNumber)}
+                    {words.slice(0, -1).map((word, index) => (
+                      <span key={index}>
+                        <MushafWordButton
+                          ayah={ayah}
+                          word={word}
+                          wordIndex={index}
+                          meaningWords={meaningWords}
+                          onWordPress={onWordPress}
+                        />{' '}
                       </span>
+                    ))}
+                    <span className="mushaf-ayah-tail">
+                      <MushafWordButton
+                        ayah={ayah}
+                        word={words[words.length - 1]}
+                        wordIndex={words.length - 1}
+                        meaningWords={meaningWords}
+                        onWordPress={onWordPress}
+                      />
+                      <button
+                        type="button"
+                        className="mushaf-ayah-mark"
+                        aria-label={`خيارات الآية ${toArabicNumber(ayah.ayahNumber)} من سورة ${ayah.surahName}`}
+                        onClick={() => onAyahPress?.(ayah.surahId, ayah.ayahNumber)}
+                      >
+                        <span className="mushaf-ayah-mark__glyph" aria-hidden="true">
+                          {'\u06DD'}{toArabicNumber(ayah.ayahNumber)}
+                        </span>
+                      </button>
                     </span>
                   </span>{' '}
                 </span>
@@ -212,7 +321,9 @@ export function MushafPage({
         </p>
       )}
 
-      <div className="mushaf-folio">{toArabicNumber(page)}</div>
+      <div className="mushaf-folio" role="note" aria-label={`رقم الصفحة ${toArabicNumber(page)}`}>
+        {toArabicNumber(page)}
+      </div>
     </div>
   );
 }

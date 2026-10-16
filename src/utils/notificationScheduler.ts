@@ -1,6 +1,6 @@
 import { LocalNotifications, type LocalNotificationSchema } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
-import { getSettings } from '@/db/database';
+import { db, getSettings } from '@/db/database';
 import type { Settings } from '@/db/database';
 import {
   addCalendarDays,
@@ -11,7 +11,7 @@ import {
   getPrayerTimeZone,
 } from '@/utils/prayerTimes';
 import { deviceClockDriftMs, toDeviceClock, trustedNow, trustedNowMs } from '@/utils/clock';
-import { generateDailyTasks, getTodayTasks } from '@/utils/taskManager';
+import { describePortion, generateDailyTasks, getTodayTasks } from '@/utils/taskManager';
 import { assembleNotificationQueue, dhikrFillerBudget } from '@/utils/notificationQueue';
 import {
   scheduleAdhanOverlay,
@@ -35,12 +35,19 @@ import {
 type DhikrReminderCategory = 'morning' | 'evening' | 'istighfar';
 
 /**
- * How many days of prayer alarms are kept armed.
+ * How many days of native prayer alarms are kept armed.
  *
  * Each open/resume rebuilds the whole queue, so this is the adhan's survival horizon
  * when the app is never opened again: beyond it there is nothing left to fire.
  */
-const PRAYER_NOTIFICATION_DAYS = 7;
+const PRAYER_NOTIFICATION_DAYS = 30;
+
+/**
+ * Sound-notification fallbacks share Android's bounded notification queue with the
+ * rest of the app. Keep them to a week (35 prayer alerts) so they still fit the
+ * existing 50-entry ceiling if native full-screen alarm arming fails.
+ */
+const PRAYER_FALLBACK_DAYS = 7;
 
 /**
  * The queue is capped at this many entries, in priority order: prayer fallback
@@ -58,6 +65,7 @@ const PRAYER_NOTIFICATION_DAYS = 7;
  * was the fallbacks themselves.
  */
 const MAX_SCHEDULED_NOTIFICATIONS = 50;
+const MAX_HIFZ_REVIEW_REMINDERS = 15;
 
 /**
  * The identity every notification carries: the tinted status icon, the
@@ -259,16 +267,19 @@ export async function rescheduleAllNotifications(): Promise<void> {
   // trim eat the filler while the adhan's fallbacks stay untouched at the front.
   const prePrayerReminders: LocalNotificationSchema[] = [];
   const iqamahAlerts: LocalNotificationSchema[] = [];
+  const hifzReviewReminders: LocalNotificationSchema[] = [];
   const taskReminders: LocalNotificationSchema[] = [];
   const hadithReminders: LocalNotificationSchema[] = [];
   const dhikrFiller: LocalNotificationSchema[] = [];
 
-  // Channels are idempotent and independent of the queue; if this fails, the previously
-  // created channels (same ids) are still in place.
+  // The native alarm posts into the prayer channel, so do not replace the working
+  // queue with alarms that may open a silent page if channel creation failed.
   try {
     await createNotificationChannels(settings);
   } catch (err) {
     console.error('Could not create notification channels:', err);
+    notifyNotificationWarning('channel-failed');
+    return;
   }
 
   /**
@@ -281,11 +292,11 @@ export async function rescheduleAllNotifications(): Promise<void> {
   const drift = deviceClockDriftMs();
   const armedAt = (instant: Date) => new Date(toDeviceClock(instant.getTime(), drift));
 
-  // 1. Prayer notifications for the next PRAYER_NOTIFICATION_DAYS days.
+  // 1. Native prayer alarms for the next PRAYER_NOTIFICATION_DAYS days.
   //
-  // More than "today + tomorrow" is what keeps the adhan firing while the app stays
-  // closed for a while: these alarms are the only thing that plays the adhan outside
-  // the process, so a two-day horizon meant the adhan silently stopped on day three.
+  // Native alarms are kept for a month so the adhan continues if the app is not
+  // opened for a while. The notification fallback remains a separate, shorter
+  // window because it shares the bounded queue with the rest of the app.
   //
   // On Android the prayer alert itself is armed natively (full-screen intent — see
   // @/utils/adhanOverlay): that is what lets the adhan *page* open while the app is
@@ -310,6 +321,7 @@ export async function rescheduleAllNotifications(): Promise<void> {
         addCalendarDays(firstDay, dayOffset),
         settings.calcMethod,
         settings.asrMadhab,
+        settings.prayerTimeAdjustments,
       );
 
       for (const prayer of dayPrayers.prayers) {
@@ -354,23 +366,25 @@ export async function rescheduleAllNotifications(): Promise<void> {
           prayerName: prayer.arabicName,
           time: prayer.time.toISOString(),
         });
-        prayerFallbacks.push({
-          id: notificationId.prayer(slot),
-          title,
-          body,
-          schedule: { at: armedAt(prayer.time), allowWhileIdle: true },
-          channelId,
-          // Only a bundled voice can ride the plugin's per-notification sound, which
-          // resolves resources; a downloaded one already rings through its channel.
-          sound: settings.adhanSound && adhan.bundled ? adhan.file : undefined,
-          ...NOTIFICATION_BRAND,
-          extra: {
-            type: 'prayer',
-            prayerKey: prayer.name,
-            prayerName: prayer.arabicName,
-            time: prayer.time.toISOString(),
-          },
-        });
+        if (dayOffset < PRAYER_FALLBACK_DAYS) {
+          prayerFallbacks.push({
+            id: notificationId.prayer(slot),
+            title,
+            body,
+            schedule: { at: armedAt(prayer.time), allowWhileIdle: true },
+            channelId,
+            // Only a bundled voice can ride the plugin's per-notification sound, which
+            // resolves resources; a downloaded one already rings through its channel.
+            sound: settings.adhanSound && adhan.bundled ? adhan.file : undefined,
+            ...NOTIFICATION_BRAND,
+            extra: {
+              type: 'prayer',
+              prayerKey: prayer.name,
+              prayerName: prayer.arabicName,
+              time: prayer.time.toISOString(),
+            },
+          });
+        }
 
         // Pre-prayer reminder
         if (settings.prePrayerReminder > 0) {
@@ -383,6 +397,12 @@ export async function rescheduleAllNotifications(): Promise<void> {
               schedule: { at: armedAt(reminderTime), allowWhileIdle: true },
               channelId: 'prayer-reminder',
               ...NOTIFICATION_BRAND,
+              extra: {
+                type: 'prayer-reminder',
+                prayerKey: prayer.name,
+                prayerName: prayer.arabicName,
+                time: prayer.time.toISOString(),
+              },
             });
           }
         }
@@ -406,13 +426,48 @@ export async function rescheduleAllNotifications(): Promise<void> {
     taskReminders.push({
       id: notificationId.task(task.id ?? 0),
       title: `حان وقت ${typeText}`,
-      body: `${task.portion} — وردك في ${typeText} اليوم`,
+      body: `${describePortion(task.portion)} — وردك في ${typeText} اليوم`,
       schedule: { at: armedAt(scheduledAt), allowWhileIdle: true },
       channelId: task.type === 'hifz' ? 'hifz' : 'review',
       sound: settings.notificationSound ? 'notification.wav' : undefined,
       ...NOTIFICATION_BRAND,
+      extra: {
+        type: 'task',
+        taskId: task.id,
+        taskType: task.type,
+        portion: task.portion,
+      },
     });
   }
+
+  // Spaced-repetition reviews are scheduled from the quiz's next due instant.
+  // The short horizon and cap keep them from crowding out today's planned work.
+  const reviewNow = trustedNowMs();
+  const reviewHorizon = reviewNow + PRAYER_NOTIFICATION_DAYS * 24 * 60 * 60_000;
+  const reviews = await db.hifzReviews
+    .where('dueAt')
+    .above(reviewNow)
+    .and((review) => Number.isFinite(review.dueAt) && review.dueAt <= reviewHorizon)
+    .limit(MAX_HIFZ_REVIEW_REMINDERS)
+    .toArray();
+  reviews.forEach((review, slot) => {
+    const portion = `surah:${review.surahId}:${review.fromAyah}-${review.toAyah}`;
+    hifzReviewReminders.push({
+      id: notificationId.hifzReview(slot),
+      title: 'موعد مراجعة حفظك',
+      body: `${describePortion(portion)} — اختبر حفظك وثبّته`,
+      schedule: { at: armedAt(new Date(review.dueAt)), allowWhileIdle: true },
+      channelId: 'review',
+      sound: settings.notificationSound ? 'notification.wav' : undefined,
+      ...NOTIFICATION_BRAND,
+      extra: {
+        type: 'hifz-review',
+        surahId: review.surahId,
+        fromAyah: review.fromAyah,
+        toAyah: review.toAyah,
+      },
+    });
+  });
 
   // 3. Hadith of the day (9:00 AM)
   const hadithTime = trustedNow();
@@ -430,6 +485,7 @@ export async function rescheduleAllNotifications(): Promise<void> {
       schedule: { at: armedAt(hadithTime), allowWhileIdle: true },
       channelId: 'hadith',
       ...NOTIFICATION_BRAND,
+      extra: { type: 'hadith' },
     });
   }
 
@@ -454,7 +510,7 @@ export async function rescheduleAllNotifications(): Promise<void> {
       const now = trustedNow();
       const previousMessageByCategory = new Map<DhikrReminderCategory, number>();
       const budget = dhikrFillerBudget(
-        { taskReminders, hadithReminders, iqamahAlerts, prePrayerReminders },
+        { taskReminders, hadithReminders, iqamahAlerts, hifzReviewReminders, prePrayerReminders },
         MAX_SCHEDULED_NOTIFICATIONS,
       );
 
@@ -487,6 +543,7 @@ export async function rescheduleAllNotifications(): Promise<void> {
               schedule: { at: armedAt(at), allowWhileIdle: true },
               channelId: 'azkar',
               ...NOTIFICATION_BRAND,
+              extra: { type: 'dhikr', category },
             });
             armed += 1;
           }
@@ -532,6 +589,7 @@ export async function rescheduleAllNotifications(): Promise<void> {
       taskReminders,
       hadithReminders,
       iqamahAlerts,
+      hifzReviewReminders,
       prePrayerReminders,
       dhikrFiller,
     },
@@ -551,7 +609,11 @@ export async function rescheduleAllNotifications(): Promise<void> {
       if (warning) {
         console.warn('Notifications were scheduled inexact:', warning);
         notifyNotificationWarning('scheduled-inexact');
+      } else {
+        notifyNotificationWarning('schedule-ready');
       }
+    } else {
+      notifyNotificationWarning('schedule-ready');
     }
   } catch (err) {
     console.error('Scheduling notifications failed — restoring the previous queue.', err);
