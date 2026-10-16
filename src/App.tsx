@@ -379,16 +379,23 @@ function useSessionSync(userId: string) {
   });
 
   useEffect(() => {
-    let stopSync: (() => void) | undefined;
+    let disposed = false;
+    let release: (() => void) | undefined;
     void startCloudSync(userId, setSyncState)
       .then((stop) => {
-        stopSync = stop;
+        // `startCloudSync` holds the loop until its first round finishes, so this
+        // can settle after the view is gone. Handing it back then would leave the
+        // ref-count permanently one too high and the loop running for a session
+        // nobody is watching.
+        if (disposed) stop();
+        else release = stop;
       })
       .catch((error: unknown) => {
         console.error('Cloud sync initial background error:', error);
       });
     return () => {
-      stopSync?.();
+      disposed = true;
+      release?.();
     };
   }, [userId]);
 
@@ -552,28 +559,36 @@ function AppContent({
   useEffect(() => {
     if (!Capacitor.isNativePlatform() || onboarded === null || !onboarded) return;
 
+    let disposed = false;
     let removeListener: (() => void) | undefined;
-    const register = async () => {
-      try {
-        const handle = await CapApp.addListener('backButton', () => {
-          // An open overlay — the adhan page, a sheet, a dialog — takes the
-          // press first; back during the adhan used to exit the app entirely,
-          // silencing the call mid-flight.
-          if (dismissTopOverlay()) return;
-          if (screen === 'home') {
-            void CapApp.exitApp();
-            return;
-          }
-          goBack();
-        });
-        removeListener = () => { void handle.remove(); };
-      } catch {
-        // Native back-button support is optional on some devices/builds.
-      }
-    };
 
-    void register();
-    return () => removeListener?.();
+    CapApp.addListener('backButton', () => {
+      // An open overlay — the adhan page, a sheet, a dialog — takes the
+      // press first; back during the adhan used to exit the app entirely,
+      // silencing the call mid-flight.
+      if (dismissTopOverlay()) return;
+      if (screen === 'home') {
+        void CapApp.exitApp();
+        return;
+      }
+      goBack();
+    })
+      .then((handle) => {
+        // The registration can settle after this effect was torn down — and this
+        // effect re-runs on every navigation, so that is the common case, not a
+        // rare one. A handle landing late still holds a live `goBack`; releasing
+        // it at once keeps one leaked listener from jumping two screens per press.
+        if (disposed) void handle.remove();
+        else removeListener = () => void handle.remove();
+      })
+      .catch(() => {
+        // Native back-button support is optional on some devices/builds.
+      });
+
+    return () => {
+      disposed = true;
+      removeListener?.();
+    };
   }, [goBack, onboarded, screen]);
 
   useEffect(() => {
@@ -693,22 +708,29 @@ function AppContent({
   // armed window is finite. Re-arming on every foreground keeps the schedule honest
   // instead of assuming it survived.
   useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let disposed = false;
     let remove: (() => void) | undefined;
 
-    if (Capacitor.isNativePlatform()) {
-      CapApp.addListener('resume', () => {
-        generateDailyTasks();
-        markMissedTasks();
-        rescheduleAllNotifications();
-      }).then((handle) => {
-        remove = () => { void handle.remove(); };
-      }).catch(() => {
+    CapApp.addListener('resume', () => {
+      generateDailyTasks();
+      markMissedTasks();
+      rescheduleAllNotifications();
+    })
+      .then((handle) => {
+        if (disposed) void handle.remove();
+        else remove = () => void handle.remove();
+      })
+      .catch(() => {
         // No plugin available (e.g. running the web build in a native shell) — the
         // open-time reschedule above still covers the common case.
       });
-    }
 
-    return () => remove?.();
+    return () => {
+      disposed = true;
+      remove?.();
+    };
   }, []);
 
   const handleOnboardComplete = useCallback(async (patch: Partial<Settings>) => {
