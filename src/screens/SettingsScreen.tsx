@@ -25,6 +25,8 @@ interface SettingsScreenProps {
   syncState?: CloudSyncState | null;
   onSyncNow?: () => Promise<void>;
   onSignOut?: () => Promise<void>;
+  /** Supplied only to an allow-listed account: the way back to the dashboard. */
+  onOpenAdmin?: () => void;
 }
 
 export function SettingsScreen({
@@ -38,6 +40,7 @@ export function SettingsScreen({
   syncState,
   onSyncNow,
   onSignOut,
+  onOpenAdmin,
 }: SettingsScreenProps) {
   return (
     <div className="space-y-6 md:space-y-0 md:grid md:grid-cols-2 md:items-start md:gap-x-6 md:gap-y-8 pb-8" dir="rtl">
@@ -59,6 +62,7 @@ export function SettingsScreen({
         syncState={syncState}
         onSyncNow={onSyncNow}
         onSignOut={onSignOut}
+        onOpenAdmin={onOpenAdmin}
       />
       <AppUpdatesSection />
       <ThemeSection

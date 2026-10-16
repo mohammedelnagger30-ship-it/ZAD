@@ -260,6 +260,40 @@ function Application() {
   const [session, setSession] = useState<Session | null>(null);
   const [authChecked, setAuthChecked] = useState(!isSupabaseConfigured);
   const [offlineUsage, setOfflineUsage] = useState(readOfflineUsage);
+  // 'unknown' until the allow-list has answered for this account — see below.
+  const [adminState, setAdminState] = useState<'unknown' | 'admin' | 'user'>('unknown');
+  const sessionUserId = session?.user.id ?? null;
+
+  // Report the open while the identity is settled: a guest counts under the
+  // device's random id, an account under its own. Signing in mid-boot changes
+  // the identity, so this effect re-runs and the account is counted too.
+  useEffect(() => {
+    void trackAppOpen(sessionUserId);
+  }, [sessionUserId]);
+
+  /**
+   * Whether this account opens the dashboard or the ordinary app is decided
+   * server-side by `public.admin_emails` — the client only ever learns a yes or
+   * a no, and a project without the migration simply reports "no" and carries
+   * on as the app it was.
+   *
+   * The answer is held as 'unknown' rather than guessed: an admin on a slow
+   * link would otherwise flash the whole app before landing on the dashboard.
+   */
+  useEffect(() => {
+    if (!sessionUserId) {
+      setAdminState('unknown');
+      return;
+    }
+    let alive = true;
+    setAdminState('unknown');
+    void isAdminAccount().then((isAdmin) => {
+      if (alive) setAdminState(isAdmin ? 'admin' : 'user');
+    });
+    return () => {
+      alive = false;
+    };
+  }, [sessionUserId]);
 
   useEffect(() => {
     if (session) {
@@ -296,6 +330,8 @@ function Application() {
     return <AppContent accountEmail={undefined} onSignOut={undefined} syncState={null} onSyncNow={undefined} />;
   }
   if (isSupabaseConfigured && session) {
+    if (adminState === 'unknown') return <GateLoading message="جارٍ فتح الحساب..." />;
+    if (adminState === 'admin') return <AdminApp session={session} />;
     return <AuthenticatedApp key={session.user.id} session={session} />;
   }
   if (isSupabaseConfigured && !offlineUsage) {
@@ -316,7 +352,26 @@ function Application() {
   return <AppContent accountEmail={undefined} onSignOut={undefined} syncState={null} onSyncNow={undefined} />;
 }
 
-function AuthenticatedApp({ session }: { session: Session }) {
+/** Full-screen holding state for the moment between a session and its view. */
+function GateLoading({ message }: { message: string }) {
+  return (
+    <div className="min-h-screen bg-surface-light dark:bg-surface-dark flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-16 h-16 mx-auto mb-4 overflow-hidden rounded-2xl shadow-lg animate-pulse-soft">
+          <img src="/icon.svg" alt="قُرّة" className="h-full w-full" />
+        </div>
+        <p className="text-primary-600 dark:text-primary-300 text-sm">{message}</p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Everything a signed-in session owes the device: the background sync loop and
+ * a sign-out that uploads before it clears. Shared by the ordinary app and the
+ * admin's "open the app" view — they are the same account either way.
+ */
+function useSessionSync(userId: string) {
   const [syncState, setSyncState] = useState<CloudSyncState>({
     status: 'syncing',
     lastSyncedAt: null,
@@ -325,7 +380,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
 
   useEffect(() => {
     let stopSync: (() => void) | undefined;
-    void startCloudSync(session.user.id, setSyncState)
+    void startCloudSync(userId, setSyncState)
       .then((stop) => {
         stopSync = stop;
       })
@@ -335,7 +390,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
     return () => {
       stopSync?.();
     };
-  }, [session.user.id]);
+  }, [userId]);
 
   const handleSignOut = useCallback(async () => {
     if (!supabase) return;
@@ -345,13 +400,53 @@ function AuthenticatedApp({ session }: { session: Session }) {
     await clearLocalUserData();
   }, []);
 
+  return { syncState, handleSignOut };
+}
+
+function AuthenticatedApp({ session, onOpenAdmin }: { session: Session; onOpenAdmin?: () => void }) {
+  const { syncState, handleSignOut } = useSessionSync(session.user.id);
+
   return (
     <AppContent
       accountEmail={session.user.email}
       onSignOut={handleSignOut}
       syncState={syncState}
       onSyncNow={() => synchronizeNow()}
+      onOpenAdmin={onOpenAdmin}
     />
+  );
+}
+
+/**
+ * The allow-listed account's two faces. It lands on the dashboard, and «فتح
+ * التطبيق» puts it in the ordinary app — where Settings → الحساب offers a way
+ * back, so no sign-out is needed to see the numbers again.
+ */
+function AdminApp({ session }: { session: Session }) {
+  const [view, setView] = useState<'dashboard' | 'app'>('dashboard');
+  // Sync starts here too, so «فتح التطبيق» opens onto an app already at work.
+  const { handleSignOut } = useSessionSync(session.user.id);
+
+  if (view === 'app') {
+    return (
+      <AuthenticatedApp
+        key={`admin-app-${session.user.id}`}
+        session={session}
+        onOpenAdmin={() => setView('dashboard')}
+      />
+    );
+  }
+
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<GateLoading message="جارٍ فتح لوحة الإدارة..." />}>
+        <AdminScreen
+          accountEmail={session.user.email}
+          onSignOut={handleSignOut}
+          onOpenApp={() => setView('app')}
+        />
+      </Suspense>
+    </ErrorBoundary>
   );
 }
 
@@ -438,11 +533,14 @@ function AppContent({
   onSignOut,
   syncState,
   onSyncNow,
+  onOpenAdmin,
 }: {
   accountEmail: string | undefined;
   onSignOut: (() => Promise<void>) | undefined;
   syncState: CloudSyncState | null;
   onSyncNow: (() => Promise<void>) | undefined;
+  /** Only supplied for an allow-listed account — the way back to the dashboard. */
+  onOpenAdmin?: (() => void) | undefined;
 }) {
   const { settings, loading, error: settingsError, save, reload: reloadSettings } = useSettings();
   const { themeMode, changeTheme, colorPalette, changeColorPalette } = useTheme();
@@ -700,6 +798,7 @@ function AppContent({
                   syncState={syncState}
                   onSyncNow={onSyncNow}
                   onSignOut={onSignOut}
+                  onOpenAdmin={onOpenAdmin}
                 />
               )}
               {screen === 'more' && <MoreScreen key={`more-${resetNonce}`} navigate={navigate} />}

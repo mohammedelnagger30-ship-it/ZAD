@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Cloud, LogOut, RefreshCw } from 'lucide-react';
+import { Cloud, LogOut, RefreshCw, ShieldCheck } from 'lucide-react';
 import { Card, Button } from '@/components/ui';
 import { SectionTitle } from '@/components/settings/SectionTitle';
 import { useConfirm } from '@/hooks/useConfirm';
@@ -10,9 +10,11 @@ interface AccountSectionProps {
   syncState?: CloudSyncState | null;
   onSyncNow?: () => Promise<void>;
   onSignOut?: () => Promise<void>;
+  /** Present only for an allow-listed account — opens the admin dashboard. */
+  onOpenAdmin?: () => void;
 }
 
-export function AccountSection({ accountEmail, syncState, onSyncNow, onSignOut }: AccountSectionProps) {
+export function AccountSection({ accountEmail, syncState, onSyncNow, onSignOut, onOpenAdmin }: AccountSectionProps) {
   const { confirm, dialog } = useConfirm();
   const [accountActionStatus, setAccountActionStatus] = useState('');
   const [accountActionBusy, setAccountActionBusy] = useState(false);
@@ -103,6 +105,16 @@ export function AccountSection({ accountEmail, syncState, onSyncNow, onSignOut }
                 <LogOut size={15} /> تسجيل الخروج
               </Button>
             </div>
+            {onOpenAdmin && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onOpenAdmin}
+                className="col-span-2 flex items-center justify-center gap-1.5 font-semibold text-xs"
+              >
+                <ShieldCheck size={15} /> لوحة الإدارة
+              </Button>
+            )}
             {accountActionStatus && (
               <p role="alert" className="mt-2 text-xs text-red-600 dark:text-red-300 font-semibold">
                 {accountActionStatus}
