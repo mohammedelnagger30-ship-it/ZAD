@@ -1,0 +1,24 @@
+# Sizes here are asserted, not merely reported.
+#
+# `check-content.ts` fails the build when this asset's on-disk size differs from
+# the value `build-content-catalog.ts` measured — an equality, not a tolerance —
+# because that number is what the app advertises as the download.
+#
+# With no rules in this file, a Windows checkout under `core.autocrlf=true` —
+# exactly what a fresh GitHub Actions runner has — rewrote all 75,695 line
+# endings to CRLF and measured 8,760,835 bytes where the repository holds
+# 8,685,140: the same words, a different environment, and a red build that no
+# content change explains.
+#
+# `eol=lf` pins both ends of the round trip. Git restores LF on every checkout,
+# so the asset measures the same bytes on any machine, and it folds any CRLF
+# back to LF on the next commit, so a contributor whose editor wrote CRLF cannot
+# record an inflated size that a later checkout fails to reproduce. Without the
+# second half the check would only be half-fixed — the person running the
+# catalogue build is the one who would break it next.
+public/hadith/*.json text eol=lf
+
+# Everything else stays on git's own auto-detection. `quran-full.json` is already
+# classified binary (no line endings to convert) and is measured only against a
+# 2 MB ceiling with headroom, so pinning the rest of the tree would change how
+# hundreds of files check out in order to fix nothing.
