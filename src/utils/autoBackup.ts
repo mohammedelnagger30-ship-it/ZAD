@@ -10,9 +10,12 @@ import { db } from '@/db/database';
 // an hourly job. Both callers below are async, so the module is loaded on
 // demand and the heavy data rides in a lazily-fetched chunk instead.
 import { todayKey } from '@/utils/dateUtils';
+import { withSyncSuppressed } from '@/utils/syncSuppression';
 
 const AUTO_BACKUP_KEY = 'zad:auto-backup-config';
 const LAST_BACKUP_KEY = 'zad:last-backup';
+/** Every snapshot is stored under this prefix; the writer and every reader agree on it here, in one place. */
+const AUTO_BACKUP_PREFIX = 'zad:backup:';
 
 export interface AutoBackupConfig {
   enabled: boolean;
@@ -102,7 +105,7 @@ export async function performAutoBackup(): Promise<boolean> {
     const config = getAutoBackupConfig();
 
     // Store backup with timestamp
-    const backupKey = `zad:backup:${today}`;
+    const backupKey = `${AUTO_BACKUP_PREFIX}${today}`;
     localStorage.setItem(backupKey, JSON.stringify(backup));
 
     // Update last backup date
@@ -128,7 +131,7 @@ async function cleanupOldBackups(maxBackups: number): Promise<void> {
     const backupKeys: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key?.startsWith('zad:backup:')) {
+      if (key?.startsWith(AUTO_BACKUP_PREFIX)) {
         backupKeys.push(key);
       }
     }
@@ -151,6 +154,29 @@ async function cleanupOldBackups(maxBackups: number): Promise<void> {
 }
 
 /**
+ * Removes every stored snapshot.
+ *
+ * Not a "keep the newest few" moment. These are full dumps of one person's
+ * data, and the restore button is a single tap: when an account signs out on
+ * a shared phone, anything left here is the previous owner's life one tap
+ * away from being written over the next person's database. So signing out
+ * empties the whole set rather than trimming it.
+ *
+ * Uses the same prefix the writer uses, so the two cannot drift apart.
+ */
+export function clearAllBackups(): void {
+  try {
+    // Walk backwards: removing a key shifts every index after it.
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(AUTO_BACKUP_PREFIX)) localStorage.removeItem(key);
+    }
+  } catch (error) {
+    console.error('Failed to clear backups:', error);
+  }
+}
+
+/**
  * Get list of all automatic backups
  */
 export function getAutoBackups(): Array<{ date: string; key: string }> {
@@ -158,7 +184,7 @@ export function getAutoBackups(): Array<{ date: string; key: string }> {
     const backups: Array<{ date: string; key: string }> = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key?.startsWith('zad:backup:')) {
+      if (key?.startsWith(AUTO_BACKUP_PREFIX)) {
         const date = key.split(':')[2];
         backups.push({ date, key });
       }
@@ -180,6 +206,17 @@ export function getAutoBackups(): Array<{ date: string; key: string }> {
  * IndexedDB rolls the whole thing back, so the previous data survives instead of
  * being replaced by a half-restored state. (This used to call `db.delete()` first,
  * which destroyed everything before the payload was even looked at.)
+ *
+ * The sync hooks are held quiet across that transaction, and this matters more
+ * than the rollback does. `clear()` fires Dexie's `deleting` hook per row, and the
+ * hook answers by enqueuing a tombstone into `localStorage` — outside the very
+ * transaction doing the restore. So a restore that *failed* rolled the local rows
+ * back while keeping every queued deletion, and the next sync round then deleted
+ * the account's cloud data: the recovery path destroyed the other copy of what it
+ * was meant to recover. Suppression is also what makes a successful restore a
+ * local act, which is what a restore is — the two copies reconcile by their own
+ * timestamps on the next round, instead of a week-old backup overwriting newer
+ * work on every device the person owns.
  */
 export async function restoreFromBackup(key: string): Promise<boolean> {
   try {
@@ -201,23 +238,25 @@ export async function restoreFromBackup(key: string): Promise<boolean> {
     }
     if (data.adhkar !== undefined && !isValidAdhkarBackup(data.adhkar)) return false;
 
-    await db.transaction(
-      'rw',
-      BACKUP_TABLES.map((name) => db.table(name)),
-      async () => {
-        for (const table of BACKUP_TABLES) {
-          const rows = data[table];
-          if (!Array.isArray(rows)) continue;
-          const tableRef = db.table(table);
-          await tableRef.clear();
-          // Settings are stored as a one-row array; a missing row means "no
-          // settings in this backup" and must not put a bare array into the table.
-          const records = (rows as Record<string, unknown>[]).filter(
-            (row) => row !== undefined && row !== null,
-          );
-          if (records.length > 0) await tableRef.bulkPut(records);
-        }
-      },
+    await withSyncSuppressed(() =>
+      db.transaction(
+        'rw',
+        BACKUP_TABLES.map((name) => db.table(name)),
+        async () => {
+          for (const table of BACKUP_TABLES) {
+            const rows = data[table];
+            if (!Array.isArray(rows)) continue;
+            const tableRef = db.table(table);
+            await tableRef.clear();
+            // Settings are stored as a one-row array; a missing row means "no
+            // settings in this backup" and must not put a bare array into the table.
+            const records = (rows as Record<string, unknown>[]).filter(
+              (row) => row !== undefined && row !== null,
+            );
+            if (records.length > 0) await tableRef.bulkPut(records);
+          }
+        },
+      ),
     );
 
     if (data.adhkar !== undefined) {

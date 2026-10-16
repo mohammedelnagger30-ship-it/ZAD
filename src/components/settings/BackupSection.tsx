@@ -3,6 +3,7 @@ import { Download, Upload, Database } from 'lucide-react';
 import { Card, Button } from '@/components/ui';
 import { SectionTitle } from '@/components/settings/SectionTitle';
 import { db } from '@/db/database';
+import { withSyncSuppressed } from '@/utils/syncSuppression';
 import {
   ADHKAR_STATE_KEY,
   BACKUP_TABLES,
@@ -78,17 +79,25 @@ export function BackupSection() {
             return;
           }
         }
-        await db.transaction(
-          'rw',
-          BACKUP_TABLES.map((key) => db.table(key)),
-          async () => {
-            for (const key of BACKUP_TABLES) {
-              if (!Object.prototype.hasOwnProperty.call(data, key)) continue;
-              const table = db.table(key);
-              await table.clear();
-              await table.bulkPut(data[key] as Record<string, unknown>[]);
+        // Quiet for the whole replace, for the same reason the automatic restore
+        // is: `clear()` on a synced table raises a tombstone per row, and the
+        // deletion queue lives in localStorage, outside this transaction. A
+        // failed import would then keep the queued deletions while rolling the
+        // rows back, and the next sync round would delete the account's cloud
+        // data — a rejected file must not cost the person their other copy.
+        await withSyncSuppressed(() =>
+          db.transaction(
+            'rw',
+            BACKUP_TABLES.map((key) => db.table(key)),
+            async () => {
+              for (const key of BACKUP_TABLES) {
+                if (!Object.prototype.hasOwnProperty.call(data, key)) continue;
+                const table = db.table(key);
+                await table.clear();
+                await table.bulkPut(data[key] as Record<string, unknown>[]);
+              }
             }
-          }
+          )
         );
         if (data.adhkar !== undefined) {
           localStorage.setItem(ADHKAR_STATE_KEY, JSON.stringify(data.adhkar));

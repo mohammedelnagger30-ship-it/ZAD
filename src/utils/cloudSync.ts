@@ -2,6 +2,8 @@ import type { Table } from 'dexie';
 import { App } from '@capacitor/app';
 import { db, DEFAULT_SETTINGS, type HifzPlan } from '@/db/database';
 import { supabase } from '@/utils/supabaseClient';
+import { clearAllBackups } from '@/utils/autoBackup';
+import { isSyncSuppressed, suppressSyncWrites, withSyncSuppressed } from '@/utils/syncSuppression';
 
 const SYNC_TABLES = [
   'settings',
@@ -35,18 +37,37 @@ export interface CloudSyncState {
 }
 
 const DELETE_QUEUE_PREFIX = 'zad-delete-queue:';
+const DEVICE_ID_KEY = 'zad:device-id';
 const ADHKAR_STORAGE_KEY = 'hifzi-adhkar-state';
 let activeUserId: string | null = null;
-let applyingCloudChanges = false;
 let syncTimer: ReturnType<typeof setTimeout> | undefined;
 let syncInterval: ReturnType<typeof setInterval> | undefined;
 let syncInFlight: Promise<void> | undefined;
-let statusCallback: ((state: CloudSyncState) => void) | undefined;
+/**
+ * Every mounted view watching the sync, not just the last one to ask.
+ *
+ * The admin's dashboard and its «فتح التطبيق» view are the same account and
+ * each asked for sync in turn; a single callback slot meant the second caller
+ * stole it, and the first one's stop tore down a loop still in use — while the
+ * interval it had itself created was orphaned and kept ticking.
+ */
+const statusSubscribers = new Set<(state: CloudSyncState) => void>();
+/** How many callers currently hold the loop; teardown happens at zero. */
+let syncRefCount = 0;
+let syncRuntime: (() => void) | undefined;
 let hooksInstalled = false;
 let lastSyncedAt: string | null = null;
 
 function publish(status: SyncStatus, error: string | null = null): void {
-  statusCallback?.({ status, lastSyncedAt, error });
+  const state: CloudSyncState = { status, lastSyncedAt, error };
+  for (const subscriber of statusSubscribers) {
+    try {
+      subscriber(state);
+    } catch (err) {
+      // One view's bad handler must not take the sync down with it.
+      console.error('Cloud sync status subscriber threw:', err);
+    }
+  }
 }
 
 function syncIdFor(table: SyncTableName, row: SyncRow): string {
@@ -69,20 +90,37 @@ function addMutationMetadata(table: SyncTableName, row: SyncRow): void {
   row.syncModifiedAt = Date.now();
 }
 
+/**
+ * Remembers a local deletion so the next round pushes a tombstone.
+ *
+ * This runs inside Dexie's `deleting` hook, where a thrown exception fails the
+ * *user's* operation — `db.bookmarks.delete()` would reject because
+ * `localStorage` was full or held a value `JSON.parse` refuses. Neither is a
+ * reason to refuse a deletion the user already made, and neither is fixable
+ * from here: the queue is bookkeeping for a later round, so it degrades to
+ * "not remembered" and the row simply survives in the cloud until the next
+ * edit. `readDeleteQueue` already drops a malformed entry on the read side;
+ * this is the matching tolerance on the write side.
+ */
 function queueDelete(table: SyncTableName, recordId: string): void {
   if (!activeUserId) return;
   const key = `${DELETE_QUEUE_PREFIX}${activeUserId}`;
-  const current = JSON.parse(localStorage.getItem(key) ?? '[]') as LocalTombstone[];
-  const tombstone: LocalTombstone = {
-    key: `${table}:${recordId}`,
-    table,
-    recordId,
-    modifiedAt: Date.now(),
-  };
-  const index = current.findIndex((item) => item.key === tombstone.key);
-  if (index >= 0) current[index] = tombstone;
-  else current.push(tombstone);
-  localStorage.setItem(key, JSON.stringify(current));
+  try {
+    const current = JSON.parse(localStorage.getItem(key) ?? '[]') as LocalTombstone[];
+    const tombstone: LocalTombstone = {
+      key: `${table}:${recordId}`,
+      table,
+      recordId,
+      modifiedAt: Date.now(),
+    };
+    const index = current.findIndex((item) => item.key === tombstone.key);
+    if (index >= 0) current[index] = tombstone;
+    else current.push(tombstone);
+    localStorage.setItem(key, JSON.stringify(current));
+  } catch (error) {
+    console.error('Could not record a local deletion for sync:', error);
+    return;
+  }
   scheduleSync();
 }
 
@@ -92,20 +130,20 @@ function installMutationHooks(): void {
     if (name === 'adhkar') continue;
     const table = db.table(name) as Table<SyncRow, number | string>;
     table.hook('creating').subscribe((_key, row) => {
-      if (!applyingCloudChanges) {
+      if (!isSyncSuppressed()) {
         addMutationMetadata(name, row);
         scheduleSync();
       }
     });
     table.hook('updating').subscribe((changes, _key, row) => {
-      if (!applyingCloudChanges) {
+      if (!isSyncSuppressed()) {
         changes.syncId = syncIdFor(name, row);
         changes.syncModifiedAt = Date.now();
         scheduleSync();
       }
     });
     table.hook('deleting').subscribe((_key, row) => {
-      if (!applyingCloudChanges) queueDelete(name, syncIdFor(name, row));
+      if (!isSyncSuppressed()) queueDelete(name, syncIdFor(name, row));
     });
   }
   window.addEventListener('zad:adhkar-updated', scheduleSync);
@@ -113,7 +151,7 @@ function installMutationHooks(): void {
 }
 
 function scheduleSync(): void {
-  if (!activeUserId || applyingCloudChanges) return;
+  if (!activeUserId || isSyncSuppressed()) return;
   if (syncTimer) clearTimeout(syncTimer);
   syncTimer = setTimeout(() => {
     void synchronizeNow().catch((error: unknown) => {
@@ -219,7 +257,16 @@ async function fetchCloudRecords(userId: string): Promise<Map<string, CloudRecor
     if (error) throw error;
     for (const row of data ?? []) {
       const item = row as CloudRecord;
-      if (!SYNC_TABLES.includes(item.table_name)) throw new Error('ظهر نوع سجل غير معروف في بيانات المزامنة.');
+      // A table this build has never heard of is a *newer* build's data, not a
+      // corrupt one. Throwing used to freeze cloud sync on every device still on
+      // the previous release the moment a newer device wrote one row — and that
+      // release had just added `adhkar`, so the failure was live in the wild.
+      // Skipping costs the unknown rows for this round only; they return once
+      // the build understands them.
+      if (!SYNC_TABLES.includes(item.table_name)) {
+        console.warn(`Skipping sync record from an unknown table: ${String(item.table_name)}`);
+        continue;
+      }
       records.set(`${item.table_name}:${item.record_id}`, item);
     }
     if (!data || data.length < pageSize) break;
@@ -237,13 +284,7 @@ async function fetchCloudRecords(userId: string): Promise<Map<string, CloudRecor
  * uses — telling the server to delete the record we just kept.
  */
 async function repairSilently<T>(operation: () => Promise<T>): Promise<T> {
-  const wasApplying = applyingCloudChanges;
-  applyingCloudChanges = true;
-  try {
-    return await operation();
-  } finally {
-    applyingCloudChanges = wasApplying;
-  }
+  return withSyncSuppressed(operation);
 }
 
 /**
@@ -526,15 +567,39 @@ async function applyCloudRecords(records: Map<string, CloudRecord>): Promise<voi
   const otherRows = [...records.values()].filter((row) => row.table_name !== 'plans');
   const planIds = new Map<string, number>();
   let changed = false;
-  applyingCloudChanges = true;
+  // Save-and-restore, not assign-and-clear: `clearLocalUserData` (sign-out),
+  // `repairSilently` and a backup restore all quiet the same hooks, and an
+  // unconditional release in a `finally` would re-enable them for whatever was
+  // still running underneath — turning a sign-out's remaining `clear()` calls
+  // into a storm of tombstones against the account being signed out of.
+  const releaseHooks = suppressSyncWrites();
   try {
     await db.transaction('rw', SYNC_TABLES.filter((name) => name !== 'adhkar').map((name) => db.table(name)), async () => {
+      /**
+       * One record this build cannot make sense of must not stop the round.
+       *
+       * Every shape failure used to `throw` inside this transaction: it rolled
+       * back, the round errored, and the next tick met the same server row —
+       * so a single bad record froze sync *forever* on every device, with no
+       * quarantine and no skip. The row stays on the server untouched (the
+       * server is the source of truth and validates nothing but "object"), so
+       * skipping costs that one record for this round, and the log names it.
+       */
+      const skip = (remote: CloudRecord, why: string): void => {
+        console.error(
+          `Skipping cloud record ${remote.table_name}:${remote.record_id} — ${why}`,
+        );
+      };
       const applyPlan = async (remote: CloudRecord, placeholder: boolean) => {
         if (!remote.record_data || typeof remote.record_data !== 'object') {
           if (remote.is_deleted) return;
-          throw new Error('وصل سجل سحابي ببنية غير صالحة.');
+          skip(remote, 'record has no usable payload');
+          return;
         }
-        if (!isHifzPlan(remote.record_data)) throw new Error('وصلت خطة سحابية ببنية غير صالحة.');
+        if (!isHifzPlan(remote.record_data)) {
+          skip(remote, 'plan payload does not match the plan shape');
+          return;
+        }
         const existing = await db.plans.where('syncId').equals(remote.record_id).first();
         const remoteModifiedAt = Date.parse(remote.modified_at);
         if (existing && (existing.syncModifiedAt ?? 0) >= remoteModifiedAt && !placeholder) {
@@ -584,7 +649,10 @@ async function applyCloudRecords(records: Map<string, CloudRecord>): Promise<voi
             record.record_data?.planSyncId === remote.record_id
           );
           const taskData = task?.record_data;
-          if (!taskData) throw new Error('تعذّر استعادة خطة مرتبطة بسجل حفظ.');
+          if (!taskData) {
+            skip(remote, 'a cloud task points at a plan that is neither here nor in the payload');
+            continue;
+          }
           const key = await db.plans.add({
             id: undefined,
             name: 'خطة محذوفة',
@@ -612,10 +680,14 @@ async function applyCloudRecords(records: Map<string, CloudRecord>): Promise<voi
           continue;
         }
         if (!remote.record_data || typeof remote.record_data !== 'object') {
-          throw new Error('وصل سجل سحابي ببنية غير صالحة.');
+          skip(remote, 'record has no usable payload');
+          continue;
         }
         if (tableName === 'adhkar') {
-          if (!isAdhkarState(remote.record_data)) throw new Error('وصلت بيانات أذكار سحابية ببنية غير صالحة.');
+          if (!isAdhkarState(remote.record_data)) {
+            skip(remote, 'adhkar payload does not match the adhkar shape');
+            continue;
+          }
           const remoteModifiedAt = Date.parse(remote.modified_at);
           const rawLocal = localStorage.getItem(ADHKAR_STORAGE_KEY);
           let localModifiedAt = 0;
@@ -656,7 +728,8 @@ async function applyCloudRecords(records: Map<string, CloudRecord>): Promise<voi
         if (tableName === 'tasks') {
           const planSyncId = row.planSyncId;
           if (typeof planSyncId !== 'string' || !planIds.has(planSyncId)) {
-            throw new Error('وصلت مهمة من دون خطتها المرتبطة؛ المزامنة توقفت لحماية البيانات.');
+            skip(remote, 'task has no plan this round could resolve');
+            continue;
           }
           row.planId = planIds.get(planSyncId);
           delete row.planSyncId;
@@ -664,7 +737,10 @@ async function applyCloudRecords(records: Map<string, CloudRecord>): Promise<voi
         if (tableName === 'settings') {
           row.id = 1;
         } else if (tableName === 'pageBookmarks') {
-          if (typeof row.page !== 'number') throw new Error('علامة صفحة سحابية غير صالحة.');
+          if (typeof row.page !== 'number') {
+            skip(remote, 'page bookmark has no page number');
+            continue;
+          }
         } else if (existing && typeof existing.id === 'number') {
           row.id = existing.id;
         } else {
@@ -676,7 +752,7 @@ async function applyCloudRecords(records: Map<string, CloudRecord>): Promise<voi
       }
     });
   } finally {
-    applyingCloudChanges = false;
+    releaseHooks();
   }
   if (changed) window.dispatchEvent(new Event('zad:cloud-sync-complete'));
 }
@@ -738,13 +814,46 @@ export async function synchronizeNow(): Promise<void> {
   }
 }
 
+/**
+ * Starts the background sync loop, or joins the one already running.
+ *
+ * The loop is a module-level singleton — one interval, one realtime channel,
+ * one set of listeners — because the account is one account. Two views can
+ * ask for it at once (the admin's dashboard and its «فتح التطبيق» view are
+ * the same session), and the second call used to overwrite `syncInterval` and
+ * the status callback: the first interval was then unreachable and leaked for
+ * the life of the document, while the first caller's stop tore down a loop the
+ * second one was still using. Ref-counting makes the loop belong to the count,
+ * not to whoever asked last, and each caller gets a stop that releases exactly
+ * what it took.
+ */
 export async function startCloudSync(
   userId: string,
   onStatus: (state: CloudSyncState) => void,
 ): Promise<() => void> {
   if (!supabase) throw new Error('إعداد الاتصال السحابي غير مكتمل.');
+
+  const joining = syncRefCount > 0;
+  statusSubscribers.add(onStatus);
+  syncRefCount += 1;
   activeUserId = userId;
-  statusCallback = onStatus;
+
+  const release = (): void => {
+    if (!statusSubscribers.has(onStatus)) return;
+    statusSubscribers.delete(onStatus);
+    syncRefCount = Math.max(0, syncRefCount - 1);
+    if (syncRefCount === 0) {
+      teardownSyncRuntime();
+    }
+  };
+
+  if (joining) {
+    // Someone already owns the loop; just report where it stands so the new
+    // view is not left showing its own "syncing" placeholder forever.
+    publish(syncInFlight ? 'syncing' : lastSyncedAt ? 'synced' : 'syncing');
+    return release;
+  }
+
   installMutationHooks();
   publish('syncing');
   // A cloud failure is not a reason to keep the app closed. Everything the app reads is
@@ -760,7 +869,13 @@ export async function startCloudSync(
   }, 60_000);
   const handleOnline = () => { void synchronizeNow().catch(() => {}); };
   window.addEventListener('online', handleOnline);
-  const resumeListener = App.addListener('resume', handleOnline);
+  // Not awaited: the stop below removes it either way, and awaiting here held the
+  // first paint behind a network round trip.
+  let disposed = false;
+  const resumeListener = App.addListener('resume', handleOnline).then((listener) => {
+    if (disposed) void listener.remove();
+    return listener;
+  });
   const realtimeChannel = supabase
     .channel(`user-sync-${userId}`)
     .on(
@@ -769,28 +884,87 @@ export async function startCloudSync(
       handleOnline,
     )
     .subscribe();
-  return () => {
+  syncRuntime = () => {
+    disposed = true;
     if (syncTimer) clearTimeout(syncTimer);
     if (syncInterval) clearInterval(syncInterval);
     window.removeEventListener('online', handleOnline);
     void resumeListener.then((listener) => listener.remove());
     void supabase?.removeChannel(realtimeChannel);
     activeUserId = null;
-    statusCallback = undefined;
   };
+  return release;
 }
 
+/** Drops everything the singleton loop owns. Runs only when the last holder releases. */
+function teardownSyncRuntime(): void {
+  syncRuntime?.();
+  syncRuntime = undefined;
+  syncInterval = undefined;
+  syncTimer = undefined;
+}
+
+/**
+ * Empties the device of one account's data, at sign-out.
+ *
+ * The dialog promises "رفع بياناتك إلى حسابك أولًا، ثم تُحذف من هذا الجهاز",
+ * so this must cover *everything* the account left behind — not only the tables
+ * that happen to sync. Two kinds of user data never sync and used to survive
+ * here: `khatmah` (the reading plan and its page) and `hifzReviews` (the
+ * memorisation schedule, `lapses` and all). Both travel in backups, so the
+ * previous owner's progress was restorable by the next person on the same
+ * phone. The stored snapshots go too: they are full dumps, one tap from being
+ * written over the next account.
+ *
+ * `hifzReviews` and `khatmah` are named rather than imported from
+ * `@/utils/backup`: that module pulls in the adhkar corpus, which pulls in the
+ * full Quran text — a 1.3 MB chain that has no business sitting behind a
+ * sign-out button. They are duplicated here deliberately; `backup.test.ts`
+ * keeps the two lists honest.
+ */
 export async function clearLocalUserData(): Promise<void> {
-  applyingCloudChanges = true;
+  // Quiet for the whole wipe: without this every `clear()` below would queue a
+  // tombstone against the account the person is signing *out* of.
+  const releaseHooks = suppressSyncWrites();
   try {
-    await db.transaction('rw', SYNC_TABLES.filter((name) => name !== 'adhkar').map((name) => db.table(name)), async () => {
-      for (const name of SYNC_TABLES) {
-        if (name !== 'adhkar') await db.table(name).clear();
-      }
-      await db.settings.put({ ...DEFAULT_SETTINGS, id: 1, syncId: 'settings', syncModifiedAt: 0 });
-    });
+    await db.transaction(
+      'rw',
+      [
+        ...SYNC_TABLES.filter((name) => name !== 'adhkar').map((name) => db.table(name)),
+        // Local-only user data: not in SYNC_TABLES, so no hooks are installed on
+        // them and clearing them cannot raise a tombstone.
+        db.khatmah,
+        db.hifzReviews,
+      ],
+      async () => {
+        for (const name of SYNC_TABLES) {
+          if (name !== 'adhkar') await db.table(name).clear();
+        }
+        await db.khatmah.clear();
+        await db.hifzReviews.clear();
+        await db.settings.put({ ...DEFAULT_SETTINGS, id: 1, syncId: 'settings', syncModifiedAt: 0 });
+      },
+    );
     localStorage.removeItem(ADHKAR_STORAGE_KEY);
   } finally {
-    applyingCloudChanges = false;
+    releaseHooks();
   }
+
+  // Outside the transaction: these are storage decisions, not database rows, and
+  // `clearAllBackups` is the only thing that answers "whose phone is this?".
+  //
+  // Every queue goes, not just this account's: `activeUserId` is only set while
+  // the sync loop is actually running, so a sign-out after a failed start would
+  // have left the previous owner's queued deletions behind under a key nobody
+  // would ever read again.
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(DELETE_QUEUE_PREFIX)) localStorage.removeItem(key);
+    }
+    localStorage.removeItem(DEVICE_ID_KEY);
+  } catch (error) {
+    console.error('Could not clear local sync bookkeeping at sign-out:', error);
+  }
+  clearAllBackups();
 }
