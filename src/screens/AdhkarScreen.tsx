@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
   CheckCircle,
@@ -147,7 +147,16 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
   const [storageError, setStorageError] = useState<string | null>(initialState.error);
   const [notice, setNotice] = useState<string | null>(null);
 
+  // Nothing is written on mount. Opening the screen used to persist the state
+  // it had just read and fire `zad:adhkar-updated` along with it — and that
+  // event starts a sync round — so merely visiting a category pushed a round
+  // and stamped a new `modified_at` on data that had not changed. The guard
+  // compares object identity: `state` is only ever replaced by an edit, so the
+  // first run (the read) and every unchanged re-render fall through.
+  const lastPersistedRef = useRef(state);
   useEffect(() => {
+    if (lastPersistedRef.current === state) return;
+    lastPersistedRef.current = state;
     const persist = () => {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify({

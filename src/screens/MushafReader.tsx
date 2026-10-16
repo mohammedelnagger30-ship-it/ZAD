@@ -68,24 +68,28 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
     }
   });
 
-  // Update progress whenever the current page changes
-
-
-
-  // Update progress whenever the current page changes
+  // Update progress whenever the current page changes.
+  //
+  // The write lives outside the updater, not inside it. A React updater is
+  // free to run more than once for the same change — it does under StrictMode,
+  // and it does whenever React re-invokes it while re-rendering — so a
+  // localStorage write placed there was a side effect from a function the
+  // framework re-enters at will. Returning the same Set when the page is
+  // already counted also keeps the object identical, so a re-visit costs no
+  // render and no write.
   useEffect(() => {
-    setReadPages(prev => {
-      const next = new Set(prev);
+    if (!readPages.has(currentPage)) {
+      const next = new Set(readPages);
       next.add(currentPage);
+      setReadPages(next);
       try {
         localStorage.setItem('qran-read-pages', JSON.stringify(Array.from(next)));
       } catch {
         /* A page read that can't be remembered costs nothing. */
       }
-      return next;
-    });
+    }
     onPageChange?.(currentPage);
-  }, [currentPage, onPageChange]);
+  }, [currentPage, onPageChange, readPages]);
 
   // The khatmah plan follows the reader: landing on a page past the plan's
   // cursor advances it there — forward only, since re-reading and jumping
