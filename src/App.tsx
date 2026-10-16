@@ -327,7 +327,13 @@ function Application() {
   }, []);
 
   if (isSupabaseConfigured && !authChecked) {
-    return <AppContent accountEmail={undefined} onSignOut={undefined} syncState={null} onSyncNow={undefined} />;
+    // The session check reads local storage, so this is a beat, not a wait.
+    // Mounting AppContent here — the whole shell, settings from IndexedDB and
+    // navigation and the sync loop — and then mounting it again as
+    // AuthenticatedApp ran every hook in it twice on every single launch, and
+    // flashed the app under the gate while doing it. Holding here costs one
+    // icon and one line of text.
+    return <GateLoading message="جارٍ فحص الحساب..." />;
   }
   if (isSupabaseConfigured && session) {
     if (adminState === 'unknown') return <GateLoading message="جارٍ فتح الحساب..." />;
@@ -553,7 +559,6 @@ function AppContent({
   const { themeMode, changeTheme, colorPalette, changeColorPalette } = useTheme();
   const { screen, params, navigate, resetNonce, goBack } = useNavigation();
   const [onboarded, setOnboarded] = useState<boolean | null>(null);
-  const [syncRevision, setSyncRevision] = useState(0);
   const { azanState, closeAzan } = useAzanTrigger(settings);
 
   useEffect(() => {
@@ -593,9 +598,14 @@ function AppContent({
 
   useEffect(() => {
     const onSyncComplete = () => {
-      setSyncRevision((revision) => revision + 1);
       // Silent: a finished sync must refresh the settings in place, not bounce
       // the app back to its loading screen (scroll position, playing audio…).
+      // The reload is what updates an open screen — the `settings` prop changes
+      // and React re-renders it. It used to *also* bump a revision baked into
+      // SettingsScreen's `key`, which remounted the screen on every finished
+      // round: the scroll position went, and so did whatever the person was
+      // midway through typing. Nothing in that screen is held in local state,
+      // so the remount bought nothing but the loss.
       void reloadSettings({ silent: true });
     };
     window.addEventListener('zad:cloud-sync-complete', onSyncComplete);
@@ -807,9 +817,13 @@ function AppContent({
               {screen === 'salah' && <PrayerGuideScreen key={`salah-${resetNonce}`} navigate={navigate} />}
               {screen === 'hadith' && <HadithScreen key={`hadith-${resetNonce}`} params={params} />}
               {screen === 'progress' && <ProgressScreen key={`progress-${resetNonce}`} settings={settings} />}
+              {/* Selecting the active tab again remounts its screen. A cloud
+                  sync does not: it reloads settings, which re-render — the
+                  key stays put so the person keeps their scroll and their
+                  half-typed input. */}
               {screen === 'settings' && (
                 <SettingsScreen
-                  key={`settings-${resetNonce}-${syncRevision}`}
+                  key={`settings-${resetNonce}`}
                   settings={settings}
                   onSaveSettings={save}
                   themeMode={themeMode}
