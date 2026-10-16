@@ -254,14 +254,27 @@ export function subscribeToContent(listener: Listener): () => void {
   };
 }
 
+let notifyTimer: ReturnType<typeof setTimeout> | undefined;
+
 function notify() {
-  for (const listener of listeners) {
-    try {
-      listener();
-    } catch {
-      // A broken subscriber must not abort the write that triggered it.
+  // One notification per burst, not one per write. A bulk download writes in
+  // a loop and used to notify after every row, and each notification makes
+  // every subscriber re-read both tables: 114 full reads on the main thread
+  // for a screen that could only ever draw the last of them. Debouncing to
+  // the quiet after the last write keeps the writes and drops the redundant
+  // work between them — and the subscribers are React state reads, so a
+  // hundred milliseconds of delay is invisible next to a download.
+  if (notifyTimer) clearTimeout(notifyTimer);
+  notifyTimer = setTimeout(() => {
+    notifyTimer = undefined;
+    for (const listener of listeners) {
+      try {
+        listener();
+      } catch {
+        // A broken subscriber must not abort the write that triggered it.
+      }
     }
-  }
+  }, 100);
 }
 
 // ---------------------------------------------------------------------------
