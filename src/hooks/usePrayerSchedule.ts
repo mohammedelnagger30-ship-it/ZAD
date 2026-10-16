@@ -46,23 +46,53 @@ export function usePrayerSchedule({
     return `${day.year}-${day.month}-${day.day}`;
   }, [hasLocation, now, prayerTimeZone]);
 
-  const prayerResult = useMemo(
+  // The day's times: expensive (adhan's full calculation) and immutable while the
+  // day lasts, so it stays pinned to the calendar day exactly as the header above
+  // promises. `now` is named here only through cityDayKey — the instant inside the
+  // day cannot change the day's times.
+  const dayResult = useMemo(
     () =>
       hasLocation && cityDayKey
         ? calculatePrayerTimes(latitude!, longitude!, now, calcMethod, asrMadhab, prayerTimeZone)
         : null,
-    // `now` is named here only through cityDayKey — the instant inside the day
-    // cannot change the day's times.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [hasLocation, cityDayKey, latitude, longitude, calcMethod, asrMadhab, prayerTimeZone],
   );
 
-  const passedSignature = prayerResult
-    ? prayerResult.prayers
-        .filter((prayer) => prayer.passed)
+  // `passed` is the one field `calculatePrayerTimes` fills in from the clock rather
+  // than from the date, so reading it back out of the day-pinned memo froze it at the
+  // day's first render: a prayer that had come and gone still drew as upcoming, and
+  // `passedSignature` below — the only thing that ever made `nextPrayer` re-ask its
+  // question — never changed. `nextPrayer` therefore held the answer for whatever
+  // prayer was next at first render; once that prayer passed, the countdown stuck at
+  // 00:00 and, because `countdownTickDelayMs` returns 1000 for any non-positive
+  // remaining, kept re-rendering every second of the rest of the day.
+  //
+  // Deriving the signature straight from `now` costs one comparison per prayer and
+  // is correct at every tick.
+  const nowMs = now.getTime();
+  const passedSignature = dayResult
+    ? dayResult.prayers
+        .filter((prayer) => prayer.time.getTime() < nowMs)
         .map((prayer) => prayer.name)
         .join(',')
     : '';
+
+  // Keyed on the signature rather than on `now`, so the object keeps its identity for
+  // the whole stretch between two prayers and only moves when one actually crosses its
+  // time. Whenever that re-runs, `nowMs` is the current instant; whenever it does not,
+  // the signature's sameness guarantees every flag would come out identical anyway.
+  const prayerResult = useMemo(() => {
+    if (!dayResult) return null;
+    return {
+      ...dayResult,
+      prayers: dayResult.prayers.map((prayer) => ({
+        ...prayer,
+        passed: prayer.time.getTime() < nowMs,
+      })),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dayResult, passedSignature]);
 
   const nextPrayer = useMemo(
     () =>
