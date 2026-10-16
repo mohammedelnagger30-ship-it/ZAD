@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "check:data": "tsx --tsconfig tsconfig.app.json scripts/check-quran-data.ts",
     "check:pages": "tsx --tsconfig tsconfig.app.json scripts/check-page-map.ts",
