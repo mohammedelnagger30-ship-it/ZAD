@@ -297,16 +297,28 @@ export function useAzanTrigger(settings: Settings | null) {
         return;
       }
 
-      const now = trustedNowMs();
-      for (const prayer of times.prayers) {
-        if (prayer.name === 'sunrise') continue;
-        const instant = prayer.time.getTime();
-        const lateBy = now - instant;
-        if (lateBy < 0 || lateBy > CATCH_UP_MS) continue;
-        if (isFired(instant)) continue;
-        openForPrayer(prayer);
-        break; // at most one prayer is inside the window
-      }
+      // The permission flag is re-read here, immediately before it decides who owns
+      // the sound, instead of being trusted from the cache filled at mount and on
+      // visibilitychange. Granting notifications from Settings happens while the app
+      // is in the foreground and fires no visibilitychange, so that cache stayed
+      // "false" for the rest of the session: the native takeover rang the channel
+      // sound at the prayer instant while `openForPrayer` took the no-permission
+      // branch and played its own copy at the very same moment — two adhans, and the
+      // page's "the system is already ringing" window never applied, because the page
+      // thought it was the speaker.
+      void refreshNotificationPermission().then(() => {
+        if (disposed) return;
+        const now = trustedNowMs();
+        for (const prayer of times.prayers) {
+          if (prayer.name === 'sunrise') continue;
+          const instant = prayer.time.getTime();
+          const lateBy = now - instant;
+          if (lateBy < 0 || lateBy > CATCH_UP_MS) continue;
+          if (isFired(instant)) continue;
+          openForPrayer(prayer);
+          break; // at most one prayer is inside the window
+        }
+      });
     };
 
     const arm = () => {
