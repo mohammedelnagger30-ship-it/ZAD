@@ -22,22 +22,25 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
 
+    let disposed = false;
     let removeListener: (() => void) | undefined;
-    const register = async () => {
-      try {
-        const handle = await CapApp.addListener('backButton', () => {
-          setStep((current) => current > 0 ? current - 1 : 0);
-        });
-        removeListener = () => {
-          void handle.remove();
-        };
-      } catch {
-        // Ignore native-back behavior when the platform API is unavailable.
-      }
-    };
 
-    void register();
-    return () => removeListener?.();
+    CapApp.addListener('backButton', () => {
+      setStep((current) => current > 0 ? current - 1 : 0);
+    })
+      .then((handle) => {
+        // Released at once if the step screen was already left behind.
+        if (disposed) void handle.remove();
+        else removeListener = () => void handle.remove();
+      })
+      .catch(() => {
+        // Ignore native-back behavior when the platform API is unavailable.
+      });
+
+    return () => {
+      disposed = true;
+      removeListener?.();
+    };
   }, []);
 
   const steps: Array<{

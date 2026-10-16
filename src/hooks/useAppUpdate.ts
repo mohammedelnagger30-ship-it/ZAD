@@ -177,9 +177,10 @@ export function useAppUpdate(): AppUpdateController {
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return undefined;
+    let disposed = false;
     let remove: (() => void) | undefined;
 
-    void CapApp.addListener('resume', () => {
+    CapApp.addListener('resume', () => {
       // Refresh the release info when returning from the browser/installer.
       void check();
 
@@ -195,13 +196,19 @@ export function useAppUpdate(): AppUpdateController {
       })();
     })
       .then((handle) => {
-        remove = () => { void handle.remove(); };
+        // `check` re-runs this effect, so a late handle is the ordinary case:
+        // keep it only if the effect that asked for it is still alive.
+        if (disposed) void handle.remove();
+        else remove = () => void handle.remove();
       })
       .catch(() => {
         // Resume events are optional on some builds; the install button still works.
       });
 
-    return () => remove?.();
+    return () => {
+      disposed = true;
+      remove?.();
+    };
   }, [check]);
 
   return {
