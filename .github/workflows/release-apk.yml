@@ -19,7 +19,32 @@ permissions:
   contents: write
 
 jobs:
+  # A release used to verify nothing of its own: on commit `b42b8b6` the APK was
+  # published while CI was red on that very commit, because the two workflows
+  # shared no gate. This runs the same command CI runs, on the same OS CI uses,
+  # so publishing can no longer outrun the checks — including `check:icons`,
+  # which needs Windows PowerShell's System.Drawing and therefore cannot run on
+  # the ubuntu builder below, and `npm test`, which the release never ran at all.
+  verify:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify (typecheck, lint, tests, content checks, build)
+        run: npm run verify
+
   build-and-release:
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -87,22 +112,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify app
-        run: |
-          npm run typecheck
-          npm run lint
-          npm run check:data
-          npm run check:text
-          npm run check:content
-          npm run check:pages
-          npm run check:prayer-times
-
+      # Typecheck, lint, tests and the content checks were removed from here:
+      # the `verify` job above runs them all, and running a second, shorter copy
+      # on this builder was how a partial gate came to look like a full one.
       - name: Build web assets
         env:
           VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           VITE_APP_VERSION: ${{ steps.release.outputs.version }}
         run: npm run build
+
+      # Checked again on the bundle actually being published, not the one the
+      # verify job built: this is the `dist/` that ships inside the APK.
+      - name: Check published bundle
+        run: npm run check:assets
 
       - name: Sync Capacitor Android
         run: npx cap sync android
