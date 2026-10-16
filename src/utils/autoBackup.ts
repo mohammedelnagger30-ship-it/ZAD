@@ -106,14 +106,28 @@ export async function performAutoBackup(): Promise<boolean> {
 
     // Store backup with timestamp
     const backupKey = `${AUTO_BACKUP_PREFIX}${today}`;
-    localStorage.setItem(backupKey, JSON.stringify(backup));
+    const payload = JSON.stringify(backup);
+
+    // Write first, clean afterwards — and when the write is refused for want of
+    // room, clean *then* and try once more. Cleanup used to run only after a
+    // successful write, so a full store failed the write, skipped the very
+    // step that would have made room, and failed identically every hour after:
+    // the newest snapshot was never taken, and nothing anywhere said so.
+    try {
+      localStorage.setItem(backupKey, payload);
+    } catch {
+      console.warn('Auto backup hit the storage ceiling; trimming older snapshots to make room.');
+      await cleanupOldBackups(Math.max(0, config.maxBackups - 1));
+      localStorage.setItem(backupKey, payload);
+    }
 
     // Update last backup date
     setLastBackupDate(today);
     config.lastBackupDate = today;
     saveAutoBackupConfig(config);
 
-    // Clean up old backups if exceeding maxBackups
+    // Trim to the configured count as well: the retry above may have left one
+    // more than asked for when today's key was already the one being evicted.
     await cleanupOldBackups(config.maxBackups);
 
     return true;
