@@ -657,7 +657,7 @@ function CreatePlanModal({ onClose, onSave }: { onClose: () => void; onSave: (pl
           <div className="flex gap-2">
             <button
               onClick={() => setType('hifz')}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium ${type === 'hifz' ? 'bg-gold-500 text-white' : 'bg-gray-50 dark:bg-primary-800/30 text-gray-600 dark:text-gray-300'}`}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium ${type === 'hifz' ? 'bg-gold-500 text-gray-950' : 'bg-gray-50 dark:bg-primary-800/30 text-gray-600 dark:text-gray-300'}`}
             >
               حفظ جديد
             </button>

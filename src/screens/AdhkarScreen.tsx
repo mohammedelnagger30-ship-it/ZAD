@@ -616,7 +616,7 @@ function DhikrCard({
     <Card className={`transition-smooth ${isDone ? 'border-success-300 bg-success-50/30 dark:border-success-700 dark:bg-success-900/10' : ''}`}>
       <div className="flex items-start gap-3">
         <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-bold ${
-          isDone ? 'bg-success-500 text-white' : 'bg-primary-100 text-primary-600 dark:bg-primary-800 dark:text-primary-300'
+          isDone ? 'bg-success-500 text-gray-950' : 'bg-primary-100 text-primary-600 dark:bg-primary-800 dark:text-primary-300'
         }`}>
           {isDone ? <Check size={17} /> : toArabicNumber(index + 1)}
         </div>

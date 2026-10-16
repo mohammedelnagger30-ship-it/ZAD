@@ -96,7 +96,7 @@ function PillarCard({ item, index }: { item: PrayerGuideItem; index: number }) {
         </div>
       </div>
       <blockquote className={QUOTE_FRAME}>
-        <QuoteText text={item.text} className="text-[17px]" />
+        <QuoteText text={item.text} className="text-[1.0625rem]" />
       </blockquote>
       <SourceLine item={item} />
     </Card>
@@ -120,7 +120,7 @@ function MovementCard({ item }: { item: PrayerGuideStep }) {
         </div>
       </div>
       <blockquote className={QUOTE_FRAME}>
-        <QuoteText text={item.text} className="text-[15px] leading-[1.9]" />
+        <QuoteText text={item.text} className="text-[0.9375rem] leading-[1.9]" />
       </blockquote>
       <SourceLine item={item} />
     </Card>
@@ -140,7 +140,7 @@ function MistakeCard({ item, index }: { item: PrayerGuideItem; index: number }) 
         </div>
       </div>
       <blockquote className="mt-3 rounded-xl border-r-[3px] border-error-300 bg-error-50/50 px-3.5 py-3 dark:border-error-700 dark:bg-error-900/20">
-        <QuoteText text={item.text} className="text-[15px] leading-[1.9]" />
+        <QuoteText text={item.text} className="text-[0.9375rem] leading-[1.9]" />
       </blockquote>
       <SourceLine item={item} />
     </Card>
@@ -158,7 +158,7 @@ function SunnahCard({ item }: { item: PrayerGuideItem }) {
         </div>
       </div>
       <blockquote className={QUOTE_FRAME}>
-        <QuoteText text={item.text} className="text-[15px] leading-[1.9]" />
+        <QuoteText text={item.text} className="text-[0.9375rem] leading-[1.9]" />
       </blockquote>
       <SourceLine item={item} />
     </Card>
@@ -266,7 +266,7 @@ export function PrayerGuideScreen({ navigate }: PrayerGuideScreenProps) {
         />
         <Card className="border-gold-200 bg-gold-50/40 dark:border-[#cfa95c]/40 dark:bg-[#cfa95c]/[0.05]">
           <div className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gold-500 text-white shadow-xs">
+            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gold-500 text-gray-950 shadow-xs">
               <BookOpen size={16} />
             </span>
             <div className="min-w-0">
@@ -279,7 +279,7 @@ export function PrayerGuideScreen({ navigate }: PrayerGuideScreenProps) {
             </div>
           </div>
           <blockquote className={QUOTE_FRAME}>
-            <QuoteText text={PRAYER_GUIDE_MOVEMENTS_INTRO.text} className="text-[17px]" />
+            <QuoteText text={PRAYER_GUIDE_MOVEMENTS_INTRO.text} className="text-[1.0625rem]" />
           </blockquote>
           <SourceLine item={PRAYER_GUIDE_MOVEMENTS_INTRO} />
         </Card>
@@ -318,7 +318,7 @@ export function PrayerGuideScreen({ navigate }: PrayerGuideScreenProps) {
         </div>
       </section>
 
-      <p className="pt-2 text-center text-[11px] leading-5 text-gray-400 dark:text-gray-500">
+      <p className="pt-2 text-center text-[0.6875rem] leading-5 text-gray-400 dark:text-gray-500">
         الأحاديث مقتبسة حرفيّاً من الصحيحين والسنن، والآيات من نصّ المصحف — مع رقم كل مصدر.
       </p>
     </div>

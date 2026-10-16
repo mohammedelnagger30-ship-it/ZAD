@@ -355,7 +355,7 @@ export function QiblaCompass({ qiblaDirection, contextLabel }: QiblaCompassProps
                   جارٍ انتظار المستشعر…
                 </p>
               ) : aligned ? (
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-success-500 text-white shadow-lg">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-success-500 text-gray-950 shadow-lg">
                   <Check size={20} strokeWidth={3} aria-hidden="true" />
                 </span>
               ) : (

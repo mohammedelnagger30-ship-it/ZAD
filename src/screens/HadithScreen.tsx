@@ -594,7 +594,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
           aria-pressed={sahihOnly}
           className={`flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-smooth ${
             sahihOnly
-              ? 'bg-success-500 text-white'
+              ? 'bg-success-500 text-gray-950'
               : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
           }`}
         >
@@ -606,7 +606,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
           aria-pressed={showFavoritesOnly}
           className={`flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-smooth ${
             showFavoritesOnly
-              ? 'bg-error-500 text-white'
+              ? 'bg-error-500 text-gray-950'
               : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
           }`}
         >

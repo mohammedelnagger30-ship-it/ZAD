@@ -87,11 +87,18 @@ export function Button({
   const variants: Record<string, string> = {
     primary: 'bg-primary-600 hover:bg-primary-700 text-white shadow-sm',
     secondary: 'bg-primary-100 hover:bg-primary-200 dark:bg-primary-800 dark:hover:bg-primary-700 text-primary-700 dark:text-primary-100',
-    gold: 'bg-gold-500 hover:bg-gold-600 text-white shadow-sm',
+    // These four sit on bright fills — gold-500, success-500, warning-500,
+    // error-500 — and white on them measures 2.38, 2.28, 2.15 and 3.76:1, all
+    // under the 4.5:1 a label needs. Stepping a shade darker does not rescue
+    // them either: -600 lands at 3.63/3.30/3.19, still short. So the fill stays
+    // bright — it is the app's identity — and the text goes dark instead, which
+    // buys 8.09/8.43/8.95/5.11:1 and leaves `hover:` pointing at -600 exactly
+    // where it was. No palette entry moves, so nothing else in the app shifts.
+    gold: 'bg-gold-500 hover:bg-gold-600 text-gray-950 shadow-sm',
     ghost: 'hover:bg-primary-50 dark:hover:bg-primary-800/40 text-primary-700 dark:text-primary-200',
-    success: 'bg-success-500 hover:bg-success-600 text-white shadow-sm',
-    error: 'bg-error-500 hover:bg-error-600 text-white shadow-sm',
-    warning: 'bg-warning-500 hover:bg-warning-600 text-white shadow-sm',
+    success: 'bg-success-500 hover:bg-success-600 text-gray-950 shadow-sm',
+    error: 'bg-error-500 hover:bg-error-600 text-gray-950 shadow-sm',
+    warning: 'bg-warning-500 hover:bg-warning-600 text-gray-950 shadow-sm',
   };
   const sizes: Record<string, string> = {
     // sm keeps the compact look but no longer shrinks below a tappable 40px.
