@@ -1578,9 +1578,30 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* The mushaf's own movement first — a page turn is motion the reader can do
+     without, and the sheet is the largest thing that slides. */
   .mushaf-turn[data-dir],
   .mushaf-sheet__panel,
   .mushaf-sheet__backdrop {
+    animation: none;
+  }
+
+  /* Everything else that moves on its own. This block used to stop at the
+     mushaf, so the four general transitions — fade in, slide up, slide down,
+     scale in — and Tailwind's spin, ping, bounce and pulse all ran for a
+     reader who had asked the system to keep still. A spinner does not vanish:
+     without its rotation it reads as the static ring it always was, which is
+     still an honest "something is happening". */
+  .animate-fade-in,
+  .animate-slide-up,
+  .animate-slide-down,
+  .animate-scale-in,
+  .animate-pulse,
+  .animate-pulse-soft,
+  .animate-shimmer,
+  .animate-spin,
+  .animate-ping,
+  .animate-bounce {
     animation: none;
   }
 }

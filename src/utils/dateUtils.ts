@@ -41,7 +41,13 @@ export function formatArabicDate(date: Date): string {
 export function getHijriDate(date: Date, adjustmentDays = 0): string {
   try {
     const adjusted = adjustmentDays === 0 ? date : addDays(date, adjustmentDays);
-    const hijri = new Intl.DateTimeFormat('ar-SA-u-ca-islamic', {
+    // Umm al-Qura, not the tabular calendar `ca-islamic` gives. The tabular
+    // one is arithmetic: a fixed formula, no observation, and it drifts a day
+    // or two from the crescent people actually saw. Umm al-Qura is the
+    // calendar Saudi Arabia declares by — the one a mosque wall and a printed
+    // almanac agree on — so a reader comparing the app to the notice by the
+    // door gets the same date.
+    const hijri = new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', {
       day: 'numeric',
       month: 'long',
       year: 'numeric',
