@@ -113,7 +113,7 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
                     {item.label}
                   </p>
                   {item.badge && (
-                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-extrabold text-amber-800 dark:bg-amber-950/80 dark:text-amber-300">
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[0.625rem] font-extrabold text-amber-800 dark:bg-amber-950/80 dark:text-amber-300">
                       {item.badge}
                     </span>
                   )}
@@ -154,7 +154,7 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
               <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
                 رفيقك اليومي لتلاوة وتدبر وحفظ القرآن الكريم وإتمام الأذكار والصلوات بدون إنترنت.
               </p>
-              <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 mt-1.5">
+              <p className="text-[0.6875rem] font-semibold text-gray-400 dark:text-gray-500 mt-1.5">
                 الإصدار {import.meta.env.VITE_APP_VERSION ?? '1.20.0'} • تطوير متكامل
               </p>
             </div>

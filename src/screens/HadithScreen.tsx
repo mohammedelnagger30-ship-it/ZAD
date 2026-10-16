@@ -487,7 +487,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
                   />
                 </button>
               </div>
-              <p className="quran-text rounded-xl border-r-2 border-gold-400 bg-primary-50/60 px-3 py-3 text-[17px] leading-[2.1] text-primary-900 dark:bg-primary-800/30 dark:text-primary-50 line-clamp-4 whitespace-pre-line md:max-w-3xl">
+              <p className="quran-text rounded-xl border-r-2 border-gold-400 bg-primary-50/60 px-3 py-3 text-[1.0625rem] leading-[2.1] text-primary-900 dark:bg-primary-800/30 dark:text-primary-50 line-clamp-4 whitespace-pre-line md:max-w-3xl">
                 {hadith.text}
               </p>
             </Card>
@@ -740,7 +740,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
                       />
                     </button>
                   </div>
-                  <p className="quran-text rounded-xl border-r-2 border-gold-400 bg-primary-50/60 px-3 py-3 text-[17px] leading-[2.1] text-primary-900 dark:bg-primary-800/30 dark:text-primary-50 line-clamp-4 whitespace-pre-line md:max-w-3xl">
+                  <p className="quran-text rounded-xl border-r-2 border-gold-400 bg-primary-50/60 px-3 py-3 text-[1.0625rem] leading-[2.1] text-primary-900 dark:bg-primary-800/30 dark:text-primary-50 line-clamp-4 whitespace-pre-line md:max-w-3xl">
                     {hadith.text}
                   </p>
                   <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">

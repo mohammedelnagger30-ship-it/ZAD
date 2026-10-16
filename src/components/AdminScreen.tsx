@@ -62,11 +62,11 @@ function StatCard({
         {icon}
       </span>
       <span className="min-w-0">
-        <span className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400">{label}</span>
+        <span className="block text-[0.6875rem] font-semibold text-gray-500 dark:text-gray-400">{label}</span>
         <span className="mt-0.5 block text-2xl font-extrabold text-primary-900 dark:text-primary-50" dir="ltr">
           {formatCount(value)}
         </span>
-        {hint && <span className="mt-0.5 block text-[11px] text-gray-500 dark:text-gray-400">{hint}</span>}
+        {hint && <span className="mt-0.5 block text-[0.6875rem] text-gray-500 dark:text-gray-400">{hint}</span>}
       </span>
     </Card>
   );
@@ -81,7 +81,7 @@ function DailyChart({ daily }: { daily: AdminStats['daily'] }) {
     <Card>
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-bold text-primary-900 dark:text-primary-50">آخر 14 يوم</h2>
-        <div className="flex items-center gap-3 text-[11px] text-gray-500 dark:text-gray-400">
+        <div className="flex items-center gap-3 text-[0.6875rem] text-gray-500 dark:text-gray-400">
           <span className="inline-flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-sm bg-primary-600" /> حسابات
           </span>
@@ -111,7 +111,7 @@ function DailyChart({ daily }: { daily: AdminStats['daily'] }) {
                 title={`${entry.day} — بدون حساب: ${entry.guests}`}
               />
             </div>
-            <span className="text-[9px] text-gray-400 dark:text-gray-500">{entry.day.slice(8)}</span>
+            <span className="text-[0.5625rem] text-gray-400 dark:text-gray-500">{entry.day.slice(8)}</span>
           </div>
         ))}
       </div>
@@ -295,7 +295,7 @@ export function AdminScreen({ accountEmail, onSignOut, onOpenApp }: AdminScreenP
               <DailyChart daily={stats.daily} />
             </section>
 
-            <p className="mt-4 text-center text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
+            <p className="mt-4 text-center text-[0.6875rem] leading-relaxed text-gray-500 dark:text-gray-400">
               {stats.lastTrackedAt
                 ? `آخر تسجيل لفتح تطبيق ${timeAgo(stats.lastTrackedAt)} • `
                 : ''}

@@ -363,7 +363,7 @@ export function QiblaCompass({ qiblaDirection, contextLabel }: QiblaCompassProps
                   <span className="text-2xl font-bold text-primary-800 dark:text-primary-100">
                     {toArabicNumber(Math.abs(Math.round(delta ?? 0)))}°
                   </span>
-                  <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                  <span className="text-[0.6875rem] text-gray-500 dark:text-gray-400">
                     {delta !== null && delta > 0 ? 'ادر يمينًا' : 'ادر يسارًا'}
                   </span>
                 </>
@@ -411,7 +411,7 @@ export function QiblaCompass({ qiblaDirection, contextLabel }: QiblaCompassProps
                   style={{ width: `${Math.round(calibrationProgress * 100)}%` }}
                 />
               </div>
-              <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">
+              <div className="flex items-center justify-between text-[0.6875rem] text-gray-500 dark:text-gray-400">
                 <span>
                   دُوران {toArabicNumber(Math.round(tally.sweptDeg))}° من{' '}
                   {toArabicNumber(CALIBRATION_TARGET_ROTATION_DEG)}°

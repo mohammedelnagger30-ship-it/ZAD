@@ -290,7 +290,7 @@ export function TasbihScreen() {
               }`}
             >
               {preset.label}
-              <span className={`mr-1.5 text-[10px] opacity-75 ${active ? 'text-amber-300' : 'text-primary-500'}`}>
+              <span className={`mr-1.5 text-[0.625rem] opacity-75 ${active ? 'text-amber-300' : 'text-primary-500'}`}>
                 ({preset.target})
               </span>
             </button>
@@ -417,7 +417,7 @@ export function TasbihScreen() {
               <Trophy size={16} />
             </div>
             <p className="text-xl font-extrabold text-primary-900 dark:text-primary-50">{state.cycles}</p>
-            <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">دورات مكتملة اليوم</p>
+            <p className="text-[0.6875rem] font-semibold text-gray-500 dark:text-gray-400">دورات مكتملة اليوم</p>
           </div>
 
           <div className="px-2">
@@ -425,7 +425,7 @@ export function TasbihScreen() {
               <Flame size={16} />
             </div>
             <p className="text-xl font-extrabold text-primary-900 dark:text-primary-50">{state.totalToday}</p>
-            <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">مجموع تسبيحات اليوم</p>
+            <p className="text-[0.6875rem] font-semibold text-gray-500 dark:text-gray-400">مجموع تسبيحات اليوم</p>
           </div>
 
           <div className="px-2">
@@ -433,7 +433,7 @@ export function TasbihScreen() {
               <Sparkles size={16} />
             </div>
             <p className="text-xl font-extrabold text-primary-900 dark:text-primary-50">{Math.round(progress * 100)}%</p>
-            <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">التقدم بالدورة</p>
+            <p className="text-[0.6875rem] font-semibold text-gray-500 dark:text-gray-400">التقدم بالدورة</p>
           </div>
         </div>
       </Card>

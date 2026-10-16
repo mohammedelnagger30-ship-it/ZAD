@@ -265,7 +265,7 @@ export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenPro
           >
             المتابعة بدون حساب
           </button>
-          <p className="mt-2 text-center text-[11px] leading-relaxed text-primary-700/70 dark:text-primary-300/70">
+          <p className="mt-2 text-center text-[0.6875rem] leading-relaxed text-primary-700/70 dark:text-primary-300/70">
             كل بياناتك تبقى على هذا الجهاز، ويمكنك إنشاء حساب لاحقًا لمزامنتها بين أجهزتك.
           </p>
         </div>

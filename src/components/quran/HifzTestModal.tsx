@@ -180,7 +180,7 @@ export function HifzTestModal({ surah, fromAyah, toAyah, onClose }: HifzTestModa
         >
           {GRADE_LABELS_AR[grade]}
           {suggested === grade && (
-            <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-gold-500 px-1.5 text-[9px] font-bold text-white">
+            <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-gold-500 px-1.5 text-[0.5625rem] font-bold text-white">
               الأقرب
             </span>
           )}

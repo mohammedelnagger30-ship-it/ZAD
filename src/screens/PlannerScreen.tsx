@@ -436,7 +436,7 @@ function ProgressStat({ value, label }: { value: number; label: string }) {
   return (
     <div className="rounded-xl border border-white/10 bg-white/10 px-2 py-2.5 text-center backdrop-blur-xs">
       <p className="text-xl font-bold">{toArabicNumber(value)}</p>
-      <p className="mt-0.5 text-[10px] leading-4 text-white/75 sm:text-xs">{label}</p>
+      <p className="mt-0.5 text-[0.625rem] leading-4 text-white/75 sm:text-xs">{label}</p>
     </div>
   );
 }
@@ -475,7 +475,7 @@ function SurahProgressCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <h3 className="font-bold text-primary-800 dark:text-primary-100">{name}</h3>
-            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] md:text-xs font-semibold ${status.style}`}>
+            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.625rem] md:text-xs font-semibold ${status.style}`}>
               <StatusIcon size={12} />
               {status.label}
             </span>
@@ -513,7 +513,7 @@ function SurahProgressCard({
               <button
                 type="button"
                 onClick={onMarkMemorized}
-                className="rounded-lg bg-success-50 px-2.5 py-1.5 text-[11px] md:text-xs font-semibold text-success-700 transition hover:bg-success-100 dark:bg-success-900/25 dark:text-success-300 dark:hover:bg-success-900/40"
+                className="rounded-lg bg-success-50 px-2.5 py-1.5 text-[0.6875rem] md:text-xs font-semibold text-success-700 transition hover:bg-success-100 dark:bg-success-900/25 dark:text-success-300 dark:hover:bg-success-900/40"
               >
                 تم الحفظ
               </button>
@@ -521,7 +521,7 @@ function SurahProgressCard({
             <button
               type="button"
               onClick={onMarkReviewed}
-              className="rounded-lg bg-primary-50 px-2.5 py-1.5 text-[11px] md:text-xs font-semibold text-primary-700 transition hover:bg-primary-100 dark:bg-primary-800/60 dark:text-primary-200 dark:hover:bg-primary-800"
+              className="rounded-lg bg-primary-50 px-2.5 py-1.5 text-[0.6875rem] md:text-xs font-semibold text-primary-700 transition hover:bg-primary-100 dark:bg-primary-800/60 dark:text-primary-200 dark:hover:bg-primary-800"
             >
               تمت المراجعة
             </button>

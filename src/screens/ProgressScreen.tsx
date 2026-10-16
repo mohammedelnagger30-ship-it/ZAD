@@ -269,7 +269,7 @@ export function ProgressScreen({ settings }: ProgressScreenProps) {
                 >
                   {badge.name}
                 </p>
-                <p className="mt-0.5 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
+                <p className="mt-0.5 text-[0.6875rem] leading-snug text-gray-500 dark:text-gray-400">
                   {badge.description}
                 </p>
 
@@ -294,7 +294,7 @@ export function ProgressScreen({ settings }: ProgressScreenProps) {
                         style={{ width: `${Math.round(fraction * 100)}%` }}
                       />
                     </div>
-                    <p className="mt-1 text-[10px] text-gray-400 dark:text-gray-500">
+                    <p className="mt-1 text-[0.625rem] text-gray-400 dark:text-gray-500">
                       {toArabicNumber(value)} من {toArabicNumber(target)}
                     </p>
                   </div>

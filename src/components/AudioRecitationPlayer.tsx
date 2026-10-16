@@ -245,7 +245,7 @@ export function AudioRecitationPlayer({
                   تنزيل سورة {surah.name} للعمل دون إنترنت
                 </button>
                 {downloadState === 'error' && (
-                  <span className="text-[11px] font-medium text-error-600 dark:text-error-400">
+                  <span className="text-[0.6875rem] font-medium text-error-600 dark:text-error-400">
                     {downloadError ?? 'تعذّر التنزيل'}
                   </span>
                 )}

@@ -379,7 +379,7 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
               >
                 <tab.icon size={20} strokeWidth={2} className={`transition-transform ${browseMode === tab.mode ? 'scale-110' : 'group-hover:scale-110'}`} />
                 <span className="text-sm font-bold">{tab.label}</span>
-                <span className="hidden text-[10px] opacity-70 sm:block">{tab.desc}</span>
+                <span className="hidden text-[0.625rem] opacity-70 sm:block">{tab.desc}</span>
                 {browseMode === tab.mode && (
                   <div className="absolute bottom-1.5 h-1 w-8 rounded-full bg-white/50" />
                 )}
@@ -489,7 +489,7 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
                           {toArabicNumber(inlineSurahAyahSearch.total)}
                         </span>
                         {inlineSurahAyahSearch.total > inlineSurahAyahSearch.results.length && (
-                          <span className="text-[10px] text-gray-500 dark:text-gray-400">
+                          <span className="text-[0.625rem] text-gray-500 dark:text-gray-400">
                             (أول {toArabicNumber(inlineSurahAyahSearch.results.length)})
                           </span>
                         )}
