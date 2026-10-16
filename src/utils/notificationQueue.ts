@@ -59,3 +59,39 @@ export function assembleNotificationQueue(
     ...parts.dhikrFiller,
   ].slice(0, limit);
 }
+
+/**
+ * How many dhikr filler entries are worth generating, given the ceiling.
+ *
+ * `prayerFallbacks` is deliberately absent from the reservation, and the type
+ * makes that impossible to do by accident. They are the only bucket that is not
+ * certainly scheduled: they join the queue solely when the native full-screen
+ * takeover has already failed, and `assembleNotificationQueue` then ranks them
+ * first and trims the filler to make room. Contention is resolved once, at
+ * assembly — reserving their share a second time, here, held 35 of the
+ * ceiling's 50 slots for nobody on an ordinary day, so this returned zero and
+ * the random dhikr reminders were never generated at all.
+ *
+ * The buckets that *are* passed still get subtracted, but as an economy rather
+ * than a rule: assembly would discard that filler anyway, so generating it
+ * would be work thrown away.
+ */
+export function dhikrFillerBudget(
+  certainlyArmed: {
+    taskReminders: LocalNotificationSchema[];
+    hadithReminders: LocalNotificationSchema[];
+    iqamahAlerts: LocalNotificationSchema[];
+    prePrayerReminders: LocalNotificationSchema[];
+  },
+  max: number,
+): number {
+  const limit = Number.isFinite(max) ? Math.max(0, Math.floor(max)) : 0;
+  return Math.max(
+    0,
+    limit
+      - certainlyArmed.prePrayerReminders.length
+      - certainlyArmed.iqamahAlerts.length
+      - certainlyArmed.taskReminders.length
+      - certainlyArmed.hadithReminders.length,
+  );
+}

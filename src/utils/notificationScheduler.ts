@@ -12,7 +12,7 @@ import {
 } from '@/utils/prayerTimes';
 import { deviceClockDriftMs, toDeviceClock, trustedNow, trustedNowMs } from '@/utils/clock';
 import { generateDailyTasks, getTodayTasks } from '@/utils/taskManager';
-import { assembleNotificationQueue } from '@/utils/notificationQueue';
+import { assembleNotificationQueue, dhikrFillerBudget } from '@/utils/notificationQueue';
 import {
   scheduleAdhanOverlay,
   setAdhanChannel,
@@ -434,9 +434,11 @@ export async function rescheduleAllNotifications(): Promise<void> {
   }
 
   // 4. Random text-only dhikr reminders for today and tomorrow — the queue's
-  //    filler. They are generated only for as many slots as the cap leaves free
-  //    (the prayer fallbacks reserve their share first), so a full queue drops
-  //    tomorrow's dhikr rather than a prayer or a task.
+  //    filler. They are generated only for as many slots as the certainly-armed
+  //    buckets leave free, so a full queue drops tomorrow's dhikr rather than a
+  //    prayer or a task. The fallbacks claim nothing here: they are conditional
+  //    on the takeover failing, and assembly ranks them first when it does —
+  //    see dhikrFillerBudget.
   if (settings.randomDhikrEnabled) {
     const startMinute = timeToMinutes(settings.randomDhikrStartTime);
     const endMinute = timeToMinutes(settings.randomDhikrEndTime);
@@ -451,14 +453,9 @@ export async function rescheduleAllNotifications(): Promise<void> {
       const duration = (endMinute - startMinute + 1440) % 1440;
       const now = trustedNow();
       const previousMessageByCategory = new Map<DhikrReminderCategory, number>();
-      const budget = Math.max(
-        0,
-        MAX_SCHEDULED_NOTIFICATIONS
-          - prayerFallbacks.length
-          - prePrayerReminders.length
-          - iqamahAlerts.length
-          - taskReminders.length
-          - hadithReminders.length,
+      const budget = dhikrFillerBudget(
+        { taskReminders, hadithReminders, iqamahAlerts, prePrayerReminders },
+        MAX_SCHEDULED_NOTIFICATIONS,
       );
 
       if (duration > 0 && budget > 0) {

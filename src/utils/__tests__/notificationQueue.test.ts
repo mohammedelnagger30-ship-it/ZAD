@@ -1,6 +1,6 @@
 import { describe, it, expect } from '@jest/globals';
 import type { LocalNotificationSchema } from '@capacitor/local-notifications';
-import { assembleNotificationQueue } from '@/utils/notificationQueue';
+import { assembleNotificationQueue, dhikrFillerBudget, type NotificationQueueParts } from '@/utils/notificationQueue';
 
 /** The smallest object the assembler cares about: identity, for asserting order. */
 const n = (id: number): LocalNotificationSchema =>
@@ -132,5 +132,97 @@ describe('assembleNotificationQueue', () => {
       50,
     );
     expect(ids(scheduled)).toEqual([2001, 3001]);
+  });
+});
+
+describe('dhikrFillerBudget', () => {
+  /** The four buckets that are armed whether or not the takeover succeeds. */
+  const certainlyArmed = (
+    parts: Partial<Omit<NotificationQueueParts, 'prayerFallbacks' | 'dhikrFiller'>> = {},
+  ): Omit<NotificationQueueParts, 'prayerFallbacks' | 'dhikrFiller'> => ({
+    taskReminders: [],
+    hadithReminders: [],
+    iqamahAlerts: [],
+    prePrayerReminders: [],
+    ...parts,
+  });
+
+  const many = (from: number, length: number) =>
+    Array.from({ length }, (_, i) => n(from + i));
+
+  it('hands the whole ceiling to the filler when nothing else is armed', () => {
+    expect(dhikrFillerBudget(certainlyArmed(), 50)).toBe(50);
+  });
+
+  /**
+   * The regression this budget exists to prevent. Reserving the 35 prayer
+   * fallbacks — which are armed *only* when the native takeover has failed — on
+   * top of assembly ranking them first left a normal day with
+   * `50 - 35 - 35 - 3 - 1 < 0`, so the random dhikr reminders were never
+   * generated at all. They are not subtracted any more, and the parameter list
+   * no longer admits them.
+   */
+  it('reserves nothing for the prayer fallbacks, which assembly ranks when they arrive', () => {
+    const budget = dhikrFillerBudget(
+      certainlyArmed({
+        iqamahAlerts: many(6000, 35),
+        taskReminders: [n(2001)],
+        hadithReminders: [n(3001)],
+      }),
+      50,
+    );
+    // 50 - 35 iqamah - 1 task - 1 hadith. The fallbacks' 35 are absent.
+    expect(budget).toBe(13);
+    // What the old arithmetic returned for this same day, and why it was zero.
+    expect(50 - 35 - 35 - 1 - 1).toBeLessThan(0);
+  });
+
+  it('yields nothing once the certainly armed buckets already fill the ceiling', () => {
+    // Seven days of pre-prayer reminders behind seven days of iqamah alerts is
+    // 70 entries against a ceiling of 50 — there is genuinely no room, and the
+    // filler is the bucket the priority order spends last.
+    const budget = dhikrFillerBudget(
+      certainlyArmed({
+        prePrayerReminders: many(4000, 35),
+        iqamahAlerts: many(6000, 35),
+        taskReminders: [n(2001), n(2002)],
+        hadithReminders: [n(3001)],
+      }),
+      50,
+    );
+    expect(budget).toBe(0);
+  });
+
+  it('never hands out a negative or non-finite share', () => {
+    expect(dhikrFillerBudget(certainlyArmed({ iqamahAlerts: many(6000, 60) }), 50)).toBe(0);
+    expect(dhikrFillerBudget(certainlyArmed(), 0)).toBe(0);
+    expect(dhikrFillerBudget(certainlyArmed(), -5)).toBe(0);
+    expect(dhikrFillerBudget(certainlyArmed(), Number.NaN)).toBe(0);
+  });
+
+  /**
+   * The whole point of the split: a day where the takeover *did* fail, with the
+   * full fallback share arriving at assembly. The filler that the budget funded
+   * is exactly what gives way — the adhan keeps every slot it claims.
+   */
+  it('lets assembly spend the filler rather than the adhan when the takeover failed', () => {
+    const prayerFallbacks = many(1000, 35);
+    const iqamahAlerts = many(6000, 35);
+    const taskReminders = [n(2001)];
+    const hadithReminders = [n(3001)];
+    const budget = dhikrFillerBudget(
+      certainlyArmed({ iqamahAlerts, taskReminders, hadithReminders }),
+      50,
+    );
+    const dhikrFiller = many(5000, budget);
+
+    const scheduled = assembleNotificationQueue(
+      { prayerFallbacks, iqamahAlerts, taskReminders, hadithReminders, prePrayerReminders: [], dhikrFiller },
+      50,
+    );
+
+    expect(scheduled).toHaveLength(50);
+    expect(ids(scheduled).slice(0, 35)).toEqual(ids(prayerFallbacks));
+    expect(ids(scheduled)).not.toEqual(expect.arrayContaining(ids(dhikrFiller)));
   });
 });
