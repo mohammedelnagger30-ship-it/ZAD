@@ -189,11 +189,28 @@ When Supabase is configured and a user signs in, account data is synchronized re
 ### Supabase setup
 
 1. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and the project's **anon/publishable** key. These are client-side values; never put a Supabase `service_role` key in a `VITE_` variable or APK.
-2. Run `supabase/migrations/20261005000000_user_record_sync.sql` in the Supabase SQL Editor before signing in.
-3. Keep Row Level Security enabled. The migration restricts reads to the authenticated owner and permits writes only through an authenticated, owner-scoped RPC.
+2. Run these in the Supabase SQL Editor before signing in, in order:
+   - `supabase/migrations/20261005000000_user_record_sync.sql` — the sync tables, RLS and the owner-scoped write RPC.
+   - `supabase/migrations/20261005010000_sync_adhkar_state.sql` — adds the adhkar counters to the synced set. A device running an older build must not meet a record it cannot name, so run this before that build is replaced.
+3. Keep Row Level Security enabled. The migrations restrict reads to the authenticated owner and permit writes only through an authenticated, owner-scoped RPC.
 4. Configure email confirmation and redirect URLs in Supabase Auth for the deployed web app if email confirmation is enabled.
 
 The app includes no Supabase credentials in source control. Builds without the two Vite environment variables continue to use local-only mode.
+
+### Admin dashboard
+
+An allow-listed account that signs in from the ordinary sign-in screen lands on the admin dashboard instead of the app: total accounts, accounts active in the last 7/30 days, new sign-ups, app opens, and entries made **without an account** — counted through a random per-device id that carries no personal data (one counted open per identity every 30 minutes, client and server both enforce it).
+
+1. Open `supabase/migrations/20261015000000_admin_dashboard.sql`, replace `admin@example.com` in the final `INSERT` with the address you will sign in with, and run the file in the Supabase SQL Editor.
+2. Run `supabase/migrations/20261016000000_track_app_open_limits.sql`. The anon key ships inside the published APK, so `track_app_open` is callable by anyone — and a guest's only identity is a device id the caller picks. Without this second file nothing stops minting unlimited ids: unbounded rows and a completely poisoned guest count. The file caps anonymous opens per network address and per device, and prunes events older than 180 days.
+3. Create that account from the app's sign-in screen (sign up → confirm the email → sign in). Listing the address in `public.admin_emails` is the entire gate; every other account, including yours before the edit, gets the normal app.
+4. To grant or revoke later, without touching code:
+   ```sql
+   insert into public.admin_emails (email) values ('someone@example.com');
+   delete from public.admin_emails where email = 'someone@example.com';
+   ```
+
+Reading the numbers always goes through the `admin_stats()` function, which refuses anyone not on the list; both tables are closed to clients by RLS with no policies. From the dashboard, «فتح التطبيق» opens the ordinary app, and Settings → الحساب offers «لوحة الإدارة» to come back — no sign-out needed. Counts start from the moment the migration runs: opens recorded before it do not exist.
 
 ### GitHub releases and APK updates
 
