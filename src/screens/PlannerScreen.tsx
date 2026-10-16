@@ -1,7 +1,8 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Plus, Trash2, Sparkles, Check, X, Calendar, Clock, BookOpenCheck, Search, RotateCcw, CircleDashed } from 'lucide-react';
 import { Card, Button, Badge, EmptyState } from '@/components/ui';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { useDialogBehavior } from '@/hooks/useDialogBehavior';
 import { db, type HifzPlan, type HifzProgress, type ProgressType } from '@/db/database';
 import { SURAHS, JUZ_INFO, getSurah, toArabicNumber, TOTAL_QURAN_PAGES } from '@/data/surahs';
 import { describePortion, suggestPlan, generateDailyTasks } from '@/utils/taskManager';
@@ -81,6 +82,11 @@ export function PlannerScreen() {
     () => (goalText.trim() ? suggestPlan(goalText) : null),
     [goalText],
   );
+  const suggestRef = useRef<HTMLDivElement | null>(null);
+  // Escape, the backdrop and the Android back button all dismiss the suggestion
+  // sheet; Tab stays inside it. Back used to fall through to screen navigation
+  // and unmount the planner from behind the dialog.
+  useDialogBehavior(showSuggest, () => setShowSuggest(false), suggestRef);
 
   const load = useCallback(async () => {
     const [storedPlans, storedProgress] = await Promise.all([
@@ -337,16 +343,21 @@ export function PlannerScreen() {
 
       {/* Suggest plan modal */}
       {showSuggest && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4 md:pr-24 lg:pr-32 xl:pr-36">
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4 md:pr-24 lg:pr-32 xl:pr-36"
+          onClick={(e) => e.target === e.currentTarget && setShowSuggest(false)}
+        >
           <div
+            ref={suggestRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="suggest-plan-title"
-            className="flex max-h-full w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-primary-100 bg-white shadow-xs animate-scale-in dark:border-primary-800 dark:bg-primary-900"
+            tabIndex={-1}
+            className="flex max-h-full w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-primary-100 bg-white shadow-xs animate-scale-in outline-none dark:border-primary-800 dark:bg-primary-900"
           >
             <div className="flex items-center justify-between p-4 border-b border-primary-100 dark:border-primary-800">
               <h2 id="suggest-plan-title" className="text-lg font-bold text-primary-800 dark:text-primary-100">اقتراح خطة</h2>
-              <button onClick={() => setShowSuggest(false)} aria-label="إغلاق" className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowSuggest(false)} aria-label="إغلاق" className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 focus-visible:ring-2 focus-visible:ring-primary-500 dark:hover:bg-primary-800">
                 <X size={20} />
               </button>
             </div>
@@ -565,6 +576,9 @@ function PlanCard({ plan, onDelete, onToggle }: { plan: HifzPlan; onDelete: () =
 }
 
 function CreatePlanModal({ onClose, onSave }: { onClose: () => void; onSave: (plan: Omit<HifzPlan, 'id' | 'createdAt'>) => void }) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  // Mounted only while open, so the dialog is unconditionally the top overlay.
+  useDialogBehavior(true, onClose, panelRef);
   const [name, setName] = useState('');
   const [type, setType] = useState<'hifz' | 'muraja'>('hifz');
   const [portionType, setPortionType] = useState<'surah' | 'juz' | 'page'>('surah');
@@ -605,12 +619,17 @@ function CreatePlanModal({ onClose, onSave }: { onClose: () => void; onSave: (pl
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-3 sm:p-4 md:pr-24 lg:pr-32 xl:pr-36">
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-3 sm:p-4 md:pr-24 lg:pr-32 xl:pr-36"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="create-plan-title"
-        className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-lg md:max-w-2xl flex-col overflow-hidden rounded-2xl border border-primary-100 bg-white shadow-xl animate-scale-in dark:border-primary-800 dark:bg-primary-900 sm:max-h-[calc(100dvh-2rem)]"
+        tabIndex={-1}
+        className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-lg md:max-w-2xl flex-col overflow-hidden rounded-2xl border border-primary-100 bg-white shadow-xl animate-scale-in outline-none dark:border-primary-800 dark:bg-primary-900 sm:max-h-[calc(100dvh-2rem)]"
       >
         <div className="flex shrink-0 items-center justify-between border-b border-primary-100 bg-white p-4 dark:border-primary-800 dark:bg-primary-900">
           <h2 id="create-plan-title" className="text-lg font-bold text-primary-800 dark:text-primary-100">خطة جديدة</h2>

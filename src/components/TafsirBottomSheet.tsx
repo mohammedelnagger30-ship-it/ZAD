@@ -20,7 +20,7 @@ import {
   type TafsirEdition,
 } from '@/data/tafsir';
 import { useInstalledContent } from '@/hooks/useContent';
-import { useOverlayDismiss } from '@/hooks/useOverlayDismiss';
+import { useDialogBehavior } from '@/hooks/useDialogBehavior';
 import { getSurah, toArabicNumber, TOTAL_QURAN_AYAHS } from '@/data/surahs';
 
 interface TafsirSheetProps {
@@ -44,9 +44,11 @@ export function TafsirBottomSheet({ surahId, ayahNumber, onClose, onNavigateAyah
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [showPicker, setShowPicker] = useState(false);
   const installed = useInstalledContent();
-  // Mounted only while open: back dismisses the sheet instead of navigating
-  // the reader underneath it.
-  useOverlayDismiss(true, onClose);
+  // Mounted only while open: back, Escape and Tab all stay inside the sheet
+  // instead of reaching the reader underneath it.
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  useDialogBehavior(true, onClose, panelRef);
+  const sheetLabelId = 'tafsir-sheet-title';
 
   // Downloads are keyed by edition+surah; a new request supersedes the previous one so
   // flipping quickly through ayahs cannot leave the wrong text on screen.
@@ -130,7 +132,14 @@ export function TafsirBottomSheet({ surahId, ayahNumber, onClose, onNavigateAyah
       <div className="absolute inset-0 bg-black/50 animate-fade-in" onClick={onClose} />
 
       {/* Sheet */}
-      <div className="relative bg-white dark:bg-primary-900 rounded-t-3xl max-h-[85vh] flex flex-col animate-slide-up md:max-w-2xl md:max-h-[80vh] md:rounded-3xl md:border md:shadow-2xl">
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={sheetLabelId}
+        tabIndex={-1}
+        className="relative bg-white dark:bg-primary-900 rounded-t-3xl max-h-[85vh] flex flex-col animate-slide-up md:max-w-2xl md:max-h-[80vh] md:rounded-3xl md:border md:shadow-2xl outline-none"
+      >
         <div className="flex justify-center pt-3 pb-1">
           <div className="w-12 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full" />
         </div>
@@ -138,7 +147,7 @@ export function TafsirBottomSheet({ surahId, ayahNumber, onClose, onNavigateAyah
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-primary-100 dark:border-primary-800 w-full max-w-2xl mx-auto">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-lg font-bold text-primary-800 dark:text-primary-100 truncate">
+            <span id={sheetLabelId} className="text-lg font-bold text-primary-800 dark:text-primary-100 truncate">
               {surah?.name}
             </span>
             <span className="text-sm text-gray-500 dark:text-gray-400 shrink-0">
@@ -150,7 +159,8 @@ export function TafsirBottomSheet({ surahId, ayahNumber, onClose, onNavigateAyah
               onClick={handleCopy}
               disabled={state.status !== 'ready'}
               title="نسخ"
-              className="w-8 h-8 rounded-lg bg-primary-50 dark:bg-primary-800 flex items-center justify-center text-primary-600 dark:text-primary-300 disabled:opacity-40"
+              aria-label="نسخ التفسير"
+              className="w-11 h-11 rounded-lg bg-primary-50 dark:bg-primary-800 flex items-center justify-center text-primary-600 dark:text-primary-300 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-primary-500"
             >
               <Copy size={16} />
             </button>
@@ -158,14 +168,16 @@ export function TafsirBottomSheet({ surahId, ayahNumber, onClose, onNavigateAyah
               onClick={handleShare}
               disabled={state.status !== 'ready'}
               title="مشاركة"
-              className="w-8 h-8 rounded-lg bg-primary-50 dark:bg-primary-800 flex items-center justify-center text-primary-600 dark:text-primary-300 disabled:opacity-40"
+              aria-label="مشاركة التفسير"
+              className="w-11 h-11 rounded-lg bg-primary-50 dark:bg-primary-800 flex items-center justify-center text-primary-600 dark:text-primary-300 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-primary-500"
             >
               <Share2 size={16} />
             </button>
             <button
               onClick={onClose}
               title="إغلاق"
-              className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500"
+              aria-label="إغلاق التفسير"
+              className="w-11 h-11 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 focus-visible:ring-2 focus-visible:ring-primary-500"
             >
               <X size={18} />
             </button>

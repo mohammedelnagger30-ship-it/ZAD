@@ -18,6 +18,7 @@ import {
   CITY_PRESETS,
 } from '@/utils/prayerTimes';
 import { useCountdownClock, usePrayerSchedule } from '@/hooks/usePrayerSchedule';
+import { useDialogBehavior } from '@/hooks/useDialogBehavior';
 import { trustedNow } from '@/utils/clock';
 import {
   getDayPrayerRecords,
@@ -254,7 +255,13 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
           description="اختر مدينتك أو اسمح بتحديد موقعك تلقائياً لحساب مواقيت الصلاة"
           action={<Button onClick={() => setShowLocation(true)} variant="primary">تحديد الموقع</Button>}
         />
-        {showLocation && <LocationPicker onPick={handleLocationPick} onAuto={handleAutoLocation} />}
+        {showLocation && (
+          <LocationPicker
+            onPick={handleLocationPick}
+            onAuto={handleAutoLocation}
+            onClose={() => setShowLocation(false)}
+          />
+        )}
       </div>
     );
   }
@@ -630,7 +637,13 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
       )}
 
       {/* Location picker modal */}
-      {showLocation && <LocationPicker onPick={handleLocationPick} onAuto={handleAutoLocation} />}
+      {showLocation && (
+        <LocationPicker
+          onPick={handleLocationPick}
+          onAuto={handleAutoLocation}
+          onClose={() => setShowLocation(false)}
+        />
+      )}
 
       {showIqamahEditor && (
         <IqamahEditor
@@ -687,15 +700,39 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
   );
 }
 
-function LocationPicker({ onPick, onAuto }: { onPick: (lat: number, lng: number, name: string) => void; onAuto: () => void }) {
+function LocationPicker({
+  onPick,
+  onAuto,
+  onClose,
+}: {
+  onPick: (lat: number, lng: number, name: string) => void;
+  onAuto: () => void;
+  onClose: () => void;
+}) {
   const [search, setSearch] = useState('');
   const filtered = CITY_PRESETS.filter((c) => c.name.includes(search) || !search);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  // Back, Escape and Tab stay inside the picker. Without this the Android back
+  // button fell through to screen navigation and unmounted the whole prayer
+  // screen from behind a dialog the user believed they were dismissing.
+  useDialogBehavior(true, onClose, panelRef);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center" onClick={(e) => e.target === e.currentTarget && null}>
-      <Card className="w-full max-w-md max-h-[80vh] flex flex-col animate-slide-up p-0! md:max-w-lg" noPadding>
-        <div className="p-4 border-b border-primary-100 dark:border-primary-800">
-          <h2 className="text-lg font-bold text-primary-800 dark:text-primary-100 mb-3">اختر موقعك</h2>
+    <div
+      className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="location-picker-title"
+        tabIndex={-1}
+        className="w-full max-w-md md:max-w-lg outline-none"
+      >
+        <Card className="max-h-[80vh] flex flex-col animate-slide-up p-0!" noPadding>
+          <div className="p-4 border-b border-primary-100 dark:border-primary-800">
+            <h2 id="location-picker-title" className="text-lg font-bold text-primary-800 dark:text-primary-100 mb-3">اختر موقعك</h2>
           <Button variant="secondary" size="sm" onClick={onAuto} className="mb-2">
             <MapPin size={16} /> تحديد موقعي تلقائياً
           </Button>
@@ -718,8 +755,9 @@ function LocationPicker({ onPick, onAuto }: { onPick: (lat: number, lng: number,
               <span className="text-sm text-primary-800 dark:text-primary-100">{city.name}</span>
             </button>
           ))}
-        </div>
-      </Card>
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -746,6 +784,10 @@ function IqamahEditor({
     ...DEFAULT_IQAMAH_OFFSETS,
     ...settings.iqamahOffsets,
   }));
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  // Back, Escape and Tab stay inside the editor instead of navigating the
+  // prayer screen underneath it.
+  useDialogBehavior(true, onClose, panelRef);
 
   const rows: { key: IqamahPrayerKey; label: string }[] = [
     { key: 'fajr', label: 'الفجر' },
@@ -761,10 +803,22 @@ function IqamahEditor({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-4" dir="rtl">
-      <Card className="w-full max-w-md max-h-[85vh] overflow-y-auto animate-slide-up p-4!">
+    <div
+      className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-4"
+      dir="rtl"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="iqamah-editor-title"
+        tabIndex={-1}
+        className="w-full max-w-md outline-none"
+      >
+        <Card className="max-h-[85vh] overflow-y-auto animate-slide-up p-4!">
         <div className="mb-4">
-          <h2 className="text-lg font-bold text-primary-800 dark:text-primary-100">مواعيد الإقامة</h2>
+          <h2 id="iqamah-editor-title" className="text-lg font-bold text-primary-800 dark:text-primary-100">مواعيد الإقامة</h2>
           <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
             الدقائق بعد الأذان التي تُقام فيها الصلاة في مسجدك — يصدر تنبيه في نفس الميعاد.
           </p>
@@ -789,7 +843,7 @@ function IqamahEditor({
                   type="button"
                   onClick={() => setMinutes(row.key, draft[row.key] - 5)}
                   aria-label={`إنقاص إقامة ${row.label}`}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary-200 text-primary-700 transition hover:bg-primary-50 disabled:opacity-40 dark:border-primary-700 dark:text-primary-200 dark:hover:bg-primary-800/40"
+                  className="flex h-11 w-11 items-center justify-center rounded-lg border border-primary-200 text-primary-700 transition hover:bg-primary-50 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-primary-500 dark:border-primary-700 dark:text-primary-200 dark:hover:bg-primary-800/40"
                   disabled={draft[row.key] <= 0}
                 >
                   <Minus size={14} />
@@ -808,7 +862,7 @@ function IqamahEditor({
                   type="button"
                   onClick={() => setMinutes(row.key, draft[row.key] + 5)}
                   aria-label={`زيادة إقامة ${row.label}`}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary-200 text-primary-700 transition hover:bg-primary-50 disabled:opacity-40 dark:border-primary-700 dark:text-primary-200 dark:hover:bg-primary-800/40"
+                  className="flex h-11 w-11 items-center justify-center rounded-lg border border-primary-200 text-primary-700 transition hover:bg-primary-50 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-primary-500 dark:border-primary-700 dark:text-primary-200 dark:hover:bg-primary-800/40"
                   disabled={draft[row.key] >= 120}
                 >
                   <Plus size={14} />
@@ -827,7 +881,8 @@ function IqamahEditor({
             إلغاء
           </Button>
         </div>
-      </Card>
+        </Card>
+      </div>
     </div>
   );
 }
