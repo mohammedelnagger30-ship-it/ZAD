@@ -458,10 +458,11 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
   const handleAyahPress = useCallback(
     (surahId: number, ayahNumber: number) => {
       setAyahChoice({ surahId, ayahNumber });
-      resetVoice();
-      resetVoice();
-      resetVoice();
-      resetVoice();
+      // One call. `resetVoice` writes six state slots to fixed values, so the
+      // second call finds them already there and React bails out — the five
+      // copies that used to stand here were one instruction repeated, and a
+      // reader who cannot tell which of them mattered gains nothing from the
+      // other four.
       resetVoice();
       // Each pressed ayah is asked about on its own terms again; the length it is
       // heard in stays what the reader chose, because that is what they listen by.

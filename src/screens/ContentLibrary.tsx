@@ -273,7 +273,22 @@ export function ContentLibrary({ showTitle = true }: { showTitle?: boolean } = {
 
                   {/* Byte progress for a partially downloaded edition */}
                   {partial && !running && (
-                    <div className="mt-2 h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                    // The one bar in the app whose value is never written down
+                    // anywhere: the badge above counts *surahs* downloaded, this
+                    // measures *bytes*, and no figure in between ever appears —
+                    // so a screen reader passed over it and learned nothing.
+                    // Every other progress bar here and elsewhere sits within
+                    // sight of a printed number (`٤٠٪`, `٣ من ٧`), which is why
+                    // those stay plain divs: they would announce the value a
+                    // second time to anyone who could already read it.
+                    <div
+                      className="mt-2 h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden"
+                      role="progressbar"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={Math.round((status?.byteFraction ?? 0) * 100)}
+                      aria-label="نسبة تنزيل الإصدار"
+                    >
                       <div
                         className="h-full bg-warning-500"
                         style={{ width: `${Math.round((status?.byteFraction ?? 0) * 100)}%` }}
