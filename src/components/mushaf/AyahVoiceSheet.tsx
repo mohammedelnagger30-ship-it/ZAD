@@ -263,13 +263,21 @@ export function AyahVoiceSheet({
               the element's own word, not the click's: a seek, a stall or a system
               pause all move the transport without the code asking for it. The end
               event is the cut's backstop — the last ayah of a file reaches it
-              before a final timeupdate can report that it stopped. */}
+              before a final timeupdate can report that it stopped.
+
+              `handleVoiceTime` is wrapped rather than passed for a reason of its
+              own: React hands every handler its event as the first argument, and
+              that handler reads its first argument as «the ayah has run out».
+              Passed bare, every tick of playback looked like an ending — a
+              one-ayah listen stopped on its first timeupdate, and a whole-surah
+              one leapt an ayah per tick. The event is of no interest here; the
+              element's own currentTime is. */}
           <audio
             ref={voiceAudioRef}
             preload="auto"
             onPlay={() => setVoicePlaying(true)}
             onPause={() => setVoicePlaying(false)}
-            onTimeUpdate={handleVoiceTime}
+            onTimeUpdate={() => handleVoiceTime()}
             onEnded={handleVoiceEnded}
           />
         </Sheet>
