@@ -54,7 +54,15 @@ const SRC = join(ROOT, 'src');
 let failures = 0;
 let checks = 0;
 
-function check(ok: boolean, label: string, detail = ''): void {
+/**
+ * Records one assertion. An `undefined` is a failure, not an oversight: it is
+ * what optional chaining returns when the entry the check is about is missing
+ * entirely — `adhkarById.get('w2')?.reference.includes(...)` answers `undefined`
+ * when there is no `w2`, which is the thing this script exists to catch. The
+ * parameter therefore accepts it rather than pushing `?? false` into eleven
+ * call sites where the absence *is* the answer.
+ */
+function check(ok: boolean | undefined, label: string, detail = ''): void {
   checks++;
   if (ok) {
     console.log(`  PASS  ${label}`);
@@ -139,7 +147,7 @@ check(HADITH_BOOKS.length === 9, 'nine hadith collections offered', `got ${HADIT
 check(
   HADITH_BOOKS.reduce((sum, book) => sum + book.count, 0) === 36064,
   'hadith collection counts match the source catalog total',
-  HADITH_BOOKS.reduce((sum, book) => sum + book.count, 0),
+  `${HADITH_BOOKS.reduce((sum, book) => sum + book.count, 0)}`,
 );
 const qudsiCollection = HADITH_BOOKS.find((book) => book.id === 'forty_qudsi');
 check(qudsiCollection?.titleAr === 'الأربعون القدسية', 'Qudsi collection has the correct Arabic title');
@@ -647,6 +655,10 @@ console.log('\n== prayer week grid ==');
     isPast: false,
     due: allDue,
     status: { fajr: null, dhuhr: null, asr: null, maghrib: null, isha: null },
+    // `sunnah` joined the grid after this script was written. An empty slot
+    // list is the honest value for a synthetic day that records prayers only,
+    // and it keeps the object the type the rest of the app builds against.
+    sunnah: { fajr: [], dhuhr: [], asr: [], maghrib: [], isha: [] },
     ...over,
   });
 
@@ -835,11 +847,16 @@ check(
   'the raising-the-voice mistake quotes its ayah verbatim from the bundled Quran text',
 );
 
+/** The intro entry is prose, not a graded item, so it carries no `grade`. */
+const gradeOf = (id: string): string | undefined => {
+  const item = guideById.get(id);
+  return item && 'grade' in item ? item.grade : undefined;
+};
 check(
-  ['e1', 'e4', 's9'].every((id) => guideById.get(id)?.grade === 'حديث حسن صحيح') &&
-    guideById.get('e3')?.grade === 'صحيح موقوف' &&
-    guideById.get('p6')?.grade === 'حديث صحيح' &&
-    guideById.get('s10')?.grade === 'حديث صحيح',
+  ['e1', 'e4', 's9'].every((id) => gradeOf(id) === 'حديث حسن صحيح') &&
+    gradeOf('e3') === 'صحيح موقوف' &&
+    gradeOf('p6') === 'حديث صحيح' &&
+    gradeOf('s10') === 'حديث صحيح',
   'the stated gradings match what the graders say',
 );
 check(

@@ -27,9 +27,9 @@ const CHECK_CACHE_TTL_MS = 120_000;
 let cachedCheck: { checkedAt: number; result: AppUpdateCheck } | null = null;
 let checkInFlight: Promise<AppUpdateCheck> | null = null;
 
-export async function checkForAppUpdate(): Promise<AppUpdateCheck> {
+export async function checkForAppUpdate(options?: { force?: boolean }): Promise<AppUpdateCheck> {
   if (!Capacitor.isNativePlatform()) return { status: 'unavailable' };
-  if (cachedCheck && Date.now() - cachedCheck.checkedAt < CHECK_CACHE_TTL_MS) return cachedCheck.result;
+  if (!options?.force && cachedCheck && Date.now() - cachedCheck.checkedAt < CHECK_CACHE_TTL_MS) return cachedCheck.result;
   if (checkInFlight) return checkInFlight;
 
   checkInFlight = fetchUpdateCheck()

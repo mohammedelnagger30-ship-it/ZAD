@@ -487,7 +487,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
                   />
                 </button>
               </div>
-              <p className="quran-text rounded-xl border-r-2 border-gold-400 bg-primary-50/60 px-3 py-3 text-[17px] leading-[2.1] text-primary-900 dark:bg-primary-800/30 dark:text-primary-50 line-clamp-4 whitespace-pre-line md:max-w-3xl">
+              <p className="quran-text rounded-xl border-r-2 border-gold-400 bg-primary-50/60 px-3 py-3 text-[1.0625rem] leading-[2.1] text-primary-900 dark:bg-primary-800/30 dark:text-primary-50 line-clamp-4 whitespace-pre-line md:max-w-3xl">
                 {hadith.text}
               </p>
             </Card>
@@ -513,7 +513,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
           setViewMode(managerReturnView);
           void refreshInstalled();
         }} />
-        <ContentLibrary showTitle={false} />
+        <ContentLibrary showTitle={false} initialSection="hadith" />
       </div>
     );
   }
@@ -594,7 +594,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
           aria-pressed={sahihOnly}
           className={`flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-smooth ${
             sahihOnly
-              ? 'bg-success-500 text-white'
+              ? 'bg-success-500 text-gray-950'
               : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
           }`}
         >
@@ -606,7 +606,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
           aria-pressed={showFavoritesOnly}
           className={`flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-smooth ${
             showFavoritesOnly
-              ? 'bg-error-500 text-white'
+              ? 'bg-error-500 text-gray-950'
               : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
           }`}
         >
@@ -740,7 +740,7 @@ export function HadithScreen({ params }: HadithScreenProps) {
                       />
                     </button>
                   </div>
-                  <p className="quran-text rounded-xl border-r-2 border-gold-400 bg-primary-50/60 px-3 py-3 text-[17px] leading-[2.1] text-primary-900 dark:bg-primary-800/30 dark:text-primary-50 line-clamp-4 whitespace-pre-line md:max-w-3xl">
+                  <p className="quran-text rounded-xl border-r-2 border-gold-400 bg-primary-50/60 px-3 py-3 text-[1.0625rem] leading-[2.1] text-primary-900 dark:bg-primary-800/30 dark:text-primary-50 line-clamp-4 whitespace-pre-line md:max-w-3xl">
                     {hadith.text}
                   </p>
                   <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">

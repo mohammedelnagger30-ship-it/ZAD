@@ -30,9 +30,9 @@ interface PrayerStatusSheetProps {
 }
 
 const OPTIONS: { status: PrayerStatus; label: string; icon: typeof Check; variant: 'success' | 'warning' | 'error'; active: string }[] = [
-  { status: 'ontime', label: 'صلّيتها في وقتها', icon: Check, variant: 'success', active: 'bg-success-500 text-white border-success-500' },
-  { status: 'late', label: 'صلّتها قضاء', icon: Clock, variant: 'warning', active: 'bg-warning-500 text-white border-warning-500' },
-  { status: 'missed', label: 'ما صليتهاش', icon: X, variant: 'error', active: 'bg-error-500 text-white border-error-500' },
+  { status: 'ontime', label: 'صلّيتها في وقتها', icon: Check, variant: 'success', active: 'bg-success-500 text-gray-950 border-success-500' },
+  { status: 'late', label: 'صلّتها قضاء', icon: Clock, variant: 'warning', active: 'bg-warning-500 text-gray-950 border-warning-500' },
+  { status: 'missed', label: 'ما صليتهاش', icon: X, variant: 'error', active: 'bg-error-500 text-gray-950 border-error-500' },
 ];
 
 /**

@@ -16,6 +16,7 @@ import {
   DEFAULT_IQAMAH_OFFSETS,
   type IqamahPrayerKey,
   CITY_PRESETS,
+  isEgyptianLocation,
 } from '@/utils/prayerTimes';
 import { useCountdownClock, usePrayerSchedule } from '@/hooks/usePrayerSchedule';
 import { useDialogBehavior } from '@/hooks/useDialogBehavior';
@@ -42,6 +43,7 @@ interface PrayerScreenProps {
   settings: Settings;
   onSaveSettings: (patch: Partial<Settings>) => void;
   navigate: (screen: ScreenName, params?: NavParams) => void;
+  params?: Record<string, unknown>;
 }
 
 /** Entry point into فقه الصلاة — the pillars/movements/errors/sunnah guide. */
@@ -78,6 +80,8 @@ const PRAYER_ICONS: Record<string, typeof Moon> = {
   fajr: Sunrise, sunrise: Sun, dhuhr: Sun, asr: Sun, maghrib: Sunset, isha: Moon,
 };
 
+const NOTIFIABLE_PRAYER_KEYS = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
+
 /**
  * Every sunnah this screen offers.
  *
@@ -104,13 +108,13 @@ const SUNNAH_TYPES: {
   { key: 'duha', label: 'صلاة الضحى', note: 'نافلة مستقلة' },
 ];
 
-export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScreenProps) {
+export function PrayerScreen({ settings, onSaveSettings, navigate, params }: PrayerScreenProps) {
   const [records, setRecords] = useState<Record<string, string | null>>({});
   const [sunnahRecords, setSunnahRecords] = useState<Record<string, boolean>>({});
   const [grid, setGrid] = useState<DayPrayerGrid[]>([]);
   const [stats, setStats] = useState<PrayerStats | null>(null);
   const [showLocation, setShowLocation] = useState(false);
-  // The جماعة minutes editor — lives beside the table that shows its result.
+  // Mosque timetable corrections and the جماعة minutes editor.
   const [showIqamahEditor, setShowIqamahEditor] = useState(false);
   // Which (day, prayer) the status sheet is open for, if any.
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
@@ -120,6 +124,15 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
   const now = useCountdownClock(nextPrayerTargetRef);
   const today = trustedNow();
 
+  useEffect(() => {
+    const prayerKey = params?.prayerKey;
+    if (typeof prayerKey !== 'string' || !NOTIFIABLE_PRAYER_KEYS.includes(prayerKey)) return;
+    document.getElementById(`prayer-time-${prayerKey}`)?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+    });
+  }, [params]);
+
   const location =
     settings.latitude != null && settings.longitude != null
       ? {
@@ -128,6 +141,7 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
           calcMethod: settings.calcMethod,
           asrMadhab: settings.asrMadhab,
           timeZone: getPrayerTimeZone(settings.timeZone, settings.cityName),
+          prayerTimeAdjustments: settings.prayerTimeAdjustments,
         }
       : undefined;
 
@@ -149,7 +163,15 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
     setGrid(g);
     setStats(summariseGrid(g));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.latitude, settings.longitude, settings.calcMethod, settings.asrMadhab, settings.timeZone, settings.cityName]);
+  }, [
+    settings.latitude,
+    settings.longitude,
+    settings.calcMethod,
+    settings.asrMadhab,
+    settings.timeZone,
+    settings.cityName,
+    settings.prayerTimeAdjustments,
+  ]);
 
   useEffect(() => {
     load();
@@ -180,6 +202,7 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
     asrMadhab: settings.asrMadhab,
     timeZone: settings.timeZone,
     cityName: settings.cityName,
+    prayerTimeAdjustments: settings.prayerTimeAdjustments,
     now,
   });
 
@@ -226,21 +249,27 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
+          const { latitude, longitude } = pos.coords;
+          if (!isEgyptianLocation(latitude, longitude)) {
+            alert('التطبيق مضبوط لمصر فقط. سيستمر استخدام آخر موقع مصري محفوظ.');
+            return;
+          }
           onSaveSettings({
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-            cityName: 'موقعي الحالي',
-            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            latitude,
+            longitude,
+            cityName: 'موقعي داخل مصر',
+            timeZone: 'Africa/Cairo',
             locationMethod: 'auto',
           });
           setShowLocation(false);
         },
         () => {
-          alert('تعذّر تحديد موقعك. اختر مدينة يدخياً.');
-        }
+          alert('تعذّر تحديد موقعك الآن. سيستمر استخدام آخر موقع مصري محفوظ، ويمكنك اختيار القاهرة أو الإسكندرية.');
+        },
+        { enableHighAccuracy: false, timeout: 15_000, maximumAge: 10 * 60_000 },
       );
     } else {
-      alert('المتصفح لا يدعم تحديد الموقع. اختر مدينة يدخياً.');
+      alert('المتصفح لا يدعم تحديد الموقع. سيستمر استخدام آخر موقع مصري محفوظ.');
     }
   };
 
@@ -298,23 +327,27 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
       {/* Only when the device itself can silence the adhan — nothing to show otherwise. */}
       <DeviceProtectionBanner />
 
-      {/* Enhanced Next Prayer Highlight */}
+      {/* Enhanced Next Prayer Highlight — deep high-contrast gradient that stays readable on every palette */}
       {nextPrayer && (
-        <div className="relative isolate overflow-hidden rounded-[2rem] bg-linear-to-br from-primary-600 via-primary-700 to-primary-900 p-6 text-white shadow-2xl dark:from-primary-700 dark:via-primary-800 dark:to-primary-950">
-          {/* Decorative patterns */}
-          <div className="pointer-events-none absolute -right-20 -top-20 -z-10 h-64 w-64 rounded-full border-4 border-white/5" />
-          <div className="pointer-events-none absolute -right-10 top-10 -z-10 h-40 w-40 rounded-full border-4 border-white/5" />
-          <div className="pointer-events-none absolute right-1/3 bottom-0 -z-10 h-48 w-48 rounded-full border-4 border-white/5 opacity-50" />
-          <Clock className="pointer-events-none absolute -right-8 bottom-0 -z-10 h-40 w-40 rotate-12 text-white/[0.05]" />
+        <div className="relative isolate overflow-hidden rounded-[2rem] p-6 shadow-2xl backdrop-blur-sm">
+          {/* Deep primary gradient: light mode uses 600→900 for strong contrast, dark mode uses 700→950 */}
+          <div className="absolute inset-0 rounded-[2rem] bg-gradient-to-br from-primary-600 via-primary-700 to-primary-900 dark:from-primary-700 dark:via-primary-800 dark:to-primary-950" />
+          {/* Ambient accent glow for depth */}
+          <div className="pointer-events-none absolute -top-8 -right-8 -z-10 h-48 w-48 rounded-full bg-[var(--func-accent)]/25 blur-3xl dark:bg-[var(--func-accent)]/15" />
+          {/* Decorative patterns — clearer borders for light mode */}
+          <div className="pointer-events-none absolute -right-20 -top-20 -z-10 h-64 w-64 rounded-full border-4 border-white/20 dark:border-white/10" />
+          <div className="pointer-events-none absolute -right-10 top-10 -z-10 h-40 w-40 rounded-full border-4 border-white/20 dark:border-white/10" />
+          <div className="pointer-events-none absolute right-1/3 bottom-0 -z-10 h-48 w-48 rounded-full border-4 border-white/20 dark:border-white/10 opacity-70" />
+          <Clock className="pointer-events-none absolute -right-8 bottom-0 -z-10 h-40 w-40 rotate-12 text-white/[0.12] dark:text-white/[0.08]" />
 
           <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
             <div className="flex-1">
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 backdrop-blur-xs">
-                <span className="h-2 w-2 rounded-full bg-gold-400 animate-pulse" />
-                <p className="text-xs font-semibold text-white/90">الصلاة القادمة</p>
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/25 px-3 py-1.5 backdrop-blur-xs border border-white/30 dark:border-white/15">
+                <span className="h-2 w-2 rounded-full bg-[var(--func-accent)] animate-pulse shadow-[0_0_16px_var(--func-accent)]" />
+                <p className="text-xs font-semibold text-white">الصلاة القادمة</p>
               </div>
-              <h2 className="text-4xl font-bold leading-tight sm:text-5xl">{nextPrayer.arabicName}</h2>
-              <p className="mt-3 text-xl text-gold-300 font-semibold">
+              <h2 className="text-4xl font-bold leading-tight sm:text-5xl text-white">{nextPrayer.arabicName}</h2>
+              <p className="mt-3 text-xl font-semibold text-[var(--func-accent)]">
                 {getTimeUntil(nextPrayer.time, now)}
               </p>
               <button
@@ -330,17 +363,17 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
                     })
                   );
                 }}
-                className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-gold-400/20 hover:bg-gold-400/30 px-4 py-2.5 text-sm font-bold text-gold-300 backdrop-blur-xs transition-all hover:scale-105 border border-gold-400/30 shadow-lg"
+                className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-white/15 hover:bg-white/20 px-4 py-2.5 text-sm font-bold text-white backdrop-blur-xs transition-all hover:scale-105 border border-white/30 shadow-lg dark:bg-[var(--func-accent)]/15 dark:hover:bg-[var(--func-accent)]/25 dark:text-[var(--func-accent)] dark:border-[var(--func-accent)]/40"
               >
                 <Sparkles size={16} />
                 عرض صفحة الأذان
               </button>
             </div>
-            <div className="flex flex-col items-center justify-center rounded-3xl bg-white/10 backdrop-blur-xs px-6 py-4 border border-white/20 shadow-xl">
-              <p className="text-5xl font-bold text-gold-300 sm:text-6xl">
+            <div className="flex flex-col items-center justify-center rounded-3xl bg-white/25 backdrop-blur-xs px-6 py-4 border border-white/30 shadow-xl dark:bg-white/10 dark:border-white/15">
+              <p className="text-5xl font-bold text-white sm:text-6xl">
                 {formatTime12h(nextPrayer.time, timeZone)}
               </p>
-              <p className="mt-1 text-xs text-white/70">وقت الصلاة</p>
+              <p className="mt-1 text-xs text-white/90 dark:text-white/80">وقت الصلاة</p>
             </div>
           </div>
         </div>
@@ -358,7 +391,7 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
               className="flex items-center gap-1.5 rounded-xl border border-primary-200 bg-white px-3 py-1.5 text-xs font-bold text-primary-700 transition hover:border-primary-400 hover:bg-primary-50 dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-200 dark:hover:border-primary-600"
             >
               <Clock size={14} />
-              مواعيد الإقامة
+              ضبط مواقيت المسجد
             </button>
           }
         />
@@ -454,7 +487,7 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
             );
 
             return (
-              <div className="space-y-3" key={prayer.name}>
+              <div className="space-y-3" id={`prayer-time-${prayer.name}`} key={prayer.name}>
                 {prayerCard}
                 {(attachedSunnahs.length > 0 || isAsr) && (
                   <div className="mr-4 space-y-2 border-r-2 border-primary-200 pr-4 dark:border-primary-800">
@@ -649,10 +682,9 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
         <IqamahEditor
           settings={settings}
           todayTimes={iqamahPreview}
-          onSave={(offsets) => {
-            // Saved through the shared settings path, whose schedule fingerprint
-            // now includes these offsets — the queue re-arms on the spot.
-            onSaveSettings({ iqamahOffsets: offsets });
+          onSave={({ iqamahOffsets, prayerTimeAdjustments }) => {
+            // Both adjustments affect prayer display and every related alarm.
+            onSaveSettings({ iqamahOffsets, prayerTimeAdjustments });
             setShowIqamahEditor(false);
           }}
           onClose={() => setShowIqamahEditor(false)}
@@ -671,6 +703,7 @@ export function PrayerScreen({ settings, onSaveSettings, navigate }: PrayerScree
               settings.calcMethod,
               settings.asrMadhab,
               timeZone,
+              settings.prayerTimeAdjustments,
             ).prayers.find((p) => p.name === sheet.prayer)!.time,
             timeZone,
           )}
@@ -776,13 +809,24 @@ function IqamahEditor({
 }: {
   settings: Settings;
   todayTimes: Partial<Record<IqamahPrayerKey, Date>>;
-  onSave: (offsets: Record<IqamahPrayerKey, number>) => void;
+  onSave: (values: {
+    iqamahOffsets: Record<IqamahPrayerKey, number>;
+    prayerTimeAdjustments: Record<IqamahPrayerKey, number>;
+  }) => void;
   onClose: () => void;
 }) {
   const timeZone = getPrayerTimeZone(settings.timeZone, settings.cityName);
   const [draft, setDraft] = useState<Record<IqamahPrayerKey, number>>(() => ({
     ...DEFAULT_IQAMAH_OFFSETS,
     ...settings.iqamahOffsets,
+  }));
+  const [adhanDraft, setAdhanDraft] = useState<Record<IqamahPrayerKey, number>>(() => ({
+    fajr: 0,
+    dhuhr: 0,
+    asr: 0,
+    maghrib: 0,
+    isha: 0,
+    ...settings.prayerTimeAdjustments,
   }));
   const panelRef = useRef<HTMLDivElement | null>(null);
   // Back, Escape and Tab stay inside the editor instead of navigating the
@@ -801,6 +845,19 @@ function IqamahEditor({
     const clamped = Math.min(Math.max(Math.round(minutes) || 0, 0), 120);
     setDraft((prev) => ({ ...prev, [key]: clamped }));
   };
+  const setAdhanMinutes = (key: IqamahPrayerKey, minutes: number) => {
+    const clamped = Math.min(Math.max(Math.round(minutes) || 0, -30), 30);
+    setAdhanDraft((prev) => ({ ...prev, [key]: clamped }));
+  };
+
+  const previewAdhan = (key: IqamahPrayerKey): Date | undefined => {
+    const currentTime = todayTimes[key];
+    if (!currentTime) return undefined;
+    const currentAdjustment = settings.prayerTimeAdjustments?.[key] ?? 0;
+    return new Date(
+      currentTime.getTime() + (adhanDraft[key] - currentAdjustment) * 60_000,
+    );
+  };
 
   return (
     <div
@@ -818,9 +875,9 @@ function IqamahEditor({
       >
         <Card className="max-h-[85vh] overflow-y-auto animate-slide-up p-4!">
         <div className="mb-4">
-          <h2 id="iqamah-editor-title" className="text-lg font-bold text-primary-800 dark:text-primary-100">مواعيد الإقامة</h2>
+          <h2 id="iqamah-editor-title" className="text-lg font-bold text-primary-800 dark:text-primary-100">ضبط مواقيت المسجد</h2>
           <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-            الدقائق بعد الأذان التي تُقام فيها الصلاة في مسجدك — يصدر تنبيه في نفس الميعاد.
+            قارن بجدول مسجدك. الرقم الموجب يؤخر الأذان والسالب يقدّمه؛ ثم حدّد دقائق الإقامة بعده.
           </p>
         </div>
 
@@ -832,49 +889,90 @@ function IqamahEditor({
             >
               <div className="min-w-0">
                 <p className="text-sm font-bold text-primary-800 dark:text-primary-100">{row.label}</p>
-                {todayTimes[row.key] && (
+                {previewAdhan(row.key) && (
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    اليوم: الإقامة {formatTime12h(getIqamahTime(todayTimes[row.key]!, row.key, draft), timeZone)}
+                    اليوم: الأذان {formatTime12h(previewAdhan(row.key)!, timeZone)}
+                    {' · '}الإقامة{' '}
+                    {formatTime12h(getIqamahTime(previewAdhan(row.key)!, row.key, draft), timeZone)}
                   </p>
                 )}
               </div>
-              <div className="flex shrink-0 items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setMinutes(row.key, draft[row.key] - 5)}
-                  aria-label={`إنقاص إقامة ${row.label}`}
-                  className="flex h-11 w-11 items-center justify-center rounded-lg border border-primary-200 text-primary-700 transition hover:bg-primary-50 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-primary-500 dark:border-primary-700 dark:text-primary-200 dark:hover:bg-primary-800/40"
-                  disabled={draft[row.key] <= 0}
-                >
-                  <Minus size={14} />
-                </button>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  max={120}
-                  value={draft[row.key]}
-                  onChange={(e) => setMinutes(row.key, Number(e.target.value))}
-                  aria-label={`دقائق إقامة ${row.label} بعد الأذان`}
-                  className="w-12 rounded-lg border border-primary-200 bg-gray-50 py-1 text-center text-sm font-bold text-primary-800 dark:border-primary-700 dark:bg-primary-800/30 dark:text-primary-100"
-                />
-                <button
-                  type="button"
-                  onClick={() => setMinutes(row.key, draft[row.key] + 5)}
-                  aria-label={`زيادة إقامة ${row.label}`}
-                  className="flex h-11 w-11 items-center justify-center rounded-lg border border-primary-200 text-primary-700 transition hover:bg-primary-50 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-primary-500 dark:border-primary-700 dark:text-primary-200 dark:hover:bg-primary-800/40"
-                  disabled={draft[row.key] >= 120}
-                >
-                  <Plus size={14} />
-                </button>
-                <span className="w-10 text-xs text-gray-400 dark:text-gray-500">دقيقة</span>
+              <div className="flex shrink-0 flex-col gap-2">
+                <div className="flex items-center gap-1">
+                  <span className="w-14 text-[0.625rem] text-gray-500 dark:text-gray-400">تصحيح الأذان</span>
+                  <button
+                    type="button"
+                    onClick={() => setAdhanMinutes(row.key, adhanDraft[row.key] - 1)}
+                    aria-label={`تقديم أذان ${row.label} دقيقة`}
+                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-primary-200 text-primary-700 transition hover:bg-primary-50 disabled:opacity-40 dark:border-primary-700 dark:text-primary-200 dark:hover:bg-primary-800/40"
+                    disabled={adhanDraft[row.key] <= -30}
+                  >
+                    <Minus size={13} />
+                  </button>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={-30}
+                    max={30}
+                    value={adhanDraft[row.key]}
+                    onChange={(e) => setAdhanMinutes(row.key, Number(e.target.value))}
+                    aria-label={`تصحيح أذان ${row.label} بالدقائق`}
+                    className="w-12 rounded-lg border border-primary-200 bg-gray-50 py-1 text-center text-sm font-bold text-primary-800 dark:border-primary-700 dark:bg-primary-800/30 dark:text-primary-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setAdhanMinutes(row.key, adhanDraft[row.key] + 1)}
+                    aria-label={`تأخير أذان ${row.label} دقيقة`}
+                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-primary-200 text-primary-700 transition hover:bg-primary-50 disabled:opacity-40 dark:border-primary-700 dark:text-primary-200 dark:hover:bg-primary-800/40"
+                    disabled={adhanDraft[row.key] >= 30}
+                  >
+                    <Plus size={13} />
+                  </button>
+                  <span className="w-7 text-[0.625rem] text-gray-400 dark:text-gray-500">دقيقة</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="w-14 text-[0.625rem] text-gray-500 dark:text-gray-400">الإقامة بعده</span>
+                  <button
+                    type="button"
+                    onClick={() => setMinutes(row.key, draft[row.key] - 5)}
+                    aria-label={`إنقاص إقامة ${row.label}`}
+                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-primary-200 text-primary-700 transition hover:bg-primary-50 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-primary-500 dark:border-primary-700 dark:text-primary-200 dark:hover:bg-primary-800/40"
+                    disabled={draft[row.key] <= 0}
+                  >
+                    <Minus size={13} />
+                  </button>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    max={120}
+                    value={draft[row.key]}
+                    onChange={(e) => setMinutes(row.key, Number(e.target.value))}
+                    aria-label={`دقائق إقامة ${row.label} بعد الأذان`}
+                    className="w-12 rounded-lg border border-primary-200 bg-gray-50 py-1 text-center text-sm font-bold text-primary-800 dark:border-primary-700 dark:bg-primary-800/30 dark:text-primary-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMinutes(row.key, draft[row.key] + 5)}
+                    aria-label={`زيادة إقامة ${row.label}`}
+                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-primary-200 text-primary-700 transition hover:bg-primary-50 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-primary-500 dark:border-primary-700 dark:text-primary-200 dark:hover:bg-primary-800/40"
+                    disabled={draft[row.key] >= 120}
+                  >
+                    <Plus size={13} />
+                  </button>
+                  <span className="w-7 text-[0.625rem] text-gray-400 dark:text-gray-500">دقيقة</span>
+                </div>
               </div>
             </div>
           ))}
         </div>
 
         <div className="mt-4 flex gap-2">
-          <Button variant="primary" onClick={() => onSave(draft)} className="flex-1">
+          <Button
+            variant="primary"
+            onClick={() => onSave({ iqamahOffsets: draft, prayerTimeAdjustments: adhanDraft })}
+            className="flex-1"
+          >
             حفظ
           </Button>
           <Button variant="secondary" onClick={onClose}>

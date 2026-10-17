@@ -1,3 +1,5 @@
+import { PRINTED_PAGE_STARTS } from './mushafPageStarts';
+
 /**
  * Facts about the *printed* Madani mushaf that are not layout decisions of ours.
  *
@@ -6,13 +8,11 @@
  *
  *  1. **Which juz or hizb an ayah belongs to.** A property of the text and the printed
  *     mushaf, not a layout choice. Al-Fatihah is in juz 1 whatever we do.
- *  2. **Which page an ayah is printed on.** Until the flow layout landed this came from a
- *     reconstruction; now it is `mushafFlow.ts`'s answer and ours to choose.
+ *  2. **Which page an ayah is printed on.** This comes from Tanzil's licensed page-start
+ *     metadata; the app's line breaks and visual page layout remain independent.
  *
- * Keeping the printed tables here, in a module that imports nothing, is what lets the flow
- * generator read them, the reader read the flow, and `surahs.ts` read both — without an
- * import cycle. It also means these numbers can be deleted from one place if the app ever
- * stops claiming to line up with a physical mushaf.
+ * Keeping printed facts separate lets the flow generator and `surahs.ts` consume them
+ * without an import cycle or conflating printed-page references with app page layout.
  *
  * Nothing here is shown to the user as a page number: `mushafFlow.ts` maps every boundary
  * below through the flow, so what the reader displays is always our own pagination.
@@ -94,23 +94,28 @@ export const PRINTED_HIZB_START_PAGES: Record<number, number> = {
 };
 
 /**
- * Page of an ayah in the printed mushaf.
- *
- * There is no per-ayah page map for the printed mushaf, so the ayah's position inside its
- * surah is scaled onto the surah's exact printed page range. Monotonic and anchored on real
- * surah starts, which is all it is used for here: finding the ayah that a printed page
- * boundary falls on, so that boundary can be mapped through the flow. Deliberately never
- * used for anything the user sees.
+ * Exact page of an ayah in the printed Madani mushaf, resolved from Tanzil's licensed
+ * page-start metadata.
  */
 export function printedAyahPage(surahId: number, ayahNumber: number, ayahCount: number): number {
-  const start = PRINTED_SURAH_START[surahId - 1];
-  if (start === undefined) return 1;
-  const next = PRINTED_SURAH_START[surahId];
-  const end = Math.min(Math.max((next ?? PRINTED_TOTAL_PAGES) - 1, start), PRINTED_TOTAL_PAGES);
-  const span = end - start;
-  if (span <= 0 || ayahCount <= 1) return start;
-  const offset = Math.round(((ayahNumber - 1) / (ayahCount - 1)) * span);
-  return Math.min(Math.max(start + offset, start), end);
+  if (!Number.isInteger(surahId) || !Number.isInteger(ayahNumber)
+    || surahId < 1 || surahId > PRINTED_SURAH_START.length
+    || ayahNumber < 1 || ayahNumber > ayahCount) return 1;
+
+  let low = 0;
+  let high = PRINTED_PAGE_STARTS.length - 1;
+  let page = 1;
+  while (low <= high) {
+    const middle = (low + high) >> 1;
+    const [startSurah, startAyah] = PRINTED_PAGE_STARTS[middle];
+    if (startSurah < surahId || (startSurah === surahId && startAyah <= ayahNumber)) {
+      page = middle + 1;
+      low = middle + 1;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return page;
 }
 
 /** Juz (1-30) containing a printed page. */

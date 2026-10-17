@@ -3,11 +3,14 @@ import { Plus, Trash2, Sparkles, Check, X, Calendar, Clock, BookOpenCheck, Searc
 import { Card, Button, Badge, EmptyState } from '@/components/ui';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useDialogBehavior } from '@/hooks/useDialogBehavior';
-import { db, type HifzPlan, type HifzProgress, type ProgressType } from '@/db/database';
+import { db, type DailyTask, type HifzPlan, type HifzProgress, type HifzReview, type ProgressType, type TaskStatus } from '@/db/database';
 import { SURAHS, JUZ_INFO, getSurah, toArabicNumber, TOTAL_QURAN_PAGES } from '@/data/surahs';
-import { describePortion, suggestPlan, generateDailyTasks } from '@/utils/taskManager';
+import { describePortion, getRecentTasks, markMissedTasks, suggestPlan, generateDailyTasks } from '@/utils/taskManager';
 import { rescheduleAllNotifications } from '@/utils/notificationScheduler';
-import { getDayNameShort } from '@/utils/dateUtils';
+import { formatArabicDate, getDayNameShort } from '@/utils/dateUtils';
+import { trustedNowMs } from '@/utils/clock';
+import { getNotificationDestination } from '@/utils/notificationRouting';
+import type { NavParams, ScreenName } from '@/hooks/useApp';
 
 const SUGGESTION_EXAMPLES = [
   {
@@ -30,8 +33,9 @@ const SUGGESTION_EXAMPLES = [
   },
 ];
 
-type PlannerTab = 'plans' | 'surahs';
+type PlannerTab = 'plans' | 'surahs' | 'history';
 type SurahFilter = 'all' | 'memorized' | 'partial' | 'notStarted' | 'reviewed';
+type TaskHistoryFilter = 'all' | 'pending' | 'done' | 'missed';
 
 interface SurahProgressSummary {
   memorizedAyahs: number;
@@ -43,35 +47,49 @@ interface SurahProgressSummary {
 
 function countCoveredAyahs(records: HifzProgress[], statuses: ProgressType[], surahId: number): number {
   const ayahCount = getSurah(surahId)?.ayahCount ?? 0;
-  const ranges = records
-    .filter((record) => record.surahId === surahId && statuses.includes(record.status))
-    .map((record) => [
-      Math.max(1, record.ayahStart),
-      Math.min(ayahCount, record.ayahEnd),
-    ] as const)
-    .filter(([start, end]) => start <= end)
-    .sort((a, b) => a[0] - b[0]);
-  let count = 0;
-  let start = 0;
-  let end = -1;
-  for (const [nextStart, nextEnd] of ranges) {
-    if (nextStart > end + 1) {
-      if (end >= start) count += end - start + 1;
-      start = nextStart;
-      end = nextEnd;
-    } else {
-      end = Math.max(end, nextEnd);
+  const latestByAyah = new Map<number, HifzProgress>();
+  for (const record of records) {
+    if (record.surahId !== surahId) continue;
+    const start = Math.max(1, record.ayahStart);
+    const end = Math.min(ayahCount, record.ayahEnd);
+    for (let ayah = start; ayah <= end; ayah += 1) {
+      const previous = latestByAyah.get(ayah);
+      if (
+        !previous ||
+        record.ratedAt > previous.ratedAt ||
+        (record.ratedAt === previous.ratedAt && (record.id ?? 0) > (previous.id ?? 0))
+      ) {
+        latestByAyah.set(ayah, record);
+      }
     }
   }
-  if (end >= start) count += end - start + 1;
-  return count;
+  return [...latestByAyah.values()].filter((record) => statuses.includes(record.status)).length;
 }
 
-export function PlannerScreen() {
+const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
+  pending: 'قيد التنفيذ',
+  snoozed: 'مؤجل',
+  done: 'مكتمل',
+  missed: 'فات',
+};
+
+const TASK_STATUS_VARIANTS: Record<TaskStatus, 'success' | 'warning' | 'error' | 'neutral'> = {
+  pending: 'neutral',
+  snoozed: 'warning',
+  done: 'success',
+  missed: 'error',
+};
+
+export function PlannerScreen({ navigate }: {
+  navigate: (screen: ScreenName, params?: NavParams) => void;
+}) {
   const [plans, setPlans] = useState<HifzPlan[]>([]);
   const [progress, setProgress] = useState<HifzProgress[]>([]);
+  const [reviews, setReviews] = useState<HifzReview[]>([]);
+  const [recentTasks, setRecentTasks] = useState<DailyTask[]>([]);
   const [activeTab, setActiveTab] = useState<PlannerTab>('plans');
   const [surahFilter, setSurahFilter] = useState<SurahFilter>('all');
+  const [taskHistoryFilter, setTaskHistoryFilter] = useState<TaskHistoryFilter>('all');
   const [surahSearch, setSurahSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [showSuggest, setShowSuggest] = useState(false);
@@ -89,12 +107,17 @@ export function PlannerScreen() {
   useDialogBehavior(showSuggest, () => setShowSuggest(false), suggestRef);
 
   const load = useCallback(async () => {
-    const [storedPlans, storedProgress] = await Promise.all([
+    await markMissedTasks();
+    const [storedPlans, storedProgress, storedReviews, storedTasks] = await Promise.all([
       db.plans.toArray(),
       db.hifzProgress.toArray(),
+      db.hifzReviews.toArray(),
+      getRecentTasks(30),
     ]);
     setPlans(storedPlans.filter((plan) => !plan.syncPlaceholder).sort((a, b) => b.createdAt - a.createdAt));
     setProgress(storedProgress);
+    setReviews(storedReviews);
+    setRecentTasks(storedTasks);
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -145,6 +168,24 @@ export function PlannerScreen() {
   const memorizedSurahs = surahSummaries.filter(({ summary }) => summary.isMemorized).length;
   const partiallyMemorizedSurahs = surahSummaries.filter(({ summary }) => summary.isPartial).length;
   const reviewedSurahs = surahSummaries.filter(({ summary }) => summary.hasReview).length;
+  const now = trustedNowMs();
+  const dueReviews = reviews
+    .filter((review) => review.dueAt <= now)
+    .sort((a, b) => a.dueAt - b.dueAt);
+  const upcomingReviews = reviews
+    .filter((review) => review.dueAt > now && review.dueAt <= now + 7 * 24 * 60 * 60 * 1000)
+    .sort((a, b) => a.dueAt - b.dueAt);
+  const taskHistoryCounts = {
+    all: recentTasks.length,
+    pending: recentTasks.filter((task) => task.status === 'pending' || task.status === 'snoozed').length,
+    done: recentTasks.filter((task) => task.status === 'done').length,
+    missed: recentTasks.filter((task) => task.status === 'missed').length,
+  };
+  const visibleTasks = recentTasks.filter((task) =>
+    taskHistoryFilter === 'all' ||
+    (taskHistoryFilter === 'pending' && (task.status === 'pending' || task.status === 'snoozed')) ||
+    task.status === taskHistoryFilter,
+  );
   const visibleSurahs = surahSummaries.filter(({ surah, summary }) => {
     const query = surahSearch.trim().replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit))).toLowerCase();
     const matchesSearch = !query || surah.name.toLowerCase().includes(query) ||
@@ -193,6 +234,7 @@ export function PlannerScreen() {
         {([
           { tab: 'plans' as const, label: 'خططي', icon: Calendar },
           { tab: 'surahs' as const, label: 'سجل السور', icon: BookOpenCheck },
+          { tab: 'history' as const, label: 'متابعة الورد', icon: Clock },
         ]).map(({ tab, label, icon: Icon }) => (
           <button
             key={tab}
@@ -246,6 +288,16 @@ export function PlannerScreen() {
 
       {activeTab === 'surahs' && (
         <section className="space-y-3">
+          <DueReviewsCard
+            dueReviews={dueReviews}
+            upcomingReviews={upcomingReviews}
+            onOpen={(review) => navigate('quran', {
+              openSurahId: review.surahId,
+              openAyah: review.fromAyah,
+              openToAyah: review.toAyah,
+              openHifzTest: true,
+            })}
+          />
           <div className="relative">
             <Search size={17} className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-primary-500 dark:text-primary-300" />
             <input
@@ -307,6 +359,23 @@ export function PlannerScreen() {
             </div>
           )}
         </section>
+      )}
+
+      {activeTab === 'history' && (
+        <TaskHistory
+          tasks={visibleTasks}
+          counts={taskHistoryCounts}
+          filter={taskHistoryFilter}
+          onFilterChange={setTaskHistoryFilter}
+          onOpen={(task) => {
+            const destination = getNotificationDestination({
+              type: 'task',
+              taskType: task.type,
+              portion: task.portion,
+            });
+            if (destination) navigate(destination.screen, destination.params);
+          }}
+        />
       )}
 
       {/* Create plan modal */}
@@ -432,11 +501,182 @@ export function PlannerScreen() {
   );
 }
 
+function DueReviewsCard({
+  dueReviews,
+  upcomingReviews,
+  onOpen,
+}: {
+  dueReviews: HifzReview[];
+  upcomingReviews: HifzReview[];
+  onOpen: (review: HifzReview) => void;
+}) {
+  const reviewLabel = (review: HifzReview) =>
+    describePortion(`surah:${review.surahId}:${review.fromAyah}-${review.toAyah}`);
+
+  return (
+    <Card className="border-gold-200 bg-linear-to-bl from-gold-50/80 to-white dark:border-gold-800/50 dark:from-gold-900/20 dark:to-primary-900/40">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="font-bold text-primary-900 dark:text-primary-100">مراجعات الحفظ</h2>
+          <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">
+            مواعيد المراجعة المحسوبة من اختباراتك؛ افتح الورد وابدأ الاختبار.
+          </p>
+        </div>
+        <Badge variant={dueReviews.length ? 'warning' : 'success'}>
+          {dueReviews.length ? `${toArabicNumber(dueReviews.length)} مستحقة` : 'لا توجد مراجعات متأخرة'}
+        </Badge>
+      </div>
+      {dueReviews.length > 0 ? (
+        <div className="mt-3 space-y-2">
+          {dueReviews.slice(0, 6).map((review) => (
+            <div key={review.key} className="flex items-center gap-3 rounded-xl border border-gold-200/70 bg-white/80 p-3 dark:border-gold-800/40 dark:bg-primary-950/30">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gold-100 text-gold-700 dark:bg-gold-900/40 dark:text-gold-300">
+                <RotateCcw size={16} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-primary-800 dark:text-primary-100">{reviewLabel(review)}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {review.lapses > 0 ? `تعثر سابق: ${toArabicNumber(review.lapses)} · ` : ''}
+                  استحقت {new Date(review.dueAt).toLocaleDateString('ar-EG')}
+                </p>
+              </div>
+              <Button size="sm" variant="primary" onClick={() => onOpen(review)}>ابدأ</Button>
+            </div>
+          ))}
+          {dueReviews.length > 6 && (
+            <p className="text-center text-xs text-gray-500 dark:text-gray-400">
+              وهناك {toArabicNumber(dueReviews.length - 6)} مراجعات أخرى مستحقة.
+            </p>
+          )}
+        </div>
+      ) : (
+        <p className="mt-3 rounded-xl bg-success-50 px-3 py-2.5 text-sm text-success-800 dark:bg-success-900/20 dark:text-success-200">
+          أحسنت، لا توجد مراجعة مستحقة الآن.
+        </p>
+      )}
+      {upcomingReviews.length > 0 && (
+        <p className="mt-3 border-t border-primary-100 pt-3 text-xs text-gray-500 dark:border-primary-800 dark:text-gray-400">
+          القادم خلال ٧ أيام: {upcomingReviews.slice(0, 3).map(reviewLabel).join('، ')}
+          {upcomingReviews.length > 3 ? `، و${toArabicNumber(upcomingReviews.length - 3)} أخرى` : ''}
+        </p>
+      )}
+    </Card>
+  );
+}
+
+function TaskHistory({
+  tasks,
+  counts,
+  filter,
+  onFilterChange,
+  onOpen,
+}: {
+  tasks: DailyTask[];
+  counts: Record<TaskHistoryFilter, number>;
+  filter: TaskHistoryFilter;
+  onFilterChange: (filter: TaskHistoryFilter) => void;
+  onOpen: (task: DailyTask) => void;
+}) {
+  const filters: { key: TaskHistoryFilter; label: string }[] = [
+    { key: 'all', label: 'الكل' },
+    { key: 'pending', label: 'قيد التنفيذ' },
+    { key: 'done', label: 'مكتمل' },
+    { key: 'missed', label: 'فات' },
+  ];
+
+  return (
+    <section className="space-y-4">
+      <Card className="border-primary-100 bg-linear-to-l from-primary-50 to-white dark:border-primary-800 dark:from-primary-900/50 dark:to-primary-950/30">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="font-bold text-primary-900 dark:text-primary-100">متابعة آخر ٣٠ يومًا</h2>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">سجل واضح للحفظ والمراجعة وما اكتمل أو فات.</p>
+          </div>
+          <BookOpenCheck size={24} className="shrink-0 text-primary-600 dark:text-gold-300" />
+        </div>
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          <HistoryStat label="مكتمل" value={counts.done} style="text-success-700 dark:text-success-300" />
+          <HistoryStat label="قيد التنفيذ" value={counts.pending} style="text-primary-700 dark:text-primary-200" />
+          <HistoryStat label="فات" value={counts.missed} style="text-error-700 dark:text-error-300" />
+        </div>
+      </Card>
+
+      <div className="flex gap-1 overflow-x-auto rounded-xl bg-primary-50/80 p-1 dark:bg-primary-900/35">
+        {filters.map(({ key, label }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => onFilterChange(key)}
+            aria-pressed={filter === key}
+            className={`shrink-0 rounded-lg px-3 py-2 text-xs font-semibold transition ${
+              filter === key
+                ? 'bg-white text-primary-700 shadow-sm dark:bg-primary-800 dark:text-primary-100'
+                : 'text-gray-500 hover:text-primary-700 dark:text-gray-400 dark:hover:text-primary-100'
+            }`}
+          >
+            {label} ({toArabicNumber(counts[key])})
+          </button>
+        ))}
+      </div>
+
+      {tasks.length ? (
+        <div className="space-y-2.5">
+          {tasks.map((task) => (
+            <Card key={`${task.date}-${task.id ?? task.planId}-${task.portion}`} className="p-4!">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                    <Badge variant={task.type === 'hifz' ? 'gold' : 'primary'}>
+                      {task.type === 'hifz' ? 'حفظ' : 'مراجعة'}
+                    </Badge>
+                    <Badge variant={TASK_STATUS_VARIANTS[task.status]}>
+                      {task.status === 'done' && <Check size={11} />}
+                      {task.status === 'missed' && <X size={11} />}
+                      {TASK_STATUS_LABELS[task.status]}
+                    </Badge>
+                    {task.status === 'done' && task.strength && (
+                      <Badge variant={task.strength === 'strong' ? 'success' : task.strength === 'medium' ? 'warning' : 'error'}>
+                        {task.strength === 'strong' ? 'قوي' : task.strength === 'medium' ? 'متوسط' : 'يحتاج تثبيت'}
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="truncate text-sm font-bold text-primary-900 dark:text-primary-100">
+                    {describePortion(task.portion)}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {formatArabicDate(new Date(`${task.date}T12:00:00`))} · {task.scheduledTime}
+                  </p>
+                </div>
+                <Button size="sm" variant="secondary" onClick={() => onOpen(task)}>افتح الورد</Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          icon={<Calendar size={44} />}
+          title={filter === 'all' ? 'لا يوجد سجل خلال آخر ٣٠ يومًا' : 'لا توجد مهام بهذا التصنيف'}
+          description="ستظهر هنا مهام خطط الحفظ والمراجعة مع حالتها وتاريخها."
+        />
+      )}
+    </section>
+  );
+}
+
+function HistoryStat({ label, value, style }: { label: string; value: number; style: string }) {
+  return (
+    <div className="rounded-xl bg-white/80 px-2 py-2 text-center dark:bg-primary-950/50">
+      <p className={`text-lg font-bold ${style}`}>{toArabicNumber(value)}</p>
+      <p className="text-[0.625rem] leading-4 text-gray-500 dark:text-gray-400">{label}</p>
+    </div>
+  );
+}
+
 function ProgressStat({ value, label }: { value: number; label: string }) {
   return (
     <div className="rounded-xl border border-white/10 bg-white/10 px-2 py-2.5 text-center backdrop-blur-xs">
       <p className="text-xl font-bold">{toArabicNumber(value)}</p>
-      <p className="mt-0.5 text-[10px] leading-4 text-white/75 sm:text-xs">{label}</p>
+      <p className="mt-0.5 text-[0.625rem] leading-4 text-white/75 sm:text-xs">{label}</p>
     </div>
   );
 }
@@ -475,7 +715,7 @@ function SurahProgressCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <h3 className="font-bold text-primary-800 dark:text-primary-100">{name}</h3>
-            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] md:text-xs font-semibold ${status.style}`}>
+            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.625rem] md:text-xs font-semibold ${status.style}`}>
               <StatusIcon size={12} />
               {status.label}
             </span>
@@ -513,7 +753,7 @@ function SurahProgressCard({
               <button
                 type="button"
                 onClick={onMarkMemorized}
-                className="rounded-lg bg-success-50 px-2.5 py-1.5 text-[11px] md:text-xs font-semibold text-success-700 transition hover:bg-success-100 dark:bg-success-900/25 dark:text-success-300 dark:hover:bg-success-900/40"
+                className="rounded-lg bg-success-50 px-2.5 py-1.5 text-[0.6875rem] md:text-xs font-semibold text-success-700 transition hover:bg-success-100 dark:bg-success-900/25 dark:text-success-300 dark:hover:bg-success-900/40"
               >
                 تم الحفظ
               </button>
@@ -521,7 +761,7 @@ function SurahProgressCard({
             <button
               type="button"
               onClick={onMarkReviewed}
-              className="rounded-lg bg-primary-50 px-2.5 py-1.5 text-[11px] md:text-xs font-semibold text-primary-700 transition hover:bg-primary-100 dark:bg-primary-800/60 dark:text-primary-200 dark:hover:bg-primary-800"
+              className="rounded-lg bg-primary-50 px-2.5 py-1.5 text-[0.6875rem] md:text-xs font-semibold text-primary-700 transition hover:bg-primary-100 dark:bg-primary-800/60 dark:text-primary-200 dark:hover:bg-primary-800"
             >
               تمت المراجعة
             </button>
@@ -657,7 +897,7 @@ function CreatePlanModal({ onClose, onSave }: { onClose: () => void; onSave: (pl
           <div className="flex gap-2">
             <button
               onClick={() => setType('hifz')}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium ${type === 'hifz' ? 'bg-gold-500 text-white' : 'bg-gray-50 dark:bg-primary-800/30 text-gray-600 dark:text-gray-300'}`}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium ${type === 'hifz' ? 'bg-gold-500 text-gray-950' : 'bg-gray-50 dark:bg-primary-800/30 text-gray-600 dark:text-gray-300'}`}
             >
               حفظ جديد
             </button>

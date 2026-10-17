@@ -12,6 +12,7 @@ import { describeKhatmah } from '@/utils/khatmah';
 import { ADHKAR_STATE_KEY } from '@/utils/backup';
 import { normalizeCompletedDays } from '@/utils/adhkarDays';
 import { exportProgressReport } from '@/utils/exportPDF';
+import { useSnackbar } from '@/hooks/useSnackbar';
 import { YearHeatmap } from '@/components/YearHeatmap';
 
 interface ProgressScreenProps {
@@ -50,6 +51,7 @@ export function ProgressScreen({ settings }: ProgressScreenProps) {
   const [doneTasks, setDoneTasks] = useState(0);
   const [badgeProgress, setBadgeProgress] = useState<BadgeProgress[]>([]);
   const [isExporting, setIsExporting] = useState(false);
+  const { show, snackbar } = useSnackbar();
 
   const handleExportPDF = async () => {
     setIsExporting(true);
@@ -57,7 +59,10 @@ export function ProgressScreen({ settings }: ProgressScreenProps) {
       await exportProgressReport();
     } catch (error) {
       console.error('Export failed:', error);
-      alert('تعذّر تصدير تقرير التقدم');
+      // A bar, not a dialog: the export failed, nothing is pending an answer,
+      // and the person's other choice is a modal they must dismiss with a tap
+      // they did not want to spend. The app already has a bar for exactly this.
+      show({ message: 'تعذّر تصدير تقرير التقدم' });
     } finally {
       setIsExporting(false);
     }
@@ -264,7 +269,7 @@ export function ProgressScreen({ settings }: ProgressScreenProps) {
                 >
                   {badge.name}
                 </p>
-                <p className="mt-0.5 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
+                <p className="mt-0.5 text-[0.6875rem] leading-snug text-gray-500 dark:text-gray-400">
                   {badge.description}
                 </p>
 
@@ -289,7 +294,7 @@ export function ProgressScreen({ settings }: ProgressScreenProps) {
                         style={{ width: `${Math.round(fraction * 100)}%` }}
                       />
                     </div>
-                    <p className="mt-1 text-[10px] text-gray-400 dark:text-gray-500">
+                    <p className="mt-1 text-[0.625rem] text-gray-400 dark:text-gray-500">
                       {toArabicNumber(value)} من {toArabicNumber(target)}
                     </p>
                   </div>
@@ -299,6 +304,7 @@ export function ProgressScreen({ settings }: ProgressScreenProps) {
           </div>
         )}
       </Card>
+      {snackbar}
     </div>
   );
 }

@@ -1,5 +1,12 @@
 import Dexie, { type Table } from 'dexie';
-import { DEFAULT_IQAMAH_OFFSETS, type IqamahPrayerKey } from '@/utils/prayerTimes';
+import { type ColorPalette } from '@/utils/colorThemes';
+import {
+  CITY_PRESETS,
+  DEFAULT_IQAMAH_OFFSETS,
+  isEgyptianLocation,
+  type IqamahPrayerKey,
+  type PrayerTimeAdjustments,
+} from '@/utils/prayerTimes';
 
 // ---- Types ----
 
@@ -141,7 +148,7 @@ export interface Settings {
   syncId?: string;
   syncModifiedAt?: number;
   theme: 'light' | 'dark' | 'system';
-  colorPalette: 'emerald' | 'ocean' | 'plum' | 'sand';
+  colorPalette: ColorPalette;
   fontSize: number; // Quran font size in px
   notificationSound: boolean;
   adhanSound: boolean;
@@ -162,11 +169,19 @@ export interface Settings {
   /** -1 | 0 | 1 — manual correction when the displayed Hijri date is off by a day. */
   hijriAdjustment?: number;
   locationMethod: 'manual' | 'auto';
-  /** Icon style preference: 'lucide' (default), 'feather', 'heroicons' */
+  /**
+   * Line weight of every icon in the app. The ids keep the names of the icon sets the
+   * weights were borrowed from — `lucide` (default, no rule), `feather` (lighter),
+   * `heroicons` (heavier) — because rows in the wild already store them. Applied by
+   * `App` as `data-icon-style` on <html>; index.css owns the actual stroke widths.
+   */
   iconStyle?: 'lucide' | 'feather' | 'heroicons';
   /** Enable custom badge emojis */
   customBadgesEnabled?: boolean;
-  /** Show onboarding tips on home screen */
+  /**
+   * Legacy: the switch that wrote this was removed because no tips feature ever read
+   * it. Kept in the type so existing rows stay valid on read, backup and sync.
+   */
   showOnboardingTips?: boolean;
   /**
    * Minutes each prayer's iqamah follows its adhan (الجماعة), per mosque
@@ -175,6 +190,8 @@ export interface Settings {
    * falls back per key for a partially saved object.
    */
   iqamahOffsets?: Partial<Record<IqamahPrayerKey, number>>;
+   /** Per-prayer minute corrections for matching a trusted local mosque timetable. */
+   prayerTimeAdjustments?: PrayerTimeAdjustments;
 }
 
 export interface DayStreak {
@@ -368,7 +385,7 @@ const SETTINGS_ROW_ID = 1;
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'dark',
-  colorPalette: 'emerald',
+  colorPalette: 'ocean',
   fontSize: 28,
   notificationSound: true,
   adhanSound: true,
@@ -390,6 +407,7 @@ export const DEFAULT_SETTINGS: Settings = {
   customBadgesEnabled: true,
   showOnboardingTips: true,
   iqamahOffsets: { ...DEFAULT_IQAMAH_OFFSETS },
+  prayerTimeAdjustments: { fajr: 0, dhuhr: 0, asr: 0, maghrib: 0, isha: 0 },
 };
 
 export async function getSettings(): Promise<Settings> {
@@ -400,31 +418,26 @@ export async function getSettings(): Promise<Settings> {
   }
   // Rows are kept sorted by id so the read result is deterministic.
   const first = existing.reduce((min, row) => (row.id! < min.id! ? row : min));
-  // Earlier versions initialized fresh installs to Makkah with auto location enabled.
-  // Migrate only that exact untouched default; manually selected cities and GPS fixes
-  // have different names/methods and are deliberately preserved.
-  const isLegacyDefaultLocation =
-    first.locationMethod === 'auto' &&
-    first.cityName === 'مكة المكرمة' &&
-    first.latitude === 21.4225 &&
-    first.longitude === 39.8262;
   // Earlier versions defaulted the adhan voice to عاصم جاويد; the Makkah adhan is now the
   // out-of-the-box voice. Migrate only that exact untouched default — a deliberately
   // chosen voice is any other value and is preserved.
   const isLegacyDefaultAdhan = first.adhanVoiceId === 'asim_javed';
-  const settings = { ...DEFAULT_SETTINGS, ...first };
-  if (isLegacyDefaultLocation) {
-    Object.assign(settings, {
-      locationMethod: DEFAULT_SETTINGS.locationMethod,
-      cityName: DEFAULT_SETTINGS.cityName,
-      latitude: DEFAULT_SETTINGS.latitude,
-      longitude: DEFAULT_SETTINGS.longitude,
-    });
+  const settings = normalizeEgyptPrayerSettings({ ...DEFAULT_SETTINGS, ...first });
+  if (
+    first.calcMethod !== settings.calcMethod ||
+    first.latitude !== settings.latitude ||
+    first.longitude !== settings.longitude ||
+    first.cityName !== settings.cityName ||
+    first.timeZone !== settings.timeZone ||
+    first.locationMethod !== settings.locationMethod
+  ) {
     await db.settings.update(first.id!, {
-      locationMethod: DEFAULT_SETTINGS.locationMethod,
-      cityName: DEFAULT_SETTINGS.cityName,
-      latitude: DEFAULT_SETTINGS.latitude,
-      longitude: DEFAULT_SETTINGS.longitude,
+      calcMethod: settings.calcMethod,
+      latitude: settings.latitude,
+      longitude: settings.longitude,
+      cityName: settings.cityName,
+      timeZone: settings.timeZone,
+      locationMethod: settings.locationMethod,
     });
   }
   if (isLegacyDefaultAdhan) {
@@ -442,12 +455,53 @@ export async function updateSettings(patch: Partial<Settings>): Promise<Settings
   // made every settings save one database round trip more than it needed.
   const existing = await db.settings.toArray();
   if (existing.length === 0) {
-    const created: Settings = { ...DEFAULT_SETTINGS, ...patch, id: SETTINGS_ROW_ID };
+    const created = normalizeEgyptPrayerSettings({
+      ...DEFAULT_SETTINGS,
+      ...patch,
+      id: SETTINGS_ROW_ID,
+    });
     await db.settings.put(created);
     return created;
   }
   const current = existing.reduce((min, row) => (row.id! < min.id! ? row : min));
-  const merged: Settings = { ...current, ...patch, id: SETTINGS_ROW_ID };
-  await db.settings.update(current.id!, { ...patch, id: SETTINGS_ROW_ID });
+  const merged = normalizeEgyptPrayerSettings({
+    ...current,
+    ...patch,
+    id: SETTINGS_ROW_ID,
+  });
+  await db.settings.update(current.id!, {
+    ...patch,
+    id: SETTINGS_ROW_ID,
+    calcMethod: merged.calcMethod,
+    latitude: merged.latitude,
+    longitude: merged.longitude,
+    cityName: merged.cityName,
+    timeZone: merged.timeZone,
+    locationMethod: merged.locationMethod,
+  });
   return merged;
+}
+
+function normalizeEgyptPrayerSettings(settings: Settings): Settings {
+  const hasEgyptianLocation = isEgyptianLocation(
+    settings.latitude ?? Number.NaN,
+    settings.longitude ?? Number.NaN,
+  );
+  const cityName = !hasEgyptianLocation
+    ? DEFAULT_SETTINGS.cityName
+    : settings.locationMethod === 'auto'
+      ? 'موقعي داخل مصر'
+      : CITY_PRESETS.some((city) => city.name === settings.cityName)
+        ? settings.cityName!
+        : DEFAULT_SETTINGS.cityName;
+
+  return {
+    ...settings,
+    calcMethod: 'Egyptian',
+    latitude: hasEgyptianLocation ? settings.latitude : DEFAULT_SETTINGS.latitude,
+    longitude: hasEgyptianLocation ? settings.longitude : DEFAULT_SETTINGS.longitude,
+    cityName,
+    timeZone: 'Africa/Cairo',
+    locationMethod: settings.locationMethod === 'auto' ? 'auto' : 'manual',
+  };
 }

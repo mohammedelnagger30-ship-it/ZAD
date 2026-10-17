@@ -206,16 +206,16 @@ export function TafsirBottomSheet({ surahId, ayahNumber, onClose, onNavigateAyah
                         {e.titleAr}
                       </span>
                       {have > 0 && (
-                        <span className="text-[11px] text-success-600 dark:text-success-400 shrink-0">
+                        <span className="text-[0.6875rem] text-success-600 dark:text-success-400 shrink-0">
                           {have === e.surahs ? 'كامل' : `${have} من ${e.surahs} سورة`}
                         </span>
                       )}
                     </div>
                     <div className="flex items-center justify-between gap-2 mt-0.5">
-                      <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                      <span className="text-[0.6875rem] text-gray-500 dark:text-gray-400">
                         {e.authorAr}
                       </span>
-                      <span className="text-[11px] text-gray-400 dark:text-gray-500 shrink-0">
+                      <span className="text-[0.6875rem] text-gray-400 dark:text-gray-500 shrink-0">
                         {formatBytes(e.totalBytes)}
                       </span>
                     </div>
@@ -311,7 +311,7 @@ export function TafsirBottomSheet({ surahId, ayahNumber, onClose, onNavigateAyah
                   {edition?.titleAr} — {edition?.authorAr}
                 </p>
                 {edition && !edition.surahBytes.every((b) => b > 0) && (
-                  <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                  <span className="text-[0.6875rem] text-gray-400 dark:text-gray-500">
                     {toArabicNumber(edition.ayahs)} من {toArabicNumber(TOTAL_QURAN_AYAHS)} آية
                   </span>
                 )}

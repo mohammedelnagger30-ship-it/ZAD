@@ -464,7 +464,7 @@ export function AzanOverlayModal({
                 )}
                 <div className="truncate text-right">
                   <p className="text-xs font-semibold text-white truncate">{adhanSound.name}</p>
-                  <p className="text-[11px] text-emerald-400">{soundStatus}</p>
+                  <p className="text-[0.6875rem] text-emerald-400">{soundStatus}</p>
                 </div>
               </div>
 
@@ -518,7 +518,7 @@ export function AzanOverlayModal({
               <p className="text-sm font-semibold text-emerald-100 leading-relaxed font-serif">
                 "{AFTER_AZAN_DUAA.text}"
               </p>
-              <p className="text-[11px] text-amber-200/80 italic">
+              <p className="text-[0.6875rem] text-amber-200/80 italic">
                 {AFTER_AZAN_DUAA.benefit}
               </p>
             </div>

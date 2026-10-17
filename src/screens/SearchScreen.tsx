@@ -41,7 +41,7 @@ const SOURCE_ICONS: Record<UnifiedSource, typeof BookOpen> = {
 /** One neutral pill for all four. The icon and the word carry the difference;
  *  a colour code would be a fifth thing for the reader to learn. */
 const SOURCE_PILL =
-  'inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-bold text-gray-600 dark:bg-gray-800 dark:text-gray-300';
+  'inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 text-[0.6875rem] font-bold text-gray-600 dark:bg-gray-800 dark:text-gray-300';
 
 export function SearchScreen({ navigate }: SearchScreenProps) {
   const [query, setQuery] = useState('');

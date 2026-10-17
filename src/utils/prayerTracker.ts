@@ -1,6 +1,6 @@
 ﻿import { db, type PrayerRecord, type SunnahRecord } from '@/db/database';
 import { formatDateKey, addDays, getLast7Days, getDayNameShort } from '@/utils/dateUtils';
-import { calculatePrayerTimes } from '@/utils/prayerTimes';
+import { calculatePrayerTimes, type PrayerTimeAdjustments } from '@/utils/prayerTimes';
 import { trustedNow, trustedNowMs } from '@/utils/clock';
 
 export async function getPrayerRecord(date: string, prayer: string): Promise<PrayerRecord | undefined> {
@@ -297,6 +297,7 @@ export interface PrayerGridLocation {
   calcMethod: string;
   asrMadhab: 'standard' | 'hanafi';
   timeZone?: string;
+  prayerTimeAdjustments?: PrayerTimeAdjustments;
 }
 
 const allDue = (): Record<PrayerKey, boolean> =>
@@ -350,6 +351,7 @@ export async function getPrayerGrid(location?: PrayerGridLocation): Promise<DayP
       location.calcMethod,
       location.asrMadhab,
       location.timeZone,
+      location.prayerTimeAdjustments,
     );
     todayDue = noDue();
     for (const p of times.prayers) {

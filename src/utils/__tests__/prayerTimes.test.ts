@@ -10,6 +10,10 @@ import {
   formatTime12h,
   zoneOffsetMs,
   DEFAULT_IQAMAH_OFFSETS,
+  CALC_METHODS,
+  CITY_PRESETS,
+  getCalcMethod,
+  isEgyptianLocation,
 } from '@/utils/prayerTimes';
 
 /**
@@ -35,6 +39,27 @@ function withBrokenPlatformFormatter<T>(run: () => T): T {
     spy.mockRestore();
   }
 }
+
+describe('Egypt prayer scope', () => {
+  it('uses the Egyptian calculation method regardless of legacy saved methods', () => {
+    expect(CALC_METHODS).toEqual(['Egyptian']);
+    expect(getCalcMethod('MWL')).toEqual(getCalcMethod('Egyptian'));
+    expect(getCalcMethod('Egyptian').methodAdjustments.dhuhr).toBe(0);
+  });
+
+  it('offers only Egyptian preset cities and accepts only Egypt GPS coordinates', () => {
+    expect(CITY_PRESETS.map((city) => city.name)).toEqual([
+      'القاهرة', 'الإسكندرية', 'الجيزة', 'بنها', 'طنطا', 'شبين الكوم', 'دمنهور',
+      'كفر الشيخ', 'دمياط', 'المنصورة', 'الزقازيق', 'الإسماعيلية', 'بورسعيد',
+      'السويس', 'العريش', 'الطور', 'بني سويف', 'الفيوم', 'المنيا', 'أسيوط',
+      'سوهاج', 'قنا', 'الأقصر', 'أسوان', 'الغردقة', 'مرسى مطروح', 'الخارجة',
+    ]);
+    expect(CITY_PRESETS.every((city) => isEgyptianLocation(city.latitude, city.longitude))).toBe(true);
+    expect(isEgyptianLocation(30.0444, 31.2357)).toBe(true);
+    expect(isEgyptianLocation(51.5074, -0.1278)).toBe(false);
+    expect(isEgyptianLocation(Number.NaN, 31.2357)).toBe(false);
+  });
+});
 
 describe('calendarDayInZone', () => {
   it('reads the city day, not the device day', () => {
@@ -178,6 +203,46 @@ describe('calculatePrayerTimes', () => {
     expect(times).toEqual(sorted);
   });
 
+  it('applies mosque corrections to each prayer without changing sunrise', () => {
+    const base = calculatePrayerTimes(
+      30.0444, 31.2357, day, 'MWL', 'standard', 'Africa/Cairo',
+    );
+    const adjusted = calculatePrayerTimes(
+      30.0444,
+      31.2357,
+      day,
+      'MWL',
+      'standard',
+      'Africa/Cairo',
+      { fajr: -3, dhuhr: 2, asr: 0, maghrib: 4, isha: -2 },
+    );
+
+    for (const name of ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha']) {
+      const original = base.prayers.find((prayer) => prayer.name === name)!;
+      const corrected = adjusted.prayers.find((prayer) => prayer.name === name)!;
+      const minutes = { fajr: -3, dhuhr: 2, asr: 0, maghrib: 4, isha: -2 }[
+        name as 'fajr' | 'dhuhr' | 'asr' | 'maghrib' | 'isha'
+      ];
+      expect(corrected.time.getTime() - original.time.getTime()).toBe(minutes * 60_000);
+    }
+    expect(
+      adjusted.prayers.find((prayer) => prayer.name === 'sunrise')!.time.getTime(),
+    ).toBe(base.prayers.find((prayer) => prayer.name === 'sunrise')!.time.getTime());
+  });
+
+  it('clamps malformed mosque corrections to thirty minutes', () => {
+    const base = calculatePrayerTimes(
+      30.0444, 31.2357, day, 'MWL', 'standard', 'Africa/Cairo',
+    );
+    const adjusted = calculatePrayerTimes(
+      30.0444, 31.2357, day, 'MWL', 'standard', 'Africa/Cairo', { fajr: -999 },
+    );
+    expect(
+      adjusted.prayers.find((prayer) => prayer.name === 'fajr')!.time.getTime()
+        - base.prayers.find((prayer) => prayer.name === 'fajr')!.time.getTime(),
+    ).toBe(-30 * 60_000);
+  });
+
   it('falls back to finite times when coordinates are not numbers', () => {
     const result = calculatePrayerTimes(NaN, NaN, day, 'MWL', 'standard', 'Africa/Cairo');
     expect(result.prayers.length).toBeGreaterThan(0);
@@ -213,18 +278,16 @@ describe('getNextPrayer', () => {
 });
 
 describe('getPrayerTimeZone', () => {
-  it('prefers a valid stored zone', () => {
-    expect(getPrayerTimeZone('Asia/Tokyo', 'Cairo')).toBe('Asia/Tokyo');
+  it('always pins prayer times to Egypt even if legacy settings have another zone', () => {
+    expect(getPrayerTimeZone('Asia/Tokyo', 'القاهرة')).toBe('Africa/Cairo');
   });
 
-  it('falls back to the preset city zone when the stored zone is invalid', () => {
-    expect(getPrayerTimeZone('not/a/zone', 'إسطنبول')).toBe('Europe/Istanbul');
+  it('does not accept a legacy city from another country', () => {
+    expect(getPrayerTimeZone('not/a/zone', 'إسطنبول')).toBe('Africa/Cairo');
   });
 
-  it('falls back to the device zone when nothing else resolves', () => {
-    expect(getPrayerTimeZone('not/a/zone', 'No Such City')).toBe(
-      Intl.DateTimeFormat().resolvedOptions().timeZone,
-    );
+  it('stays on Cairo time when no location metadata is available', () => {
+    expect(getPrayerTimeZone('not/a/zone', 'No Such City')).toBe('Africa/Cairo');
   });
 });
 

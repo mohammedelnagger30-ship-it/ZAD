@@ -308,7 +308,7 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
                         {bm.page !== undefined && (
                           <Badge variant="gold">صفحة {toArabicNumber(bm.page)}</Badge>
                         )}
-                        <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                        <span className="text-[0.6875rem] text-gray-400 dark:text-gray-500">
                           {new Date(bm.createdAt).toLocaleDateString('ar-EG', {
                             year: 'numeric',
                             month: 'long',
@@ -385,7 +385,7 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
                   <p className="text-sm font-bold text-primary-800 dark:text-primary-100">
                     الصفحة {toArabicNumber(bm.page)}
                   </p>
-                  <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">
+                  <p className="mt-0.5 text-[0.6875rem] text-gray-400 dark:text-gray-500">
                     {new Date(bm.createdAt).toLocaleDateString('ar-EG', {
                       month: 'long',
                       day: 'numeric',

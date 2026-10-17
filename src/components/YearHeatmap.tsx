@@ -90,7 +90,7 @@ export function YearHeatmap() {
             {grid.monthLabels.map((month, index) => (
               <div
                 key={index}
-                className="w-4 shrink-0 overflow-visible whitespace-nowrap text-[9px] leading-none text-gray-500 dark:text-gray-400 md:w-5"
+                className="w-4 shrink-0 overflow-visible whitespace-nowrap text-[0.5625rem] leading-none text-gray-500 dark:text-gray-400 md:w-5"
               >
                 {month !== null ? ARABIC_MONTHS[month] : ''}
               </div>

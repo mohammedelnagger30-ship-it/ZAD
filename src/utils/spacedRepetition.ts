@@ -302,29 +302,51 @@ export async function recordQuizResult(
   grade: HifzGrade,
 ): Promise<HifzReview> {
   const key = reviewRangeKey(surahId, fromAyah, toAyah);
-  const existing = await db.hifzReviews.where('key').equals(key).first();
   const now = trustedNowMs();
-  const { state, dueAt } = scheduleReview(
-    existing
-      ? { ease: existing.ease, intervalDays: existing.intervalDays, repetitions: existing.repetitions, lapses: existing.lapses }
-      : initialReviewState(),
-    GRADE_QUALITY[grade],
-    now,
-  );
-  const row = {
-    key,
-    surahId,
-    fromAyah,
-    toAyah,
-    ...state,
-    dueAt,
-    lastGrade: grade,
-    lastReviewedAt: now,
-  };
-  if (existing?.id !== undefined) {
-    await db.hifzReviews.put({ ...row, id: existing.id });
-    return { ...row, id: existing.id };
-  }
-  const id = await db.hifzReviews.add(row);
-  return { ...row, id };
+  // One transaction, not a read followed by a write. IndexedDB runs two
+  // readwrite transactions against the same store strictly one after the
+  // other, so the second call now waits for the first instead of racing it:
+  // it finds the row the first created and updates it. Read-then-write had
+  // both calls see "no row yet" and both add one, leaving the same portion
+  // with a row per tap and the schedule quietly forked.
+  return db.transaction('rw', db.hifzReviews, async () => {
+    const found = await db.hifzReviews.where('key').equals(key).toArray();
+    // Heal duplicates an earlier double tap left behind: the row the person
+    // graded last carries the freshest state, so the older copies go.
+    const existing = found.reduce<HifzReview | null>(
+      (newest, row) => (!newest || row.lastReviewedAt > newest.lastReviewedAt ? row : newest),
+      null,
+    );
+    if (existing && found.length > 1) {
+      const stale = found
+        .filter((row) => row.id !== existing.id)
+        .map((row) => row.id)
+        .filter((id): id is number => id !== undefined);
+      if (stale.length > 0) await db.hifzReviews.bulkDelete(stale);
+    }
+
+    const { state, dueAt } = scheduleReview(
+      existing
+        ? { ease: existing.ease, intervalDays: existing.intervalDays, repetitions: existing.repetitions, lapses: existing.lapses }
+        : initialReviewState(),
+      GRADE_QUALITY[grade],
+      now,
+    );
+    const row = {
+      key,
+      surahId,
+      fromAyah,
+      toAyah,
+      ...state,
+      dueAt,
+      lastGrade: grade,
+      lastReviewedAt: now,
+    };
+    if (existing?.id !== undefined) {
+      await db.hifzReviews.put({ ...row, id: existing.id });
+      return { ...row, id: existing.id };
+    }
+    const id = await db.hifzReviews.add(row);
+    return { ...row, id };
+  });
 }

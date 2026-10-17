@@ -1,4 +1,5 @@
 import { toArabicNumber } from '@/data/surahs';
+import { Capacitor } from '@capacitor/core';
 
 /**
  * Sharing an ayah as a picture, not as a string of text.
@@ -76,6 +77,11 @@ export interface AyahShareInput {
   ayahText: string;
   surahName: string;
   ayahNumber: number;
+}
+
+export interface PreparedAyahShare {
+  blob: Blob;
+  nativeUri?: string;
 }
 
 export type ShareOutcome =
@@ -202,6 +208,50 @@ export async function renderAyahCard(input: AyahShareInput): Promise<Blob | null
     } catch {
       resolve(null);
     }
+  });
+}
+
+export async function prepareAyahShare(input: AyahShareInput): Promise<PreparedAyahShare | null> {
+  try {
+    const blob = await renderAyahCard(input);
+    if (!blob) return null;
+    if (!Capacitor.isNativePlatform()) return { blob };
+
+    try {
+      const { Directory, Filesystem } = await import('@capacitor/filesystem');
+      const data = await blobToBase64(blob);
+      const { uri } = await Filesystem.writeFile({
+        path: 'daily-quran-message.png',
+        data,
+        directory: Directory.Cache,
+      });
+      return { blob, nativeUri: uri };
+    } catch (error) {
+      console.warn('Could not prepare the Quran message image for native sharing:', error);
+      return { blob };
+    }
+  } catch {
+    return null;
+  }
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') {
+        reject(new Error('Image could not be encoded for sharing.'));
+        return;
+      }
+      const separator = reader.result.indexOf(',');
+      if (separator < 0) {
+        reject(new Error('Image data is not a valid data URL.'));
+        return;
+      }
+      resolve(reader.result.slice(separator + 1));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('Image could not be read for sharing.'));
+    reader.readAsDataURL(blob);
   });
 }
 
@@ -359,14 +409,55 @@ function drawReference(context: CanvasRenderingContext2D, surahName: string, aya
  * the person cancelling — sending a second sheet after they closed the first
  * would be the app not listening.
  */
-export async function shareAyahCard(input: AyahShareInput): Promise<ShareOutcome> {
+export async function shareAyahCard(
+  input: AyahShareInput,
+  preparedShare?: PreparedAyahShare | null,
+): Promise<ShareOutcome> {
   if (typeof navigator === 'undefined' || !navigator.share) {
+    if (Capacitor.isNativePlatform() && preparedShare?.nativeUri) {
+      try {
+        const { Share } = await import('@capacitor/share');
+        await Share.share({
+          files: [preparedShare.nativeUri],
+          text: composeSharePayload(input),
+          title: 'رسالة اليوم من القرآن',
+          dialogTitle: 'مشاركة آية اليوم',
+        });
+        return 'shared';
+      } catch (error) {
+        console.warn('Could not share the Quran message image natively:', error);
+        try {
+          const { Share } = await import('@capacitor/share');
+          await Share.share({ text: composeSharePayload(input), title: 'رسالة اليوم من القرآن' });
+          return 'shared';
+        } catch (textShareError) {
+          console.warn('Could not share the Quran message text natively:', textShareError);
+          return copyToClipboard(composeSharePayload(input));
+        }
+      }
+    }
     return copyToClipboard(composeSharePayload(input));
   }
 
   const payload = composeSharePayload(input);
-  const blob = await renderAyahCard(input).catch(() => null);
-  const file = blob ? toPngFile(blob, input) : null;
+  const prepared = preparedShare === undefined
+    ? await prepareAyahShare(input)
+    : preparedShare;
+  if (Capacitor.isNativePlatform() && prepared?.nativeUri) {
+    try {
+      const { Share } = await import('@capacitor/share');
+      await Share.share({
+        files: [prepared.nativeUri],
+        text: payload,
+        title: 'رسالة اليوم من القرآن',
+        dialogTitle: 'مشاركة آية اليوم',
+      });
+      return 'shared';
+    } catch (error) {
+      console.warn('Could not share the Quran message image natively:', error);
+    }
+  }
+  const file = prepared ? toPngFile(prepared.blob, input) : null;
 
   if (file && navigator.canShare?.({ files: [file] })) {
     try {

@@ -79,17 +79,17 @@ export function KhatmahCard() {
             <div className="grid grid-cols-3 gap-2 md:gap-3 text-center">
               <div className="rounded-2xl bg-primary-50/70 py-2 dark:bg-primary-900/30">
                 <p className="text-lg font-bold text-primary-800 dark:text-gold-400">{toArabicNumber(khatmahStatus.completed)}</p>
-                <p className="text-[10px] text-gray-500 dark:text-gray-400">صفحة مقروءة</p>
+                <p className="text-[0.625rem] text-gray-500 dark:text-gray-400">صفحة مقروءة</p>
               </div>
               <div className="rounded-2xl bg-primary-50/70 py-2 dark:bg-primary-900/30">
                 <p className="text-lg font-bold text-primary-800 dark:text-gold-400">{toArabicNumber(khatmahStatus.remaining)}</p>
-                <p className="text-[10px] text-gray-500 dark:text-gray-400">صفحة متبقية</p>
+                <p className="text-[0.625rem] text-gray-500 dark:text-gray-400">صفحة متبقية</p>
               </div>
               <div className="rounded-2xl bg-primary-50/70 py-2 dark:bg-primary-900/30">
                 <p className="text-lg font-bold text-primary-800 dark:text-gold-400">
                   {khatmahStatus.pagesPerDay !== null ? toArabicNumber(khatmahStatus.pagesPerDay) : '—'}
                 </p>
-                <p className="text-[10px] text-gray-500 dark:text-gray-400">صفحة اليوم</p>
+                <p className="text-[0.625rem] text-gray-500 dark:text-gray-400">صفحة اليوم</p>
               </div>
             </div>
 
@@ -106,7 +106,7 @@ export function KhatmahCard() {
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-2 gap-y-1">
-              <p className="text-[11px] md:text-xs min-w-0 truncate text-gray-500 dark:text-gray-400">
+              <p className="text-[0.6875rem] md:text-xs min-w-0 truncate text-gray-500 dark:text-gray-400">
                 {khatmah.targetDate
                   ? khatmahStatus.daysLeft !== null && khatmahStatus.daysLeft > 0
                     ? `باقٍ ${toArabicNumber(khatmahStatus.daysLeft)} يومًا على هدف ${khatmah.targetDate}`

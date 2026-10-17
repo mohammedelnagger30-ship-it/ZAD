@@ -1,4 +1,4 @@
-import type { KeyboardEvent, ReactNode } from 'react';
+import type { CSSProperties, KeyboardEvent, ReactNode } from 'react';
 
 interface CardProps {
   children: ReactNode;
@@ -30,11 +30,13 @@ export function Card({ children, className = '', onClick, noPadding }: CardProps
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
       className={`
-        bg-white dark:bg-primary-900/40
+        bg-panel dark:bg-raised
         rounded-2xl shadow-sm
-        border border-primary-100 dark:border-primary-800/40
+        border border-primary-100/80 dark:border-primary-800/60
         transition-smooth
-        ${onClick ? 'cursor-pointer hover:shadow-md hover:border-primary-300 dark:hover:border-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:focus-visible:ring-gold-400' : ''}
+        ${onClick
+          ? 'cursor-pointer hover:shadow-md hover:border-primary-300 dark:hover:border-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:focus-visible:ring-gold-400'
+          : 'motion-safe:transition-all duration-200 hover:shadow-md hover:border-primary-200/80 dark:hover:border-primary-700/80'}
         ${noPadding ? '' : 'p-4 md:p-5'}
         ${className}
       `}
@@ -73,6 +75,8 @@ interface ButtonProps {
   fullWidth?: boolean;
   disabled?: boolean;
   className?: string;
+  /** Inline override for the fill (e.g. the active palette's gradient). Wins over `variant`. */
+  style?: CSSProperties;
 }
 
 export function Button({
@@ -83,15 +87,23 @@ export function Button({
   fullWidth,
   disabled,
   className = '',
+  style,
 }: ButtonProps) {
   const variants: Record<string, string> = {
     primary: 'bg-primary-600 hover:bg-primary-700 text-white shadow-sm',
     secondary: 'bg-primary-100 hover:bg-primary-200 dark:bg-primary-800 dark:hover:bg-primary-700 text-primary-700 dark:text-primary-100',
-    gold: 'bg-gold-500 hover:bg-gold-600 text-white shadow-sm',
+    // These four sit on bright fills — gold-500, success-500, warning-500,
+    // error-500 — and white on them measures 2.38, 2.28, 2.15 and 3.76:1, all
+    // under the 4.5:1 a label needs. Stepping a shade darker does not rescue
+    // them either: -600 lands at 3.63/3.30/3.19, still short. So the fill stays
+    // bright — it is the app's identity — and the text goes dark instead, which
+    // buys 8.09/8.43/8.95/5.11:1 and leaves `hover:` pointing at -600 exactly
+    // where it was. No palette entry moves, so nothing else in the app shifts.
+    gold: 'bg-gold-500 hover:bg-gold-600 text-gray-950 shadow-sm',
     ghost: 'hover:bg-primary-50 dark:hover:bg-primary-800/40 text-primary-700 dark:text-primary-200',
-    success: 'bg-success-500 hover:bg-success-600 text-white shadow-sm',
-    error: 'bg-error-500 hover:bg-error-600 text-white shadow-sm',
-    warning: 'bg-warning-500 hover:bg-warning-600 text-white shadow-sm',
+    success: 'bg-success-500 hover:bg-success-600 text-gray-950 shadow-sm',
+    error: 'bg-error-500 hover:bg-error-600 text-gray-950 shadow-sm',
+    warning: 'bg-warning-500 hover:bg-warning-600 text-gray-950 shadow-sm',
   };
   const sizes: Record<string, string> = {
     // sm keeps the compact look but no longer shrinks below a tappable 40px.
@@ -103,6 +115,7 @@ export function Button({
     <button
       onClick={onClick}
       disabled={disabled}
+      style={style}
       className={`
         font-medium transition-smooth active:scale-95
         disabled:opacity-50 disabled:cursor-not-allowed
@@ -119,6 +132,54 @@ export function Button({
 export interface BadgeProps {
   children: ReactNode;
   variant?: 'primary' | 'gold' | 'success' | 'warning' | 'error' | 'neutral';
+}
+
+/**
+ * A labelled on/off switch.
+ *
+ * It is a real switch to assistive tech (`role` + `aria-checked`) rather than a bare
+ * icon that only *looks* toggleable, and the track itself carries the state — a grey
+ * knob on a hairline label is something sighted users miss too.
+ */
+export interface ToggleRowProps {
+  label: string;
+  /** Second line under the label: what the setting actually changes. */
+  description?: string;
+  icon?: ReactNode;
+  value: boolean;
+  onChange: (value: boolean) => void;
+  disabled?: boolean;
+}
+
+export function ToggleRow({ label, description, icon, value, onChange, disabled }: ToggleRowProps) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-1.5">
+      <div className="flex min-w-0 items-center gap-2.5">
+        {icon}
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-primary-900 dark:text-primary-100">{label}</p>
+          {description && <p className="text-xs text-gray-500 dark:text-gray-400">{description}</p>}
+        </div>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={value}
+        aria-label={label}
+        disabled={disabled}
+        onClick={() => onChange(!value)}
+        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50 ${
+          value ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-700'
+        }`}
+      >
+        <span
+          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+            value ? '-translate-x-5' : 'translate-x-0'
+          }`}
+        />
+      </button>
+    </div>
+  );
 }
 
 export function Badge({ children, variant = 'primary' }: BadgeProps) {

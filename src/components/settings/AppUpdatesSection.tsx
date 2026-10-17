@@ -41,7 +41,7 @@ export function AppUpdatesSection() {
                   <p className="text-sm font-bold text-primary-900 dark:text-primary-100">
                     يتوفر إصدار جديد: {appUpdate.version}
                   </p>
-                  <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold text-amber-800 dark:bg-amber-900/60 dark:text-amber-300">
+                  <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[0.6875rem] font-bold text-amber-800 dark:bg-amber-900/60 dark:text-amber-300">
                     تحديث جديد
                   </span>
                 </div>

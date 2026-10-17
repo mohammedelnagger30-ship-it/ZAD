@@ -31,7 +31,12 @@ import {
   getAyahPage,
   getAyahsInJuz,
 } from '../src/data/surahs';
-import { PRINTED_JUZ_START_PAGES } from '../src/data/mushafPrinted';
+import {
+  PRINTED_JUZ_START_PAGES,
+  PRINTED_TOTAL_PAGES,
+  printedAyahPage,
+} from '../src/data/mushafPrinted';
+import { PRINTED_PAGE_STARTS } from '../src/data/mushafPageStarts';
 import { TOTAL_PAGES } from '../src/data/mushafFlow';
 import { suggestPlan } from '../src/utils/taskManager';
 
@@ -48,6 +53,33 @@ const check = (label: string, actual: unknown, expected: unknown) => {
 };
 
 console.log(`\nour mushaf: ${TOTAL_PAGES} pages\n`);
+
+// The printable page index is licensed metadata and remains distinct from the reader's
+// custom pagination.
+check('licensed Madani metadata contains 604 page starts', PRINTED_PAGE_STARTS.length, PRINTED_TOTAL_PAGES);
+let wrongPrintedPageStarts = 0;
+for (const [index, [surahId, ayahNumber]] of PRINTED_PAGE_STARTS.entries()) {
+  const surah = getSurah(surahId);
+  if (!surah || printedAyahPage(surahId, ayahNumber, surah.ayahCount) !== index + 1) {
+    wrongPrintedPageStarts++;
+  }
+}
+check('every Tanzil page start maps to its exact printed page', wrongPrintedPageStarts, 0);
+check('printed page 2 opens at Al-Baqarah 2:1', printedAyahPage(2, 1, 286), 2);
+check('printed page 604 opens at Al-Ikhlas 112:1', printedAyahPage(112, 1, 4), 604);
+const printedPagesSeen = new Set<number>();
+let invalidPrintedAyahs = 0;
+for (const surah of SURAHS) {
+  let previousPage = 0;
+  for (let ayah = 1; ayah <= surah.ayahCount; ayah++) {
+    const page = printedAyahPage(surah.id, ayah, surah.ayahCount);
+    if (page < 1 || page > PRINTED_TOTAL_PAGES || page < previousPage) invalidPrintedAyahs++;
+    previousPage = page;
+    printedPagesSeen.add(page);
+  }
+}
+check('all ayahs have a monotonic printed page inside 1..604', invalidPrintedAyahs, 0);
+check('all 604 printed pages contain at least one ayah start', printedPagesSeen.size, PRINTED_TOTAL_PAGES);
 
 // ---- one page count, everywhere ----
 check('the reader, the surah table and the flow agree on the page count', [

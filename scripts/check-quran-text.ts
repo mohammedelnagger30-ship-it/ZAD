@@ -128,7 +128,7 @@ check('Al-Fatihah is 7 ayahs', getAyahs(1).length, 7);
 check('Al-Baqarah is 286 ayahs', getAyahs(2).length, 286);
 check('At-Tawbah is 129 ayahs (longest surah)', getAyahs(9).length, 129);
 check('An-Nas is 6 ayahs', getAyahs(114).length, 6);
-check('last ayah of the mushaf is An-Nas 6', getAyah(114, 6)?.text.length > 0, true);
+check('last ayah of the mushaf is An-Nas 6', (getAyah(114, 6)?.text.length ?? 0) > 0, true);
 check('out-of-range ayah returns undefined', getAyah(114, 7), undefined);
 check('unknown surah returns no ayahs', getAyahs(999).length, 0);
 

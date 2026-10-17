@@ -36,12 +36,14 @@ import java.io.File;
 /**
  * Arms the prayer-time takeover alarms behind the auto-opening adhan page.
  *
- * Each alarm is an exact {@link AlarmManager} wake-up targeting
+ * Each prayer is an <b>alarm-clock</b> alarm ({@link AlarmManager#setAlarmClock}) targeting
  * {@link AdhanOverlayReceiver}, which posts a full-screen-intent notification — the
- * sanctioned way for a closed app to put its own activity on the screen. The receiver
- * owns the notification (sound included, via the prayer channel); this plugin owns the
- * arming, and hands the launch/tap payload to JS so the overlay opens on the right
- * prayer.
+ * sanctioned way for a closed app to put its own activity on the screen. The alarm-clock
+ * API (rather than a plain exact alarm) is what makes the adhan survive the OEM battery
+ * cleaners on Xiaomi/Oppo/Huawei skins, which otherwise drop a closed app's alarms
+ * without a word. The receiver owns the notification (sound included, via the prayer
+ * channel); this plugin owns the arming, and hands the launch/tap payload to JS so the
+ * overlay opens on the right prayer.
  *
  * The JS scheduler calls {@code schedule()} with the whole drift-compensated batch on
  * every rebuild (mirroring the notification queue's swap semantics) and
@@ -164,29 +166,29 @@ public class AdhanOverlay extends Plugin {
         if (alarmManager == null) return false;
 
         long now = System.currentTimeMillis();
-        int next = -1;
+        boolean hasFutureAlarm = false;
+        boolean hasMissingAlarm = false;
         try {
             for (int i = 0; i < batch.length(); i += 1) {
                 JSONObject alarm = batch.getJSONObject(i);
-                if (alarm.optLong("at", 0L) > now) {
-                    next = i;
-                    break;
-                }
-            }
-            if (next < 0) return false; // the stored window is spent; the next open rebuilds it
+                if (alarm.optLong("at", 0L) <= now) continue;
+                hasFutureAlarm = true;
 
-            // Only the soonest alarm is probed: the set is armed and dropped as one,
-            // so one survivor proves the rest.
-            int id = batch.getJSONObject(next).optInt("id", -1);
-            if (id < 0) return false;
-            Intent probe = new Intent(context, AdhanOverlayReceiver.class);
-            probe.setAction(ACTION_ADHAN);
-            PendingIntent armed = PendingIntent.getBroadcast(
-                context, id, probe, PendingIntent.FLAG_NO_CREATE | PendingIntent.FLAG_IMMUTABLE);
-            if (armed != null) return false; // still armed — nothing to do
+                int id = alarm.optInt("id", -1);
+                if (id < 0) {
+                    Logger.warn(TAG, "Stored future adhan alarm has no valid id");
+                    return false;
+                }
+                Intent probe = new Intent(context, AdhanOverlayReceiver.class);
+                probe.setAction(ACTION_ADHAN);
+                PendingIntent armed = PendingIntent.getBroadcast(
+                    context, id, probe, PendingIntent.FLAG_NO_CREATE | PendingIntent.FLAG_IMMUTABLE);
+                if (armed == null) hasMissingAlarm = true;
+            }
+            if (!hasFutureAlarm || !hasMissingAlarm) return false;
 
             armBatch(context, alarmManager, batch);
-            Logger.info(TAG, "Adhan alarms were missing - re-armed the stored batch");
+            Logger.info(TAG, "One or more future adhan alarms were missing - re-armed the stored batch");
             return true;
         } catch (JSONException e) {
             Logger.error(TAG, "Stored adhan batch is unreadable", e);
@@ -235,13 +237,40 @@ public class AdhanOverlay extends Plugin {
             );
 
             if (canExact) {
-                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending);
+                // `setAlarmClock`, not `setExactAndAllowWhileIdle`.
+                //
+                // Both are exact and both survive Doze, but only the alarm-clock API is
+                // something the *system* treats as a clock the person set and is waiting
+                // for. Ordinary exact alarms — including `setExactAndAllowWhileIdle` — are
+                // still fair game for the OEM "battery cleaners" on MIUI, ColorOS, EMUI and
+                // friends: they drop a package's alarms without any broadcast, which is
+                // exactly the «الأذان ما بيطلعش والتطبيق مغلق» report. An alarm-clock
+                // alarm is instead held to the same standard as the built-in clock, is
+                // exempt from the doze idle-quota that defers the ordinary kind, and puts
+                // this app in the platform's allowlist to start work from the background
+                // (the full-screen takeover that follows it needs that standing).
+                alarmManager.setAlarmClock(
+                    new AlarmManager.AlarmClockInfo(at, showIntent(context, id, intent)),
+                    pending);
             } else {
                 alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending);
             }
             armedIds.put(id);
         }
         prefs(context).edit().putString(KEY_ARMED_IDS, armedIds.toString()).apply();
+    }
+
+    /**
+     * The intent behind the system's own «next alarm» row (status bar, lock screen,
+     * the built-in clock's list). It must open an <em>activity</em> — handing it the
+     * broadcast above would make that row fire a receiver the system already fired,
+     * so it is a launch of the adhan page instead, carrying the same prayer.
+     */
+    private static PendingIntent showIntent(Context context, int id, Intent launch) {
+        return PendingIntent.getActivity(
+            context, id, launch,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
     }
 
     private static JSONArray storedBatch(Context context) {
@@ -358,6 +387,12 @@ public class AdhanOverlay extends Plugin {
             && (Build.VERSION.SDK_INT < Build.VERSION_CODES.S
                 || alarmManager.canScheduleExactAlarms()));
 
+        NotificationManager notificationManager =
+            (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        out.put("fullScreenIntentAllowed", notificationManager != null
+            && (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+                || notificationManager.canUseFullScreenIntent()));
+
         boolean ignoringBattery = false;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
@@ -406,6 +441,14 @@ public class AdhanOverlay extends Plugin {
         if ("exact".equals(target)) {
             return new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
                 .setData(Uri.parse("package:" + context.getPackageName()));
+        }
+        if ("full-screen".equals(target)) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                return new Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT)
+                    .setData(Uri.parse("package:" + context.getPackageName()));
+            }
+            return new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, context.getPackageName());
         }
         if ("battery".equals(target)) {
             // The system's own exemption prompt — the only route that does not

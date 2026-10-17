@@ -876,12 +876,19 @@ export async function startCloudSync(
     if (disposed) void listener.remove();
     return listener;
   });
+  // A burst, not a series of events. Saving row after row on another device
+  // fires one realtime event per row, and each one used to start a full round
+  // of its own — pull, diff, push, apply — so a bulk save drove this device
+  // through dozens of back-to-back rounds for what was one write. Coalescing
+  // turns the burst into a single round that runs once the stream goes quiet,
+  // through the same window an ordinary local write already uses.
+  const handleRemoteChange = () => scheduleSync();
   const realtimeChannel = supabase
     .channel(`user-sync-${userId}`)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'user_sync_records', filter: `user_id=eq.${userId}` },
-      handleOnline,
+      handleRemoteChange,
     )
     .subscribe();
   syncRuntime = () => {

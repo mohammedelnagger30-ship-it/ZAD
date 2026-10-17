@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Check, X, Clock, Flame, BookOpen, Moon, Sunrise, BookText, ChevronLeft, Sparkles, Calendar, Heart, Repeat, Share2 } from 'lucide-react';
+import { Check, X, Clock, Flame, BookOpen, Moon, Sunrise, BookText, ChevronLeft, Sparkles, Calendar, Heart, Repeat, Share2, LoaderCircle } from 'lucide-react';
 import { Card, Button, Badge, SectionHeader, EmptyState, type BadgeProps } from '@/components/ui';
 import { PrayerStatusSheet } from '@/components/PrayerStatusSheet';
 import { type DailyTask, type Settings, type StrengthRating, type TaskStatus } from '@/db/database';
@@ -26,7 +26,7 @@ import { todayKey, formatArabicDate, getHijriDate, getDayName } from '@/utils/da
 // module is imported on demand in the effect below — a static import here would
 // put the full text chunk on the app's very first screen.
 import type { DailyQuranMessage } from '@/utils/dailyQuranMessage';
-import { shareAyahCard } from '@/utils/shareCard';
+import { prepareAyahShare, shareAyahCard, shareTextOrCopy, type PreparedAyahShare } from '@/utils/shareCard';
 import { getHadithCollection, hadithOfDay, installedCollections, HADITH_OF_DAY_BOOK } from '@/data/hadiths';
 import { toArabicNumber } from '@/data/surahs';
 import type { ScreenName, NavParams } from '@/hooks/useApp';
@@ -44,6 +44,12 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
   const [dailyQuranMessage, setDailyQuranMessage] = useState<DailyQuranMessage | null>(null);
   const [dailyQuranMessageError, setDailyQuranMessageError] = useState('');
   const [shareNotice, setShareNotice] = useState<string | null>(null);
+  const [preparedAyahCard, setPreparedAyahCard] = useState<PreparedAyahShare | null>(null);
+  const [isSharingAyah, setIsSharingAyah] = useState(false);
+  const [isSharingHadith, setIsSharingHadith] = useState(false);
+  const [hadithShareNotice, setHadithShareNotice] = useState<string | null>(null);
+  const shareInProgress = useRef(false);
+  const hadithShareInProgress = useRef(false);
   // Reference clock for the countdown: armed once, ticking per-second only in the
   // last minute before the next prayer (see useCountdownClock) instead of
   // re-rendering this screen every second of the day.
@@ -82,6 +88,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
         const { getDailyQuranMessage } = await import('@/utils/dailyQuranMessage');
         if (!alive) return;
         setDailyQuranMessage(getDailyQuranMessage(trustedNow()));
+        setPreparedAyahCard(null);
         setDailyQuranMessageError('');
       } catch (error) {
         if (!alive) return;
@@ -94,6 +101,22 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
     };
   }, [messageDayKey]);
 
+  useEffect(() => {
+    if (!dailyQuranMessage) return;
+    let alive = true;
+    void prepareAyahShare({
+      surahId: dailyQuranMessage.surahId,
+      ayahText: dailyQuranMessage.text,
+      surahName: dailyQuranMessage.surahName,
+      ayahNumber: dailyQuranMessage.ayahNumber,
+    }).then((blob) => {
+      if (alive) setPreparedAyahCard(blob);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [dailyQuranMessage]);
+
   /**
    * Sends the day's ayah as a picture.
    *
@@ -104,21 +127,31 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
    * phone say anything.
    */
   const shareDailyAyah = async () => {
-    if (!dailyQuranMessage) return;
-    const outcome = await shareAyahCard({
-      surahId: dailyQuranMessage.surahId,
-      ayahText: dailyQuranMessage.text,
-      surahName: dailyQuranMessage.surahName,
-      ayahNumber: dailyQuranMessage.ayahNumber,
-    });
-    if (outcome === 'shared' || outcome === 'cancelled') return;
-
-    setShareNotice(
-      outcome === 'copied'
-        ? 'المشاركة غير متاحة هنا — نُسخت الآية بدلاً منها.'
-        : 'تعذّرت المشاركة على هذا الجهاز.',
-    );
-    setTimeout(() => setShareNotice(null), 3000);
+    if (!dailyQuranMessage || shareInProgress.current) return;
+    shareInProgress.current = true;
+    setIsSharingAyah(true);
+    try {
+      const outcome = await shareAyahCard({
+        surahId: dailyQuranMessage.surahId,
+        ayahText: dailyQuranMessage.text,
+        surahName: dailyQuranMessage.surahName,
+        ayahNumber: dailyQuranMessage.ayahNumber,
+      }, preparedAyahCard);
+      if (outcome === 'shared' || outcome === 'cancelled') return;
+      setShareNotice(
+        outcome === 'copied'
+          ? 'نُسخت الآية ومصدرها — يمكنك إرسالها الآن.'
+          : 'تعذّرت المشاركة والنسخ على هذا الجهاز.',
+      );
+      setTimeout(() => setShareNotice(null), 3000);
+    } catch (error) {
+      console.error('Daily Quran ayah sharing failed:', error);
+      setShareNotice('تعذّرت المشاركة الآن. حاول مرة أخرى.');
+      setTimeout(() => setShareNotice(null), 3000);
+    } finally {
+      shareInProgress.current = false;
+      setIsSharingAyah(false);
+    }
   };
 
   // Prayer times for a calendar day never change while the day lasts; the shared
@@ -131,6 +164,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
     asrMadhab: settings.asrMadhab,
     timeZone: settings.timeZone,
     cityName: settings.cityName,
+    prayerTimeAdjustments: settings.prayerTimeAdjustments,
     now,
   });
 
@@ -187,9 +221,39 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
     };
   }, []);
 
+  const shareDailyHadith = async () => {
+    if (!hadith || hadithShareInProgress.current) return;
+    hadithShareInProgress.current = true;
+    setIsSharingHadith(true);
+    setHadithShareNotice(null);
+    try {
+      const outcome = await shareTextOrCopy(
+        `${hadith.text}\n\n${hadith.collectionTitle} — رقم ${toArabicNumber(hadith.number)}\nحديث اليوم من تطبيق قُرّة`,
+      );
+      if (outcome === 'copied') {
+        setHadithShareNotice('نُسخ الحديث ومصدره — يمكنك إرساله الآن.');
+        setTimeout(() => setHadithShareNotice(null), 3000);
+      } else if (outcome === 'failed') {
+        setHadithShareNotice('تعذّرت مشاركة الحديث أو نسخه.');
+        setTimeout(() => setHadithShareNotice(null), 3000);
+      }
+    } catch (error) {
+      console.error('Daily hadith sharing failed:', error);
+      setHadithShareNotice('تعذّرت مشاركة الحديث الآن. حاول مرة أخرى.');
+      setTimeout(() => setHadithShareNotice(null), 3000);
+    } finally {
+      hadithShareInProgress.current = false;
+      setIsSharingHadith(false);
+    }
+  };
+
   const handleConfirm = async (taskId: number, status: 'done' | 'missed', strength?: 'weak' | 'medium' | 'strong') => {
     await confirmTask(taskId, status, strength);
-    load();
+    try {
+      await rescheduleAllNotifications();
+    } finally {
+      await load();
+    }
   };
 
   const handleSnooze = async (taskId: number, minutes: number) => {
@@ -223,42 +287,86 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
     await load();
   };
 
+  // Calculate prayer progress towards next prayer
+  const prayerProgress = (() => {
+    if (!nextPrayer || !prayerResult?.prayers.length) return 0;
+    const nextIdx = prayerResult.prayers.findIndex((p) => p.name === nextPrayer.name);
+    const prevPrayer = nextIdx > 0 ? prayerResult.prayers[nextIdx - 1] : prayerResult.prayers[prayerResult.prayers.length - 1];
+    if (!prevPrayer) return 0;
+    const totalSpan = nextPrayer.time.getTime() - prevPrayer.time.getTime();
+    const elapsed = now.getTime() - prevPrayer.time.getTime();
+    if (totalSpan <= 0 || elapsed < 0) return 0;
+    return Math.min(100, Math.max(0, Math.round((elapsed / totalSpan) * 100)));
+  })();
+
   const pendingTasks = tasks.filter((t) => t.status === 'pending' || t.status === 'snoozed');
   const doneTasks = tasks.filter((t) => t.status === 'done');
 
   return (
     <div className="space-y-5 pb-4">
       {/* Header with greeting */}
-      <div className="bg-linear-to-bl from-primary-700 to-primary-900 dark:from-primary-800 dark:to-primary-950 rounded-3xl p-5 md:p-6 text-white relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-32 h-32 bg-gold-400/10 rounded-full -translate-x-16 -translate-y-16" />
-        <div className="absolute bottom-0 left-0 w-24 h-24 bg-gold-400/5 rounded-full translate-x-12 translate-y-12" />
+      <div
+        className="rounded-3xl p-5 md:p-6 text-white relative overflow-hidden shadow-xl"
+        style={{
+          background: 'var(--brand-gradient, linear-gradient(135deg, #1f734e 0%, #2f8f64 45%, #b84414 100%))',
+          boxShadow: '0 20px 40px -15px var(--brand-glow, rgba(31, 115, 78, 0.35))',
+        }}
+      >
+        <div
+          className="absolute -top-12 -left-12 w-44 h-44 rounded-full blur-2xl pointer-events-none opacity-40 animate-float"
+          style={{ background: 'var(--brand-to, #b84414)' }}
+        />
+        <div
+          className="absolute -bottom-10 -right-10 w-40 h-40 rounded-full blur-xl pointer-events-none opacity-35 animate-float-slow"
+          style={{ background: 'var(--brand-from, #1f734e)' }}
+        />
         <div className="relative">
           <div className="flex items-center justify-between mb-2">
             <div>
-              <p className="text-gold-300 text-sm">{getDayName(today)}</p>
-              <h1 className="text-2xl md:text-3xl font-bold mt-0.5">السلام عليكم</h1>
+              <p className="text-white/85 text-xs md:text-sm font-semibold tracking-wide">{getDayName(today)}</p>
+              <h1 className="text-2xl md:text-3xl font-extrabold mt-0.5 tracking-tight">السلام عليكم</h1>
             </div>
             <div className="text-left">
-              <p className="text-xs md:text-sm text-primary-200">{formatArabicDate(today)}</p>
-              <p className="text-xs md:text-sm text-gold-300 mt-0.5">{getHijriDate(today, settings.hijriAdjustment)}</p>
+              <p className="text-xs md:text-sm text-white/85 font-medium">{formatArabicDate(today)}</p>
+              <p className="text-xs md:text-sm text-white/90 font-semibold mt-0.5">{getHijriDate(today, settings.hijriAdjustment)}</p>
             </div>
           </div>
 
           {/* Next prayer card */}
           {nextPrayer && (
-            <div className="mt-4 bg-white/10 rounded-2xl p-3 backdrop-blur-xs">
+            <div className="mt-4 bg-white/15 dark:bg-black/20 rounded-2xl p-3.5 backdrop-blur-md border border-white/20 shadow-inner">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Sunrise size={20} className="text-gold-300" />
+                <div className="flex items-center gap-2.5">
+                  <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 backdrop-blur-sm text-white shadow-xs">
+                    <Sunrise size={20} />
+                    <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
+                      <span className="animate-ping-soft absolute inline-flex h-full w-full rounded-full bg-[var(--func-accent)] opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[var(--func-accent)] shadow-xs" />
+                    </span>
+                  </div>
                   <div>
-                    <p className="text-xs text-primary-200">الصلاة القادمة</p>
-                    <p className="font-bold text-gold-300">{nextPrayer.arabicName}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-[11px] text-white/85 font-medium">الصلاة القادمة</p>
+                      <span className="inline-block h-1 w-1 rounded-full bg-[var(--func-accent)] animate-pulse" />
+                    </div>
+                    <p className="font-bold text-base text-white">{nextPrayer.arabicName}</p>
                   </div>
                 </div>
                 <div className="text-left">
-                  <p className="font-bold text-lg">{formatTime12h(nextPrayer.time, prayerTimeZone)}</p>
-                  <p className="text-xs text-primary-200">{getTimeUntil(nextPrayer.time, now)}</p>
+                  <p className="font-bold text-lg md:text-xl text-white">{formatTime12h(nextPrayer.time, prayerTimeZone)}</p>
+                  <p className="text-xs text-white/80 font-medium">{getTimeUntil(nextPrayer.time, now)}</p>
                 </div>
+              </div>
+
+              {/* Live Prayer Elapsed Progress Bar */}
+              <div className="mt-3 pt-2.5 border-t border-white/15 flex items-center gap-2.5">
+                <div className="flex-1 h-1.5 rounded-full bg-black/20 overflow-hidden p-0.5 backdrop-blur-xs">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-white via-white/90 to-white/60 transition-all duration-1000 ease-out shadow-xs"
+                    style={{ width: `${prayerProgress}%` }}
+                  />
+                </div>
+                <span className="text-[10px] text-white/90 font-bold tabular-nums">{prayerProgress}%</span>
               </div>
             </div>
           )}
@@ -270,10 +378,10 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
         <button
           type="button"
           onClick={() => navigate('quran')}
-          className="flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 transition-all hover:scale-[1.02] active:scale-95"
+          className="group flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
         >
-          <div className="h-10 w-10 md:h-12 md:w-12 rounded-xl bg-primary-100 dark:bg-primary-800 text-primary-700 dark:text-gold-400 flex items-center justify-center mb-1.5 shadow-xs">
-            <BookOpen size={20} />
+          <div className="h-11 w-11 md:h-12 md:w-12 rounded-xl bg-gradient-to-br from-primary-600 to-primary-800 text-white flex items-center justify-center mb-1.5 shadow-md shadow-primary-700/25 transition-transform duration-200 group-hover:scale-110">
+            <BookOpen size={21} />
           </div>
           <span className="text-xs md:text-sm font-bold text-primary-900 dark:text-primary-100">المصحف</span>
         </button>
@@ -281,10 +389,10 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
         <button
           type="button"
           onClick={() => navigate('prayer')}
-          className="flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 transition-all hover:scale-[1.02] active:scale-95"
+          className="group flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
         >
-          <div className="h-10 w-10 md:h-12 md:w-12 rounded-xl bg-primary-100 dark:bg-primary-800 text-primary-700 dark:text-gold-400 flex items-center justify-center mb-1.5 shadow-xs">
-            <Moon size={20} />
+          <div className="h-11 w-11 md:h-12 md:w-12 rounded-xl bg-gradient-to-br from-primary-700 to-primary-900 text-white flex items-center justify-center mb-1.5 shadow-md shadow-primary-800/25 transition-transform duration-200 group-hover:scale-110">
+            <Moon size={21} />
           </div>
           <span className="text-xs md:text-sm font-bold text-primary-900 dark:text-primary-100">الصلاة</span>
         </button>
@@ -292,10 +400,10 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
         <button
           type="button"
           onClick={() => navigate('adhkar')}
-          className="flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 transition-all hover:scale-[1.02] active:scale-95"
+          className="group flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
         >
-          <div className="h-10 w-10 md:h-12 md:w-12 rounded-xl bg-primary-100 dark:bg-primary-800 text-primary-700 dark:text-gold-400 flex items-center justify-center mb-1.5 shadow-xs">
-            <Heart size={20} />
+          <div className="h-11 w-11 md:h-12 md:w-12 rounded-xl bg-gradient-to-br from-primary-600 to-accent-700 text-white flex items-center justify-center mb-1.5 shadow-md shadow-accent-700/25 transition-transform duration-200 group-hover:scale-110">
+            <Heart size={21} />
           </div>
           <span className="text-xs md:text-sm font-bold text-primary-900 dark:text-primary-100">الأذكار</span>
         </button>
@@ -303,27 +411,34 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
         <button
           type="button"
           onClick={() => navigate('tasbih')}
-          className="flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 transition-all hover:scale-[1.02] active:scale-95"
+          className="group flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
         >
-          <div className="h-10 w-10 md:h-12 md:w-12 rounded-xl bg-primary-100 dark:bg-primary-800 text-primary-700 dark:text-gold-400 flex items-center justify-center mb-1.5 shadow-xs">
-            <Repeat size={20} />
+          <div className="h-11 w-11 md:h-12 md:w-12 rounded-xl bg-gradient-to-br from-accent-600 to-primary-700 text-white flex items-center justify-center mb-1.5 shadow-md shadow-primary-700/25 transition-transform duration-200 group-hover:scale-110">
+            <Repeat size={21} />
           </div>
           <span className="text-xs md:text-sm font-bold text-primary-900 dark:text-primary-100">المسبحة</span>
         </button>
       </div>
 
-      <Card className="border-gold-200 bg-linear-to-bl from-gold-50 to-white dark:border-gold-800/50 dark:from-gold-900/20 dark:to-primary-900/50">
+      <Card className="border-gold-300/70 bg-gradient-to-bl from-gold-50/70 via-white to-primary-50/30 dark:border-gold-800/50 dark:from-gold-950/20 dark:via-primary-950/40 dark:to-primary-900/40 shadow-[0_8px_24px_-10px_var(--brand-glow)] transition-all duration-300 hover:shadow-lg">
         <div className="flex items-center gap-2 text-primary-700 dark:text-gold-300">
-          <Sparkles size={18} />
+          <Sparkles size={18} className="animate-pulse-soft text-accent-500 shrink-0" />
           <h2 className="flex-1 font-bold">رسالة اليوم من القرآن</h2>
           {dailyQuranMessage && (
             <button
               type="button"
               onClick={() => void shareDailyAyah()}
-              aria-label="مشاركة الآية كصورة"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-primary-600/70 transition-colors hover:bg-primary-100 hover:text-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-gold-400/80 dark:hover:bg-primary-800/40 dark:hover:text-gold-200"
+              disabled={isSharingAyah}
+              aria-label="مشاركة آية اليوم"
+              aria-busy={isSharingAyah}
+              title={isSharingAyah ? 'جارٍ تجهيز بطاقة الآية للمشاركة' : 'مشاركة آية اليوم كبطاقة'}
+              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-primary-700 px-3 text-xs font-bold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:shadow-sm motion-reduce:transition-none dark:bg-gold-400 dark:text-primary-950 dark:hover:bg-gold-300"
             >
-              <Share2 size={16} />
+              {isSharingAyah ? (
+                <LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+              ) : (
+                <Share2 size={15} aria-hidden="true" />
+              )}
             </button>
           )}
         </div>
@@ -336,11 +451,11 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
               سورة {dailyQuranMessage.surahName} — الآية {toArabicNumber(dailyQuranMessage.ayahNumber)}
             </p>
             {shareNotice ? (
-              <p role="status" className="mt-1 text-[11px] md:text-sm text-success-700 dark:text-success-300">
+              <p role="status" className="mt-1 text-[0.6875rem] md:text-sm text-success-700 dark:text-success-300">
                 {shareNotice}
               </p>
             ) : (
-              <p className="mt-1 text-[11px] md:text-sm text-gray-400 dark:text-gray-500">
+              <p className="mt-1 text-[0.6875rem] md:text-sm text-gray-400 dark:text-gray-500">
                 آية للتدبر من نص المصحف؛ لا تُعرض كتفسير للآية.
               </p>
             )}
@@ -354,20 +469,29 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
 
       {/* Streak + quick stats */}
       <div className="grid grid-cols-3 gap-3 md:gap-4">
-        <Card className="flex flex-col items-center text-center p-3 md:p-4!">
-          <Flame size={24} className={streak > 0 ? 'text-accent-500' : 'text-gray-300 dark:text-gray-600'} />
-          <p className="text-2xl font-bold text-primary-700 dark:text-primary-200 mt-1">{streak}</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">أيام متتالية</p>
+        <Card className="flex flex-col items-center text-center p-3 md:p-4! group transition-all duration-300 hover:shadow-md hover:-translate-y-0.5">
+          <div className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-accent-500 to-accent-700 text-white shadow-md shadow-accent-600/25 transition-transform duration-200 group-hover:scale-110">
+            <Flame size={22} className={streak > 0 ? 'animate-flame' : 'opacity-70'} />
+            {streak > 0 && (
+              <span className="absolute -inset-1 rounded-xl bg-accent-500/25 blur-xs pointer-events-none -z-10 animate-pulse" />
+            )}
+          </div>
+          <p className="text-2xl font-extrabold text-primary-800 dark:text-primary-100 mt-2">{streak}</p>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">أيام متتالية</p>
         </Card>
-        <Card className="flex flex-col items-center text-center p-3 md:p-4!">
-          <Check size={24} className="text-success-500" />
-          <p className="text-2xl font-bold text-primary-700 dark:text-primary-200 mt-1">{doneTasks.length}</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">مهام مكتملة</p>
+        <Card className="flex flex-col items-center text-center p-3 md:p-4! group transition-all duration-300 hover:shadow-md hover:-translate-y-0.5">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-success-500 to-success-700 text-white shadow-md shadow-success-600/25 transition-transform duration-200 group-hover:scale-110">
+            <Check size={22} />
+          </div>
+          <p className="text-2xl font-extrabold text-primary-800 dark:text-primary-100 mt-2">{doneTasks.length}</p>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">مهام مكتملة</p>
         </Card>
-        <Card className="flex flex-col items-center text-center p-3 md:p-4!">
-          <Clock size={24} className="text-warning-500" />
-          <p className="text-2xl font-bold text-primary-700 dark:text-primary-200 mt-1">{pendingTasks.length}</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">مهام معلقة</p>
+        <Card className="flex flex-col items-center text-center p-3 md:p-4! group transition-all duration-300 hover:shadow-md hover:-translate-y-0.5">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-warning-500 to-warning-700 text-white shadow-md shadow-warning-600/25 transition-transform duration-200 group-hover:scale-110">
+            <Clock size={22} />
+          </div>
+          <p className="text-2xl font-extrabold text-primary-800 dark:text-primary-100 mt-2">{pendingTasks.length}</p>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">مهام معلقة</p>
         </Card>
       </div>
 
@@ -420,23 +544,29 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
             }
           />
           <Card noPadding>
-            <div className="grid grid-cols-3 gap-1 p-2 md:grid-cols-6 md:gap-2 md:p-3">
+            <div className="grid grid-cols-3 gap-1.5 p-2 md:grid-cols-6 md:gap-2.5 md:p-3">
               {prayerResult.prayers.map((prayer) => {
                 const isSunrise = prayer.name === 'sunrise';
+                const isNext = nextPrayer?.name === prayer.name;
                 const record = prayerRecords[prayer.name] ?? null;
                 const answerable = !isSunrise && prayer.passed;
 
                 const body = (
                   <>
-                    <p className={`text-xs font-medium ${isSunrise ? 'text-gold-600 dark:text-gold-400' : 'text-primary-600 dark:text-primary-300'}`}>
+                    <p className={`text-xs font-semibold ${isSunrise ? 'text-accent-600 dark:text-accent-400' : isNext ? 'text-primary-800 dark:text-primary-200 font-bold' : 'text-primary-700 dark:text-primary-300'}`}>
                       {prayer.arabicName}
                     </p>
-                    <p className="text-sm font-bold text-primary-800 dark:text-primary-100 mt-0.5">
+                    <p className="text-sm font-bold text-primary-900 dark:text-primary-100 mt-0.5">
                       {formatTime12h(prayer.time, prayerTimeZone)}
                     </p>
                     <div className="mt-1.5 min-h-[1.25rem] flex items-center justify-center">
                       {isSunrise ? (
                         <Badge variant="gold">شروق</Badge>
+                      ) : isNext ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary-600 text-white dark:bg-gold-400 dark:text-primary-950 shadow-xs">
+                          <span className="h-1.5 w-1.5 rounded-full bg-white dark:bg-primary-950 animate-ping-soft" />
+                          القادمة
+                        </span>
                       ) : !prayer.passed ? null : record === 'ontime' ? (
                         <Badge variant="success"><Check size={10} /> في وقتها</Badge>
                       ) : record === 'late' ? (
@@ -450,14 +580,18 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
                   </>
                 );
 
-                // The whole tile is the target. The previous 24px dots were well under
-                // the 44px a finger reliably hits, and the grey undo ✕ sat next to the
-                // red "missed" ✕ — so confirming was easy and undoing was not.
+                // The whole tile is the target.
                 if (!answerable) {
                   return (
                     <div
                       key={prayer.name}
-                      className={`rounded-xl p-2.5 text-center ${prayer.passed ? 'bg-gray-50 dark:bg-gray-800/30' : 'bg-gray-50 dark:bg-gray-800/30'}`}
+                      className={`rounded-xl p-2.5 text-center transition-all ${
+                        isNext
+                          ? 'border-2 border-primary-500/80 dark:border-primary-400/70 bg-primary-100 dark:bg-primary-900/40 shadow-sm scale-[1.02]'
+                          : prayer.passed
+                          ? 'bg-primary-50/60 dark:bg-gray-800/30'
+                          : 'bg-primary-50/60 dark:bg-gray-800/30'
+                      }`}
                     >
                       {body}
                     </div>
@@ -472,10 +606,12 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
                     aria-label={`صلاة ${prayer.arabicName} — ${
                       record ? 'مسجّلة، اضغط للعرض' : 'لم تسجّل بعد، اضغط للتأكيد'
                     }`}
-                    className={`rounded-xl p-2.5 text-center transition-smooth active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:focus-visible:ring-gold-400 ${
-                      record
+                    className={`rounded-xl p-2.5 text-center transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:focus-visible:ring-primary-400 ${
+                      isNext
+                        ? 'border-2 border-primary-500/80 dark:border-primary-400/70 bg-primary-100 dark:bg-primary-900/50 shadow-sm ring-2 ring-primary-400/20 scale-[1.02]'
+                        : record
                         ? 'bg-primary-50 dark:bg-primary-800/30'
-                        : 'bg-gray-50 dark:bg-gray-800/30 hover:bg-primary-100/70 dark:hover:bg-primary-800/50'
+                        : 'bg-primary-50/60 dark:bg-gray-800/30 hover:bg-primary-100 dark:hover:bg-primary-800/50'
                     }`}
                   >
                     {body}
@@ -512,26 +648,52 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
           title="حديث اليوم"
           icon={<BookText size={20} />}
           action={
-            <button onClick={() => navigate('hadith')} className="text-sm text-primary-600 dark:text-gold-400 flex items-center gap-0.5">
-              <span>المكتبة</span>
-              <ChevronLeft size={16} />
-            </button>
+            <div className="flex items-center gap-2">
+              {hadith && (
+                <button
+                  type="button"
+                  onClick={() => void shareDailyHadith()}
+                  disabled={isSharingHadith}
+                  aria-label="مشاركة حديث اليوم"
+                  aria-busy={isSharingHadith}
+                  title="مشاركة حديث اليوم"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-primary-600 transition-colors hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-gold-400 dark:hover:bg-primary-800/50"
+                >
+                  {isSharingHadith ? (
+                    <LoaderCircle size={18} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                  ) : (
+                    <Share2 size={18} aria-hidden="true" />
+                  )}
+                </button>
+              )}
+              <button onClick={() => navigate('hadith')} className="text-sm text-primary-600 dark:text-gold-400 flex items-center gap-0.5">
+                <span>المكتبة</span>
+                <ChevronLeft size={16} />
+              </button>
+            </div>
           }
         />
         {hadith ? (
-          <Card onClick={() => navigate('hadith', { hadithId: hadith.id })}>
-            <div className="flex items-start gap-3">
-              <Sparkles size={20} className="text-gold-500 shrink-0 mt-1" />
-              <div className="flex-1">
-                <p className="text-sm md:text-base md:leading-relaxed md:max-w-prose text-primary-800 dark:text-primary-100 line-clamp-3 quran-text whitespace-pre-line">
-                  {hadith.text}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                  {hadith.collectionTitle} — رقم {toArabicNumber(hadith.number)}
-                </p>
+          <>
+            <Card onClick={() => navigate('hadith', { hadithId: hadith.id })}>
+              <div className="flex items-start gap-3">
+                <Sparkles size={20} className="text-gold-500 shrink-0 mt-1" />
+                <div className="flex-1">
+                  <p className="text-sm md:text-base md:leading-relaxed md:max-w-prose text-primary-800 dark:text-primary-100 line-clamp-3 quran-text whitespace-pre-line">
+                    {hadith.text}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                    {hadith.collectionTitle} — رقم {toArabicNumber(hadith.number)}
+                  </p>
+                </div>
               </div>
-            </div>
-        </Card>
+            </Card>
+            {hadithShareNotice && (
+              <p role="status" className="mt-1 text-xs text-success-700 dark:text-success-300">
+                {hadithShareNotice}
+              </p>
+            )}
+          </>
         ) : (
           <Card onClick={() => navigate('hadith')}>
             <div className="flex items-start gap-3">

@@ -29,22 +29,29 @@ export interface PrayerTimesResult {
   date: Date;
 }
 
-export function getCalcMethod(method: string): CalculationParameters {
-  switch (method) {
-    case 'Egyptian': return CalculationMethod.Egyptian();
-    case 'MWL': return CalculationMethod.MuslimWorldLeague();
-    case 'Karachi': return CalculationMethod.Karachi();
-    case 'UMM al-Qura': return CalculationMethod.UmmAlQura();
-    case 'Dubai': return CalculationMethod.Dubai();
-    case 'Moonsighting': return CalculationMethod.MoonsightingCommittee();
-    case 'NorthAmerica': return CalculationMethod.NorthAmerica();
-    case 'Kuwait': return CalculationMethod.Kuwait();
-    case 'Qatar': return CalculationMethod.Qatar();
-    case 'Singapore': return CalculationMethod.Singapore();
-    case 'Turkey': return CalculationMethod.Turkey();
-    case 'Tehran': return CalculationMethod.Tehran();
-    default: return CalculationMethod.Egyptian();
-  }
+/** The five prayers with an adhan and a congregation time; sunrise is not a prayer. */
+export type PrayerTimeKey = 'fajr' | 'dhuhr' | 'asr' | 'maghrib' | 'isha';
+
+/** Per-prayer minute corrections used to match a trusted local mosque timetable. */
+export type PrayerTimeAdjustments = Partial<Record<PrayerTimeKey, number>>;
+
+export function getCalcMethod(_method: string): CalculationParameters {
+  const params = CalculationMethod.Egyptian();
+  // The ESA reference samples show adhan's preset Dhuhr minute adjustment makes
+  // the result later than the published time; removing it brings all samples
+  // within one minute of the official timetable.
+  params.methodAdjustments.dhuhr = 0;
+  return params;
+}
+
+/** Egypt-only bounds for prayer locations; saved coordinates remain usable offline. */
+export function isEgyptianLocation(latitude: number, longitude: number): boolean {
+  return Number.isFinite(latitude) &&
+    Number.isFinite(longitude) &&
+    latitude >= 21.7 &&
+    latitude <= 31.9 &&
+    longitude >= 24.6 &&
+    longitude <= 37.0;
 }
 
 /**
@@ -101,6 +108,7 @@ export function calculatePrayerTimes(
   calcMethod: string,
   asrMadhab: 'standard' | 'hanafi',
   timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone,
+  adjustments?: PrayerTimeAdjustments | null,
 ): PrayerTimesResult {
   return calculatePrayerTimesForDay(
     latitude,
@@ -108,6 +116,7 @@ export function calculatePrayerTimes(
     calendarDayInZone(date, timeZone),
     calcMethod,
     asrMadhab,
+    adjustments,
   );
 }
 
@@ -122,6 +131,7 @@ export function calculatePrayerTimesForDay(
   day: CalendarDay,
   calcMethod: string,
   asrMadhab: 'standard' | 'hanafi',
+  adjustments?: PrayerTimeAdjustments | null,
 ): PrayerTimesResult {
   const coords = new Coordinates(
     finiteCoordinate(latitude, FALLBACK_LATITUDE),
@@ -139,10 +149,10 @@ export function calculatePrayerTimesForDay(
   const qiblaDirection = Qibla(coords);
 
   const now = trustedNowMs();
-  const prayers: PrayerTimeInfo[] = finitePrayerTimes(pt).map((prayer) => ({
-    ...prayer,
-    passed: prayer.time.getTime() < now,
-  }));
+  const prayers: PrayerTimeInfo[] = finitePrayerTimes(pt).map((prayer) => {
+    const time = applyPrayerTimeAdjustment(prayer.time, prayer.name, adjustments);
+    return { ...prayer, time, passed: time.getTime() < now };
+  });
 
   return { prayers, qiblaDirection, date: prayerDate };
 }
@@ -153,9 +163,12 @@ export function getNextPrayer(
   calcMethod: string,
   asrMadhab: 'standard' | 'hanafi',
   timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone,
+  adjustments?: PrayerTimeAdjustments | null,
 ): PrayerTimeInfo | null {
   const now = trustedNow();
-  const today = calculatePrayerTimes(latitude, longitude, now, calcMethod, asrMadhab, timeZone);
+  const today = calculatePrayerTimes(
+    latitude, longitude, now, calcMethod, asrMadhab, timeZone, adjustments,
+  );
   const upcoming = today.prayers.filter((p) => p.name !== 'sunrise' && p.time.getTime() > now.getTime());
   if (upcoming.length > 0) {
     return upcoming[0];
@@ -167,14 +180,35 @@ export function getNextPrayer(
     addCalendarDays(calendarDayInZone(now, timeZone), 1),
     calcMethod,
     asrMadhab,
+    adjustments,
   );
   return tomorrowTimes.prayers.find((p) => p.name !== 'sunrise') ?? tomorrowTimes.prayers[0] ?? null;
 }
 
-export function getPrayerTimeZone(timeZone?: string, cityName?: string): string {
-  if (timeZone && isTimeZone(timeZone)) return timeZone;
-  return CITY_PRESETS.find((city) => city.name === cityName)?.timeZone
-    ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+const MAX_PRAYER_TIME_ADJUSTMENT_MINUTES = 30;
+
+function applyPrayerTimeAdjustment(
+  time: Date,
+  prayerName: string,
+  adjustments?: PrayerTimeAdjustments | null,
+): Date {
+  const minutes = adjustments?.[prayerName as IqamahPrayerKey];
+  if (
+    prayerName === 'sunrise' ||
+    typeof minutes !== 'number' ||
+    !Number.isFinite(minutes)
+  ) {
+    return time;
+  }
+  const boundedMinutes = Math.min(
+    Math.max(Math.trunc(minutes), -MAX_PRAYER_TIME_ADJUSTMENT_MINUTES),
+    MAX_PRAYER_TIME_ADJUSTMENT_MINUTES,
+  );
+  return new Date(time.getTime() + boundedMinutes * 60_000);
+}
+
+export function getPrayerTimeZone(_timeZone?: string, _cityName?: string): string {
+  return 'Africa/Cairo';
 }
 
 /* ------------------------------------------------------------------ *
@@ -182,7 +216,7 @@ export function getPrayerTimeZone(timeZone?: string, cityName?: string): string 
  * ------------------------------------------------------------------ */
 
 /** The five prayers an iqamah offset is addressed by (sunrise has none). */
-export type IqamahPrayerKey = 'fajr' | 'dhuhr' | 'asr' | 'maghrib' | 'isha';
+export type IqamahPrayerKey = PrayerTimeKey;
 
 /**
  * Minutes each prayer's iqamah follows its adhan, by common mosque custom:
@@ -222,19 +256,6 @@ export function getIqamahTime(
     : fallback;
   const bounded = Math.min(Math.max(minutes, 0), IQAMAH_MAX_MINUTES);
   return new Date(prayerTime.getTime() + bounded * 60_000);
-}
-
-function isTimeZone(value: string): boolean {
-  // The bundled database is asked first: it knows zones an old engine's ICU
-  // would reject outright (or spell differently), so a valid city is never
-  // discarded just because the phone's engine predates it.
-  if (tzDatabaseZoneOffsetMs(value, new Date()) !== null) return true;
-  try {
-    new Intl.DateTimeFormat('en', { timeZone: value });
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /** A calendar day, independent of any time zone (month is 1-based). */
@@ -485,32 +506,10 @@ export function getTimeUntil(date: Date, now: Date = trustedNow()): string {
 
 export const CALC_METHODS = [
   'Egyptian',
-  'MWL',
-  'Karachi',
-  'UMM al-Qura',
-  'Dubai',
-  'Moonsighting',
-  'NorthAmerica',
-  'Kuwait',
-  'Qatar',
-  'Singapore',
-  'Turkey',
-  'Tehran',
 ];
 
 export const CALC_METHOD_NAMES_AR: Record<string, string> = {
   'Egyptian': 'الهيئة المصرية العامة للمساحة',
-  'MWL': 'رابطة العالم الإسلامي',
-  'Karachi': 'جامعة كراتشي',
-  'UMM al-Qura': 'أم القرى',
-  'Dubai': 'دبي',
-  'Moonsighting': 'لجنة رؤية الهلال',
-  'NorthAmerica': 'أمريكا الشمالية',
-  'Kuwait': 'الكويت',
-  'Qatar': 'قطر',
-  'Singapore': 'سنغافورة',
-  'Turkey': 'تركيا',
-  'Tehran': 'طهران',
 };
 
 export interface CityPreset {
@@ -522,34 +521,30 @@ export interface CityPreset {
 
 export const CITY_PRESETS: CityPreset[] = [
   { name: 'القاهرة', latitude: 30.0444, longitude: 31.2357, timeZone: 'Africa/Cairo' },
-  { name: 'مكة المكرمة', latitude: 21.4225, longitude: 39.8262, timeZone: 'Asia/Riyadh' },
-  { name: 'المدينة المنورة', latitude: 24.5247, longitude: 39.5692, timeZone: 'Asia/Riyadh' },
-  { name: 'الرياض', latitude: 24.7136, longitude: 46.6753, timeZone: 'Asia/Riyadh' },
   { name: 'الإسكندرية', latitude: 31.2001, longitude: 29.9187, timeZone: 'Africa/Cairo' },
-  { name: 'بيروت', latitude: 33.8938, longitude: 35.5018, timeZone: 'Asia/Beirut' },
-  { name: 'عمّان', latitude: 31.9454, longitude: 35.9284, timeZone: 'Asia/Amman' },
-  { name: 'بغداد', latitude: 33.3152, longitude: 44.3661, timeZone: 'Asia/Baghdad' },
-  { name: 'دمشق', latitude: 33.5138, longitude: 36.2765, timeZone: 'Asia/Damascus' },
-  { name: 'الجزائر', latitude: 36.7538, longitude: 3.0588, timeZone: 'Africa/Algiers' },
-  { name: 'تونس', latitude: 36.8065, longitude: 10.1815, timeZone: 'Africa/Tunis' },
-  { name: 'الرباط', latitude: 34.0209, longitude: -6.8416, timeZone: 'Africa/Casablanca' },
-  { name: 'الدوحة', latitude: 25.2854, longitude: 51.531, timeZone: 'Asia/Qatar' },
-  { name: 'الكويت', latitude: 29.3759, longitude: 47.9774, timeZone: 'Asia/Kuwait' },
-  { name: 'المنامة', latitude: 26.2285, longitude: 50.586, timeZone: 'Asia/Bahrain' },
-  { name: 'أبو ظبي', latitude: 24.4539, longitude: 54.3773, timeZone: 'Asia/Dubai' },
-  { name: 'دبي', latitude: 25.2048, longitude: 55.2708, timeZone: 'Asia/Dubai' },
-  { name: 'صنعاء', latitude: 15.3694, longitude: 44.191, timeZone: 'Asia/Aden' },
-  { name: 'الخرطوم', latitude: 15.5007, longitude: 32.5599, timeZone: 'Africa/Khartoum' },
-  { name: 'إسطنبول', latitude: 41.0082, longitude: 28.9784, timeZone: 'Europe/Istanbul' },
-  { name: 'لندن', latitude: 51.5074, longitude: -0.1278, timeZone: 'Europe/London' },
-  { name: 'باريس', latitude: 48.8566, longitude: 2.3522, timeZone: 'Europe/Paris' },
-  { name: 'برلين', latitude: 52.52, longitude: 13.405, timeZone: 'Europe/Berlin' },
-  { name: 'مدريد', latitude: 40.4168, longitude: -3.7038, timeZone: 'Europe/Madrid' },
-  { name: 'روما', latitude: 41.9028, longitude: 12.4964, timeZone: 'Europe/Rome' },
-  { name: 'أمستردام', latitude: 52.3676, longitude: 4.9041, timeZone: 'Europe/Amsterdam' },
-  { name: 'تورونتو', latitude: 43.6532, longitude: -79.3832, timeZone: 'America/Toronto' },
-  { name: 'نيويورك', latitude: 40.7128, longitude: -74.006, timeZone: 'America/New_York' },
-  { name: 'كوالالمبور', latitude: 3.139, longitude: 101.6869, timeZone: 'Asia/Kuala_Lumpur' },
-  { name: 'إسلام آباد', latitude: 33.6844, longitude: 73.0479, timeZone: 'Asia/Karachi' },
-  { name: 'طرابلس', latitude: 32.8872, longitude: 13.1913, timeZone: 'Africa/Tripoli' },
+  { name: 'الجيزة', latitude: 30.0131, longitude: 31.2089, timeZone: 'Africa/Cairo' },
+  { name: 'بنها', latitude: 30.4667, longitude: 31.1833, timeZone: 'Africa/Cairo' },
+  { name: 'طنطا', latitude: 30.7865, longitude: 31.0004, timeZone: 'Africa/Cairo' },
+  { name: 'شبين الكوم', latitude: 30.5526, longitude: 31.0090, timeZone: 'Africa/Cairo' },
+  { name: 'دمنهور', latitude: 31.0341, longitude: 30.4682, timeZone: 'Africa/Cairo' },
+  { name: 'كفر الشيخ', latitude: 31.1117, longitude: 30.9399, timeZone: 'Africa/Cairo' },
+  { name: 'دمياط', latitude: 31.4165, longitude: 31.8133, timeZone: 'Africa/Cairo' },
+  { name: 'المنصورة', latitude: 31.0409, longitude: 31.3785, timeZone: 'Africa/Cairo' },
+  { name: 'الزقازيق', latitude: 30.5877, longitude: 31.5020, timeZone: 'Africa/Cairo' },
+  { name: 'الإسماعيلية', latitude: 30.5965, longitude: 32.2715, timeZone: 'Africa/Cairo' },
+  { name: 'بورسعيد', latitude: 31.2653, longitude: 32.3019, timeZone: 'Africa/Cairo' },
+  { name: 'السويس', latitude: 29.9668, longitude: 32.5498, timeZone: 'Africa/Cairo' },
+  { name: 'العريش', latitude: 31.1316, longitude: 33.7984, timeZone: 'Africa/Cairo' },
+  { name: 'الطور', latitude: 28.2417, longitude: 33.6222, timeZone: 'Africa/Cairo' },
+  { name: 'بني سويف', latitude: 29.0661, longitude: 31.0994, timeZone: 'Africa/Cairo' },
+  { name: 'الفيوم', latitude: 29.3084, longitude: 30.8428, timeZone: 'Africa/Cairo' },
+  { name: 'المنيا', latitude: 28.1099, longitude: 30.7503, timeZone: 'Africa/Cairo' },
+  { name: 'أسيوط', latitude: 27.1809, longitude: 31.1837, timeZone: 'Africa/Cairo' },
+  { name: 'سوهاج', latitude: 26.5569, longitude: 31.6948, timeZone: 'Africa/Cairo' },
+  { name: 'قنا', latitude: 26.1551, longitude: 32.7160, timeZone: 'Africa/Cairo' },
+  { name: 'الأقصر', latitude: 25.6872, longitude: 32.6396, timeZone: 'Africa/Cairo' },
+  { name: 'أسوان', latitude: 24.0889, longitude: 32.8998, timeZone: 'Africa/Cairo' },
+  { name: 'الغردقة', latitude: 27.2579, longitude: 33.8116, timeZone: 'Africa/Cairo' },
+  { name: 'مرسى مطروح', latitude: 31.3543, longitude: 27.2373, timeZone: 'Africa/Cairo' },
+  { name: 'الخارجة', latitude: 25.4390, longitude: 30.5586, timeZone: 'Africa/Cairo' },
 ];

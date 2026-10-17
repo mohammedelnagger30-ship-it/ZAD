@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ComponentType, useState, useEffect, useCallback, useMemo } from 'react';
+import { lazy, Suspense, type ComponentType, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { CloudOff, X } from 'lucide-react';
 import { useSettings, useTheme, useNavigation } from '@/hooks/useApp';
 import { BottomNav } from '@/components/BottomNav';
@@ -15,6 +15,7 @@ import { isAdminAccount } from '@/utils/adminStats';
 import { useAppUpdate } from '@/hooks/useAppUpdate';
 import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
+import { LocalNotifications } from '@capacitor/local-notifications';
 import type { Session } from '@supabase/supabase-js';
 import type { Settings } from '@/db/database';
 import { AzanOverlayModal } from '@/components/AzanOverlayModal';
@@ -30,6 +31,8 @@ import {
   TIME_ZONE_ADOPTION_EVENT,
 } from '@/utils/timeZoneTravel';
 import { initAutoBackup } from '@/utils/autoBackup';
+import { isEgyptianLocation } from '@/utils/prayerTimes';
+import { getNotificationDestination } from '@/utils/notificationRouting';
 
 const ONBOARDED_KEY = 'hifzi-onboarded';
 // Latch used by lazyWithRetry: after a chunk 404 we reload once; a reloaded page that
@@ -327,7 +330,13 @@ function Application() {
   }, []);
 
   if (isSupabaseConfigured && !authChecked) {
-    return <AppContent accountEmail={undefined} onSignOut={undefined} syncState={null} onSyncNow={undefined} />;
+    // The session check reads local storage, so this is a beat, not a wait.
+    // Mounting AppContent here — the whole shell, settings from IndexedDB and
+    // navigation and the sync loop — and then mounting it again as
+    // AuthenticatedApp ran every hook in it twice on every single launch, and
+    // flashed the app under the gate while doing it. Holding here costs one
+    // icon and one line of text.
+    return <GateLoading message="جارٍ فحص الحساب..." />;
   }
   if (isSupabaseConfigured && session) {
     if (adminState === 'unknown') return <GateLoading message="جارٍ فتح الحساب..." />;
@@ -552,9 +561,33 @@ function AppContent({
   const { settings, loading, error: settingsError, save, reload: reloadSettings } = useSettings();
   const { themeMode, changeTheme, colorPalette, changeColorPalette } = useTheme();
   const { screen, params, navigate, resetNonce, goBack } = useNavigation();
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
   const [onboarded, setOnboarded] = useState<boolean | null>(null);
-  const [syncRevision, setSyncRevision] = useState(0);
   const { azanState, closeAzan } = useAzanTrigger(settings);
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let disposed = false;
+    let removeListener: (() => void) | undefined;
+    void LocalNotifications.addListener('localNotificationActionPerformed', ({ notification }) => {
+      const destination = getNotificationDestination(notification.extra);
+      if (destination) navigateRef.current(destination.screen, destination.params);
+    })
+      .then((handle) => {
+        if (disposed) void handle.remove();
+        else removeListener = () => void handle.remove();
+      })
+      .catch((error: unknown) => {
+        console.error('Could not register notification navigation listener:', error);
+      });
+
+    return () => {
+      disposed = true;
+      removeListener?.();
+    };
+  }, []);
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform() || onboarded === null || !onboarded) return;
@@ -593,9 +626,14 @@ function AppContent({
 
   useEffect(() => {
     const onSyncComplete = () => {
-      setSyncRevision((revision) => revision + 1);
       // Silent: a finished sync must refresh the settings in place, not bounce
       // the app back to its loading screen (scroll position, playing audio…).
+      // The reload is what updates an open screen — the `settings` prop changes
+      // and React re-renders it. It used to *also* bump a revision baked into
+      // SettingsScreen's `key`, which remounted the screen on every finished
+      // round: the scroll position went, and so did whatever the person was
+      // midway through typing. Nothing in that screen is held in local state,
+      // so the remount bought nothing but the loss.
       void reloadSettings({ silent: true });
     };
     window.addEventListener('zad:cloud-sync-complete', onSyncComplete);
@@ -617,6 +655,13 @@ function AppContent({
       void rescheduleAllNotifications();
     });
   }, []);
+
+  // Icon style rides on <html> exactly like the palette: index.css turns it into a
+  // single stroke-width rule, so the choice repaints every Lucide glyph in the app —
+  // no per-icon prop threading, and the default adds no rule at all.
+  useEffect(() => {
+    document.documentElement.dataset.iconStyle = settings?.iconStyle ?? 'lucide';
+  }, [settings?.iconStyle]);
 
   // Which settings actually change what is armed on the device. Everything else
   // (font size, palette, icon style, tips…) must not pay for a queue rebuild:
@@ -644,6 +689,8 @@ function AppContent({
       // The iqamah offsets move every iqamah alert; without them in the key,
       // editing a جماعة minute would not re-arm a single notification.
       JSON.stringify(settings.iqamahOffsets ?? null),
+      // Mosque corrections move every prayer, iqamah and reminder alarm.
+      JSON.stringify(settings.prayerTimeAdjustments ?? null),
     ].join('|');
   }, [settings]);
 
@@ -659,12 +706,9 @@ function AppContent({
     initAutoBackup();
   }, [scheduleFingerprint]);
 
-  // A trip moves the app with the phone: the new zone's own summer/winter rules
-  // come free with its IANA name, a permitted GPS fix gives the real position,
-  // a preset city with that zone is the fallback, and a city pinned deliberately
-  // is never moved. Checked on open, on return to the foreground, and every ten
-  // minutes (a SIM or network swap can change the zone mid-session). The settings
-  // effect above re-arms every notification at the new city's instants.
+  // Egypt is the only prayer-time scope. A device-zone change can refresh an
+  // automatically selected GPS position only if the fix remains inside Egypt;
+  // otherwise the last saved Egyptian coordinates and Cairo timezone stay intact.
   useEffect(() => {
     if (!settings || !onboarded) return;
 
@@ -698,6 +742,74 @@ function AppContent({
       clearInterval(interval);
     };
   }, [settings, onboarded, save]);
+
+  // Auto mode refreshes GPS while the app is in use, but only accepts fixes inside
+  // Egypt. Settings are persisted locally, so a later offline launch continues from
+  // the last accepted fix and never waits for a network location service.
+  const autoLocationMethod = settings?.locationMethod;
+  const savedLatitude = settings?.latitude;
+  const savedLongitude = settings?.longitude;
+  const savedCityName = settings?.cityName;
+  const savedTimeZone = settings?.timeZone;
+
+  useEffect(() => {
+    if (autoLocationMethod !== 'auto') return;
+    const geolocation = globalThis.navigator?.geolocation;
+    if (!geolocation) return;
+
+    let active = true;
+    let requesting = false;
+    const refreshEgyptLocation = () => {
+      if (requesting || document.visibilityState === 'hidden') return;
+      requesting = true;
+      geolocation.getCurrentPosition(
+        ({ coords }) => {
+          requesting = false;
+          if (!active || !isEgyptianLocation(coords.latitude, coords.longitude)) return;
+
+          const latDelta = (coords.latitude - (savedLatitude ?? 0)) * 111_000;
+          const lngDelta = (coords.longitude - (savedLongitude ?? 0)) *
+            111_000 * Math.cos((coords.latitude * Math.PI) / 180);
+          const movedMeters = Math.hypot(latDelta, lngDelta);
+          if (
+            movedMeters < 250 &&
+            savedCityName === 'موقعي داخل مصر' &&
+            savedTimeZone === 'Africa/Cairo'
+          ) return;
+
+          void save({
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            cityName: 'موقعي داخل مصر',
+            timeZone: 'Africa/Cairo',
+            locationMethod: 'auto',
+          }).catch((error: unknown) => {
+            console.error('تعذّر حفظ آخر موقع مصري للمواقيت.', error);
+          });
+        },
+        () => {
+          requesting = false;
+        },
+        { enableHighAccuracy: false, timeout: 15_000, maximumAge: 10 * 60_000 },
+      );
+    };
+
+    refreshEgyptLocation();
+    document.addEventListener('visibilitychange', refreshEgyptLocation);
+    const interval = setInterval(refreshEgyptLocation, 10 * 60_000);
+    return () => {
+      active = false;
+      document.removeEventListener('visibilitychange', refreshEgyptLocation);
+      clearInterval(interval);
+    };
+  }, [
+    autoLocationMethod,
+    savedLatitude,
+    savedLongitude,
+    savedCityName,
+    savedTimeZone,
+    save,
+  ]);
 
   // The launcher's widget is drawn from the last snapshot the app left behind,
   // so it is refreshed here rather than on any task toggle: at the settings
@@ -802,14 +914,18 @@ function AppContent({
               {/* Selecting the active tab again remounts its screen. */}
               {screen === 'home' && <HomeScreen key={`home-${resetNonce}`} settings={settings} navigate={navigate} />}
               {screen === 'quran' && <QuranScreen key={`quran-${resetNonce}`} settings={settings} params={params} />}
-              {screen === 'planner' && <PlannerScreen key={`planner-${resetNonce}`} />}
-              {screen === 'prayer' && <PrayerScreen key={`prayer-${resetNonce}`} settings={settings} onSaveSettings={save} navigate={navigate} />}
+              {screen === 'planner' && <PlannerScreen key={`planner-${resetNonce}`} navigate={navigate} />}
+              {screen === 'prayer' && <PrayerScreen key={`prayer-${resetNonce}`} settings={settings} onSaveSettings={save} navigate={navigate} params={params} />}
               {screen === 'salah' && <PrayerGuideScreen key={`salah-${resetNonce}`} navigate={navigate} />}
               {screen === 'hadith' && <HadithScreen key={`hadith-${resetNonce}`} params={params} />}
               {screen === 'progress' && <ProgressScreen key={`progress-${resetNonce}`} settings={settings} />}
+              {/* Selecting the active tab again remounts its screen. A cloud
+                  sync does not: it reloads settings, which re-render — the
+                  key stays put so the person keeps their scroll and their
+                  half-typed input. */}
               {screen === 'settings' && (
                 <SettingsScreen
-                  key={`settings-${resetNonce}-${syncRevision}`}
+                  key={`settings-${resetNonce}`}
                   settings={settings}
                   onSaveSettings={save}
                   themeMode={themeMode}
@@ -824,9 +940,21 @@ function AppContent({
                 />
               )}
               {screen === 'more' && <MoreScreen key={`more-${resetNonce}`} navigate={navigate} />}
-              {screen === 'library' && <ContentLibrary key={`library-${resetNonce}`} />}
+              {screen === 'library' && (
+                <ContentLibrary
+                  key={`library-${resetNonce}`}
+                  initialSection={
+                    params.section === 'tafsir' ||
+                    params.section === 'hadith' ||
+                    params.section === 'meanings' ||
+                    params.section === 'audio'
+                      ? params.section
+                      : 'audio'
+                  }
+                />
+              )}
               {screen === 'adhkar' && <AdhkarScreen key={`adhkar-${resetNonce}`} params={params} />}
-              {screen === 'tasbih' && <TasbihScreen key={`tasbih-${resetNonce}`} />}
+              {screen === 'tasbih' && <TasbihScreen key={`tasbih-${resetNonce}`} params={params} />}
               {screen === 'bookmarks' && <BookmarksScreen key={`bookmarks-${resetNonce}`} navigate={navigate} />}
               {screen === 'search' && <SearchScreen key={`search-${resetNonce}`} navigate={navigate} />}
             </Suspense>

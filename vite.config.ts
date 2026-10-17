@@ -55,7 +55,15 @@ export default defineConfig(({ mode }) => {
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2,json,mp3,ogg}'],
-        globIgnores: ['**/quranText-*.js'],
+        // The Quran text and the bundled صحيح مسلم payload are the two large
+        // data files, and neither belongs in the install: the first is 7MB of
+        // ayahs read a page at a time, the second is 8.3MB copied into IndexedDB
+        // on first use and never read from HTTP again. Both are matched below
+        // and kept for a year instead, so a first install pulls roughly 18MB
+        // less and an unchanged file is not re-fetched on the next release —
+        // workbox carries an unchanged precached entry over, but only if it is
+        // precached in the first place.
+        globIgnores: ['**/quranText-*.js', '**/hadith/*.json'],
         // vite-plugin-pwa marks everything under assets/ as cache-bust-free, i.e. its URL
         // is taken as proof of its content — so a stylesheet rewritten under an unchanged
         // URL would never be re-fetched, and the old bytes would outlive the fix. A regex
@@ -71,6 +79,24 @@ export default defineConfig(({ mode }) => {
               cacheName: 'quran-text',
               expiration: {
                 maxEntries: 2,
+                maxAgeSeconds: 60 * 60 * 24 * 365,
+              },
+            },
+          },
+          {
+            // The bundled collection, kept the way the Quran text is: fetched
+            // once, then offline from there. It is copied into IndexedDB on
+            // first use (`hadithService.collectionDownloadUrls`), after which
+            // the HTTP copy is never read again — so the precache was paying
+            // 8.3MB of install for a file that exists to be seen once. The
+            // CDN fallback is on cdn.jsdelivr.net under `/editions/`, not under
+            // `/hadith/`, so this pattern cannot catch it by accident.
+            urlPattern: /\/hadith\/[^/]+\.json$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'bundled-hadith',
+              expiration: {
+                maxEntries: 5,
                 maxAgeSeconds: 60 * 60 * 24 * 365,
               },
             },

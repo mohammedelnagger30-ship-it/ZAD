@@ -348,12 +348,16 @@ export function hadithOfDay(): HadithRecord | null {
  * Where a collection that is not yet on the device is fetched from.
  *
  * The essential collection (صحيح مسلم) is bundled inside the app itself:
- * `public/hadith/<slug>.json` ships in the webDir, so the daily card,
- * search and browsing work from the very first launch with no network at
- * all — the file is copied onto the device on first use. The source CDN
- * stays the fallback (for web deploys that predate the bundled asset;
- * the payload is byte-for-byte the same) and remains the only source for
- * every other book, which the user still downloads on demand.
+ * `public/hadith/<slug>.json` ships in the webDir, so on Android it is on
+ * disk from the first launch with no network at all, and the daily card,
+ * search and browsing read it from IndexedDB once the file has been copied
+ * there on first use. On the web build that copy is one fetch: the file is
+ * deliberately left out of the service worker's precache (it is 8.3MB and
+ * read exactly once) and served from a runtime cache after it, so a reader
+ * who has opened the tab online once can read it offline forever after. The
+ * source CDN stays the fallback (for web deploys that predate the bundled
+ * asset; the payload is byte-for-byte the same) and remains the only source
+ * for every other book, which the user still downloads on demand.
  */
 function collectionDownloadUrls(book: HadithBook): string[] {
   const urls: string[] = [];

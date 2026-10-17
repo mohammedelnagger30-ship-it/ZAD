@@ -6,16 +6,19 @@
  * per-surah sizes come from the real per-surah payloads. That is what lets the app warn
  * "this surah will take 4 MB" instead of quoting a figure invented in a comment.
  *
- * Run after `npm run data:fetch` / `npm run data:tafsir`:
+ * Run after `npm run data:fetch` / `npm run data:tafsir`, with the word-meanings dump in
+ * place (.cache/content/meanings.json.gz):
  *   npm run data:catalog
  */
 import { statSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gunzipSync } from 'node:zlib';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CACHE = join(ROOT, '.cache', 'content');
 const TAFSIR_CACHE = join(CACHE, 'tafsir');
+const MEANINGS_GZ = join(CACHE, 'meanings.json.gz');
 const OUT = join(ROOT, 'src', 'data', 'contentCatalog.ts');
 
 /** Maps the app's existing collection ids onto the upstream file slugs. */
@@ -62,7 +65,8 @@ const mb = (n: number) => n / 1048576;
 
 function fail(msg: string): never {
   console.error(`\nFAILED: ${msg}`);
-  console.error('Run `npm run data:fetch` and `npm run data:tafsir` first.\n');
+  console.error('Run `npm run data:fetch` and `npm run data:tafsir` first, and fetch the word-meanings dump:');
+  console.error('  https://quranpedia.net/dumps/meanings.json.gz -> .cache/content/meanings.json.gz\n');
   process.exit(1);
 }
 
@@ -118,6 +122,80 @@ const tafsirRows = TAFSIR.map((t) => {
   return { ...t, surahBytes, totalBytes: total, ayahs, surahs };
 });
 
+// ---- word meanings ----------------------------------------------------------
+
+// The word-meanings dump is fetched as one gzip file and split per surah at install
+// time, so both sizes are measured here: what travels (`downloadBytes`, the gzip on
+// disk) and what the device ends up storing (`storedBytes`, the sum of the per-surah
+// segments exactly as the service writes them).
+interface MeaningsBookRaw {
+  book_info?: { id?: number; name?: string; author?: string | null };
+  words?: Array<{ text?: string; meaning?: string }>;
+}
+interface MeaningsAyahRaw {
+  surah?: number;
+  ayah?: number;
+  meanings?: MeaningsBookRaw[];
+}
+
+if (!existsSync(MEANINGS_GZ)) {
+  fail(`missing ${MEANINGS_GZ} — download https://quranpedia.net/dumps/meanings.json.gz into .cache/content/`);
+}
+
+const meaningsDump = JSON.parse(gunzipSync(readFileSync(MEANINGS_GZ)).toString('utf8')) as {
+  license?: { version?: string };
+  schema?: string;
+  data: MeaningsAyahRaw[];
+};
+
+if (meaningsDump.schema !== '/v1/ayah/{surah}/{ayah}/meanings' || !Array.isArray(meaningsDump.data)) {
+  fail('meanings.json.gz does not have the shape the app expects');
+}
+
+const meaningsSurahBytes: number[] = new Array(115).fill(0); // 1-indexed
+const meaningsBooks = new Map<number, { titleAr: string; authorAr: string; ayahs: number; words: number }>();
+let meaningsAyahs = 0;
+
+for (let surah = 1; surah <= 114; surah++) {
+  const entries = meaningsDump.data.filter((a) => a.surah === surah);
+  meaningsAyahs += entries.length;
+  const slim = entries.map((e) => ({
+    ayah: e.ayah,
+    meanings: (e.meanings ?? []).map((b) => ({
+      book: b.book_info?.id ?? 0,
+      words: (b.words ?? []).map((w) => ({ text: w.text ?? '', meaning: w.meaning ?? '' })),
+    })),
+  }));
+  meaningsSurahBytes[surah] = Buffer.byteLength(JSON.stringify({ surah, ayat: slim }), 'utf8');
+
+  for (const entry of entries) {
+    for (const book of entry.meanings ?? []) {
+      const id = book.book_info?.id ?? 0;
+      const row = meaningsBooks.get(id) ?? {
+        titleAr: book.book_info?.name ?? '',
+        authorAr: book.book_info?.author ?? '',
+        ayahs: 0,
+        words: 0,
+      };
+      row.ayahs++;
+      row.words += (book.words ?? []).length;
+      meaningsBooks.set(id, row);
+    }
+  }
+}
+
+const meaningsDownloadBytes = statSync(MEANINGS_GZ).size;
+const meaningsStoredBytes = meaningsSurahBytes.reduce((a, b) => a + b, 0);
+
+// Short labels for the switcher in the word sheet. A book the table does not know
+// falls back to its full title rather than to a guess cut out of the middle of it.
+const MEANINGS_SHORT: Record<number, string> = {
+  491: 'السراج',
+  208: 'تذكرة الأريب',
+  327: 'التبيان',
+  1424: 'كلمات القرآن',
+};
+
 // ---- emit ------------------------------------------------------------------
 
 
@@ -163,6 +241,38 @@ export interface HadithBook {
    * first use, with no network involved.
    */
   bundled: boolean;
+}
+
+export interface WordMeaningBook {
+  /** Upstream book id inside the dump. */
+  id: number;
+  titleAr: string;
+  /** Short label for the book switcher in the word sheet. */
+  shortAr: string;
+  authorAr: string;
+  /** Ayahs carrying a gloss from this book — it annotates only the unusual words. */
+  ayahs: number;
+  /** Individual gloss entries across those ayahs. */
+  words: number;
+}
+
+export interface WordMeaningsSource {
+  id: string;
+  titleAr: string;
+  blurb: string;
+  /** Compressed dump the app downloads. */
+  url: string;
+  /** Upstream version stamp, so a stored copy can be recognised after an update. */
+  version: string;
+  /** Bytes over the wire — the gzip file as the server sends it. */
+  downloadBytes: number;
+  /** Bytes once decompressed and split per surah: what the device actually stores. */
+  storedBytes: number;
+  /** Ayahs that carry at least one gloss from any book. */
+  ayahs: number;
+  books: WordMeaningBook[];
+  /** Per-surah stored size in bytes, index 1..114. */
+  surahBytes: number[];
 }
 
 const TAFSIR_WEIGHT: Record<TafsirEdition['id'], TafsirEdition['weight']> = {
@@ -212,6 +322,42 @@ ${hadithRows
 ];
 
 export const DEFAULT_TAFSIR_ID = 'muyassar';
+
+/**
+ * The word-meanings source: meanings of the unusual words of the Quran, from the
+ * classical gharīb books, in Arabic. One download covers every book below; the app
+ * splits it per surah on the device so only the surah in play is parsed.
+ */
+export const WORD_MEANINGS: WordMeaningsSource = {
+  id: 'quranpedia',
+  titleAr: 'معاني الكلمات',
+  blurb: 'معاني غريب القرآن من كتب موثوقة (السراج، تذكرة الأريب، التبيان، كلمات القرآن).',
+  url: 'https://quranpedia.net/dumps/meanings.json.gz',
+  version: '${meaningsDump.license?.version ?? 'unknown'}',
+  downloadBytes: ${meaningsDownloadBytes},
+  storedBytes: ${meaningsStoredBytes},
+  ayahs: ${meaningsAyahs},
+  books: [
+${[...meaningsBooks]
+  // Most complete first: the default book leads the switcher in the word sheet.
+  .sort((a, b) => b[1].words - a[1].words)
+  .map(
+    ([id, b]) =>
+      `    { id: ${id}, titleAr: '${b.titleAr.replace(/'/g, "\\'")}', shortAr: '${(MEANINGS_SHORT[id] ?? b.titleAr).replace(/'/g, "\\'")}', authorAr: '${b.authorAr.replace(/'/g, "\\'")}', ayahs: ${b.ayahs}, words: ${b.words} },`,
+  )
+  .join('\n')}
+  ],
+  surahBytes: [${meaningsSurahBytes.join(', ')}],
+};
+
+/** The book shown first in the word sheet: the most complete of the four. */
+export const WORD_MEANINGS_DEFAULT_BOOK = ${[...meaningsBooks].sort(
+  (a, b) => b[1].words - a[1].words,
+)[0][0]};
+
+export function getWordMeaningBook(id: number): WordMeaningBook | undefined {
+  return WORD_MEANINGS.books.find((b) => b.id === id);
+}
 
 /**
  * The collection "hadith of the day" reads from — and the base of the library.
@@ -275,3 +421,12 @@ console.log(
   `\nTotal tafsir ${mb(tafsirRows.reduce((a, t) => a + t.totalBytes, 0)).toFixed(1)} MB, ` +
     `total hadith ${mb(hadithRows.reduce((a, h) => a + h.downloadBytes, 0)).toFixed(1)} MB`,
 );
+console.log('\nWord meanings:');
+console.log(
+  `  ${'معاني الكلمات'.padEnd(24)} ${String(mb(meaningsDownloadBytes).toFixed(2)).padStart(6)} MB download   ` +
+    `${String(mb(meaningsStoredBytes).toFixed(2)).padStart(6)} MB stored   ` +
+    `${String(meaningsAyahs).padStart(5)} ayahs   ${meaningsBooks.size} books`,
+);
+for (const [id, b] of [...meaningsBooks].sort((a, b) => a[0] - b[0])) {
+  console.log(`    ${String(id).padStart(5)} ${b.titleAr.padEnd(30)} ${String(b.ayahs).padStart(5)} ayahs  ${String(b.words).padStart(5)} glosses`);
+}

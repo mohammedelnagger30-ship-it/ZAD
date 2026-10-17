@@ -153,6 +153,22 @@ export async function getTodayTasks(): Promise<DailyTask[]> {
   return tasks.sort((a, b) => a.scheduledTime.localeCompare(b.scheduledTime));
 }
 
+export async function getRecentTasks(days = 30): Promise<DailyTask[]> {
+  if (!Number.isInteger(days) || days < 1 || days > 365) {
+    throw new RangeError('مدة سجل الورد يجب أن تكون بين يوم و365 يومًا.');
+  }
+  const today = trustedNow();
+  const endKey = formatDateKey(today);
+  const start = new Date(today);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - days + 1);
+  const startKey = formatDateKey(start);
+  const tasks = await db.tasks.where('date').between(startKey, endKey, true, true).toArray();
+  return tasks.sort((a, b) =>
+    b.date.localeCompare(a.date) || b.scheduledTime.localeCompare(a.scheduledTime),
+  );
+}
+
 export async function confirmTask(
   taskId: number,
   status: 'done' | 'missed',
@@ -202,6 +218,17 @@ export async function markMissedTasks(): Promise<void> {
   endOfDay.setHours(23, 59, 0, 0);
   const isEndOfDay = now >= endOfDay.getTime();
 
+  // Close every unfinished day, not only yesterday: the app may have stayed
+  // closed across several days and the history must not leave old tasks pending.
+  await db.tasks
+    .where('date')
+    .below(dateKey)
+    .and((task) => task.status === 'pending' || task.status === 'snoozed')
+    .modify((task) => {
+      task.status = 'missed';
+      delete task.snoozedUntil;
+    });
+
   // An expired snooze becomes actionable again; unfinished tasks become missed at day end.
   const pending = await db.tasks.where('date').equals(dateKey).toArray();
   for (const task of pending) {
@@ -216,16 +243,6 @@ export async function markMissedTasks(): Promise<void> {
     }
   }
 
-  // Also mark yesterday's pending tasks as missed
-  const yesterday = trustedNow();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayKey = formatDateKey(yesterday);
-  const yesterdayTasks = await db.tasks.where('date').equals(yesterdayKey).toArray();
-  for (const task of yesterdayTasks) {
-    if (task.status === 'pending' || task.status === 'snoozed') {
-      await db.tasks.update(task.id!, { status: 'missed' });
-    }
-  }
 }
 
 /**

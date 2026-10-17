@@ -1,5 +1,5 @@
-import { Palette, Layout, Sparkles, ToggleLeft, ToggleRight } from 'lucide-react';
-import { Card, SectionHeader } from '@/components/ui';
+import { Layout, Sparkles, Bell } from 'lucide-react';
+import { Card, SectionHeader, ToggleRow } from '@/components/ui';
 import type { Settings } from '@/db/database';
 
 interface UISettingsSectionProps {
@@ -7,94 +7,75 @@ interface UISettingsSectionProps {
   onSaveSettings: (patch: Partial<Settings>) => void;
 }
 
+/**
+ * The icon styles, named for what they do rather than for the icon sets they borrow
+ * their weights from — a reader who wants lighter or heavier line work should not have
+ * to know what "Heroicons" is. `value` is what gets stored; `stroke` is both the CSS
+ * weight (see index.css) and the weight of the preview glyph, so the button shows the
+ * exact look it applies.
+ */
+const ICON_STYLES = [
+  { value: 'lucide' as const, label: 'افتراضي', stroke: 2 },
+  { value: 'feather' as const, label: 'رقيق', stroke: 1.5 },
+  { value: 'heroicons' as const, label: 'عريض', stroke: 2.6 },
+];
+
 export function UISettingsSection({ settings, onSaveSettings }: UISettingsSectionProps) {
+  const iconStyle = settings.iconStyle ?? 'lucide';
+
   return (
     <Card>
       <SectionHeader title="تخصيص الواجهة" icon={<Layout size={20} />} />
 
-      <div className="space-y-4">
-        {/* Icon Style Selection */}
+      <div className="space-y-5">
+        {/* Icon style: three live previews, so the choice is visible before it is made. */}
         <div>
-          <label className="block text-sm font-semibold text-primary-700 dark:text-primary-200 mb-2">
-            نمط الأيقونات
-          </label>
-          <div className="grid grid-cols-3 gap-2 md:max-w-lg">
-            {[
-              { value: 'lucide' as const, label: 'Lucide' },
-              { value: 'feather' as const, label: 'Feather' },
-              { value: 'heroicons' as const, label: 'Heroicons' },
-            ].map((style) => (
-              <button
-                key={style.value}
-                type="button"
-                onClick={() => onSaveSettings({ iconStyle: style.value })}
-                className={`py-2.5 px-3 rounded-xl text-sm font-semibold transition-all ${
-                  settings.iconStyle === style.value
-                    ? 'bg-primary-600 text-white shadow-md'
-                    : 'bg-primary-50 text-primary-700 hover:bg-primary-100 dark:bg-primary-800/50 dark:text-primary-200 dark:hover:bg-primary-800'
-                }`}
-              >
-                {style.label}
-              </button>
-            ))}
+          <p id="icon-style-label" className="block text-sm font-semibold text-primary-700 dark:text-primary-200 mb-2">
+            سماكة الأيقونات
+          </p>
+          <div
+            role="radiogroup"
+            aria-labelledby="icon-style-label"
+            className="grid grid-cols-3 gap-2 md:max-w-lg"
+          >
+            {ICON_STYLES.map((style) => {
+              const selected = iconStyle === style.value;
+              return (
+                <button
+                  key={style.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => onSaveSettings({ iconStyle: style.value })}
+                  className={`flex flex-col items-center gap-1.5 rounded-xl border-2 px-3 py-2.5 text-xs font-bold transition-smooth focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${
+                    selected
+                      ? 'border-primary-600 bg-primary-600 text-white shadow-md'
+                      : 'border-primary-100 bg-primary-50 text-primary-700 hover:bg-primary-100 dark:border-primary-800 dark:bg-primary-800/50 dark:text-primary-200 dark:hover:bg-primary-800'
+                  }`}
+                >
+                  <Bell size={22} strokeWidth={style.stroke} aria-hidden="true" />
+                  <span>{style.label}</span>
+                </button>
+              );
+            })}
           </div>
+          <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+            تُطبَّق على أيقونات التطبيق كلها فورًا.
+          </p>
         </div>
 
-        {/* Custom Badges Toggle */}
-        <div className="flex items-center justify-between py-2">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-100 dark:bg-primary-800">
+        {/* Custom badges: the emoji shown on a shareable achievement. */}
+        <ToggleRow
+          label="أوسمة مخصصة"
+          description="إظهار إيموجي مخصص للأوسمة"
+          icon={
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-100 dark:bg-primary-800">
               <Sparkles size={20} className="text-primary-600 dark:text-gold-400" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-primary-700 dark:text-primary-200">
-                أوسمة مخصصة
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                إظهار إيموجي مخصص للأوسمة
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => onSaveSettings({ customBadgesEnabled: !settings.customBadgesEnabled })}
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all"
-          >
-            {settings.customBadgesEnabled ? (
-              <ToggleRight size={20} className="text-primary-600 dark:text-gold-400" />
-            ) : (
-              <ToggleLeft size={20} className="text-gray-400" />
-            )}
-          </button>
-        </div>
-
-        {/* Onboarding Tips Toggle */}
-        <div className="flex items-center justify-between py-2">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-100 dark:bg-primary-800">
-              <Palette size={20} className="text-primary-600 dark:text-gold-400" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-primary-700 dark:text-primary-200">
-                نصائح إرشادية
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                إظهار نصائح للميزات المتقدمة
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => onSaveSettings({ showOnboardingTips: !settings.showOnboardingTips })}
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all"
-          >
-            {settings.showOnboardingTips ? (
-              <ToggleRight size={20} className="text-primary-600 dark:text-gold-400" />
-            ) : (
-              <ToggleLeft size={20} className="text-gray-400" />
-            )}
-          </button>
-        </div>
+            </span>
+          }
+          value={settings.customBadgesEnabled !== false}
+          onChange={(value) => onSaveSettings({ customBadgesEnabled: value })}
+        />
       </div>
     </Card>
   );

@@ -1,4 +1,4 @@
-import { Calendar, BarChart3, Settings as SettingsIcon, ChevronLeft, Info, Shield, Heart, Repeat, Library, Sparkles, BookOpen, Bookmark, Search } from 'lucide-react';
+import { Calendar, BarChart3, Settings as SettingsIcon, ChevronLeft, Info, Shield, Heart, Repeat, Sparkles, BookOpen, Bookmark, Search, Music2, BookText } from 'lucide-react';
 import { Card } from '@/components/ui';
 import type { ScreenName, NavParams } from '@/hooks/useApp';
 
@@ -50,10 +50,27 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
     },
     {
       screen: 'library' as ScreenName,
-      label: 'مكتبة المحتوى',
-      description: 'تحميل التفاسير وكتب الحديث للعمل بدون إنترنت',
-      icon: Library,
+      params: { section: 'audio' },
+      label: 'إدارة التلاوات',
+      description: 'تنزيل التلاوات وترتيب السور المحفوظة لكل قارئ',
+      icon: Music2,
       color: 'from-blue-600 to-blue-700',
+    },
+    {
+      screen: 'library' as ScreenName,
+      params: { section: 'tafsir' },
+      label: 'إدارة التفاسير',
+      description: 'اختيار التفاسير وتنزيلها وإدارة المحفوظ منها',
+      icon: BookOpen,
+      color: 'from-emerald-600 to-emerald-700',
+    },
+    {
+      screen: 'library' as ScreenName,
+      params: { section: 'hadith' },
+      label: 'إدارة الأحاديث',
+      description: 'تنزيل كتب الحديث وإدارة المجموعات المحفوظة',
+      icon: BookText,
+      color: 'from-indigo-600 to-indigo-700',
     },
     {
       screen: 'planner' as ScreenName,
@@ -99,9 +116,9 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
           const Icon = item.icon;
           return (
             <button
-              key={item.screen}
+              key={item.label}
               type="button"
-              onClick={() => navigate(item.screen)}
+              onClick={() => navigate(item.screen, 'params' in item ? item.params : undefined)}
               className="group text-right flex items-center gap-3.5 p-4 md:p-5 rounded-3xl border border-primary-100/90 bg-white/90 dark:border-primary-800/80 dark:bg-primary-950/80 shadow-md hover:shadow-xl hover:border-primary-400 dark:hover:border-primary-600 transition-all duration-200 active:scale-[0.98]"
             >
               <div className={`h-12 w-12 rounded-2xl bg-gradient-to-br ${item.color} text-white flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform`}>
@@ -113,7 +130,7 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
                     {item.label}
                   </p>
                   {item.badge && (
-                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-extrabold text-amber-800 dark:bg-amber-950/80 dark:text-amber-300">
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[0.625rem] font-extrabold text-amber-800 dark:bg-amber-950/80 dark:text-amber-300">
                       {item.badge}
                     </span>
                   )}
@@ -154,8 +171,8 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
               <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
                 رفيقك اليومي لتلاوة وتدبر وحفظ القرآن الكريم وإتمام الأذكار والصلوات بدون إنترنت.
               </p>
-              <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 mt-1.5">
-                الإصدار {import.meta.env.VITE_APP_VERSION ?? '1.20.0'} • تطوير متكامل
+              <p className="text-[0.6875rem] font-semibold text-gray-400 dark:text-gray-500 mt-1.5">
+                الإصدار {import.meta.env.VITE_APP_VERSION ?? '1.23.0'} • تطوير متكامل
               </p>
             </div>
           </div>

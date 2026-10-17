@@ -63,7 +63,7 @@ export function AyahSearchPanel({ ayahQuery, setAyahQuery, ayahSearch, openAyahF
                       {toArabicNumber(ayahSearch.total)}
                     </span>
                     {ayahSearch.total > ayahSearch.results.length && (
-                      <span className="text-[10px] text-gray-500 dark:text-gray-400">
+                      <span className="text-[0.625rem] text-gray-500 dark:text-gray-400">
                         (أول {toArabicNumber(ayahSearch.results.length)})
                       </span>
                     )}

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BookOpen, LockKeyhole, Mail, RefreshCcw, Sun, Moon, Monitor, Sparkles } from 'lucide-react';
+import { BookOpen, LockKeyhole, Mail, RefreshCcw, Sun, Moon, Monitor, Sparkles, Palette, Check, X } from 'lucide-react';
 import { supabase } from '@/utils/supabaseClient';
 import { useTheme } from '@/hooks/useApp';
 import { COLOR_PALETTES, type ColorPalette } from '@/utils/colorThemes';
@@ -18,6 +18,16 @@ export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenPro
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showPaletteDropdown, setShowPaletteDropdown] = useState(false);
+
+  // Apply color palette immediately on selection (even before auth)
+  const handleColorChange = async (palette: ColorPalette) => {
+    await changeColorPalette(palette);
+    // Force immediate update of CSS variables
+    document.documentElement.dataset.palette = palette;
+    const themeColor = COLOR_PALETTES.find((item) => item.id === palette)?.color;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor ?? '#1f734e');
+  };
 
   const resendConfirmation = async () => {
     if (!supabase || !email.trim()) {
@@ -99,11 +109,11 @@ export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenPro
               onClick={() => void changeTheme('light')}
               title="الوضع الفاتح"
               aria-label="الوضع الفاتح"
-              className={`rounded-lg min-h-10 min-w-10 p-2.5 md:p-3 text-xs transition ${
-                themeMode === 'light'
-                  ? 'bg-white text-primary-700 shadow-sm dark:bg-primary-800 dark:text-gold-300'
-                  : 'text-gray-500 hover:text-primary-700 dark:text-gray-400 dark:hover:text-gold-300'
-              }`}
+              className="rounded-lg min-h-10 min-w-10 p-2.5 md:p-3 text-xs transition"
+              style={{
+                background: themeMode === 'light' ? 'var(--brand-from, #1f734e)' : 'transparent',
+                color: themeMode === 'light' ? 'white' : '#6b7280'
+              }}
             >
               <Sun size={15} />
             </button>
@@ -112,11 +122,11 @@ export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenPro
               onClick={() => void changeTheme('dark')}
               title="الوضع الداكن"
               aria-label="الوضع الداكن"
-              className={`rounded-lg min-h-10 min-w-10 p-2.5 md:p-3 text-xs transition ${
-                themeMode === 'dark'
-                  ? 'bg-white text-primary-700 shadow-sm dark:bg-primary-800 dark:text-gold-300'
-                  : 'text-gray-500 hover:text-primary-700 dark:text-gray-400 dark:hover:text-gold-300'
-              }`}
+              className="rounded-lg min-h-10 min-w-10 p-2.5 md:p-3 text-xs transition"
+              style={{
+                background: themeMode === 'dark' ? 'var(--brand-from, #1f734e)' : 'transparent',
+                color: themeMode === 'dark' ? 'white' : '#6b7280'
+              }}
             >
               <Moon size={15} />
             </button>
@@ -125,31 +135,102 @@ export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenPro
               onClick={() => void changeTheme('system')}
               title="حسب النظام"
               aria-label="حسب النظام"
-              className={`rounded-lg min-h-10 min-w-10 p-2.5 md:p-3 text-xs transition ${
-                themeMode === 'system'
-                  ? 'bg-white text-primary-700 shadow-sm dark:bg-primary-800 dark:text-gold-300'
-                  : 'text-gray-500 hover:text-primary-700 dark:text-gray-400 dark:hover:text-gold-300'
-              }`}
+              className="rounded-lg min-h-10 min-w-10 p-2.5 md:p-3 text-xs transition"
+              style={{
+                background: themeMode === 'system' ? 'var(--brand-from, #1f734e)' : 'transparent',
+                color: themeMode === 'system' ? 'white' : '#6b7280'
+              }}
             >
               <Monitor size={15} />
             </button>
           </div>
 
-          {/* Color Palette Picker Dots */}
-          <div className="flex items-center gap-1.5">
-            {COLOR_PALETTES.map((palette) => (
-              <button
-                key={palette.id}
-                type="button"
-                onClick={() => void changeColorPalette(palette.id as ColorPalette)}
-                title={`سمة ${palette.name}`}
-                aria-label={`سمة ${palette.name}`}
-                className={`h-6 w-6 md:h-7 md:w-7 rounded-full transition-transform ${
-                  colorPalette === palette.id ? 'scale-125 ring-2 ring-gold-400 ring-offset-2 dark:ring-offset-primary-950' : 'hover:scale-110 opacity-70'
-                }`}
-                style={{ backgroundColor: palette.color }}
+          {/* Color Palette Dropdown */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowPaletteDropdown(!showPaletteDropdown)}
+              title="اختيار لون الواجهة"
+              aria-label="اختيار لون الواجهة"
+              className="relative h-10 w-10 rounded-xl border-2 transition-all duration-300 hover:scale-110 active:scale-95 shadow-lg"
+              style={{
+                borderColor: 'var(--brand-from, #1f734e)',
+                background: 'var(--brand-gradient, linear-gradient(135deg, #1f734e 0%, #2f8f64 45%, #b84414 100%))',
+                boxShadow: `0 4px 12px var(--brand-glow, rgba(31,115,78,0.22))`
+              }}
+            >
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Palette size={18} className="text-white drop-shadow-sm" />
+              </div>
+              {/* Glow effect */}
+              <div
+                className="absolute inset-0 rounded-xl opacity-0 hover:opacity-30 transition-opacity"
+                style={{
+                  background: 'radial-gradient(circle, rgba(255,255,255,0.4) 0%, transparent 70%)'
+                }}
               />
-            ))}
+            </button>
+
+            {/* Dropdown Menu */}
+            {showPaletteDropdown && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowPaletteDropdown(false)}
+                />
+                <div className="absolute top-full left-0 mt-2 z-50 w-64 rounded-2xl border bg-white p-4 shadow-2xl backdrop-blur-xl dark:border-primary-700 dark:bg-primary-950">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs font-bold text-primary-900 dark:text-primary-100">اختر اللون</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowPaletteDropdown(false)}
+                      className="p-1 rounded-lg hover:bg-primary-100 dark:hover:bg-primary-800"
+                    >
+                      <X size={16} className="text-gray-500 dark:text-gray-400" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {COLOR_PALETTES.map((palette) => {
+                      const selected = colorPalette === palette.id;
+                      return (
+                        <button
+                          key={palette.id}
+                          type="button"
+                          onClick={() => {
+                            handleColorChange(palette.id as ColorPalette);
+                            setShowPaletteDropdown(false);
+                          }}
+                          title={`سمة ${palette.name}`}
+                          aria-label={`سمة ${palette.name}`}
+                          className="relative flex flex-col items-center gap-1.5 rounded-xl p-2 transition-all duration-300 hover:scale-105"
+                          style={{
+                            background: selected ? palette.gradient : '#f9fafb',
+                            boxShadow: selected ? `0 4px 12px ${palette.glow}` : '0 1px 3px rgba(0,0,0,0.1)',
+                            border: selected ? `2px solid ${palette.color}` : '1px solid #e5e7eb'
+                          }}
+                        >
+                          <div className="flex items-center gap-0.5">
+                            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: palette.color }} />
+                            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: palette.accent }} />
+                          </div>
+                          <span
+                            className="text-[10px] font-bold"
+                            style={{ color: selected ? 'white' : palette.color }}
+                          >
+                            {palette.name}
+                          </span>
+                          {selected && (
+                            <div className="absolute -top-1 -right-1 h-4 w-4 flex items-center justify-center rounded-full bg-white shadow-md">
+                              <Check size={10} style={{ color: palette.color }} strokeWidth={3} />
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -240,18 +321,23 @@ export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenPro
           </p>
         )}
 
-        <button
-          type="button"
-          onClick={() => {
-            setMode((current) => (current === 'sign-in' ? 'sign-up' : 'sign-in'));
-            setError('');
-            setMessage('');
-            if (mode === 'sign-in') setPassword('');
-          }}
-          className="mt-5 w-full text-center text-xs font-semibold text-primary-700 hover:text-primary-800 dark:text-gold-300 dark:hover:text-gold-200 transition underline"
-        >
-          {mode === 'sign-up' ? 'لديك حساب بالفعل؟ سجّل الدخول' : 'مستخدم جديد؟ أنشئ حسابًا سحابياً'}
-        </button>
+        <div className="mt-5 flex items-center justify-center">
+          <button
+            type="button"
+            onClick={() => {
+              setMode((current) => (current === 'sign-in' ? 'sign-up' : 'sign-in'));
+              setError('');
+              setMessage('');
+              if (mode === 'sign-in') setPassword('');
+            }}
+            className="group inline-flex items-center gap-1.5 rounded-full bg-primary-50/90 px-4 py-2 text-xs font-semibold text-primary-700 transition-all duration-200 hover:bg-primary-100 hover:scale-[1.02] active:scale-95 dark:bg-primary-900/50 dark:text-gold-300 dark:hover:bg-primary-800/60 border border-primary-200/70 dark:border-primary-700/60 shadow-2xs cursor-pointer"
+          >
+            <span className="opacity-80">{mode === 'sign-up' ? 'لديك حساب بالفعل؟' : 'مستخدم جديد؟'}</span>
+            <span className="font-bold text-primary-900 dark:text-white transition-colors group-hover:text-primary-600 dark:group-hover:text-gold-200">
+              {mode === 'sign-up' ? 'سجّل الدخول' : 'إنشاء حساب جديد'}
+            </span>
+          </button>
+        </div>
 
         {/* The account is an extra, not the door: the app is offline-first, and
             signing in is the one thing here that needs the network. Anyone without
@@ -265,7 +351,7 @@ export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenPro
           >
             المتابعة بدون حساب
           </button>
-          <p className="mt-2 text-center text-[11px] leading-relaxed text-primary-700/70 dark:text-primary-300/70">
+          <p className="mt-2 text-center text-[0.6875rem] leading-relaxed text-primary-700/70 dark:text-primary-300/70">
             كل بياناتك تبقى على هذا الجهاز، ويمكنك إنشاء حساب لاحقًا لمزامنتها بين أجهزتك.
           </p>
         </div>

@@ -117,10 +117,17 @@ export async function clearKhatmah(): Promise<void> {
  * null when nothing moved.
  */
 export async function creditKhatmahPage(landed: number): Promise<number | null> {
-  const plan = await loadKhatmah();
-  if (!plan) return null;
-  const next = nextKhatmahCursor(plan.currentPage, landed);
-  if (next === null) return null;
-  await saveKhatmah({ ...plan, currentPage: next, updatedAt: Date.now() });
-  return next;
+  // Read and write inside one transaction, for the same reason the quiz
+  // grader is: IndexedDB runs same-store readwrite transactions one after the
+  // other, so a reader who settles two pages in quick succession moves the
+  // cursor twice instead of both calls computing from the same start and the
+  // second overwriting the first's advance.
+  return db.transaction('rw', db.khatmah, async () => {
+    const plan = await loadKhatmah();
+    if (!plan) return null;
+    const next = nextKhatmahCursor(plan.currentPage, landed);
+    if (next === null) return null;
+    await saveKhatmah({ ...plan, currentPage: next, updatedAt: Date.now() });
+    return next;
+  });
 }

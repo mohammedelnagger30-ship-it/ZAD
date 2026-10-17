@@ -42,6 +42,38 @@ export interface HadithBook {
   bundled: boolean;
 }
 
+export interface WordMeaningBook {
+  /** Upstream book id inside the dump. */
+  id: number;
+  titleAr: string;
+  /** Short label for the book switcher in the word sheet. */
+  shortAr: string;
+  authorAr: string;
+  /** Ayahs carrying a gloss from this book — it annotates only the unusual words. */
+  ayahs: number;
+  /** Individual gloss entries across those ayahs. */
+  words: number;
+}
+
+export interface WordMeaningsSource {
+  id: string;
+  titleAr: string;
+  blurb: string;
+  /** Compressed dump the app downloads. */
+  url: string;
+  /** Upstream version stamp, so a stored copy can be recognised after an update. */
+  version: string;
+  /** Bytes over the wire — the gzip file as the server sends it. */
+  downloadBytes: number;
+  /** Bytes once decompressed and split per surah: what the device actually stores. */
+  storedBytes: number;
+  /** Ayahs that carry at least one gloss from any book. */
+  ayahs: number;
+  books: WordMeaningBook[];
+  /** Per-surah stored size in bytes, index 1..114. */
+  surahBytes: number[];
+}
+
 const TAFSIR_WEIGHT: Record<TafsirEdition['id'], TafsirEdition['weight']> = {
   muyassar: 'light',
   jalalayn: 'light',
@@ -239,6 +271,36 @@ export const HADITH_BOOKS: HadithBook[] = [
 ];
 
 export const DEFAULT_TAFSIR_ID = 'muyassar';
+
+/**
+ * The word-meanings source: meanings of the unusual words of the Quran, from the
+ * classical gharīb books, in Arabic. One download covers every book below; the app
+ * splits it per surah on the device so only the surah in play is parsed.
+ */
+export const WORD_MEANINGS: WordMeaningsSource = {
+  id: 'quranpedia',
+  titleAr: 'معاني الكلمات',
+  blurb: 'معاني غريب القرآن من كتب موثوقة (السراج، تذكرة الأريب، التبيان، كلمات القرآن).',
+  url: 'https://quranpedia.net/dumps/meanings.json.gz',
+  version: '2026-10-10',
+  downloadBytes: 748517,
+  storedBytes: 2673703,
+  ayahs: 4799,
+  books: [
+    { id: 491, titleAr: 'السراج في بيان غريب القرآن', shortAr: 'السراج', authorAr: 'محمد بن عبد العزيز الخضيري', ayahs: 3644, words: 6104 },
+    { id: 1424, titleAr: 'كلمات القرآن', shortAr: 'كلمات القرآن', authorAr: 'حسنين محمد مخلوف', ayahs: 3628, words: 5903 },
+    { id: 208, titleAr: 'تذكرة الأريب في تفسير الغريب', shortAr: 'تذكرة الأريب', authorAr: 'ابن الجوزي', ayahs: 3167, words: 5491 },
+    { id: 327, titleAr: 'التبيان في تفسير غريب القرآن', shortAr: 'التبيان', authorAr: 'ابن الهائم', ayahs: 1955, words: 2746 },
+  ],
+  surahBytes: [0, 6731, 240634, 84932, 85750, 75510, 79025, 96477, 35570, 71669, 40418, 55732, 51098, 21469, 18703, 28321, 49009, 53406, 59274, 29954, 50488, 44414, 40521, 35291, 37688, 32919, 35109, 34567, 42474, 22125, 22454, 12471, 10921, 41547, 31875, 20402, 25285, 43080, 40154, 31836, 29791, 25371, 22805, 31722, 15989, 9833, 17124, 20063, 19379, 12264, 22838, 20350, 18216, 21745, 23676, 26571, 33053, 14599, 13165, 16391, 11414, 4968, 5777, 5749, 5752, 6824, 8167, 13947, 21220, 19395, 13991, 10144, 15205, 12286, 16284, 15084, 14216, 12598, 14663, 16140, 12738, 11802, 4252, 11231, 7316, 5087, 6998, 5642, 8397, 11894, 9227, 6484, 5460, 3597, 1187, 3125, 5263, 1937, 5703, 3772, 4509, 2949, 2960, 2211, 4394, 3191, 2351, 3662, 2199, 2341, 1978, 3840, 2700, 2392, 2842],
+};
+
+/** The book shown first in the word sheet: the most complete of the four. */
+export const WORD_MEANINGS_DEFAULT_BOOK = 491;
+
+export function getWordMeaningBook(id: number): WordMeaningBook | undefined {
+  return WORD_MEANINGS.books.find((b) => b.id === id);
+}
 
 /**
  * The collection "hadith of the day" reads from — and the base of the library.

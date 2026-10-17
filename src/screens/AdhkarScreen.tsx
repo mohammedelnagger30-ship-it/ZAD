@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
   CheckCircle,
@@ -147,7 +147,16 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
   const [storageError, setStorageError] = useState<string | null>(initialState.error);
   const [notice, setNotice] = useState<string | null>(null);
 
+  // Nothing is written on mount. Opening the screen used to persist the state
+  // it had just read and fire `zad:adhkar-updated` along with it — and that
+  // event starts a sync round — so merely visiting a category pushed a round
+  // and stamped a new `modified_at` on data that had not changed. The guard
+  // compares object identity: `state` is only ever replaced by an edit, so the
+  // first run (the read) and every unchanged re-render fall through.
+  const lastPersistedRef = useRef(state);
   useEffect(() => {
+    if (lastPersistedRef.current === state) return;
+    lastPersistedRef.current = state;
     const persist = () => {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify({
@@ -607,7 +616,7 @@ function DhikrCard({
     <Card className={`transition-smooth ${isDone ? 'border-success-300 bg-success-50/30 dark:border-success-700 dark:bg-success-900/10' : ''}`}>
       <div className="flex items-start gap-3">
         <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-bold ${
-          isDone ? 'bg-success-500 text-white' : 'bg-primary-100 text-primary-600 dark:bg-primary-800 dark:text-primary-300'
+          isDone ? 'bg-success-500 text-gray-950' : 'bg-primary-100 text-primary-600 dark:bg-primary-800 dark:text-primary-300'
         }`}>
           {isDone ? <Check size={17} /> : toArabicNumber(index + 1)}
         </div>

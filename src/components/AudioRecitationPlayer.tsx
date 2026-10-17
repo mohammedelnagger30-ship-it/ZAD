@@ -245,7 +245,7 @@ export function AudioRecitationPlayer({
                   تنزيل سورة {surah.name} للعمل دون إنترنت
                 </button>
                 {downloadState === 'error' && (
-                  <span className="text-[11px] font-medium text-error-600 dark:text-error-400">
+                  <span className="text-[0.6875rem] font-medium text-error-600 dark:text-error-400">
                     {downloadError ?? 'تعذّر التنزيل'}
                   </span>
                 )}
@@ -304,7 +304,7 @@ export function AudioRecitationPlayer({
                       aria-pressed={repeatCount === option.value}
                       className={`min-h-10 rounded-lg px-2.5 text-xs font-semibold transition-colors ${
                         repeatCount === option.value
-                          ? 'bg-gold-500 text-white'
+                          ? 'bg-gold-500 text-gray-950'
                           : 'bg-primary-50 text-primary-700 hover:bg-primary-100 dark:bg-primary-800 dark:text-primary-200 dark:hover:bg-primary-700'
                       }`}
                     >

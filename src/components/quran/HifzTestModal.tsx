@@ -20,6 +20,7 @@ import {
 } from '@/utils/spacedRepetition';
 import { recallDiff, similarityPercent, type RecallDiff } from '@/utils/textMatch';
 import type { HifzGrade } from '@/db/database';
+import { rescheduleAllNotifications } from '@/utils/notificationScheduler';
 
 interface HifzTestModalProps {
   surah: SurahMeta;
@@ -143,6 +144,9 @@ export function HifzTestModal({ surah, fromAyah, toAyah, onClose }: HifzTestModa
         const nextDays = Math.max(0, Math.round((row.dueAt - row.lastReviewedAt) / (24 * 60 * 60 * 1000)));
         setResult({ grade, nextDays });
         setExisting({ lastGrade: grade, intervalDays: nextDays });
+        void rescheduleAllNotifications().catch((error: unknown) => {
+          console.error('Could not reschedule the next Quran review reminder:', error);
+        });
       } finally {
         setSaving(false);
       }
@@ -180,7 +184,7 @@ export function HifzTestModal({ surah, fromAyah, toAyah, onClose }: HifzTestModa
         >
           {GRADE_LABELS_AR[grade]}
           {suggested === grade && (
-            <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-gold-500 px-1.5 text-[9px] font-bold text-white">
+            <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-gold-500 px-1.5 text-[0.5625rem] font-bold text-white">
               الأقرب
             </span>
           )}

@@ -62,12 +62,14 @@ export interface ProtectionStatus {
   notificationsEnabled: boolean;
   /** Android 12+ exact-alarm permission: without it prayers ring in batches. */
   exactAlarmsAllowed: boolean;
+  /** Android 14+ full-screen-intent access: without it the adhan page cannot take over. */
+  fullScreenIntentAllowed: boolean;
   /** Battery optimisation exempted — otherwise doze may postpone a prayer. */
   ignoringBatteryOptimizations: boolean;
 }
 
 /** Which system screen a fix should open. */
-export type ProtectionTarget = 'notifications' | 'exact' | 'battery' | 'autostart';
+export type ProtectionTarget = 'notifications' | 'exact' | 'full-screen' | 'battery' | 'autostart';
 
 /**
  * Replace the armed takeover alarms with this batch (empty = cancel all).

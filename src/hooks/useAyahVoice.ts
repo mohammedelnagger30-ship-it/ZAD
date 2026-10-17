@@ -25,6 +25,11 @@ export function useAyahVoice({
   const [voiceWholeFile, setVoiceWholeFile] = useState(false);
   const [voicePhase, setVoicePhase] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [voicePlaying, setVoicePlaying] = useState(false);
+  const [voiceTime, setVoiceTime] = useState({ current: 0, duration: 0 });
+  const [playbackRate, setPlaybackRate] = useState(1);
+  /** Total plays per ayah, including the first play. */
+  const [repeatCount, setRepeatCount] = useState(1);
+  const repeatRemainingRef = useRef(0);
   /** Set when this ayah has run to its end: «متابعة» then means the one after it. */
   const [voiceDone, setVoiceDone] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
@@ -74,9 +79,11 @@ export function useAyahVoice({
     if (source.verseTimings.length === 0) {
       voiceTimingRef.current = null;
       if (audio.src !== source.url) audio.src = source.url;
+      audio.playbackRate = playbackRate;
       if (restart || audio.ended) {
         audio.currentTime = 0;
       }
+      setVoiceTime({ current: audio.currentTime, duration: Number.isFinite(audio.duration) ? audio.duration : 0 });
       audio.play().catch(() => {
         setVoicePhase('error');
         setVoiceError('تعذّر تشغيل التلاوة — أعد المحاولة.');
@@ -92,6 +99,7 @@ export function useAyahVoice({
     }
     voiceTimingRef.current = timing;
     if (audio.src !== source.url) audio.src = source.url;
+    audio.playbackRate = playbackRate;
     const start = timing.startMs / 1000;
     const end = timing.endMs / 1000;
     // A file that already ran out plays its last ayah again from that ayah, not
@@ -99,12 +107,13 @@ export function useAyahVoice({
     if (restart || audio.ended || audio.currentTime < start || audio.currentTime >= end) {
       audio.currentTime = start;
     }
+    setVoiceTime({ current: Math.max(0, audio.currentTime - start), duration: end - start });
     audio.play().catch(() => {
       setVoicePhase('error');
       setVoiceError('تعذّر تشغيل التلاوة — أعد المحاولة.');
     });
     setVoiceDone(false);
-  }, []);
+  }, [playbackRate]);
 
   /**
    * Get the surah's file, then play this ayah out of it. The reader's own reciter
@@ -127,6 +136,7 @@ export function useAyahVoice({
       const { surahId } = ayahChoice;
       setVoicePhase('loading');
       setVoiceError(null);
+      repeatRemainingRef.current = repeatCount - 1;
       void loadSurahAudio(reciter, surahId)
         .then((source) => {
           // The reader may have closed the sheet while the file was on its way.
@@ -146,7 +156,7 @@ export function useAyahVoice({
           setVoiceError(cause instanceof Error ? cause.message : 'تعذّر تجهيز التلاوة.');
         });
     },
-    [ayahChoice, reciterId, playAyahFrom, releaseVoice],
+    [ayahChoice, reciterId, playAyahFrom, releaseVoice, repeatCount],
   );
 
   /**
@@ -168,10 +178,13 @@ export function useAyahVoice({
   const advanceAyah = useCallback(
     (surahId: number, ayahNumber: number) => {
       const timing = voiceSourceRef.current?.source.verseTimings.find((entry) => entry.ayah === ayahNumber);
-      if (timing) voiceTimingRef.current = timing;
+      if (timing) {
+        voiceTimingRef.current = timing;
+        repeatRemainingRef.current = repeatCount - 1;
+      }
       showAyah(surahId, ayahNumber);
     },
-    [showAyah],
+    [showAyah, repeatCount],
   );
 
   /**
@@ -179,11 +192,34 @@ export function useAyahVoice({
    * where a whole-surah listen simply turns over: the next ayah of the file already
    * in hand takes over with nothing to fetch and nothing to press.
    */
-  const handleVoiceTime = useCallback(() => {
+  const handleVoiceTime = useCallback((atEnd = false) => {
     const audio = voiceAudioRef.current;
     const timing = voiceTimingRef.current;
-    if (!audio || !timing) return;
-    if (audio.currentTime < timing.endMs / 1000) return;
+    if (!audio) return;
+    if (!timing) {
+      setVoiceTime({
+        current: audio.currentTime,
+        duration: Number.isFinite(audio.duration) ? audio.duration : 0,
+      });
+      return;
+    }
+    const start = timing.startMs / 1000;
+    const end = timing.endMs / 1000;
+    setVoiceTime({
+      current: Math.min(end - start, Math.max(0, audio.currentTime - start)),
+      duration: end - start,
+    });
+    if (!atEnd && audio.currentTime < end) return;
+    if (repeatRemainingRef.current > 0) {
+      const source = voiceSourceRef.current?.source;
+      if (!source) {
+        finishVoice();
+        return;
+      }
+      repeatRemainingRef.current -= 1;
+      playAyahFrom(source, ayahChoice?.ayahNumber ?? timing.ayah, true);
+      return;
+    }
     const choice = ayahChoice;
     const surah = choice ? getSurah(choice.surahId) : undefined;
     if (voiceScope === 'surah' && choice && surah && choice.ayahNumber < surah.ayahCount) {
@@ -191,7 +227,12 @@ export function useAyahVoice({
       return;
     }
     finishVoice();
-  }, [finishVoice, advanceAyah, ayahChoice, voiceScope]);
+  }, [finishVoice, advanceAyah, ayahChoice, voiceScope, playAyahFrom]);
+
+  const handleVoiceEnded = useCallback(() => {
+    if (voiceTimingRef.current) handleVoiceTime(true);
+    else finishVoice();
+  }, [finishVoice, handleVoiceTime]);
 
   /**
    * Carry on with the next ayah out of the file already in hand — no refetch, the
@@ -206,13 +247,14 @@ export function useAyahVoice({
     if (next > surah.ayahCount) return;
     showAyah(choice.surahId, next);
     setVoiceDone(false);
+    repeatRemainingRef.current = repeatCount - 1;
     const cached = voiceSourceRef.current;
     if (cached && cached.surahId === choice.surahId) {
       playAyahFrom(cached.source, next);
       return;
     }
     startVoice(reciterId, next);
-  }, [ayahChoice, showAyah, playAyahFrom, startVoice, reciterId]);
+  }, [ayahChoice, showAyah, playAyahFrom, startVoice, reciterId, repeatCount]);
 
   /**
    * The whole surah from its opening ayah — «من الأول», offered only once a
@@ -223,8 +265,9 @@ export function useAyahVoice({
     const choice = ayahChoice;
     if (!choice) return;
     showAyah(choice.surahId, 1);
+    repeatRemainingRef.current = repeatCount - 1;
     startVoice(reciterId, 1);
-  }, [ayahChoice, showAyah, startVoice, reciterId]);
+  }, [ayahChoice, showAyah, startVoice, reciterId, repeatCount]);
 
   /**
    * One ayah, or the whole of it. The choice says only where the recitation is to
@@ -285,8 +328,9 @@ export function useAyahVoice({
   const replayVoice = useCallback(() => {
     const cached = voiceSourceRef.current;
     if (!cached || !ayahChoice) return;
+    repeatRemainingRef.current = repeatCount - 1;
     playAyahFrom(cached.source, ayahChoice.ayahNumber, true);
-  }, [ayahChoice, playAyahFrom]);
+  }, [ayahChoice, playAyahFrom, repeatCount]);
 
   /** The first tap opens the voice; every tap after it plays or pauses this ayah. */
   const openVoice = () => {
@@ -305,6 +349,7 @@ export function useAyahVoice({
     releaseVoice();
     setReciterId(nextReciterId);
     savePreferredReciter(nextReciterId);
+    repeatRemainingRef.current = repeatCount - 1;
     // The new voice picks up the ayah being heard, not the top of the surah.
     startVoice(nextReciterId, ayahChoice?.ayahNumber);
   };
@@ -317,7 +362,36 @@ export function useAyahVoice({
     setVoicePlaying(false);
     setVoiceDone(false);
     setVoiceError(null);
-  }, []);
+    setVoiceTime({ current: 0, duration: 0 });
+    repeatRemainingRef.current = repeatCount - 1;
+  }, [repeatCount]);
+
+  const handleVoiceRate = (rate: number) => {
+    setPlaybackRate(rate);
+    if (voiceAudioRef.current) voiceAudioRef.current.playbackRate = rate;
+  };
+
+  const handleRepeatCount = (count: number) => {
+    setRepeatCount(count);
+    repeatRemainingRef.current = count - 1;
+  };
+
+  const seekVoice = (current: number) => {
+    const audio = voiceAudioRef.current;
+    if (!audio) return;
+    const timing = voiceTimingRef.current;
+    if (timing) {
+      const duration = (timing.endMs - timing.startMs) / 1000;
+      const bounded = Math.max(0, Math.min(duration, current));
+      audio.currentTime = timing.startMs / 1000 + bounded;
+      setVoiceTime({ current: bounded, duration });
+      return;
+    }
+    const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
+    const bounded = Math.max(0, Math.min(duration, current));
+    audio.currentTime = bounded;
+    setVoiceTime({ current: bounded, duration });
+  };
 
   // Leaving the reader while the ayah's voice is up must not leave the recitation
   // behind it: the element goes out of the document, and that alone never stops it.
@@ -362,6 +436,9 @@ export function useAyahVoice({
     voiceWholeFile,
     voicePhase,
     voiceError,
+    voiceTime,
+    playbackRate,
+    repeatCount,
     voiceAudioRef,
     setVoicePlaying,
     reciterId,
@@ -373,6 +450,10 @@ export function useAyahVoice({
     resetVoice,
     finishVoice,
     handleVoiceTime,
+    handleVoiceEnded,
+    handleVoiceRate,
+    handleRepeatCount,
+    seekVoice,
     voicePrimaryLabel,
     voicePrimaryDisabled,
     voiceHint,
