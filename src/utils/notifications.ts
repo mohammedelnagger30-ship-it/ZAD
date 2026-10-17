@@ -90,16 +90,58 @@ export function preserveActiveSnooze(notification: LocalNotificationSchema): boo
   return at == null || at > Date.now();
 }
 
+/**
+ * How long a permission request may stay unanswered before the caller stops waiting.
+ *
+ * On a number of Android builds the system shows no notification-permission dialog at
+ * all, or shows one and never delivers the plugin's result back to the WebView —
+ * `requestPermissions()` then stays pending forever. Callers await it while showing a
+ * «جارٍ التفعيل...» state, so an unanswered request used to freeze the onboarding
+ * screen indefinitely.
+ */
+export const NOTIFICATION_PERMISSION_TIMEOUT_MS = 10_000;
+
+/**
+ * Resolves `null` once `promise` has not settled within `ms`, instead of waiting forever.
+ *
+ * A promise that settles late is still safe: `Promise.race` holds a reaction on it, so a
+ * late rejection is swallowed rather than surfacing as an unhandled rejection.
+ */
+async function settleWithin<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), ms);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 export async function requestNotificationPermission(): Promise<boolean> {
   if (!Capacitor.isNativePlatform()) {
     if ('Notification' in window) {
-      const perm = await Notification.requestPermission();
+      const perm = await settleWithin(Notification.requestPermission(), NOTIFICATION_PERMISSION_TIMEOUT_MS);
       return perm === 'granted';
     }
     return false;
   }
-  const perm = await LocalNotifications.requestPermissions();
-  return perm.display === 'granted';
+  const granted = await settleWithin(
+    LocalNotifications.requestPermissions().then((perm) => perm.display === 'granted'),
+    NOTIFICATION_PERMISSION_TIMEOUT_MS,
+  );
+  if (granted !== null) return granted;
+  // The request went unanswered (some OEM skins swallow the dialog or its result).
+  // Report whatever the system state actually is, so the flow keeps moving and the
+  // user can re-ask from Settings, rather than hanging on «جارٍ التفعيل...».
+  try {
+    return (await settleWithin(hasNotificationPermission(), NOTIFICATION_PERMISSION_TIMEOUT_MS)) ?? false;
+  } catch {
+    return false;
+  }
 }
 
 export async function hasNotificationPermission(): Promise<boolean> {

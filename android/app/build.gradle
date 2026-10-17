@@ -3,7 +3,7 @@ import java.io.StringReader
 apply plugin: 'com.android.application'
 
 def appVersionCode = (rootProject.findProperty('VERSION_CODE') ?: '1').toString().toInteger()
-def appVersionName = (rootProject.findProperty('VERSION_NAME') ?: '1.20.0').toString()
+def appVersionName = (rootProject.findProperty('VERSION_NAME') ?: '1.23.0').toString()
 
 android {
     namespace = "com.hifzi.app"

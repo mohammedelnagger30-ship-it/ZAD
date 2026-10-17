@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Bell, Download, Play, Sparkles, Square, Trash2, Volume2 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
-import { Card, Button } from '@/components/ui';
+import { Card, Button, ToggleRow } from '@/components/ui';
 import { TimeOptionButton } from '@/components/TimeOptionButton';
 import { SectionTitle } from '@/components/settings/SectionTitle';
 import {
@@ -20,7 +20,7 @@ import {
   resolveAdhanPlayUrl,
 } from '@/utils/adhanStore';
 import { rescheduleAllNotifications } from '@/utils/notificationScheduler';
-import { canScheduleExactAlarms, NOTIFICATION_WARNING_EVENT, requestExactAlarms, requestNotificationPermission } from '@/utils/notifications';
+import { canScheduleExactAlarms, hasNotificationPermission, NOTIFICATION_WARNING_EVENT, requestExactAlarms, requestNotificationPermission } from '@/utils/notifications';
 import { type Settings } from '@/db/database';
 
 interface NotificationsSectionProps {
@@ -215,10 +215,9 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
   }, []);
 
   const enableRandomDhikrNotifications = useCallback(async () => {
-    if (!Capacitor.isNativePlatform()) {
-      setDhikrPermissionStatus('التذكيرات المجدولة تعمل في تطبيق أندرويد، وليس في معاينة المتصفح.');
-      return;
-    }
+    // Scheduled reminders are armed by the native scheduler only; on the web build this
+    // button has nothing to do, so it stays silent.
+    if (!Capacitor.isNativePlatform()) return;
     try {
       if (!(await requestNotificationPermission())) {
         setDhikrPermissionStatus('لم تُمنح صلاحية الإشعارات. يمكنك تفعيلها من إعدادات الهاتف.');
@@ -232,6 +231,62 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
       );
     }
   }, []);
+
+  /**
+   * The switch turns the *same* setting the onboarding step writes, so flipping it on
+   * has to do what onboarding does: make sure the notification permission exists, and
+   * only then leave it on. Saving the flag first and hoping the permission follows is
+   * what left the toggle showing "on" while the queue stayed empty — the reschedule
+   * bails silently when the grant is missing.
+   */
+  const handleRandomDhikrToggle = useCallback(async (enabled: boolean) => {
+    if (!enabled) {
+      setDhikrPermissionStatus('');
+      onSaveSettings({ randomDhikrEnabled: false });
+      return;
+    }
+    // Only the native scheduler can arm the reminders, so the web build leaves the
+    // switch as it is rather than showing it on with an empty queue behind it.
+    if (!Capacitor.isNativePlatform()) return;
+    try {
+      if (!(await requestNotificationPermission())) {
+        // Snapping back to off is honest: nothing can be scheduled without the grant.
+        setDhikrPermissionStatus('لم تُمنح صلاحية الإشعارات، فبقيت التذكيرات متوقفة. فعّلها من إعدادات الهاتف ثم أعد المحاولة.');
+        return;
+      }
+      onSaveSettings({ randomDhikrEnabled: true });
+      await rescheduleAllNotifications();
+      setDhikrPermissionStatus('تم تفعيل الإشعارات وإعادة جدولة التذكيرات.');
+    } catch (error) {
+      setDhikrPermissionStatus(
+        error instanceof Error ? `تعذّر تفعيل التذكيرات: ${error.message}` : 'تعذّر تفعيل التذكيرات.'
+      );
+    }
+  }, [onSaveSettings]);
+
+  /**
+   * Opening the app cannot pop the permission dialog by itself (and should not), but a
+   * switch left on with the permission revoked arms nothing at all. Surface that where
+   * the switch lives instead of leaving the user with a silent, reminder-free phone.
+   */
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform() || !settings.randomDhikrEnabled) return;
+    let alive = true;
+    void hasNotificationPermission()
+      .then((granted) => {
+        if (alive && !granted) {
+          setDhikrPermissionStatus(
+            'التذكيرات مفعّلة، لكن صلاحية الإشعارات غير ممنوحة — لن تصل التذكيرات حتى تسمح بها من إعدادات الهاتف.'
+          );
+        }
+      })
+      .catch(() => {
+        // Permission state unavailable: the toggle itself still reflects the setting.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [settings.randomDhikrEnabled]);
 
   const triggerAzanOverlayPreview = () => {
     window.dispatchEvent(
@@ -411,8 +466,14 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
               label="تذكير عشوائي بالأذكار"
               icon={<Bell size={18} className="text-primary-600 dark:text-gold-400" />}
               value={settings.randomDhikrEnabled}
-              onChange={(v) => onSaveSettings({ randomDhikrEnabled: v })}
+              onChange={(v) => void handleRandomDhikrToggle(v)}
             />
+
+            {dhikrPermissionStatus && (
+              <p role="status" className="mt-2 text-xs text-primary-600 dark:text-gold-400 font-semibold">
+                {dhikrPermissionStatus}
+              </p>
+            )}
 
             {settings.randomDhikrEnabled && (
               <div className="mt-3 space-y-3 rounded-2xl border border-primary-100 bg-primary-50/50 p-3.5 dark:border-primary-800/80 dark:bg-primary-900/30">
@@ -466,11 +527,6 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
                 <Button variant="secondary" size="sm" onClick={enableRandomDhikrNotifications} className="w-full md:w-auto md:px-5 font-semibold">
                   <Bell size={16} /> تفعيل صلاحية الإشعارات للهاتف
                 </Button>
-                {dhikrPermissionStatus && (
-                  <p role="status" className="text-xs text-primary-600 dark:text-gold-400 font-semibold text-center">
-                    {dhikrPermissionStatus}
-                  </p>
-                )}
               </div>
             )}
           </div>
@@ -498,38 +554,3 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
   );
 }
 
-function ToggleRow({
-  label,
-  icon,
-  value,
-  onChange,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  value: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between py-1">
-      <div className="flex items-center gap-2.5 text-sm font-semibold text-primary-900 dark:text-primary-100">
-        {icon}
-        <span>{label}</span>
-      </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={value}
-        onClick={() => onChange(!value)}
-        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${
-          value ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-700'
-        }`}
-      >
-        <span
-          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
-            value ? '-translate-x-5' : 'translate-x-0'
-          }`}
-        />
-      </button>
-    </div>
-  );
-}

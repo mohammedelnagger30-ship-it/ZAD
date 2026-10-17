@@ -282,7 +282,17 @@ export function useAzanTrigger(settings: Settings | null) {
         fallbackTimer = undefined;
         pendingInstant = undefined;
         if (disposed || isFired(instant)) return;
-        openAzan(prayer.name as PrayerKey, prayer.arabicName, prayer.time);
+        // This branch runs precisely when the *listener* never heard the alert — the
+        // flaky half of the pipeline. The alert itself was posted natively at the
+        // prayer instant and is likely still ringing from its channel, so the page is
+        // opened as if it came from that notification: within `SYSTEM_RING_WINDOW_MS`
+        // it stays quiet (no second copy of the same call over the first), and past
+        // that window it becomes the speaker itself. Without this flag the WebView
+        // started its own recording on top of the still-ringing channel sound — two
+        // copies of the same adhan a beat apart, which is what «الأذان بيقطع» was.
+        openAzan(prayer.name as PrayerKey, prayer.arabicName, prayer.time, {
+          fromNotification: true,
+        });
       }, NOTIFICATION_GRACE_MS);
     };
 

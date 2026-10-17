@@ -1,4 +1,4 @@
-import type { KeyboardEvent, ReactNode } from 'react';
+import type { CSSProperties, KeyboardEvent, ReactNode } from 'react';
 
 interface CardProps {
   children: ReactNode;
@@ -75,6 +75,8 @@ interface ButtonProps {
   fullWidth?: boolean;
   disabled?: boolean;
   className?: string;
+  /** Inline override for the fill (e.g. the active palette's gradient). Wins over `variant`. */
+  style?: CSSProperties;
 }
 
 export function Button({
@@ -85,6 +87,7 @@ export function Button({
   fullWidth,
   disabled,
   className = '',
+  style,
 }: ButtonProps) {
   const variants: Record<string, string> = {
     primary: 'bg-primary-600 hover:bg-primary-700 text-white shadow-sm',
@@ -112,6 +115,7 @@ export function Button({
     <button
       onClick={onClick}
       disabled={disabled}
+      style={style}
       className={`
         font-medium transition-smooth active:scale-95
         disabled:opacity-50 disabled:cursor-not-allowed
@@ -128,6 +132,54 @@ export function Button({
 export interface BadgeProps {
   children: ReactNode;
   variant?: 'primary' | 'gold' | 'success' | 'warning' | 'error' | 'neutral';
+}
+
+/**
+ * A labelled on/off switch.
+ *
+ * It is a real switch to assistive tech (`role` + `aria-checked`) rather than a bare
+ * icon that only *looks* toggleable, and the track itself carries the state — a grey
+ * knob on a hairline label is something sighted users miss too.
+ */
+export interface ToggleRowProps {
+  label: string;
+  /** Second line under the label: what the setting actually changes. */
+  description?: string;
+  icon?: ReactNode;
+  value: boolean;
+  onChange: (value: boolean) => void;
+  disabled?: boolean;
+}
+
+export function ToggleRow({ label, description, icon, value, onChange, disabled }: ToggleRowProps) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-1.5">
+      <div className="flex min-w-0 items-center gap-2.5">
+        {icon}
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-primary-900 dark:text-primary-100">{label}</p>
+          {description && <p className="text-xs text-gray-500 dark:text-gray-400">{description}</p>}
+        </div>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={value}
+        aria-label={label}
+        disabled={disabled}
+        onClick={() => onChange(!value)}
+        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50 ${
+          value ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-700'
+        }`}
+      >
+        <span
+          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+            value ? '-translate-x-5' : 'translate-x-0'
+          }`}
+        />
+      </button>
+    </div>
+  );
 }
 
 export function Badge({ children, variant = 'primary' }: BadgeProps) {

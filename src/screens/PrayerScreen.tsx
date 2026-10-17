@@ -327,23 +327,27 @@ export function PrayerScreen({ settings, onSaveSettings, navigate, params }: Pra
       {/* Only when the device itself can silence the adhan — nothing to show otherwise. */}
       <DeviceProtectionBanner />
 
-      {/* Enhanced Next Prayer Highlight */}
+      {/* Enhanced Next Prayer Highlight — deep high-contrast gradient that stays readable on every palette */}
       {nextPrayer && (
-        <div className="relative isolate overflow-hidden rounded-[2rem] bg-linear-to-br from-primary-600 via-primary-700 to-primary-900 p-6 text-white shadow-2xl dark:from-primary-700 dark:via-primary-800 dark:to-primary-950">
-          {/* Decorative patterns */}
-          <div className="pointer-events-none absolute -right-20 -top-20 -z-10 h-64 w-64 rounded-full border-4 border-white/5" />
-          <div className="pointer-events-none absolute -right-10 top-10 -z-10 h-40 w-40 rounded-full border-4 border-white/5" />
-          <div className="pointer-events-none absolute right-1/3 bottom-0 -z-10 h-48 w-48 rounded-full border-4 border-white/5 opacity-50" />
-          <Clock className="pointer-events-none absolute -right-8 bottom-0 -z-10 h-40 w-40 rotate-12 text-white/[0.05]" />
+        <div className="relative isolate overflow-hidden rounded-[2rem] p-6 shadow-2xl backdrop-blur-sm">
+          {/* Deep primary gradient: light mode uses 600→900 for strong contrast, dark mode uses 700→950 */}
+          <div className="absolute inset-0 rounded-[2rem] bg-gradient-to-br from-primary-600 via-primary-700 to-primary-900 dark:from-primary-700 dark:via-primary-800 dark:to-primary-950" />
+          {/* Ambient accent glow for depth */}
+          <div className="pointer-events-none absolute -top-8 -right-8 -z-10 h-48 w-48 rounded-full bg-[var(--func-accent)]/25 blur-3xl dark:bg-[var(--func-accent)]/15" />
+          {/* Decorative patterns — clearer borders for light mode */}
+          <div className="pointer-events-none absolute -right-20 -top-20 -z-10 h-64 w-64 rounded-full border-4 border-white/20 dark:border-white/10" />
+          <div className="pointer-events-none absolute -right-10 top-10 -z-10 h-40 w-40 rounded-full border-4 border-white/20 dark:border-white/10" />
+          <div className="pointer-events-none absolute right-1/3 bottom-0 -z-10 h-48 w-48 rounded-full border-4 border-white/20 dark:border-white/10 opacity-70" />
+          <Clock className="pointer-events-none absolute -right-8 bottom-0 -z-10 h-40 w-40 rotate-12 text-white/[0.12] dark:text-white/[0.08]" />
 
           <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
             <div className="flex-1">
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 backdrop-blur-xs">
-                <span className="h-2 w-2 rounded-full bg-gold-400 animate-pulse" />
-                <p className="text-xs font-semibold text-white/90">الصلاة القادمة</p>
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/25 px-3 py-1.5 backdrop-blur-xs border border-white/30 dark:border-white/15">
+                <span className="h-2 w-2 rounded-full bg-[var(--func-accent)] animate-pulse shadow-[0_0_16px_var(--func-accent)]" />
+                <p className="text-xs font-semibold text-white">الصلاة القادمة</p>
               </div>
-              <h2 className="text-4xl font-bold leading-tight sm:text-5xl">{nextPrayer.arabicName}</h2>
-              <p className="mt-3 text-xl text-gold-300 font-semibold">
+              <h2 className="text-4xl font-bold leading-tight sm:text-5xl text-white">{nextPrayer.arabicName}</h2>
+              <p className="mt-3 text-xl font-semibold text-[var(--func-accent)]">
                 {getTimeUntil(nextPrayer.time, now)}
               </p>
               <button
@@ -359,17 +363,17 @@ export function PrayerScreen({ settings, onSaveSettings, navigate, params }: Pra
                     })
                   );
                 }}
-                className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-gold-400/20 hover:bg-gold-400/30 px-4 py-2.5 text-sm font-bold text-gold-300 backdrop-blur-xs transition-all hover:scale-105 border border-gold-400/30 shadow-lg"
+                className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-white/15 hover:bg-white/20 px-4 py-2.5 text-sm font-bold text-white backdrop-blur-xs transition-all hover:scale-105 border border-white/30 shadow-lg dark:bg-[var(--func-accent)]/15 dark:hover:bg-[var(--func-accent)]/25 dark:text-[var(--func-accent)] dark:border-[var(--func-accent)]/40"
               >
                 <Sparkles size={16} />
                 عرض صفحة الأذان
               </button>
             </div>
-            <div className="flex flex-col items-center justify-center rounded-3xl bg-white/10 backdrop-blur-xs px-6 py-4 border border-white/20 shadow-xl">
-              <p className="text-5xl font-bold text-gold-300 sm:text-6xl">
+            <div className="flex flex-col items-center justify-center rounded-3xl bg-white/25 backdrop-blur-xs px-6 py-4 border border-white/30 shadow-xl dark:bg-white/10 dark:border-white/15">
+              <p className="text-5xl font-bold text-white sm:text-6xl">
                 {formatTime12h(nextPrayer.time, timeZone)}
               </p>
-              <p className="mt-1 text-xs text-white/70">وقت الصلاة</p>
+              <p className="mt-1 text-xs text-white/90 dark:text-white/80">وقت الصلاة</p>
             </div>
           </div>
         </div>

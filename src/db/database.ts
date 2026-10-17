@@ -169,11 +169,19 @@ export interface Settings {
   /** -1 | 0 | 1 — manual correction when the displayed Hijri date is off by a day. */
   hijriAdjustment?: number;
   locationMethod: 'manual' | 'auto';
-  /** Icon style preference: 'lucide' (default), 'feather', 'heroicons' */
+  /**
+   * Line weight of every icon in the app. The ids keep the names of the icon sets the
+   * weights were borrowed from — `lucide` (default, no rule), `feather` (lighter),
+   * `heroicons` (heavier) — because rows in the wild already store them. Applied by
+   * `App` as `data-icon-style` on <html>; index.css owns the actual stroke widths.
+   */
   iconStyle?: 'lucide' | 'feather' | 'heroicons';
   /** Enable custom badge emojis */
   customBadgesEnabled?: boolean;
-  /** Show onboarding tips on home screen */
+  /**
+   * Legacy: the switch that wrote this was removed because no tips feature ever read
+   * it. Kept in the type so existing rows stay valid on read, backup and sync.
+   */
   showOnboardingTips?: boolean;
   /**
    * Minutes each prayer's iqamah follows its adhan (الجماعة), per mosque
@@ -377,7 +385,7 @@ const SETTINGS_ROW_ID = 1;
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'dark',
-  colorPalette: 'emerald',
+  colorPalette: 'ocean',
   fontSize: 28,
   notificationSound: true,
   adhanSound: true,

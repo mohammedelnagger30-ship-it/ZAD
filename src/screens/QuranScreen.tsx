@@ -403,7 +403,7 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
                 className={`group relative flex flex-col items-center justify-center gap-1.5 rounded-2xl py-3 px-2 transition-all duration-300 ${
                   browseMode === tab.mode
                     ? 'bg-gradient-to-br from-primary-600 to-primary-700 text-white shadow-lg dark:from-primary-700 dark:to-primary-800'
-                    : 'text-gray-500 hover:bg-primary-50 hover:text-primary-700 dark:text-gray-400 dark:hover:bg-primary-900/50 dark:hover:text-primary-100'
+                    : 'text-primary-500 hover:bg-primary-50 hover:text-primary-700 dark:text-primary-400 dark:hover:bg-primary-900/50 dark:hover:text-primary-100'
                 }`}
               >
                 <tab.icon size={20} strokeWidth={2} className={`transition-transform ${browseMode === tab.mode ? 'scale-110' : 'group-hover:scale-110'}`} />

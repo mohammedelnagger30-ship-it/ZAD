@@ -62,16 +62,16 @@ export function useSettings() {
 }
 
 export function useTheme() {
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
-  const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>('system');
-  const [colorPalette, setColorPalette] = useState<ColorPalette>('emerald');
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>('dark');
+  const [colorPalette, setColorPalette] = useState<ColorPalette>('ocean');
 
   useEffect(() => {
     const loadTheme = async () => {
       try {
         const s = await getSettings();
         setThemeMode(s.theme);
-        const palette = COLOR_PALETTES.find((item) => item.id === s.colorPalette)?.id ?? 'emerald';
+        const palette = COLOR_PALETTES.find((item) => item.id === s.colorPalette)?.id ?? 'ocean';
         setColorPalette(palette);
         document.documentElement.dataset.palette = palette;
         try {

@@ -172,7 +172,7 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
                 رفيقك اليومي لتلاوة وتدبر وحفظ القرآن الكريم وإتمام الأذكار والصلوات بدون إنترنت.
               </p>
               <p className="text-[0.6875rem] font-semibold text-gray-400 dark:text-gray-500 mt-1.5">
-                الإصدار {import.meta.env.VITE_APP_VERSION ?? '1.20.0'} • تطوير متكامل
+                الإصدار {import.meta.env.VITE_APP_VERSION ?? '1.23.0'} • تطوير متكامل
               </p>
             </div>
           </div>

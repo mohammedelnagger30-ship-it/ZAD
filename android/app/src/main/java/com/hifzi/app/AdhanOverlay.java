@@ -36,12 +36,14 @@ import java.io.File;
 /**
  * Arms the prayer-time takeover alarms behind the auto-opening adhan page.
  *
- * Each alarm is an exact {@link AlarmManager} wake-up targeting
+ * Each prayer is an <b>alarm-clock</b> alarm ({@link AlarmManager#setAlarmClock}) targeting
  * {@link AdhanOverlayReceiver}, which posts a full-screen-intent notification — the
- * sanctioned way for a closed app to put its own activity on the screen. The receiver
- * owns the notification (sound included, via the prayer channel); this plugin owns the
- * arming, and hands the launch/tap payload to JS so the overlay opens on the right
- * prayer.
+ * sanctioned way for a closed app to put its own activity on the screen. The alarm-clock
+ * API (rather than a plain exact alarm) is what makes the adhan survive the OEM battery
+ * cleaners on Xiaomi/Oppo/Huawei skins, which otherwise drop a closed app's alarms
+ * without a word. The receiver owns the notification (sound included, via the prayer
+ * channel); this plugin owns the arming, and hands the launch/tap payload to JS so the
+ * overlay opens on the right prayer.
  *
  * The JS scheduler calls {@code schedule()} with the whole drift-compensated batch on
  * every rebuild (mirroring the notification queue's swap semantics) and
@@ -235,13 +237,40 @@ public class AdhanOverlay extends Plugin {
             );
 
             if (canExact) {
-                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending);
+                // `setAlarmClock`, not `setExactAndAllowWhileIdle`.
+                //
+                // Both are exact and both survive Doze, but only the alarm-clock API is
+                // something the *system* treats as a clock the person set and is waiting
+                // for. Ordinary exact alarms — including `setExactAndAllowWhileIdle` — are
+                // still fair game for the OEM "battery cleaners" on MIUI, ColorOS, EMUI and
+                // friends: they drop a package's alarms without any broadcast, which is
+                // exactly the «الأذان ما بيطلعش والتطبيق مغلق» report. An alarm-clock
+                // alarm is instead held to the same standard as the built-in clock, is
+                // exempt from the doze idle-quota that defers the ordinary kind, and puts
+                // this app in the platform's allowlist to start work from the background
+                // (the full-screen takeover that follows it needs that standing).
+                alarmManager.setAlarmClock(
+                    new AlarmManager.AlarmClockInfo(at, showIntent(context, id, intent)),
+                    pending);
             } else {
                 alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending);
             }
             armedIds.put(id);
         }
         prefs(context).edit().putString(KEY_ARMED_IDS, armedIds.toString()).apply();
+    }
+
+    /**
+     * The intent behind the system's own «next alarm» row (status bar, lock screen,
+     * the built-in clock's list). It must open an <em>activity</em> — handing it the
+     * broadcast above would make that row fire a receiver the system already fired,
+     * so it is a launch of the adhan page instead, carrying the same prayer.
+     */
+    private static PendingIntent showIntent(Context context, int id, Intent launch) {
+        return PendingIntent.getActivity(
+            context, id, launch,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
     }
 
     private static JSONArray storedBatch(Context context) {

@@ -323,12 +323,12 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
         <div className="relative">
           <div className="flex items-center justify-between mb-2">
             <div>
-              <p className="text-gold-200 text-xs md:text-sm font-medium tracking-wide">{getDayName(today)}</p>
+              <p className="text-white/85 text-xs md:text-sm font-semibold tracking-wide">{getDayName(today)}</p>
               <h1 className="text-2xl md:text-3xl font-extrabold mt-0.5 tracking-tight">السلام عليكم</h1>
             </div>
             <div className="text-left">
-              <p className="text-xs md:text-sm text-white/80 font-medium">{formatArabicDate(today)}</p>
-              <p className="text-xs md:text-sm text-gold-200 font-semibold mt-0.5">{getHijriDate(today, settings.hijriAdjustment)}</p>
+              <p className="text-xs md:text-sm text-white/85 font-medium">{formatArabicDate(today)}</p>
+              <p className="text-xs md:text-sm text-white/90 font-semibold mt-0.5">{getHijriDate(today, settings.hijriAdjustment)}</p>
             </div>
           </div>
 
@@ -337,19 +337,19 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
             <div className="mt-4 bg-white/15 dark:bg-black/20 rounded-2xl p-3.5 backdrop-blur-md border border-white/20 shadow-inner">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm text-gold-200 shadow-xs">
+                  <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 backdrop-blur-sm text-white shadow-xs">
                     <Sunrise size={20} />
                     <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
-                      <span className="animate-ping-soft absolute inline-flex h-full w-full rounded-full bg-gold-300 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-gold-300 shadow-xs" />
+                      <span className="animate-ping-soft absolute inline-flex h-full w-full rounded-full bg-[var(--func-accent)] opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[var(--func-accent)] shadow-xs" />
                     </span>
                   </div>
                   <div>
                     <div className="flex items-center gap-1.5">
-                      <p className="text-[11px] text-white/75 font-medium">الصلاة القادمة</p>
-                      <span className="inline-block h-1 w-1 rounded-full bg-gold-300 animate-pulse" />
+                      <p className="text-[11px] text-white/85 font-medium">الصلاة القادمة</p>
+                      <span className="inline-block h-1 w-1 rounded-full bg-[var(--func-accent)] animate-pulse" />
                     </div>
-                    <p className="font-bold text-base text-gold-200">{nextPrayer.arabicName}</p>
+                    <p className="font-bold text-base text-white">{nextPrayer.arabicName}</p>
                   </div>
                 </div>
                 <div className="text-left">
@@ -362,11 +362,11 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
               <div className="mt-3 pt-2.5 border-t border-white/15 flex items-center gap-2.5">
                 <div className="flex-1 h-1.5 rounded-full bg-black/20 overflow-hidden p-0.5 backdrop-blur-xs">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-gold-400 via-amber-200 to-white transition-all duration-1000 ease-out shadow-xs"
+                    className="h-full rounded-full bg-gradient-to-r from-white via-white/90 to-white/60 transition-all duration-1000 ease-out shadow-xs"
                     style={{ width: `${prayerProgress}%` }}
                   />
                 </div>
-                <span className="text-[10px] text-gold-200 font-bold tabular-nums">{prayerProgress}%</span>
+                <span className="text-[10px] text-white/90 font-bold tabular-nums">{prayerProgress}%</span>
               </div>
             </div>
           )}
@@ -391,7 +391,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
           onClick={() => navigate('prayer')}
           className="group flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
         >
-          <div className="h-11 w-11 md:h-12 md:w-12 rounded-xl bg-gradient-to-br from-accent-600 to-accent-800 text-white flex items-center justify-center mb-1.5 shadow-md shadow-accent-700/25 transition-transform duration-200 group-hover:scale-110">
+          <div className="h-11 w-11 md:h-12 md:w-12 rounded-xl bg-gradient-to-br from-primary-700 to-primary-900 text-white flex items-center justify-center mb-1.5 shadow-md shadow-primary-800/25 transition-transform duration-200 group-hover:scale-110">
             <Moon size={21} />
           </div>
           <span className="text-xs md:text-sm font-bold text-primary-900 dark:text-primary-100">الصلاة</span>
@@ -402,7 +402,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
           onClick={() => navigate('adhkar')}
           className="group flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
         >
-          <div className="h-11 w-11 md:h-12 md:w-12 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center mb-1.5 shadow-md shadow-teal-700/25 transition-transform duration-200 group-hover:scale-110">
+          <div className="h-11 w-11 md:h-12 md:w-12 rounded-xl bg-gradient-to-br from-primary-600 to-accent-700 text-white flex items-center justify-center mb-1.5 shadow-md shadow-accent-700/25 transition-transform duration-200 group-hover:scale-110">
             <Heart size={21} />
           </div>
           <span className="text-xs md:text-sm font-bold text-primary-900 dark:text-primary-100">الأذكار</span>
@@ -413,7 +413,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
           onClick={() => navigate('tasbih')}
           className="group flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
         >
-          <div className="h-11 w-11 md:h-12 md:w-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center mb-1.5 shadow-md shadow-amber-600/25 transition-transform duration-200 group-hover:scale-110">
+          <div className="h-11 w-11 md:h-12 md:w-12 rounded-xl bg-gradient-to-br from-accent-600 to-primary-700 text-white flex items-center justify-center mb-1.5 shadow-md shadow-primary-700/25 transition-transform duration-200 group-hover:scale-110">
             <Repeat size={21} />
           </div>
           <span className="text-xs md:text-sm font-bold text-primary-900 dark:text-primary-100">المسبحة</span>
@@ -470,31 +470,28 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
       {/* Streak + quick stats */}
       <div className="grid grid-cols-3 gap-3 md:gap-4">
         <Card className="flex flex-col items-center text-center p-3 md:p-4! group transition-all duration-300 hover:shadow-md hover:-translate-y-0.5">
-          <div className="relative">
-            <Flame
-              size={26}
-              className={
-                streak > 0
-                  ? 'text-accent-500 animate-flame transition-all'
-                  : 'text-gray-300 dark:text-gray-600'
-              }
-            />
+          <div className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-accent-500 to-accent-700 text-white shadow-md shadow-accent-600/25 transition-transform duration-200 group-hover:scale-110">
+            <Flame size={22} className={streak > 0 ? 'animate-flame' : 'opacity-70'} />
             {streak > 0 && (
-              <span className="absolute -inset-1 rounded-full bg-accent-500/20 blur-xs pointer-events-none -z-10 animate-pulse" />
+              <span className="absolute -inset-1 rounded-xl bg-accent-500/25 blur-xs pointer-events-none -z-10 animate-pulse" />
             )}
           </div>
-          <p className="text-2xl font-bold text-primary-700 dark:text-primary-200 mt-1">{streak}</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">أيام متتالية</p>
+          <p className="text-2xl font-extrabold text-primary-800 dark:text-primary-100 mt-2">{streak}</p>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">أيام متتالية</p>
         </Card>
         <Card className="flex flex-col items-center text-center p-3 md:p-4! group transition-all duration-300 hover:shadow-md hover:-translate-y-0.5">
-          <Check size={26} className="text-success-500 transition-transform group-hover:scale-110" />
-          <p className="text-2xl font-bold text-primary-700 dark:text-primary-200 mt-1">{doneTasks.length}</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">مهام مكتملة</p>
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-success-500 to-success-700 text-white shadow-md shadow-success-600/25 transition-transform duration-200 group-hover:scale-110">
+            <Check size={22} />
+          </div>
+          <p className="text-2xl font-extrabold text-primary-800 dark:text-primary-100 mt-2">{doneTasks.length}</p>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">مهام مكتملة</p>
         </Card>
         <Card className="flex flex-col items-center text-center p-3 md:p-4! group transition-all duration-300 hover:shadow-md hover:-translate-y-0.5">
-          <Clock size={26} className="text-warning-500 transition-transform group-hover:scale-110" />
-          <p className="text-2xl font-bold text-primary-700 dark:text-primary-200 mt-1">{pendingTasks.length}</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">مهام معلقة</p>
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-warning-500 to-warning-700 text-white shadow-md shadow-warning-600/25 transition-transform duration-200 group-hover:scale-110">
+            <Clock size={22} />
+          </div>
+          <p className="text-2xl font-extrabold text-primary-800 dark:text-primary-100 mt-2">{pendingTasks.length}</p>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">مهام معلقة</p>
         </Card>
       </div>
 
@@ -556,10 +553,10 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
 
                 const body = (
                   <>
-                    <p className={`text-xs font-semibold ${isSunrise ? 'text-gold-600 dark:text-gold-400' : isNext ? 'text-primary-700 dark:text-gold-300 font-bold' : 'text-primary-600 dark:text-primary-300'}`}>
+                    <p className={`text-xs font-semibold ${isSunrise ? 'text-accent-600 dark:text-accent-400' : isNext ? 'text-primary-800 dark:text-primary-200 font-bold' : 'text-primary-700 dark:text-primary-300'}`}>
                       {prayer.arabicName}
                     </p>
-                    <p className="text-sm font-bold text-primary-800 dark:text-primary-100 mt-0.5">
+                    <p className="text-sm font-bold text-primary-900 dark:text-primary-100 mt-0.5">
                       {formatTime12h(prayer.time, prayerTimeZone)}
                     </p>
                     <div className="mt-1.5 min-h-[1.25rem] flex items-center justify-center">
@@ -590,10 +587,10 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
                       key={prayer.name}
                       className={`rounded-xl p-2.5 text-center transition-all ${
                         isNext
-                          ? 'border-2 border-primary-500/80 dark:border-gold-400/80 bg-primary-100/50 dark:bg-primary-900/40 shadow-sm scale-[1.02]'
+                          ? 'border-2 border-primary-500/80 dark:border-primary-400/70 bg-primary-100 dark:bg-primary-900/40 shadow-sm scale-[1.02]'
                           : prayer.passed
-                          ? 'bg-gray-50 dark:bg-gray-800/30'
-                          : 'bg-gray-50 dark:bg-gray-800/30'
+                          ? 'bg-primary-50/60 dark:bg-gray-800/30'
+                          : 'bg-primary-50/60 dark:bg-gray-800/30'
                       }`}
                     >
                       {body}
@@ -609,12 +606,12 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
                     aria-label={`صلاة ${prayer.arabicName} — ${
                       record ? 'مسجّلة، اضغط للعرض' : 'لم تسجّل بعد، اضغط للتأكيد'
                     }`}
-                    className={`rounded-xl p-2.5 text-center transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:focus-visible:ring-gold-400 ${
+                    className={`rounded-xl p-2.5 text-center transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:focus-visible:ring-primary-400 ${
                       isNext
-                        ? 'border-2 border-primary-500/80 dark:border-gold-400/80 bg-primary-100/60 dark:bg-primary-900/50 shadow-sm ring-2 ring-primary-400/20 scale-[1.02]'
+                        ? 'border-2 border-primary-500/80 dark:border-primary-400/70 bg-primary-100 dark:bg-primary-900/50 shadow-sm ring-2 ring-primary-400/20 scale-[1.02]'
                         : record
                         ? 'bg-primary-50 dark:bg-primary-800/30'
-                        : 'bg-gray-50 dark:bg-gray-800/30 hover:bg-primary-100/70 dark:hover:bg-primary-800/50'
+                        : 'bg-primary-50/60 dark:bg-gray-800/30 hover:bg-primary-100 dark:hover:bg-primary-800/50'
                     }`}
                   >
                     {body}

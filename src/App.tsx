@@ -656,6 +656,13 @@ function AppContent({
     });
   }, []);
 
+  // Icon style rides on <html> exactly like the palette: index.css turns it into a
+  // single stroke-width rule, so the choice repaints every Lucide glyph in the app —
+  // no per-icon prop threading, and the default adds no rule at all.
+  useEffect(() => {
+    document.documentElement.dataset.iconStyle = settings?.iconStyle ?? 'lucide';
+  }, [settings?.iconStyle]);
+
   // Which settings actually change what is armed on the device. Everything else
   // (font size, palette, icon style, tips…) must not pay for a queue rebuild:
   // the effect below used to key on the whole settings object, so every slider
