@@ -2243,6 +2243,13 @@ button.mushaf-ayah-mark:focus-visible {
   font-size: 0.72rem;
 }
 
+/* A book with nothing to say about the tapped word stays visible — so the reader can
+   still tell which of the four is the fuller one — but reads as unavailable. */
+.mushaf-word-analysis__book:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
 .mushaf-word-analysis__download {
   width: 100%;
   margin-top: 0.6rem;

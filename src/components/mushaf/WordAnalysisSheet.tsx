@@ -190,18 +190,30 @@ export function WordAnalysisSheet({ selectedWord, onClose }: WordAnalysisSheetPr
           {!installedLoading && installed && hits !== null && (
             <>
               <div className="mushaf-word-analysis__books" role="group" aria-label="اختيار الكتاب">
-                {WORD_MEANINGS.books.map((book) => (
-                  <button
-                    key={book.id}
-                    type="button"
-                    aria-pressed={bookId === book.id}
-                    className="mushaf-seg__item mushaf-word-analysis__book"
-                    onClick={() => chooseBook(book.id)}
-                    title={`${book.titleAr} — ${book.authorAr}`}
-                  >
-                    {book.shortAr}
-                  </button>
-                ))}
+                {WORD_MEANINGS.books.map((book) => {
+                  // The books annotate only the unusual words, so on most taps three of
+                  // the four are silent. Offering those as live choices makes them read
+                  // as broken; the silent ones are marked and cannot be picked.
+                  const has = byBook.has(book.id);
+                  return (
+                    <button
+                      key={book.id}
+                      type="button"
+                      aria-pressed={has && bookId === book.id}
+                      aria-disabled={!has}
+                      disabled={!has}
+                      className="mushaf-seg__item mushaf-word-analysis__book"
+                      onClick={() => has && chooseBook(book.id)}
+                      title={
+                        has
+                          ? `${book.titleAr} — ${book.authorAr}`
+                          : `${book.titleAr} — لا يذكر هذا الكتاب معنى لهذه الكلمة`
+                      }
+                    >
+                      {book.shortAr}
+                    </button>
+                  );
+                })}
               </div>
 
               {current ? (
@@ -230,7 +242,7 @@ export function WordAnalysisSheet({ selectedWord, onClose }: WordAnalysisSheetPr
                 </p>
               ) : (
                 <p className="mushaf-hint">
-                  لم يعثر الكتاب الأربعة على معنى مطابق لهذه الكلمة في هذا الموضع. الكتب لا تعلّق
+                  لم تجد الكتب الأربعة معنىً مطابقاً لهذه الكلمة في هذا الموضع. لا تعلّق الكتب
                   إلا على ما يُعدّ غريباً، وقد يختلف رسم الكلمة عن رسم المصحف.
                 </p>
               )}

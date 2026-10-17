@@ -11,6 +11,7 @@
 /** @type {import('jest').Config} */
 module.exports = {
   testEnvironment: 'jsdom',
+  setupFiles: ['<rootDir>/src/test/setup.ts'],
   roots: ['<rootDir>/src', '<rootDir>/scripts'],
   testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
   moduleNameMapper: {
