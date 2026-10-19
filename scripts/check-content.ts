@@ -502,6 +502,66 @@ for (const [id, source] of [
     `${id}: cites its hadith source ${source}`,
   );
 }
+// The general remembrance collection and the verified sunnah.com citations added with it.
+// Every number here is the one displayed on sunnah.com (not the sequential JSON id), so a
+// regression that reverts a reference to stale content is caught immediately.
+const generalAdhkarCategory = ADHKAR_CATEGORIES.find((category) => category.id === 'general_adhkar');
+check(
+  generalAdhkarCategory != null &&
+    generalAdhkarCategory.title === 'أذكار عامة' &&
+    generalAdhkarCategory.icon === 'sparkles' &&
+    generalAdhkarCategory.daily === false,
+  'the general remembrance collection exists outside the daily counter with its own icon',
+);
+check(
+  ['g1', 'g2', 'g3', 'g4', 'g5'].every((id) => adhkarById.has(id)),
+  'the general remembrance items are present',
+);
+for (const [id, source] of [
+  ['g1', '٢٦٩٤'],
+  ['g2', '٢٧٠٤'],
+  ['g3', '٢٦٩١'],
+  ['g4', '٢٦٩٥'],
+  ['g5', '٢٦٩٨'],
+  ['e15', '٢٧٢٣'],
+  ['d9', '٢٦٩٧'],
+] as const) {
+  check(
+    adhkarById.get(id)?.reference.includes(source),
+    `${id}: cites its hadith source ${source}`,
+  );
+}
+check(
+  ['g1', 'g2', 'g4'].every((id) => adhkarById.get(id)?.countIsSpecified === false),
+  'the general adhkar whose hadiths fix no count keep countIsSpecified false',
+);
+check(
+  adhkarById.get('g3')?.count === 100 && adhkarById.get('g5')?.count === 100,
+  'the hundredfold general adhkar keep their sourced repetition count',
+);
+check(
+  ['m3', 'e1', 'e15'].every((id) => adhkarById.get(id)?.reference.includes('٢٧٢٣')),
+  'the morning and evening opening/closing remembrances cite the displayed Muslim number',
+);
+check(
+  ['m6', 'e5'].every((id) => adhkarById.get(id)?.reference.includes('٢٦٩٢')),
+  'the morning and evening hundredfold remembrances cite the displayed Muslim number',
+);
+check(
+  adhkarById.get('s4')?.reference.includes('٦٣١٣') &&
+    adhkarById.get('s4')?.reference.includes('٢٧١٠'),
+  'the bedtime surrender supplication cites both of its displayed hadith numbers',
+);
+check(
+  (generalAdhkarCategory?.items.length ?? 0) >= 5,
+  'general_adhkar: has the expanded adhkar set',
+  `got ${generalAdhkarCategory?.items.length ?? 0}`,
+);
+check(
+  (ADHKAR_CATEGORIES.find((item) => item.id === 'general_duas')?.items.length ?? 0) >= 9,
+  'general_duas: has the expanded adhkar set',
+);
+
 check(
   ['quran-12-101', 'quran-23-29', 'quran-39-53', 'quran-40-60'].every((id) => adhkarById.has(id)),
   'the newest Quranic supplication passages are present',
