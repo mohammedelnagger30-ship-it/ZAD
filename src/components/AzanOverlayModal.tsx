@@ -13,18 +13,23 @@ import { setAdhanKeepScreenOn } from '@/utils/adhanOverlay';
 import { useOverlayDismiss } from '@/hooks/useOverlayDismiss';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
+import { iqamahPlayUrl, getIqamahSound } from '@/data/iqamahSound';
+
+export type OverlayMode = 'adhan' | 'iqamah';
 
 export interface AzanOverlayProps {
   isOpen: boolean;
+  /** Which call this overlay represents — the adhan or the iqamah. */
+  mode?: OverlayMode;
   prayerKey: PrayerKey;
   prayerName?: string;
   prayerTime?: Date;
   settings: Settings;
   isPreview?: boolean;
   /**
-   * Opened by the native adhan notification. The notification posts at the prayer
+   * Opened by the native adhan/iqamah notification. The notification posts at the
    * instant itself and rings from its own channel, so the page must not start a second
-   * copy of the adhan on top of it (see `SYSTEM_RING_WINDOW_MS`).
+   * copy of the call on top of it (see `SYSTEM_RING_WINDOW_MS`).
    */
   fromNotification?: boolean;
   onClose: () => void;
@@ -68,11 +73,12 @@ export function AzanOverlayModal({
   fromNotification = false,
   onClose,
   onNavigateToAdhkar,
+  mode = 'adhan',
 }: AzanOverlayProps) {
   const [isPlaying, setIsPlaying] = useState(false);
-  /** The WebView refused to start the adhan without a gesture — fallback control. */
+  /** The WebView refused to start the adhan/iqamah without a gesture — fallback control. */
   const [blocked, setBlocked] = useState(false);
-  /** The prayer notification is ringing right now; the page's own audio stays out. */
+  /** The notification is ringing right now; the page's own audio stays out. */
   const [systemRinging, setSystemRinging] = useState(false);
   const [ended, setEnded] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -80,34 +86,51 @@ export function AzanOverlayModal({
   const [snoozed, setSnoozed] = useState(false);
   const [showDuaa, setShowDuaa] = useState(true);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  // Back on Android dismisses the adhan page. Before this, back during the
-  // adhan exited the app entirely — silencing the call mid-flight.
+  // Back on Android dismisses the page. Before this, back during the
+  // call exited the app entirely — silencing the call mid-flight.
   useOverlayDismiss(isOpen, onClose);
 
   const displayName = prayerName || PRAYER_LABELS_AR[prayerKey] || 'الصلاة';
+  const isIqamah = mode === 'iqamah';
+
+  // Whether this open may make noise at all: an iqamah needs the iqamah sound
+  // *and* the adhan sound enabled; a plain adhan only the adhan setting. Derived
+  // once for the effect below and the sound chip in the JSX — it used to be
+  // computed inside the effect, where the render could not see it.
+  const soundEnabled = isIqamah
+    ? settings.iqamahSound && settings.adhanSound
+    : settings.adhanSound;
+
+  // Select the correct sound based on mode
   const adhanSound = getAdhanSound(settings.adhanVoiceId);
+  const iqamahSound = getIqamahSound(settings.iqamahSoundId ?? 'kamil_iqamah');
+  const selectedSound = isIqamah ? iqamahSound : adhanSound;
+  const selectedPlayUrl = isIqamah ? iqamahPlayUrl(settings.iqamahSoundId) : `/audio/${adhanSound.file}`;
+
   /**
    * Where the recording lives. A bundled voice is in the package, so its URL is known
    * at once; a downloaded one is answered by the store, and the play effect below waits
    * for it rather than starting a player against a path that isn't there yet.
    */
   const [audioUrl, setAudioUrl] = useState<string | null>(() =>
-    adhanSound.bundled ? `/audio/${adhanSound.file}` : null,
+    selectedSound.bundled ? selectedPlayUrl : null,
   );
 
   useEffect(() => {
-    if (adhanSound.bundled) {
-      setAudioUrl(`/audio/${adhanSound.file}`);
+    if (selectedSound.bundled) {
+      setAudioUrl(selectedPlayUrl);
       return;
     }
     let alive = true;
-    void resolveAdhanPlayUrl(adhanSound).then((url) => {
+    // For iqamah, the URL is already known (bundled); for adhan, resolve if needed
+    const promise = isIqamah ? Promise.resolve(selectedPlayUrl) : resolveAdhanPlayUrl(adhanSound);
+    void promise.then((url) => {
       if (alive) setAudioUrl(url);
     });
     return () => {
       alive = false;
     };
-  }, [adhanSound]);
+  }, [selectedSound, isIqamah, selectedPlayUrl]);
 
   const timeZone = getPrayerTimeZone(settings.timeZone, settings.cityName);
   const displayTime = prayerTime
@@ -180,9 +203,9 @@ export function AzanOverlayModal({
     };
 
     /*
-     * The prayer notification is posted at the instant itself and rings from its own
+     * The prayer/iqamah notification is posted at the instant itself and rings from its own
      * channel, so a page arriving together with it stays quiet — two copies of the
-     * adhan would overlap. Every other opening (preview, the in-app timer, a tap on
+     * call would overlap. Every other opening (preview, the in-app timer, a tap on
      * the notification long after the prayer) arrives to silence: this page is the
      * speaker then.
      */
@@ -194,7 +217,7 @@ export function AzanOverlayModal({
 
     if (systemRingingNow) {
       setSystemRinging(true);
-    } else if (settings.adhanSound || isPreview) {
+    } else if (soundEnabled || isPreview) {
       start();
     }
 
@@ -205,7 +228,7 @@ export function AzanOverlayModal({
       audio.pause();
       audioRef.current = null;
     };
-  }, [isOpen, audioUrl, settings.adhanSound, isPreview, fromNotification, prayerTime]);
+  }, [isOpen, audioUrl, soundEnabled, isPreview, fromNotification, prayerTime, isIqamah]);
 
   /*
    * The takeover wakes the screen at prayer time, but Android's screen timeout would
@@ -387,7 +410,13 @@ export function AzanOverlayModal({
               <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
             </span>
             <span className="text-xs font-semibold text-emerald-400 tracking-wide">
-              {isPreview ? 'معاينة صفحة الأذان' : 'حَانَ الآنْ مَوْعِدُ الأَذَانْ'}
+              {isPreview
+                ? isIqamah
+                  ? 'معاينة صفحة الإقامة'
+                  : 'معاينة صفحة الأذان'
+                : isIqamah
+                  ? 'حَانَ الآنْ وَقْتُ الإِقَامَة'
+                  : 'حَانَ الآنْ مَوْعِدُ الأَذَانْ'}
             </span>
           </div>
 
@@ -443,13 +472,13 @@ export function AzanOverlayModal({
           </div>
         </div>
 
-        {/* Adhan sound — starts by itself with the page, no button to hunt for */}
-        {settings.adhanSound && (
+        {/* Adhan/Iqamah sound — starts by itself with the page, no button to hunt for */}
+        {soundEnabled && (
           <div className="mb-6 rounded-2xl border border-emerald-500/20 bg-slate-900/60 p-3.5 backdrop-blur-xs">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 overflow-hidden">
                 {/*
-                  Rendered only when the WebView refused to auto-start the adhan: a
+                  Rendered only when the WebView refused to auto-start the call: a
                   safety net, not the normal way to hear it.
                 */}
                 {blocked && (
@@ -457,7 +486,7 @@ export function AzanOverlayModal({
                     type="button"
                     onClick={startAudio}
                     className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-slate-950 font-bold hover:bg-amber-400 transition"
-                    aria-label="تشغيل الأذان"
+                    aria-label={isIqamah ? 'تشغيل الإقامة' : 'تشغيل الأذان'}
                   >
                     <Play size={22} className="mr-0.5" />
                   </button>
@@ -497,33 +526,35 @@ export function AzanOverlayModal({
           </div>
         )}
 
-        {/* Supplication After Azan Card */}
-        <div className="mb-6 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
-              <Sparkles size={14} />
-              {AFTER_AZAN_DUAA.title}
-            </h3>
-            <button
-              type="button"
-              onClick={() => setShowDuaa(!showDuaa)}
-              className="px-2 py-1 text-xs text-slate-400 underline hover:text-slate-200"
-            >
-              {showDuaa ? 'إخفاء' : 'عرض'}
-            </button>
-          </div>
-
-          {showDuaa && (
-            <div className="space-y-2 text-right">
-              <p className="text-sm font-semibold text-emerald-100 leading-relaxed font-serif">
-                "{AFTER_AZAN_DUAA.text}"
-              </p>
-              <p className="text-[0.6875rem] text-amber-200/80 italic">
-                {AFTER_AZAN_DUAA.benefit}
-              </p>
+        {/* Supplication After Azan Card — only for adhan, not iqamah */}
+        {!isIqamah && (
+          <div className="mb-6 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                <Sparkles size={14} />
+                {AFTER_AZAN_DUAA.title}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowDuaa(!showDuaa)}
+                className="px-2 py-1 text-xs text-slate-400 underline hover:text-slate-200"
+              >
+                {showDuaa ? 'إخفاء' : 'عرض'}
+              </button>
             </div>
-          )}
-        </div>
+
+            {showDuaa && (
+              <div className="space-y-2 text-right">
+                <p className="text-sm font-semibold text-emerald-100 leading-relaxed font-serif">
+                  "{AFTER_AZAN_DUAA.text}"
+                </p>
+                <p className="text-[0.6875rem] text-amber-200/80 italic">
+                  {AFTER_AZAN_DUAA.benefit}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="space-y-2.5">

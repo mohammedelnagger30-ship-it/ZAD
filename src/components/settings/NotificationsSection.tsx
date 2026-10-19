@@ -13,6 +13,13 @@ import {
   type AdhanSound,
 } from '@/data/adhanSounds';
 import { useDownloadedAdhanVoices } from '@/hooks/useAdhanVoices';
+
+import {
+  DEFAULT_NOTIFICATION_VOICE_ID,
+  NOTIFICATION_VOICES,
+  getNotificationVoice,
+  isNotificationVoiceReady,
+} from '@/data/notificationSounds';
 import {
   AdhanDownloadError,
   deleteAdhanVoice,
@@ -26,6 +33,7 @@ import { type Settings } from '@/db/database';
 interface NotificationsSectionProps {
   settings: Settings;
   onSaveSettings: (patch: Partial<Settings>) => void;
+  navigate: (screen: string) => void;
 }
 
 /** "3.1 ميجا" — how the download list states what a voice will cost the user. */
@@ -33,9 +41,16 @@ function adhanSizeLabel(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} ميجا`;
 }
 
-export function NotificationsSection({ settings, onSaveSettings }: NotificationsSectionProps) {
+export function NotificationsSection({ settings, onSaveSettings, navigate }: NotificationsSectionProps) {
   const [adhanPreviewStatus, setAdhanPreviewStatus] = useState('');
   const [previewingAdhanId, setPreviewingAdhanId] = useState<string | null>(null);
+  /**
+   * The reminder-voice picker auditions with the same element as the adhan picker —
+   * but a separate key, because the two lists share ids: «مشاري العفاسي» is both an
+   * adhan voice and a reminder voice, and a shared key would make the stop button of
+   * one light up while the other was playing.
+   */
+  const [previewingVoiceId, setPreviewingVoiceId] = useState<string | null>(null);
   const adhanAudioRef = useRef<HTMLAudioElement | null>(null);
   /**
    * On-demand voices: which are already on the device, which one is downloading right
@@ -81,7 +96,14 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
     };
   }, []);
 
-  const stopAdhanPreview = useCallback(() => {
+  /**
+   * Silences every preview this section can start.
+   *
+   * One element covers both pickers deliberately: auditioning a reminder voice while
+   * an adhan recording is still running would put two recitations on top of each other,
+   * which is never what the user meant by tapping «استماع».
+   */
+  const stopPreview = useCallback(() => {
     const audio = adhanAudioRef.current;
     if (audio) {
       audio.pause();
@@ -90,17 +112,30 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
       adhanAudioRef.current = null;
     }
     setPreviewingAdhanId(null);
+    setPreviewingVoiceId(null);
   }, []);
+
+  /** Mounts the element for one preview, replacing whatever was playing. */
+  const beginPreview = useCallback(
+    (url: string): HTMLAudioElement => {
+      stopPreview();
+      const audio = new Audio(url);
+      audio.preload = 'auto';
+      adhanAudioRef.current = audio;
+      return audio;
+    },
+    [stopPreview],
+  );
 
   const playAdhanPreview = useCallback(async () => {
     const sound = ADHAN_SOUNDS.find((item) => item.id === settings.adhanVoiceId) ?? ADHAN_SOUNDS[0];
     if (previewingAdhanId === sound.id) {
-      stopAdhanPreview();
+      stopPreview();
       setAdhanPreviewStatus('تم إيقاف الاستماع.');
       return;
     }
 
-    stopAdhanPreview();
+    stopPreview();
     setAdhanPreviewStatus('');
     let url: string;
     try {
@@ -110,8 +145,7 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
       setAdhanPreviewStatus('تعذّق الوصول إلى ملف الصوت. أعد تنزيل الصوت ثم حاول مجددًا.');
       return;
     }
-    const audio = new Audio(url);
-    audio.preload = 'auto';
+    const audio = beginPreview(url);
     audio.onended = () => {
       if (adhanAudioRef.current === audio) {
         adhanAudioRef.current = null;
@@ -126,7 +160,6 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
         setAdhanPreviewStatus('تعذّر تشغيل ملف الأذان. تحقّق من توفر الملف ثم أعد المحاولة.');
       }
     };
-    adhanAudioRef.current = audio;
     setPreviewingAdhanId(sound.id);
 
     try {
@@ -139,14 +172,76 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
       }
       setAdhanPreviewStatus(error instanceof Error ? `تعذّر تشغيل الأذان: ${error.message}` : 'تعذّر تشغيل الأذان.');
     }
-  }, [previewingAdhanId, settings.adhanVoiceId, stopAdhanPreview]);
+  }, [beginPreview, previewingAdhanId, settings.adhanVoiceId, stopPreview]);
+
+  /**
+   * Auditions the iqamah recording — what the جماعة's minute will actually sound like.
+   *
+   * Its own button because it is not the adhan: the picker above plays a full call to
+   * prayer, this one plays the twenty-odd seconds of takbirs that follow it, and a
+   * person choosing one wants to hear that difference rather than guess it.
+   */
+
+  /**
+   * Auditions the reminder voice — the sound a task, a review, the hadith of the day or
+   * a dhikr reminder will make. The adhan picker next to it is a different choice
+   * entirely, so it gets its own button rather than borrowing that one.
+   */
+  const playVoicePreview = useCallback(async () => {
+    const voice = getNotificationVoice(settings.notificationVoiceId);
+    if (voice.silent) return;
+    if (previewingVoiceId === voice.id) {
+      stopPreview();
+      setAdhanPreviewStatus('تم إيقاف الاستماع.');
+      return;
+    }
+
+    stopPreview();
+    setAdhanPreviewStatus('');
+    let url: string;
+    try {
+      url = voice.adhan
+        ? await resolveAdhanPlayUrl(voice.adhan)
+        : `/audio/${voice.file}`;
+    } catch {
+      setAdhanPreviewStatus('تعذّر الوصول إلى ملف الصوت. أعد تنزيل الصوت ثم حاول مجددًا.');
+      return;
+    }
+    const audio = beginPreview(url);
+    audio.onended = () => {
+      if (adhanAudioRef.current === audio) {
+        adhanAudioRef.current = null;
+        setPreviewingVoiceId(null);
+        setAdhanPreviewStatus('انتهى تشغيل صوت التنبيه.');
+      }
+    };
+    audio.onerror = () => {
+      if (adhanAudioRef.current === audio) {
+        adhanAudioRef.current = null;
+        setPreviewingVoiceId(null);
+        setAdhanPreviewStatus('تعذّر تشغيل ملف التنبيه. تحقّق من توفر الملف ثم أعد المحاولة.');
+      }
+    };
+    setPreviewingVoiceId(voice.id);
+
+    try {
+      await audio.play();
+      setAdhanPreviewStatus(`يُشغّل «${voice.name}» كصوت لتنبيهات المهام والحفظ.`);
+    } catch (error) {
+      if (adhanAudioRef.current === audio) {
+        adhanAudioRef.current = null;
+        setPreviewingVoiceId(null);
+      }
+      setAdhanPreviewStatus(error instanceof Error ? `تعذّر تشغيل الصوت: ${error.message}` : 'تعذّر تشغيل الصوت.');
+    }
+  }, [beginPreview, previewingVoiceId, settings.notificationVoiceId, stopPreview]);
 
   useEffect(() => {
     if (previewingAdhanId && previewingAdhanId !== settings.adhanVoiceId) {
-      stopAdhanPreview();
+      stopPreview();
       setAdhanPreviewStatus('تم إيقاف التسجيل بعد تغيير صوت الأذان.');
     }
-  }, [previewingAdhanId, settings.adhanVoiceId, stopAdhanPreview]);
+  }, [previewingAdhanId, settings.adhanVoiceId, stopPreview]);
 
   /** Fetches one on-demand voice, one file, exactly like the content library does. */
   const downloadAdhan = useCallback(async (sound: AdhanSound) => {
@@ -164,6 +259,10 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
         // The voice was already chosen: the prayer channel must now ring the stored
         // file instead of falling back to the bundled Makkah adhan.
         void rescheduleAllNotifications();
+      } else if (sound.id === settings.notificationVoiceId) {
+        // The same voice can also be the reminder sound; its channels point at the
+        // stored file from here on.
+        void rescheduleAllNotifications();
       }
     } catch (error) {
       if ((error as Error).name === 'AbortError') {
@@ -178,7 +277,7 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
       setAdhanDownloadingId(null);
       setAdhanProgress(null);
     }
-  }, [adhanDownloadingId, settings.adhanVoiceId]);
+  }, [adhanDownloadingId, settings.adhanVoiceId, settings.notificationVoiceId]);
 
   const cancelAdhanDownload = useCallback(() => {
     adhanAbortRef.current?.abort();
@@ -194,10 +293,15 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
     if (settings.adhanVoiceId === sound.id) {
       onSaveSettings({ adhanVoiceId: DEFAULT_ADHAN_SOUND_ID });
       setAdhanNotice('حُذف الصوت، ورجع الأذان لصوت المسجد الحرام الافتراضي.');
+    } else if (settings.notificationVoiceId === sound.id) {
+      // The reminder voice has nowhere left to point: fall back to the app's own chime
+      // now, rather than letting the next reminder arrive with no sound at all.
+      onSaveSettings({ notificationVoiceId: DEFAULT_NOTIFICATION_VOICE_ID });
+      setAdhanNotice('حُذف الصوت، ورجعت تنبيهات المهام والحفظ لنغمة التطبيق.');
     } else {
       setAdhanNotice('حُذف الصوت من الجهاز.');
     }
-  }, [onSaveSettings, settings.adhanVoiceId]);
+  }, [onSaveSettings, settings.adhanVoiceId, settings.notificationVoiceId]);
 
   useEffect(() => () => {
     adhanAbortRef.current?.abort();
@@ -208,6 +312,13 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
   // simply puts its download button under the picker.
   const selectedAdhan = getAdhanSound(settings.adhanVoiceId);
   const selectedAdhanReady = isAdhanSoundReady(selectedAdhan, downloadedAdhanVoices);
+
+  /**
+   * The reminder voice. The picker offers every voice in `NOTIFICATION_VOICES`, and a
+   * downloaded adhan voice that is not on the device yet simply shows its download
+   * button — the same behaviour the adhan picker above has.
+   */
+  const selectedVoice = getNotificationVoice(settings.notificationVoiceId);
 
   useEffect(() => () => {
     adhanAudioRef.current?.pause();
@@ -303,7 +414,7 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
   return (
     <>
       {/* Notifications & Azan Settings */}
-      <section className="space-y-2">
+      <section id="settings-notifications" className="space-y-2">
         <SectionTitle icon={<Bell size={20} />} title="التنبيهات وصوت الأذان" />
         <Card className="border border-primary-200/80 dark:border-primary-800/80 shadow-md space-y-4">
           {exactAlarmNotice !== '' && (
@@ -349,6 +460,48 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
             value={settings.notificationSound}
             onChange={(v) => onSaveSettings({ notificationSound: v })}
           />
+
+          {settings.notificationSound && (
+            <div className="mt-3 space-y-3 rounded-2xl border border-primary-100 bg-primary-50/50 p-3.5 dark:border-primary-800/80 dark:bg-primary-900/30">
+              <div>
+                <label
+                  htmlFor="notification-voice"
+                  className="text-xs font-semibold text-primary-900 dark:text-primary-100 mb-1.5 block"
+                >
+                  صوت التنبيه
+                </label>
+                <select
+                  id="notification-voice"
+                  value={selectedVoice.id}
+                  onChange={(e) => onSaveSettings({ notificationVoiceId: e.target.value })}
+                  className="w-full md:max-w-md bg-white dark:bg-primary-900 border border-primary-200 dark:border-primary-700 rounded-xl py-2.5 px-3 text-sm text-primary-900 dark:text-primary-100 font-semibold focus:outline-hidden focus:ring-2 focus:ring-primary-500"
+                >
+                  {NOTIFICATION_VOICES.map((voice) => (
+                    <option key={voice.id} value={voice.id}>
+                      {voice.name}
+                      {isNotificationVoiceReady(voice, downloadedAdhanVoices) ? '' : ' — تنزيل'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <p className="text-[0.625rem] md:text-xs text-primary-700 dark:text-primary-300">
+                يُطبَّق على تذكيرات المراجعة والحفظ وحديث اليوم والأذكار. أما صوت الأذان نفسه فله
+                اختياره الخاص أدناه.
+              </p>
+
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void playVoicePreview()}
+                disabled={selectedVoice.silent}
+                className="font-semibold text-xs"
+              >
+                {previewingVoiceId === selectedVoice.id ? <Square size={15} /> : <Play size={15} />}
+                {previewingVoiceId === selectedVoice.id ? 'إيقاف الصوت' : 'استماع للصوت'}
+              </Button>
+            </div>
+          )}
 
           <div className="border-t border-primary-100 dark:border-primary-800/60 pt-3">
             <ToggleRow
@@ -444,6 +597,31 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
                     <Sparkles size={15} /> معاينة صفحة الأذان
                   </Button>
                 </div>
+
+                {/* أذان الإقامة — the sound of the جماعة itself, a separate recording:
+                    ringing the full adhan again minutes after it played would announce
+                    the same prayer twice. */}
+                <Card className="p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Bell size={18} className="text-primary-600 dark:text-gold-400" aria-hidden="true" />
+                      <div>
+                        <p className="font-medium">صوت الإقامة عند وقت الجماعة</p>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                          اختيار صوت الإقامة وضبط سلوك الصفحة التلقائية
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="min-w-[120px] min-h-[40px]"
+                      onClick={() => navigate('iqamah')}
+                    >
+                      فتح الصفحة
+                    </Button>
+                  </div>
+                </Card>
 
                 {adhanNotice && (
                   <p role="status" className="text-xs font-semibold text-primary-700 dark:text-gold-300 text-center">

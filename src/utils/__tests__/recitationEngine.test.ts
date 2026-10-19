@@ -42,6 +42,7 @@ Object.defineProperty(navigator, 'mediaSession', {
 };
 
 const engine = await import('@/utils/recitationEngine');
+const { isRecitationSheetOpen, setRecitationSheetOpen } = await import('@/utils/recitationPlayerUi');
 
 const TIMINGS = [
   { ayah: 1, startMs: 0, endMs: 1000 },
@@ -251,5 +252,184 @@ describe('recitationEngine setTrack', () => {
     expect(engine.getRecitationState().reciterId).toBe('mishary');
     engine.setTrack({ ...BAQARAH, reciterId: 'abdulbasit' });
     expect(engine.getRecitationState().reciterId).toBe('abdulbasit');
+  });
+});
+
+/**
+ * Surah to surah — the part of the engine a listener driving it from a pocket, a car
+ * or the notification card actually relies on.
+ *
+ * Two rules are load-bearing here: the recitation must carry on into the next surah by
+ * itself (and stop at سورة الناس, where there is nowhere left to go), and every control
+ * — the card, the headset, the expanded player — must take the *surah* step, with the
+ * ayah step left to the reader's own controls.
+ */
+describe('recitationEngine surah navigation', () => {
+  let playSpy: ReturnType<typeof jest.spyOn>;
+  let pauseSpy: ReturnType<typeof jest.spyOn>;
+
+  beforeEach(() => {
+    playSpy = jest
+      .spyOn(HTMLMediaElement.prototype, 'play')
+      .mockImplementation(() => Promise.resolve());
+    pauseSpy = jest.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+    engine.stop();
+    for (const key of Object.keys(sessionHandlers)) delete sessionHandlers[key];
+    loadSurahAudioMock.mockResolvedValue({
+      url: 'blob:recitation',
+      blob: null,
+      verseTimings: TIMINGS,
+    });
+    engine.setTrack(FATIHA);
+  });
+
+  afterEach(() => {
+    playSpy.mockRestore();
+    pauseSpy.mockRestore();
+  });
+
+  it('walks on to the next surah when the last ayah runs out', async () => {
+    await playFirstAyah();
+    sessionHandlers.seekforward?.();
+    await flush();
+    sessionHandlers.seekforward?.();
+    await flush();
+    expect(engine.getRecitationState().activeAyah).toBe(TIMINGS.length);
+
+    recitationAudio().dispatchEvent(new Event('ended'));
+    await flush();
+
+    const state = engine.getRecitationState();
+    expect(state.surahId).toBe(2);
+    expect(state.isPlaying).toBe(true);
+    expect(state.activeAyah).toBe(1);
+    // The card must survive the switch rather than blinking away between surahs.
+    expect(state.sessionOpen).toBe(true);
+  });
+
+  it('walks on from the last ayah as the stream itself runs past the end', async () => {
+    await playFirstAyah();
+    engine.seekTo(2900);
+    expect(engine.getRecitationState().activeAyah).toBe(TIMINGS.length);
+
+    // The stream reaching the end of the recording, one tick after the last verse.
+    recitationAudio().currentTime = 3.2;
+    recitationAudio().dispatchEvent(new Event('timeupdate'));
+    await flush();
+
+    expect(engine.getRecitationState().surahId).toBe(2);
+  });
+
+  it('ends the recitation at سورة الناس, where there is no next surah', async () => {
+    engine.setTrack({ surahId: 114, surahName: 'الناس', reciterId: 'mishary' });
+    await playFirstAyah();
+    sessionHandlers.seekforward?.();
+    await flush();
+    sessionHandlers.seekforward?.();
+    await flush();
+
+    recitationAudio().dispatchEvent(new Event('ended'));
+    await flush();
+
+    const state = engine.getRecitationState();
+    expect(state.isPlaying).toBe(false);
+    expect(state.sessionOpen).toBe(false);
+    expect(state.surahId).toBe(114);
+  });
+
+  it('takes the surah step — not the ayah step — from the lock screen', async () => {
+    await playFirstAyah();
+    expect(sessionHandlers.nexttrack).toBeDefined();
+    expect(sessionHandlers.previoustrack).toBeDefined();
+
+    sessionHandlers.nexttrack?.();
+    await flush();
+
+    const state = engine.getRecitationState();
+    expect(state.surahId).toBe(2);
+    expect(state.isPlaying).toBe(true);
+    expect(state.activeAyah).toBe(1);
+  });
+
+  it('goes back a surah from a headset «السابق»', async () => {
+    engine.setTrack({ surahId: 3, surahName: 'آل عمران', reciterId: 'mishary' });
+    await playFirstAyah();
+
+    sessionHandlers.previoustrack?.();
+    await flush();
+
+    expect(engine.getRecitationState().surahId).toBe(2);
+  });
+
+  it('restarts the current surah when «السابق» comes a few seconds in', async () => {
+    engine.setTrack({ surahId: 3, surahName: 'آل عمران', reciterId: 'mishary' });
+    await playFirstAyah();
+    recitationAudio().currentTime = 5;
+
+    sessionHandlers.previoustrack?.();
+    await flush();
+
+    const state = engine.getRecitationState();
+    // The habit every player shares: a hand reaching for «السابق» mid-surah means
+    // "start this one again", not "fetch the one before it".
+    expect(state.surahId).toBe(3);
+    expect(state.activeAyah).toBe(1);
+  });
+
+  it('moves the selection without making sound when «التالي» lands while paused', async () => {
+    await playFirstAyah();
+    await engine.toggleSurah();
+    const playsBefore = playSpy.mock.calls.length;
+
+    await engine.playNextSurah();
+
+    const state = engine.getRecitationState();
+    expect(state.surahId).toBe(2);
+    expect(state.isPlaying).toBe(false);
+    // Still a live session: the card must show the new surah, paused.
+    expect(state.sessionOpen).toBe(true);
+    expect(playSpy.mock.calls.length).toBe(playsBefore);
+  });
+
+  /**
+   * The reader keeps its own `selectedSurah`, so it has to be told when the *player*
+   * moved. `setTrack` must stay silent: that call is the reader's own and echoing it
+   * back would drag a reader opened at آية ٥٠ to the first ayah of its own surah.
+   */
+  it('announces the player’s own surah changes, and only those', async () => {
+    const seen: number[] = [];
+    const unsubscribe = engine.subscribeSurahChange((id) => seen.push(id));
+    try {
+      await playFirstAyah();
+      expect(seen).toEqual([]);
+
+      await engine.playNextSurah();
+      expect(seen).toEqual([2]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it('carries the highlight with a system seek', async () => {
+    await playFirstAyah();
+
+    engine.seekTo(2500);
+
+    expect(engine.getRecitationState().activeAyah).toBe(3);
+    expect(engine.getRecitationProgress().positionMs).toBe(2500);
+  });
+
+  /**
+   * The expanded player outlives the bar it was opened from, so nothing else would
+   * ever close it: stopping has to, or the next surah would open straight into a sheet
+   * that the listener had already dismissed by ending the recitation.
+   */
+  it('closes the expanded player when the recitation stops', async () => {
+    await playFirstAyah();
+    setRecitationSheetOpen(true);
+
+    engine.stop();
+
+    expect(isRecitationSheetOpen()).toBe(false);
   });
 });

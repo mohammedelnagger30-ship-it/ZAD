@@ -111,6 +111,7 @@ export function isValidBackupRow(table: BackupTable, value: unknown): value is R
             'colorPalette',
             'fontSize',
             'notificationSound',
+            'notificationVoiceId',
             'adhanSound',
             'adhanVoiceId',
             'randomDhikrEnabled',
@@ -131,6 +132,7 @@ export function isValidBackupRow(table: BackupTable, value: unknown): value is R
         (value.colorPalette === undefined || ['emerald', 'ocean', 'plum', 'sand', 'olive', 'rose'].includes(value.colorPalette as string)) &&
         (value.fontSize === undefined || isFiniteNumber(value.fontSize)) &&
         (value.notificationSound === undefined || typeof value.notificationSound === 'boolean') &&
+        (value.notificationVoiceId === undefined || typeof value.notificationVoiceId === 'string') &&
         (value.adhanSound === undefined || typeof value.adhanSound === 'boolean') &&
         (value.adhanVoiceId === undefined || typeof value.adhanVoiceId === 'string') &&
         (value.randomDhikrEnabled === undefined || typeof value.randomDhikrEnabled === 'boolean') &&

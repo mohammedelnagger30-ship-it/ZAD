@@ -16,7 +16,7 @@ export interface AdhanOverlayAlarm {
   id: number;
   /** Device-clock epoch ms — Android alarms always fire against the device clock. */
   at: number;
-  /** Channel carrying the adhan sound (created by the JS scheduler). */
+  /** Channel carrying the adhan/iqamah sound (created by the JS scheduler). */
   channelId: string;
   title: string;
   body: string;
@@ -24,13 +24,16 @@ export interface AdhanOverlayAlarm {
   prayerName: string;
   /** Prayer instant, ISO-8601. */
   time: string;
+  /** 'prayer' for adhan, 'iqamah' for iqamah — decides which page opens. */
+  type: 'prayer' | 'iqamah';
 }
 
-/** Payload the native side hands back when the adhan page must open. */
+/** Payload the native side hands back when the adhan/iqamah page must open. */
 export interface AdhanOverlayEvent {
   prayerKey: string;
   prayerName?: string;
   time?: string;
+  type?: 'prayer' | 'iqamah';
 }
 
 interface AdhanOverlayPlugin {
@@ -41,6 +44,8 @@ interface AdhanOverlayPlugin {
     name: string;
     description?: string;
     soundPath: string;
+    /** Android channel importance; the adhan's HIGH is the default. */
+    importance?: number;
   }): Promise<void>;
   setKeepScreenOn(options: { on: boolean }): Promise<void>;
   protectionStatus(): Promise<ProtectionStatus>;
@@ -94,6 +99,8 @@ export async function setAdhanChannel(options: {
   name: string;
   description?: string;
   soundPath: string;
+  /** Android channel importance; only the reminder channels override the HIGH default. */
+  importance?: number;
 }): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
   await AdhanOverlay.setChannel(options);

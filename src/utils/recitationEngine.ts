@@ -20,15 +20,24 @@
  * track is the one already held (the reader remounting over live audio) and
  * tears the old one down otherwise — a different surah or reciter has no
  * business inheriting the previous one's sound.
+ *
+ * Walking *on* to the next surah is not: `advanceToNextSurah` and
+ * `playNextSurah`/`playPreviousSurah` change the track in place, keep the session
+ * open so the notification card survives the switch, and honour the play/pause
+ * intent the listener last expressed — «التالي» while paused moves the selection
+ * without starting to make sound.
  */
 import { AUDIO_RECITERS } from '@/data/audioReciters';
+import { getSurah } from '@/data/surahs';
 import { loadSurahAudio, type SurahAudioSource, type VerseTiming } from '@/utils/quranAudio';
 import {
   clearMediaSession,
+  reportMediaProgress,
   setMediaPlaybackState,
   setMediaSession,
   updateMediaPosition,
 } from '@/utils/mediaSession';
+import { openRecitationPlayer, setRecitationSheetOpen } from '@/utils/recitationPlayerUi';
 
 export interface RecitationState {
   /** The surah held by the engine; null until the reader first mounts. */
@@ -91,6 +100,74 @@ export function getRecitationState(): RecitationState {
   return state;
 }
 
+// ---------------------------------------------------------------------------
+// Position / duration — a store of their own.
+//
+// These change several times a second while a surah plays, and they are needed by
+// exactly two small surfaces: the progress line on the mini bar and the scrubber in
+// the expanded player. Putting them into `RecitationState` would re-render every
+// subscriber four times a second — including the reader's whole ayah list, which the
+// reader component hands down as `children`. Keeping them apart means the ayah list
+// renders when the *ayah* changes and the progress bar renders when the *position*
+// does, which is what each of them is actually watching.
+// ---------------------------------------------------------------------------
+
+export interface RecitationProgress {
+  /** Milliseconds into the recording the engine currently holds. */
+  positionMs: number;
+  /** Total length in milliseconds; 0 until the recording's metadata arrives. */
+  durationMs: number;
+}
+
+let progress: RecitationProgress = { positionMs: 0, durationMs: 0 };
+const progressListeners = new Set<() => void>();
+
+export function subscribeRecitationProgress(listener: () => void): () => void {
+  progressListeners.add(listener);
+  return () => {
+    progressListeners.delete(listener);
+  };
+}
+
+export function getRecitationProgress(): RecitationProgress {
+  return progress;
+}
+
+function patchProgress(next: RecitationProgress): void {
+  // Integer milliseconds: an unchanged value must not wake a subscriber, and the
+  // element reports fractional seconds.
+  const positionMs = Math.max(0, Math.round(next.positionMs));
+  const durationMs = Math.max(0, Math.round(next.durationMs));
+  if (positionMs === progress.positionMs && durationMs === progress.durationMs) return;
+  progress = { positionMs, durationMs };
+  for (const listener of [...progressListeners]) listener();
+}
+
+/** Read the element and push its position into the UI bar. */
+function syncProgressFromAudio(audio: HTMLAudioElement): void {
+  patchProgress({
+    positionMs: audio.currentTime * 1000,
+    durationMs: Number.isFinite(audio.duration) ? audio.duration * 1000 : 0,
+  });
+}
+
+/**
+ * Read the element and report its position to the system session.
+ *
+ * Called only where the platform cannot work the position out on its own: a new
+ * surah, a seek, a pause, a speed change, the metadata arriving. Not from
+ * `timeupdate` — see `reportMediaProgress`.
+ */
+function reportProgressFromAudio(): void {
+  const audio = audioElement;
+  if (!audio) return;
+  reportMediaProgress({
+    positionMs: Math.max(0, audio.currentTime * 1000),
+    durationMs: Number.isFinite(audio.duration) ? audio.duration * 1000 : 0,
+    playbackRate: audio.playbackRate || 1,
+  });
+}
+
 function patch(next: Partial<RecitationState>): void {
   const keys = Object.keys(next) as (keyof RecitationState)[];
   if (keys.every((key) => next[key] === state[key])) return;
@@ -119,6 +196,13 @@ let repeatRemainingRef = 1;
 let currentTimingRef: VerseTiming | null = null;
 /** What the system was last told, so a state change that alters nothing is not re-published. */
 let sessionSignature = '';
+/**
+ * True while the engine is between two surahs — the previous one has ended and the
+ * next one is still being fetched. It is a re-entry guard, not a flag the UI reads:
+ * `ended` and the last `timeupdate` both notice a surah finishing, and each of them
+ * would otherwise start the next surah on its own.
+ */
+let surahTransitionRef = false;
 
 /**
  * The one audio element, created lazily and never torn down.
@@ -137,6 +221,13 @@ function audioEl(): HTMLAudioElement {
   audio.addEventListener('error', handleAudioError);
   audio.addEventListener('pause', handleSystemPause);
   audio.addEventListener('play', handleSystemPlay);
+  // The recording's length is only known once its metadata arrives, and a streamed
+  // surah can revise it later — the scrubber must not stay stuck at zero.
+  audio.addEventListener('loadedmetadata', () => {
+    syncProgressFromAudio(audio);
+    reportProgressFromAudio();
+  });
+  audio.addEventListener('durationchange', () => syncProgressFromAudio(audio));
   if (typeof document !== 'undefined') document.body.appendChild(audio);
   audioElement = audio;
   return audio;
@@ -151,6 +242,8 @@ function handleTimeUpdate(): void {
   const audio = audioElement;
   const prepared = sourceRef;
   if (!audio || !prepared) return;
+  // The progress line on the mini bar and the scrubber in the expanded player.
+  syncProgressFromAudio(audio);
   // Keep the lock-screen position bar in step with the element.
   updateMediaPosition(audio);
   // A whole-file recording has no ayah boundaries to track: the `ended`
@@ -170,10 +263,12 @@ function handleTimeUpdate(): void {
       patch({ activeAyah: currentVerse.ayah, selectedAyah: currentVerse.ayah });
     }
 
-    // Check if we've reached the end of the last verse
+    // The end of the last verse is the end of the surah — and a recitation that
+    // runs off the end of a surah carries on into the next one, the way it would
+    // in a real sitting.
     const lastVerse = prepared.verseTimings[prepared.verseTimings.length - 1];
     if (currentMs >= lastVerse.endMs) {
-      stop();
+      advanceToNextSurah();
     }
     return;
   }
@@ -204,18 +299,22 @@ function handleEnded(): void {
     stop();
     return;
   }
-  // In continuous mode, stop playback only if we've reached the last verse
-  if (activeAyahRef === prepared.verseTimings[prepared.verseTimings.length - 1].ayah) {
-    stop();
+
+  const timings = prepared.verseTimings;
+  const lastAyah = timings[timings.length - 1].ayah;
+  if (activeAyahRef === lastAyah) {
+    // The surah is over: the next one starts, or سورة الناس ends the recitation.
+    advanceToNextSurah();
+    return;
+  }
+
+  // The file ended before its own last verse — a stream that dropped, a partial
+  // download. Walk on from where it stopped rather than abandoning the surah.
+  const nextAyah = activeAyahRef ? activeAyahRef + 1 : timings[0].ayah;
+  if (nextAyah <= lastAyah) {
+    playAyah(nextAyah, true);
   } else {
-    // If playback ended unexpectedly in continuous mode, try to continue
-    // This handles cases where the audio file might have buffering issues
-    const nextAyah = activeAyahRef ? activeAyahRef + 1 : 1;
-    if (nextAyah <= prepared.verseTimings.length) {
-      playAyah(nextAyah, true);
-    } else {
-      stop();
-    }
+    advanceToNextSurah();
   }
 }
 
@@ -312,14 +411,24 @@ export function stop(): void {
   verseEndRef = null;
   currentTimingRef = null;
   repeatRemainingRef = 1;
+  surahTransitionRef = false;
+  patchProgress({ positionMs: 0, durationMs: progress.durationMs });
   // Stopping ends the session, unlike pausing it: the lock screen must not
   // offer to resume a recitation the listener explicitly finished.
   patch({ activeAyah: null, isPlaying: false, interrupted: false, sessionOpen: false });
+  // The session is over, so the expanded player has nothing left to show. Closing it
+  // here — and not only when its own «إيقاف» is tapped — is what stops it from springing
+  // back open the next time a surah is started, since it outlives the bar it opened from.
+  setRecitationSheetOpen(false);
 }
 
 /** Playback genuinely started — the moment the Media Session becomes real. */
 function markPlaying(): void {
   patch({ isPlaying: true, sessionOpen: true });
+  // Freeze the system's idea of where this started: it takes it from here by
+  // extrapolating with the speed, and a stale position would drift the lock-screen
+  // bar by however long the app was last silent.
+  reportProgressFromAudio();
 }
 
 /** Select an Ayah without playing */
@@ -330,6 +439,9 @@ export function selectAyah(ayah: number): void {
 export function updatePlaybackRate(rate: number): void {
   patch({ playbackRate: rate });
   if (audioElement) audioElement.playbackRate = rate;
+  // A speed change is one of the few moments the platform cannot work the position
+  // out for itself: it knows the *old* speed and would drift from here on.
+  reportProgressFromAudio();
 }
 
 export function updateRepeatCount(count: number): void {
@@ -430,6 +542,8 @@ export function playAyah(ayah: number, continuous = false): void {
     audio.currentTime = 0;
     audio.playbackRate = state.playbackRate;
     patch({ activeAyah: null, selectedAyah: ayah, error: null });
+    syncProgressFromAudio(audio);
+    reportProgressFromAudio();
     audio
       .play()
       .then(() => {
@@ -470,6 +584,8 @@ export function playAyah(ayah: number, continuous = false): void {
   audio.playbackRate = state.playbackRate;
 
   patch({ activeAyah: ayah, selectedAyah: ayah, error: null });
+  syncProgressFromAudio(audio);
+  reportProgressFromAudio();
 
   audio
     .play()
@@ -557,6 +673,8 @@ export function setTrack(track: {
   abortLoad();
   stop();
   releaseSource();
+  patchProgress({ positionMs: 0, durationMs: 0 });
+  surahTransitionRef = false;
   patch({
     surahId: track.surahId,
     surahName: track.surahName,
@@ -567,6 +685,230 @@ export function setTrack(track: {
     selectedAyah: 1,
   });
   audioEl().setAttribute('aria-label', `تلاوة سورة ${track.surahName}`);
+}
+
+// ---------------------------------------------------------------------------
+// Surah to surah
+//
+// «التالي» and «السابق» move between **surahs** — on the notification card, on a
+// Bluetooth headset, on the lock screen and on the expanded player alike. The
+// ayah-level step lives in `stepAyah` and stays inside the reader's own controls,
+// because somebody driving a recitation from a car or a pocket wants the mus'haf's
+// own unit of movement, not a single verse.
+// ---------------------------------------------------------------------------
+
+const FIRST_SURAH_ID = 1;
+const LAST_SURAH_ID = 114;
+/** Seconds into a surah after which «السابق» restarts it instead of skipping back. */
+const RESTART_THRESHOLD_SECONDS = 3;
+
+interface SurahTrack {
+  surahId: number;
+  surahName: string;
+  reciterId: string;
+}
+
+/** The track for one particular surah, or null at the ends of the mus'haf. */
+function trackFor(surahId: number): SurahTrack | null {
+  if (!state.reciterId) return null;
+  const surah = getSurah(surahId);
+  if (!surah) return null;
+  return { surahId: surah.id, surahName: surah.name, reciterId: state.reciterId };
+}
+
+/** Whether a surah follows this one — what the system's «التالي» is told. */
+export function canPlayNextSurah(): boolean {
+  return state.surahId !== null && state.surahId < LAST_SURAH_ID;
+}
+
+/** Whether a surah precedes this one — what the system's «السابق» is told. */
+export function canPlayPreviousSurah(): boolean {
+  return state.surahId !== null && state.surahId > FIRST_SURAH_ID;
+}
+
+// ---------------------------------------------------------------------------
+// Telling the reader that the player moved
+//
+// The reader holds its own `selectedSurah` and hands it to the engine through
+// `setTrack`. When the *player* changes the surah instead — the end of a surah
+// walking on to the next one, or «التالي/السابق» from the notification card, a
+// headset or the expanded player — the reader would otherwise sit on a surah nobody
+// is reciting.
+//
+// Only `changeSurah` raises this. `setTrack` deliberately does not: that call comes
+// *from* the reader, and echoing it back would drag a reader that opened at آية ٥٠
+// to the first ayah of the surah it had just handed over.
+// ---------------------------------------------------------------------------
+
+type SurahChangeListener = (surahId: number) => void;
+const surahChangeListeners = new Set<SurahChangeListener>();
+
+export function subscribeSurahChange(listener: SurahChangeListener): () => void {
+  surahChangeListeners.add(listener);
+  return () => {
+    surahChangeListeners.delete(listener);
+  };
+}
+
+function notifySurahChanged(surahId: number): void {
+  for (const listener of [...surahChangeListeners]) listener(surahId);
+}
+
+/**
+ * Move to another surah — the engine's own `setTrack`, with two differences that
+ * matter for a recitation running with the screen off:
+ *
+ *  - the session stays open, so the notification card survives the switch instead of
+ *    blinking away between surahs, and
+ *  - the play/pause *intent* is carried across in `autoplay` rather than reset:
+ *    «التالي» on a paused player must move the selection without starting to make
+ *    sound the listener had put a stop to.
+ */
+async function changeSurah(track: SurahTrack, autoplay: boolean): Promise<void> {
+  surahTransitionRef = true;
+  abortLoad();
+  // Silence the outgoing surah in the same synchronous block that clears the intent:
+  // the element's own `pause` event arrives a tick later, and with the intent still
+  // marked "playing" it would be read as an interruption (see handleSystemPause).
+  audioElement?.pause();
+  releaseSource();
+  activeAyahRef = null;
+  continuousRef = false;
+  currentTimingRef = null;
+  verseEndRef = null;
+  repeatRemainingRef = 1;
+  patchProgress({ positionMs: 0, durationMs: 0 });
+  patch({
+    surahId: track.surahId,
+    surahName: track.surahName,
+    reciterId: track.reciterId,
+    activeAyah: null,
+    selectedAyah: 1,
+    isPlaying: false,
+    interrupted: false,
+    wholeFile: false,
+    error: null,
+    sessionOpen: true,
+  });
+  audioElement?.setAttribute('aria-label', `تلاوة سورة ${track.surahName}`);
+  notifySurahChanged(track.surahId);
+
+  try {
+    const prepared = await ensureSource();
+    // A failure leaves the reader on the new surah with its error banner: the
+    // previous surah has already been released and cannot be resumed honestly.
+    if (!prepared || !autoplay) return;
+    repeatRemainingRef = 1;
+    playAyah(1, true);
+  } finally {
+    surahTransitionRef = false;
+  }
+}
+
+/**
+ * The surah finished: walk on to the next one, the automatic continuation the whole
+ * engine exists for. At سورة الناس there is nowhere left to go, so the recitation
+ * ends — and the notification card goes with it.
+ */
+function advanceToNextSurah(): void {
+  if (surahTransitionRef) return;
+  const next = state.surahId === null ? null : trackFor(state.surahId + 1);
+  if (!next) {
+    stop();
+    return;
+  }
+  void changeSurah(next, true);
+}
+
+/**
+ * «التالي» — the next surah.
+ *
+ * The one entry point every control uses: the notification card, the hardware media
+ * keys, the lock screen and the expanded player all land here so they cannot drift
+ * apart.
+ */
+export async function playNextSurah(): Promise<void> {
+  if (state.surahId === null) return;
+  const next = trackFor(state.surahId + 1);
+  if (!next) return;
+  await changeSurah(next, state.isPlaying);
+}
+
+/**
+ * «السابق» — the previous surah.
+ *
+ * A few seconds in, the habit every player shares applies first: the current surah
+ * restarts instead of the previous one being fetched, which is what a hand reaching
+ * for «السابق» almost always means.
+ */
+export async function playPreviousSurah(): Promise<void> {
+  const audio = audioElement;
+  if (audio && audio.currentTime > RESTART_THRESHOLD_SECONDS) {
+    restartCurrentSurah();
+    return;
+  }
+  if (state.surahId === null) return;
+  const previous = state.surahId > FIRST_SURAH_ID ? trackFor(state.surahId - 1) : null;
+  if (!previous) {
+    // سورة الفاتحة has nothing before it: «السابق» means "start this one again".
+    restartCurrentSurah();
+    return;
+  }
+  await changeSurah(previous, state.isPlaying);
+}
+
+/** Back to the top of the surah the engine already holds — sound only if it was sounding. */
+function restartCurrentSurah(): void {
+  const prepared = sourceRef;
+  const audio = audioElement;
+  if (!prepared || !audio) return;
+
+  const first = prepared.verseTimings[0];
+  if (state.isPlaying) {
+    repeatRemainingRef = 1;
+    playAyah(first ? first.ayah : 1, true);
+    return;
+  }
+
+  // Paused: move the needle and nothing else.
+  audio.currentTime = 0;
+  activeAyahRef = first ? first.ayah : null;
+  continuousRef = true;
+  currentTimingRef = first ?? null;
+  verseEndRef = null;
+  patch({ activeAyah: activeAyahRef, selectedAyah: activeAyahRef ?? 1 });
+  syncProgressFromAudio(audio);
+  reportProgressFromAudio();
+}
+
+/**
+ * Move the needle to an absolute position — the system scrubber was dragged.
+ *
+ * The highlight follows the needle: a drag from آية ٣ to آية ٤٠ must leave the reader
+ * showing the verse the recitation is now in, not the one it left behind.
+ */
+export function seekTo(positionMs: number): void {
+  const prepared = sourceRef;
+  const audio = audioElement;
+  if (!prepared || !audio || !Number.isFinite(positionMs)) return;
+
+  const knownSeconds = Number.isFinite(audio.duration) && audio.duration > 0
+    ? audio.duration
+    : null;
+  const targetSeconds = Math.max(0, positionMs / 1000);
+  audio.currentTime = knownSeconds === null ? targetSeconds : Math.min(targetSeconds, knownSeconds);
+
+  const timing = prepared.verseTimings.find(
+    (item) => positionMs >= item.startMs && positionMs < item.endMs,
+  );
+  if (timing) {
+    activeAyahRef = timing.ayah;
+    currentTimingRef = timing;
+    if (!continuousRef) verseEndRef = timing.endMs / 1000;
+    patch({ activeAyah: timing.ayah, selectedAyah: timing.ayah });
+  }
+  syncProgressFromAudio(audio);
+  reportProgressFromAudio();
 }
 
 // ---------------------------------------------------------------------------
@@ -613,15 +955,26 @@ function registerSession(): void {
       artist: reciter?.name ?? 'القرآن الكريم',
       album: 'قُرّة — تلاوة وحفظ',
       artworkUrl: '/icons/icon-512.png',
+      // At سورة الناس there is no «التالي», and at الفاتحة no «السابق»: the system is
+      // told so rather than being given a button that does nothing.
+      hasNext: canPlayNextSurah(),
+      hasPrevious: canPlayPreviousSurah(),
     },
     {
       onPlay: resumeFromSession,
       onPause: pausePlayback,
       onStop: stop,
-      // «السابق/التالي» on a headset or a car dashboard — the memoriser's
-      // hands are on the wheel or the mushaf, not on the screen.
+      // «السابق/التالي» on a headset, a car dashboard or the notification card move
+      // between surahs — the memoriser's hands are on the wheel or the mushaf, not on
+      // the screen. The finer ayah step stays for the platforms that offer it.
+      onPrevious: () => void playPreviousSurah(),
+      onNext: () => void playNextSurah(),
       onSeekBack: () => stepAyah(-1),
       onSeekForward: () => stepAyah(1),
+      onSeek: seekTo,
+      // Tapping the card brings the app forward; it should land on the player the
+      // listener just tapped for, not on whatever screen was left behind.
+      onOpenPlayer: () => openRecitationPlayer(),
     },
   );
 }
@@ -658,6 +1011,8 @@ function stepAyah(delta: number): void {
   currentTimingRef = timing;
   if (!continuousRef) verseEndRef = timing.endMs / 1000;
   patch({ activeAyah: next, selectedAyah: next });
+  syncProgressFromAudio(audio);
+  reportProgressFromAudio();
 }
 
 /** The lock screen's play button drives the exact same code path as an on-screen tap. */
@@ -681,4 +1036,7 @@ function pausePlayback(): void {
   const audio = audioElement;
   if (audio && !audio.paused) audio.pause();
   patch({ isPlaying: false, interrupted: false });
+  // A pause is a discontinuity: the platform stops extrapolating here and would keep
+  // showing wherever it last heard from if this were not sent.
+  reportProgressFromAudio();
 }

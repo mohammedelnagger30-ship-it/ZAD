@@ -1,9 +1,9 @@
 ﻿import { useEffect, useState } from 'react';
-import { Bell, MapPin, BookOpen, Check, ChevronLeft, Heart, Search, Palette, Sparkles } from 'lucide-react';
+import { Bell, MapPin, BookOpen, Check, ChevronLeft, Heart, Search, Palette } from 'lucide-react';
 import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { Button } from '@/components/ui';
-import { requestNotificationPermission, hasNotificationPermission } from '@/utils/notifications';
+import { requestNotificationPermission } from '@/utils/notifications';
 import { getProtectionStatus, openProtectionSettings } from '@/utils/adhanOverlay';
 import { CITY_PRESETS } from '@/utils/prayerTimes';
 import { COLOR_PALETTES } from '@/utils/colorThemes';
@@ -27,8 +27,6 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   // native once the notification step is reached; on web it stays false and no prompt
   // is ever shown.
   const [batteryRestricted, setBatteryRestricted] = useState(false);
-  const [dhikrEnabled, setDhikrEnabled] = useState(false);
-  const [dhikrRequesting, setDhikrRequesting] = useState(false);
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -81,36 +79,8 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         '🤲 أذكار ومسبحة إلكترونية',
         '📊 تتبع التقدم والإحصائيات',
       ],
-      action: () => setStep(1),
+      action: () => setStep((current) => current + 1),
       actionLabel: 'ابدأ',
-    },
-    // Random Dhikr Reminders
-    {
-      icon: <Sparkles size={64} style={{ color: 'var(--brand-from, #1f734e)' }} />,
-      title: 'تذكير عشوائي بالأذكار',
-      description: 'هل تريد أن نذكرك بأذكار عشوائية على مدار اليوم؟ تُرسل تذكيرات جميلة تساعدك على ذكر الله في كل وقت.',
-      tips: [
-        '⏰ تذكيرات عشوائية متفرقة',
-        '🤲 أذكار متنوعة من مكتبة التطبيق',
-        '🔔 يمكنك إيقافها من الإعدادات',
-        '✨ تذكيرات لطيفة ومفيدة',
-      ],
-      action: async () => {
-        setDhikrRequesting(true);
-        try {
-          const granted = await requestNotificationPermission();
-          if (granted) {
-            setDhikrEnabled(true);
-          }
-          setStep(2);
-        } catch {
-          // The request must never trap the flow: move on and let Settings retry.
-          setStep(2);
-        } finally {
-          setDhikrRequesting(false);
-        }
-      },
-      actionLabel: dhikrRequesting ? 'جارٍ التفعيل...' : dhikrEnabled ? 'تم التفعيل - متابعة' : 'تفعيل التذكيرات',
     },
     // Notifications
     {
@@ -149,10 +119,10 @@ export function Onboarding({ onComplete }: OnboardingProps) {
               // Protection probe is best-effort; never block onboarding on it.
             }
           }
-          setStep(3);
+          setStep((current) => current + 1);
         } catch (error) {
           setNotificationError(error instanceof Error ? error.message : 'تعذّر طلب إذن الإشعارات.');
-          setStep(3);
+          setStep((current) => current + 1);
         } finally {
           setRequesting(false);
         }
@@ -164,7 +134,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       icon: <Palette size={64} style={{ color: 'var(--brand-from, #1f734e)' }} />,
       title: 'اختر لونك المفضل',
       description: 'اختر نغمة ألوان تناسب ذوقك. يمكنك تغييرها لاحقاً من الإعدادات.',
-      action: () => setStep(4),
+      action: () => setStep((current) => current + 1),
       actionLabel: 'متابعة',
       extra: (
         <div className="w-full mb-4">
@@ -228,7 +198,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       icon: <MapPin size={64} style={{ color: 'var(--brand-from, #1f734e)' }} />,
       title: 'حدد موقعك',
       description: 'اختر مدينتك لضبط مواقيت الصلاة بدقة. القاهرة محددة افتراضياً، ويمكنك البحث بين مدن ومحافظات مصر.',
-      action: () => setStep(5),
+      action: () => setStep((current) => current + 1),
       actionLabel: 'متابعة',
       extra: (
         <div className="w-full mb-4">
@@ -283,28 +253,21 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         // Applied here rather than on the location step, so picking a city does not skip
         // this screen. Cairo is preselected; the user can choose another city.
         const city = selectedCity ? CITY_PRESETS.find((c) => c.name === selectedCity) : undefined;
-        // The dhikr step's request gives up after a timeout on devices whose system never
-        // answers it, and the grant can still land a moment later. Ask the system itself
-        // one more time here so a late grant still switches the reminders on.
-        //
-        // `randomDhikrEnabled` is the switch the scheduler actually reads — writing a
-        // private flag here armed nothing, which is why the reminders never fired.
-        void (async () => {
-          const granted = dhikrEnabled || (await hasNotificationPermission().catch(() => false));
-          onComplete(
-            city
-              ? {
-                  latitude: city.latitude,
-                  longitude: city.longitude,
-                  cityName: city.name,
-                  timeZone: city.timeZone,
-                  locationMethod: 'manual',
-                  colorPalette: colorPalette,
-                  randomDhikrEnabled: granted,
-                }
-              : { colorPalette: colorPalette, randomDhikrEnabled: granted },
-          );
-        })();
+        // `randomDhikrEnabled` is deliberately left untouched: onboarding no longer asks for
+        // the random dhikr reminders, so they stay off until the reader opts in from the
+        // in-app notice or from Settings.
+        onComplete(
+          city
+            ? {
+                latitude: city.latitude,
+                longitude: city.longitude,
+                cityName: city.name,
+                timeZone: city.timeZone,
+                locationMethod: 'manual',
+                colorPalette: colorPalette,
+              }
+            : { colorPalette: colorPalette },
+        );
       },
       actionLabel: 'ابدأ التطبيق',
     },
@@ -378,14 +341,14 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             size="lg"
             variant="primary"
             onClick={current.action}
-            disabled={requesting || dhikrRequesting}
+            disabled={requesting}
             className="shadow-lg"
             style={{
               background: 'var(--brand-gradient, linear-gradient(135deg, #1f734e 0%, #2f8f64 45%, #b84414 100%))'
             }}
           >
             {current.actionLabel}
-            {step < 5 && <ChevronLeft size={20} />}
+            {step < steps.length - 1 && <ChevronLeft size={20} />}
           </Button>
           {/* Progress dots */}
           <div className="flex justify-center gap-2 mt-6">

@@ -23,6 +23,7 @@ import { ReaderChoiceSheet } from '@/components/quran/ReaderChoiceSheet';
 import { ReaderNavigation } from '@/components/quran/ReaderNavigation';
 import { splitBasmala } from '@/utils/basmala';
 import { searchAyahs } from '@/utils/ayahSearch';
+import { getRecitationState, subscribeSurahChange } from '@/utils/recitationEngine';
 
 interface QuranScreenProps {
   settings: Settings;
@@ -102,14 +103,37 @@ function loadSavedReaderState() {
 
 export function QuranScreen({ settings, params }: QuranScreenProps) {
   const savedState = useMemo(loadSavedReaderState, []);
+
+  /**
+   * A recitation that is already running is the live thing.
+   *
+   * The reader mounts its own audio panel, and that panel hands the engine *its*
+   * surah — so if the reader opened on a surah the engine is not on, mounting the
+   * panel would stop the recitation and start a different one. When the player has
+   * walked on to a surah other than the one this reader last held, the reader opens
+   * on the recitation instead, at its first ayah.
+   */
+  const runningRecitation = useMemo(() => {
+    const engine = getRecitationState();
+    if (!engine.sessionOpen || engine.surahId === null) return null;
+    const surah = getSurah(engine.surahId) ?? null;
+    // Same surah: the reader is simply coming back to where it left off.
+    if (!surah || savedState?.surah?.id === surah.id) return null;
+    return surah;
+  }, [savedState]);
+
   const [browseMode, setBrowseMode] = useState<BrowseMode>('surah');
   const [revelationFilter, setRevelationFilter] = useState<RevelationFilter>('all');
   const [viewMode, setViewMode] = useState<ViewMode>(savedState?.viewMode ?? 'list');
   const [searchQuery, setSearchQuery] = useState('');
   const [ayahQuery, setAyahQuery] = useState('');
-  const [selectedSurah, setSelectedSurah] = useState<SurahMeta | null>(savedState?.surah ?? null);
-  const [fromAyah, setFromAyah] = useState(savedState?.fromAyah ?? 1);
-  const [toAyah, setToAyah] = useState<number | null>(savedState?.toAyah ?? null);
+  const [selectedSurah, setSelectedSurah] = useState<SurahMeta | null>(
+    runningRecitation ?? savedState?.surah ?? null,
+  );
+  const [fromAyah, setFromAyah] = useState(runningRecitation ? 1 : (savedState?.fromAyah ?? 1));
+  const [toAyah, setToAyah] = useState<number | null>(
+    runningRecitation ? null : (savedState?.toAyah ?? null),
+  );
   const [hideText, setHideText] = useState(false);
   const [hideWordByWord, setHideWordByWord] = useState(false);
   const [bookmarks, setBookmarks] = useState<BookmarkType[]>([]);
@@ -151,6 +175,29 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
   useEffect(() => {
     loadBookmarks();
   }, [loadBookmarks]);
+
+  /**
+   * The player can change the surah under the reader: the end of a surah walking on
+   * to the next one, or «التالي/السابق» from the notification card, a headset or the
+   * expanded player. The reader follows, because a reader showing a surah nobody is
+   * reciting is worse than one that moved without being asked.
+   *
+   * The view mode is deliberately left alone: a listener browsing the surah list must
+   * not be yanked into the reader because a surah ended.
+   */
+  useEffect(
+    () =>
+      subscribeSurahChange((surahId) => {
+        const surah = getSurah(surahId);
+        if (!surah) return;
+        setSelectedSurah(surah);
+        setFromAyah(1);
+        setToAyah(null);
+        setTafsirAyah(null);
+        setShowHifzTest(false);
+      }),
+    [],
+  );
 
   /**
    * Deep links from other screens — «محفوظاتي» sends `{ openSurahId, openAyah }`

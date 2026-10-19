@@ -1,4 +1,6 @@
 import Dexie, { type Table } from 'dexie';
+import { DEFAULT_NOTIFICATION_VOICE_ID } from '@/data/notificationSounds';
+import { DEFAULT_IQAMAH_SOUND_ID } from '@/data/iqamahSound';
 import { type ColorPalette } from '@/utils/colorThemes';
 import {
   CITY_PRESETS,
@@ -53,7 +55,15 @@ export interface Bookmark {
   syncModifiedAt?: number;
   surahId: number;
   ayahNumber: number;
+  /** Free-text note kept with the ayah. */
   note?: string;
+  /**
+   * Highlight colour id from `utils/ayahHighlights` — an ayah washed in a colour
+   * rather than the plain bookmark wash. A colour *id*, not a CSS value, so the
+   * record stays stable across themes and palette retunes. Not an index, so
+   * adding it needs no schema migration — Dexie stores the value as-is.
+   */
+  color?: string;
   createdAt: number;
 }
 
@@ -110,11 +120,14 @@ export type HifzGrade = 'again' | 'hard' | 'good' | 'easy';
  * Deliberately keyed by the *range* the way a hifz portion is (`surahId` +
  * `fromAyah..toAyah`), not per ayah: a memoriser thinks in portions, the quiz
  * tests a portion, and one state per portion keeps the schedule honest without
- * 6000 rows of bookkeeping. Kept out of cloud sync like `khatmah` — a personal
- * study schedule, backed up with everything else but not merged across devices.
+ * 6000 rows of bookkeeping. Synced across devices keyed by `key` (see v9), so a
+ * grade given on one device reschedules the range on the other instead of the
+ * two schedules quietly diverging.
  */
 export interface HifzReview {
   id?: number;
+  syncId?: string;
+  syncModifiedAt?: number;
   /** `${surahId}:${from}-${to}` — the range this state belongs to. */
   key: string;
   surahId: number;
@@ -151,8 +164,22 @@ export interface Settings {
   colorPalette: ColorPalette;
   fontSize: number; // Quran font size in px
   notificationSound: boolean;
+  /**
+   * Which voice the reminder notifications ring (hifz/review/hadith/azkar) — an id
+   * from `NOTIFICATION_VOICES`, which offers the app's own chime, every adhan voice,
+   * and «بدون صوت». `notificationSound` stays the master switch above it.
+   */
+  notificationVoiceId: string;
   adhanSound: boolean;
   adhanVoiceId: string;
+  /**
+   * Ring the iqamah's own recording (أذان الإقامة) at the جماعة's minute, after the
+   * adhan. Master switch is `adhanSound`: with the adhan silenced there is no call to
+   * repeat, so this one is read as `adhanSound && iqamahSound` everywhere it matters.
+   */
+  iqamahSound: boolean;
+  /** Which iqamah sound to play — an id from `IQAMAH_SOUNDS`. */
+  iqamahSoundId: string;
   randomDhikrEnabled: boolean;
   randomDhikrCategory: 'varied' | 'morning' | 'evening' | 'istighfar';
   randomDhikrIntervalMinutes: number;
@@ -176,6 +203,16 @@ export interface Settings {
    * `App` as `data-icon-style` on <html>; index.css owns the actual stroke widths.
    */
   iconStyle?: 'lucide' | 'feather' | 'heroicons';
+  /**
+   * Pin the app's text scale and ignore the system's (Android's «الوضع البسيط», the font
+   * size slider, the display size setting).
+   *
+   * The WebView multiplies every font by the system font scale, while the layout boxes are
+   * laid out in px and do not move — so a larger scale makes text overflow and the whole
+   * app look turned inside out. Turning this on sets `textZoom` to 100 natively and pins
+   * the root font size on the web, so the app renders at its own scale regardless.
+   */
+  ignoreSystemFontScale?: boolean;
   /** Enable custom badge emojis */
   customBadgesEnabled?: boolean;
   /**
@@ -203,6 +240,8 @@ export interface DayStreak {
 /** One Quran-completion (khatmah) plan: a start, an optional target date, and page progress. */
 export interface KhatmahPlan {
   id?: number;
+  syncId?: string;
+  syncModifiedAt?: number;
   /** ISO date (YYYY-MM-DD) the plan started. */
   startDate: string;
   /** ISO date the user aims to finish by — null for an open-ended plan. */
@@ -308,6 +347,7 @@ export class HifziDB extends Dexie {
     // v5: khatmah — a Quran-completion plan tracked by page progress. Kept
     // deliberately out of the v4 syncable set: it is a local reading plan, not
     // a cross-device record (syncing it later can reuse the same upgrade path).
+    // It joined the synced set in v9.
     this.version(5).stores({
       khatmah: '++id, updatedAt',
     });
@@ -359,6 +399,15 @@ export class HifziDB extends Dexie {
       hifzProgress: '++id, surahId, status, [surahId+status], ratedAt, syncId',
       hadithFavorites: '++id, hadithId, collection, [collection+hadithId], createdAt, syncId',
     });
+
+    // v9: khatmah and hifzReviews join the synced set, so `syncId` must be an
+    // index on them too — every incoming record is looked up by its record id
+    // (see v8), and a merge of N records would otherwise cost N full table scans.
+    // Index-only change, so Dexie rebuilds the indexes without touching row data.
+    this.version(9).stores({
+      khatmah: '++id, updatedAt, startDate, syncId',
+      hifzReviews: '++id, key, dueAt, surahId, syncId',
+    });
   }
 }
 
@@ -379,17 +428,20 @@ function legacySyncId(table: string, row: Record<string, unknown>, index: number
 }
 
 /** The settings table must hold exactly one row; this is its primary key. */
-const SETTINGS_ROW_ID = 1;
+export const SETTINGS_ROW_ID = 1;
 
 // ---- Default settings ----
 
 export const DEFAULT_SETTINGS: Settings = {
-  theme: 'dark',
+  theme: 'light',
   colorPalette: 'ocean',
   fontSize: 28,
   notificationSound: true,
+  notificationVoiceId: DEFAULT_NOTIFICATION_VOICE_ID,
   adhanSound: true,
   adhanVoiceId: 'makkah_masjid',
+  iqamahSound: true,
+  iqamahSoundId: DEFAULT_IQAMAH_SOUND_ID,
   randomDhikrEnabled: false,
   randomDhikrCategory: 'varied',
   randomDhikrIntervalMinutes: 60,
@@ -404,6 +456,7 @@ export const DEFAULT_SETTINGS: Settings = {
   latitude: 30.0444,
   longitude: 31.2357,
   iconStyle: 'lucide',
+  ignoreSystemFontScale: false,
   customBadgesEnabled: true,
   showOnboardingTips: true,
   iqamahOffsets: { ...DEFAULT_IQAMAH_OFFSETS },

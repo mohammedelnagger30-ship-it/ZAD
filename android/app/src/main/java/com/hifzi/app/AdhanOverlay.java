@@ -230,6 +230,9 @@ public class AdhanOverlay extends Plugin {
             intent.putExtra(AdhanOverlayReceiver.EXTRA_PRAYER_KEY, prayerKey);
             intent.putExtra(AdhanOverlayReceiver.EXTRA_PRAYER_NAME, alarm.getString("prayerName"));
             intent.putExtra(AdhanOverlayReceiver.EXTRA_TIME, alarm.getString("time"));
+            // Type defaults to "prayer" for backwards compatibility
+            String type = alarm.has("type") ? alarm.getString("type") : "prayer";
+            intent.putExtra(AdhanOverlayReceiver.EXTRA_TYPE, type);
 
             PendingIntent pending = PendingIntent.getBroadcast(
                 context, id, intent,
@@ -317,8 +320,22 @@ public class AdhanOverlay extends Plugin {
         Uri soundUri = FileProvider.getUriForFile(
             getContext(), getContext().getPackageName() + ".fileprovider", sound);
 
-        NotificationChannel channel = new NotificationChannel(
-            id, name, NotificationManager.IMPORTANCE_HIGH);
+        // A FileProvider URI is readable only by whoever holds a grant — and the file is
+        // opened by the *system* when the channel rings, not by this app. Without a grant
+        // the notification arrives and simply stays silent on a number of devices, at
+        // prayer time, which is the one moment silence is not an option. Granting is
+        // best-effort: a ROM that refuses still gets the channel exactly as before.
+        grantUriReadToSoundPlayers(soundUri);
+
+        // Callers that are not a prayer — the hifz/review/hadith/azkar reminder
+        // channels — pass their own importance, because «تذكير مراجعة» has no business
+        // taking over the screen the way a prayer does. Default stays HIGH for the adhan.
+        Integer requestedImportance = call.getInt("importance");
+        int importance = requestedImportance != null
+            ? requestedImportance
+            : NotificationManager.IMPORTANCE_HIGH;
+
+        NotificationChannel channel = new NotificationChannel(id, name, importance);
         channel.setDescription(call.getString("description"));
         channel.enableVibration(true);
         channel.setLockscreenVisibility(android.app.Notification.VISIBILITY_PUBLIC);
@@ -335,6 +352,31 @@ public class AdhanOverlay extends Plugin {
         }
         manager.createNotificationChannel(channel);
         call.resolve();
+    }
+
+    /**
+     * Let the packages that actually play a channel's sound read its file.
+     *
+     * Channel audio is opened by whoever owns the ringing — the system UI, not this app —
+     * so a {@code content://} URI needs an explicit read grant or it resolves to nothing.
+     * The exact package differs per ROM, so each is attempted and none is required: a
+     * failure leaves the channel exactly as it was before this call existed.
+     */
+    private void grantUriReadToSoundPlayers(Uri soundUri) {
+        String[] players = {
+            "com.android.systemui",
+            getContext().getPackageName(),
+        };
+        for (String player : players) {
+            try {
+                getContext().grantUriPermission(
+                    player, soundUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            } catch (Exception ignored) {
+                // Some ROMs refuse cross-package grants for a non-exported provider.
+                // The channel below is created either way — silence, but never a crash
+                // on the path that used to work.
+            }
+        }
     }
 
     /**
@@ -526,6 +568,8 @@ public class AdhanOverlay extends Plugin {
         if (prayerName != null) data.put("prayerName", prayerName);
         String time = intent.getStringExtra(AdhanOverlayReceiver.EXTRA_TIME);
         if (time != null) data.put("time", time);
+        String type = intent.getStringExtra(AdhanOverlayReceiver.EXTRA_TYPE);
+        if (type != null) data.put("type", type);
         return data;
     }
 
@@ -536,6 +580,7 @@ public class AdhanOverlay extends Plugin {
         intent.removeExtra(AdhanOverlayReceiver.EXTRA_PRAYER_KEY);
         intent.removeExtra(AdhanOverlayReceiver.EXTRA_PRAYER_NAME);
         intent.removeExtra(AdhanOverlayReceiver.EXTRA_TIME);
+        intent.removeExtra(AdhanOverlayReceiver.EXTRA_TYPE);
     }
 
     private static SharedPreferences prefs(Context context) {

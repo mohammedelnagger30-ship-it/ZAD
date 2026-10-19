@@ -62,8 +62,8 @@ export function useSettings() {
 }
 
 export function useTheme() {
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
-  const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>('dark');
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>('light');
   const [colorPalette, setColorPalette] = useState<ColorPalette>('ocean');
 
   useEffect(() => {
@@ -81,7 +81,7 @@ export function useTheme() {
         }
         document.querySelector('meta[name="theme-color"]')?.setAttribute(
           'content',
-          COLOR_PALETTES.find((item) => item.id === palette)?.color ?? '#1f734e',
+          COLOR_PALETTES.find((item) => item.id === palette)?.color ?? '#0369a1',
         );
         applyTheme(s.theme);
       } catch {
@@ -140,7 +140,7 @@ export function useTheme() {
       // Storage unavailable: only the pre-paint mirror is lost.
     }
     const themeColor = COLOR_PALETTES.find((item) => item.id === palette)?.color;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor ?? '#1f734e');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor ?? '#0369a1');
   };
 
   return { theme, themeMode, changeTheme, colorPalette, changeColorPalette };
@@ -154,6 +154,8 @@ const SCREEN_NAMES = [
   'prayer',
   'salah',
   'hadith',
+  'sunnah',
+  'nawafil',
   'library',
   'progress',
   'settings',
@@ -162,6 +164,7 @@ const SCREEN_NAMES = [
   'tasbih',
   'bookmarks',
   'search',
+  'iqamah',
 ] as const;
 
 export type ScreenName = (typeof SCREEN_NAMES)[number];

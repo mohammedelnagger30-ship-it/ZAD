@@ -45,6 +45,7 @@ public class AdhanOverlayReceiver extends BroadcastReceiver {
     static final String EXTRA_PRAYER_KEY = "prayerKey";
     static final String EXTRA_PRAYER_NAME = "prayerName";
     static final String EXTRA_TIME = "time";
+    static final String EXTRA_TYPE = "type";
 
     private static final int COLOR_BRAND = 0xFF1F734E;
 
@@ -67,7 +68,9 @@ public class AdhanOverlayReceiver extends BroadcastReceiver {
 
         ensureChannel(context, channelId);
 
-        Intent launch = buildLaunchIntent(context, prayerKey, prayerName, time);
+        // Read the type from the alarm intent (defaults to "prayer")
+        final String type = intent.getStringExtra(EXTRA_TYPE);
+        Intent launch = buildLaunchIntent(context, prayerKey, prayerName, time, type);
 
         // Tapping the card and the full-screen takeover open the very same page; both
         // carry the prayer so the overlay can show the right one.
@@ -128,13 +131,14 @@ public class AdhanOverlayReceiver extends BroadcastReceiver {
     }
 
     private static Intent buildLaunchIntent(
-        Context context, String prayerKey, String prayerName, String time
+        Context context, String prayerKey, String prayerName, String time, String type
     ) {
         Intent launch = new Intent(context, MainActivity.class);
         launch.setAction(AdhanOverlay.ACTION_ADHAN);
         launch.putExtra(EXTRA_PRAYER_KEY, prayerKey);
         if (prayerName != null) launch.putExtra(EXTRA_PRAYER_NAME, prayerName);
         if (time != null) launch.putExtra(EXTRA_TIME, time);
+        if (type != null) launch.putExtra(EXTRA_TYPE, type);
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP
             | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         return launch;

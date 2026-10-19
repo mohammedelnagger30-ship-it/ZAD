@@ -19,6 +19,9 @@ public class MainActivity extends BridgeActivity {
         // Home-screen widget: takes the day's snapshot out of the WebView and hands it
         // to the launcher. Registered with the rest before the bridge is built.
         registerPlugin(WirdWidget.class);
+        // Recitation player card: mirrors the in-app <audio> playback onto an Android
+        // notification + MediaSession, because a WebView has no navigator.mediaSession.
+        registerPlugin(RecitationMedia.class);
         super.onCreate(savedInstanceState);
 
         applyAdhanWindowFlags(getIntent());

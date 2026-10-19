@@ -10,6 +10,12 @@
 # (AppUpdater) or the adhan overlay (AdhanOverlay).
 -keep class com.hifzi.app.AppUpdater { *; }
 -keep class com.hifzi.app.AdhanOverlay { *; }
+# The recitation player card. The service is what the platform starts and what
+# JS reaches through `RecitationMedia`, and the receiver is the target of the
+# notification's own buttons — neither may be renamed or stripped.
+-keep class com.hifzi.app.RecitationMedia { *; }
+-keep class com.hifzi.app.RecitationMediaService { *; }
+-keep class com.hifzi.app.RecitationMediaReceiver { *; }
 
 # Capacitor's annotation lookup reads these off the kept plugin classes; R8 full
 # mode (the AGP 8 default) strips annotations unless they are kept explicitly.

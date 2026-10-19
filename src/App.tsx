@@ -8,10 +8,18 @@ import { generateDailyTasks, markMissedTasks } from '@/utils/taskManager';
 import { rescheduleAllNotifications } from '@/utils/notificationScheduler';
 import { dismissTopOverlay } from '@/utils/overlayRegistry';
 import { onClockChange, startClockService } from '@/utils/clock';
-import { clearLocalUserData, startCloudSync, synchronizeNow, type CloudSyncState } from '@/utils/cloudSync';
+import {
+  clearLocalUserData,
+  startCloudSync,
+  synchronizeNow,
+  type CloudSyncState,
+  type SignOutOptions,
+  type SignOutResult,
+} from '@/utils/cloudSync';
 import { isSupabaseConfigured, supabase } from '@/utils/supabaseClient';
 import { trackAppOpen } from '@/utils/analytics';
 import { isAdminAccount } from '@/utils/adminStats';
+import { applySystemFontScale } from '@/utils/displayScale';
 import { useAppUpdate } from '@/hooks/useAppUpdate';
 import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
@@ -19,6 +27,8 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import type { Session } from '@supabase/supabase-js';
 import type { Settings } from '@/db/database';
 import { AzanOverlayModal } from '@/components/AzanOverlayModal';
+import { RecitationPlayer } from '@/components/RecitationPlayer';
+import { useRecitationVisible } from '@/hooks/useRecitation';
 import { useAzanTrigger } from '@/hooks/useAzanTrigger';
 import { useWirdWidget } from '@/hooks/useWirdWidget';
 import {
@@ -31,8 +41,10 @@ import {
   TIME_ZONE_ADOPTION_EVENT,
 } from '@/utils/timeZoneTravel';
 import { initAutoBackup } from '@/utils/autoBackup';
+import { ensurePersistentStorage } from '@/utils/storagePersistence';
 import { isEgyptianLocation } from '@/utils/prayerTimes';
 import { getNotificationDestination } from '@/utils/notificationRouting';
+import { DhikrReminderNotice } from '@/components/DhikrReminderNotice';
 
 const ONBOARDED_KEY = 'hifzi-onboarded';
 // Latch used by lazyWithRetry: after a chunk 404 we reload once; a reloaded page that
@@ -91,10 +103,13 @@ const PlannerScreen = lazyWithRetry(() => import('@/screens/PlannerScreen').then
 const PrayerScreen = lazyWithRetry(() => import('@/screens/PrayerScreen').then((module) => ({ default: module.PrayerScreen })));
 const PrayerGuideScreen = lazyWithRetry(() => import('@/screens/PrayerGuideScreen').then((module) => ({ default: module.PrayerGuideScreen })));
 const HadithScreen = lazyWithRetry(() => import('@/screens/HadithScreen').then((module) => ({ default: module.HadithScreen })));
+const SunnahScreen = lazyWithRetry(() => import('@/screens/SunnahScreen').then((module) => ({ default: module.default })));
+const NawafilScreen = lazyWithRetry(() => import('@/screens/NawafilScreen').then((module) => ({ default: module.default })));
 const ProgressScreen = lazyWithRetry(() => import('@/screens/ProgressScreen').then((module) => ({ default: module.ProgressScreen })));
 const SettingsScreen = lazyWithRetry(() => import('@/screens/SettingsScreen').then((module) => ({ default: module.SettingsScreen })));
 const MoreScreen = lazyWithRetry(() => import('@/screens/MoreScreen').then((module) => ({ default: module.MoreScreen })));
 const ContentLibrary = lazyWithRetry(() => import('@/screens/ContentLibrary').then((module) => ({ default: module.ContentLibrary })));
+const IqamahScreen = lazyWithRetry(() => import('@/screens/IqamahScreen').then((module) => ({ default: module.IqamahScreen })));
 const AdhkarScreen = lazyWithRetry(() => import('@/screens/AdhkarScreen').then((module) => ({ default: module.AdhkarScreen })));
 const TasbihScreen = lazyWithRetry(() => import('@/screens/TasbihScreen').then((module) => ({ default: module.TasbihScreen })));
 const BookmarksScreen = lazyWithRetry(() => import('@/screens/BookmarksScreen').then((module) => ({ default: module.BookmarksScreen })));
@@ -263,8 +278,16 @@ function Application() {
   const [session, setSession] = useState<Session | null>(null);
   const [authChecked, setAuthChecked] = useState(!isSupabaseConfigured);
   const [offlineUsage, setOfflineUsage] = useState(readOfflineUsage);
+  // Opened from Settings → الحساب: the reader who walked in as a guest decides later
+  // that they want their data on more than one device. Held here rather than in
+  // Settings so a session appearing mid-sign-up swaps the whole view over, as at the gate.
+  const [showAuthForGuest, setShowAuthForGuest] = useState(false);
   // 'unknown' until the allow-list has answered for this account — see below.
   const [adminState, setAdminState] = useState<'unknown' | 'admin' | 'user'>('unknown');
+  // كل مستخدم — أدمن أو لا — يفتح التطبيق العادى، ولوحة الإدارة تُفتح بالطلب من
+  // الإعدادات. الحالة هنا لا داخل `AdminApp`: زر «لوحة الإدارة» يصل إلى هذا المكوّن
+  // من تحت، فلا بدّ أن يرفع الطلب إلى هذا المستوى ليُبدّل العرض.
+  const [showAdminDashboard, setShowAdminDashboard] = useState(false);
   const sessionUserId = session?.user.id ?? null;
 
   // Report the open while the identity is settled: a guest counts under the
@@ -340,8 +363,19 @@ function Application() {
   }
   if (isSupabaseConfigured && session) {
     if (adminState === 'unknown') return <GateLoading message="جارٍ فتح الحساب..." />;
-    if (adminState === 'admin') return <AdminApp session={session} />;
-    return <AuthenticatedApp key={session.user.id} session={session} />;
+    // كل المستخدمين — כולל الأدمن — يفتحوا التطبيق العادى. صفحة الإدارة يمكن
+    // فتحها من داخل التطبيق لو احتجنا لاحقًا، لكن مش تلقائياً عند تسجيل الدخول.
+    // لوحة الإدارة لا تُفتح تلقائيًا عند تسجيل الدخول: كل الحسابات تدخل التطبيق
+    // العادى. الرافع هنا هو هذا المستوى لأن زر «لوحة الإدارة» في الإعدادات يجلس
+    // أسفل ثلاث طبقات من المكوّنات ولا يصل إلى هذا المكوّن مباشرة.
+    if (adminState === 'admin' && showAdminDashboard) return <AdminApp session={session} />;
+    return (
+      <AuthenticatedApp
+        key={session.user.id}
+        session={session}
+        onOpenAdmin={adminState === 'admin' ? () => setShowAdminDashboard(true) : undefined}
+      />
+    );
   }
   if (isSupabaseConfigured && !offlineUsage) {
     return (
@@ -358,7 +392,38 @@ function Application() {
       />
     );
   }
-  return <AppContent accountEmail={undefined} onSignOut={undefined} syncState={null} onSyncNow={undefined} />;
+  return (
+    <>
+      <AppContent
+        accountEmail={undefined}
+        onSignOut={undefined}
+        syncState={null}
+        onSyncNow={undefined}
+        /* Without a backend there is nothing to sign up to, so the entry in Settings
+           is simply not offered rather than failing when pressed. */
+        onCreateAccount={isSupabaseConfigured ? () => setShowAuthForGuest(true) : undefined}
+      />
+      {/* An overlay, not a swap: Settings keeps its place underneath, so closing the
+          form returns the reader to the screen they opened it from. */}
+      {showAuthForGuest && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-surface-light dark:bg-surface-dark">
+          <AuthScreen
+            initialMode="sign-up"
+            onAuthenticated={() => {
+              // The listener above hands the session to `Application`, which re-renders
+              // into the signed-in app; closing first keeps the form from lingering
+              // over it for a beat. For an email-confirmation sign-up there is no
+              // session yet, so this is what puts the reader back in the app until the
+              // confirmation link arrives.
+              setShowAuthForGuest(false);
+            }}
+            onClose={() => setShowAuthForGuest(false)}
+            onContinueOffline={() => setShowAuthForGuest(false)}
+          />
+        </div>
+      )}
+    </>
+  );
 }
 
 /** Full-screen holding state for the moment between a session and its view. */
@@ -408,12 +473,24 @@ function useSessionSync(userId: string) {
     };
   }, [userId]);
 
-  const handleSignOut = useCallback(async () => {
-    if (!supabase) return;
-    await synchronizeNow();
+  const handleSignOut = useCallback(async (options?: SignOutOptions): Promise<SignOutResult> => {
+    if (!supabase) return 'signed-out';
+    // The dialog promises the data is uploaded before the local copy goes, so the
+    // upload runs first — and a failure stops here rather than signing the reader out
+    // behind their back. The rows are still on this device; the screen below decides
+    // with them whether to continue without uploading.
+    if (!options?.skipUpload) {
+      try {
+        await synchronizeNow();
+      } catch (error) {
+        console.error('Sign-out upload failed:', error);
+        return 'upload-failed';
+      }
+    }
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
     await clearLocalUserData();
+    return 'signed-out';
   }, []);
 
   return { syncState, handleSignOut };
@@ -550,13 +627,16 @@ function AppContent({
   syncState,
   onSyncNow,
   onOpenAdmin,
+  onCreateAccount,
 }: {
   accountEmail: string | undefined;
-  onSignOut: (() => Promise<void>) | undefined;
+  onSignOut: ((options?: SignOutOptions) => Promise<SignOutResult>) | undefined;
   syncState: CloudSyncState | null;
   onSyncNow: (() => Promise<void>) | undefined;
   /** Only supplied for an allow-listed account — the way back to the dashboard. */
   onOpenAdmin?: (() => void) | undefined;
+  /** Supplied only to a guest: the way from Settings to creating an account. */
+  onCreateAccount?: (() => void) | undefined;
 }) {
   const { settings, loading, error: settingsError, save, reload: reloadSettings } = useSettings();
   const { themeMode, changeTheme, colorPalette, changeColorPalette } = useTheme();
@@ -565,6 +645,9 @@ function AppContent({
   navigateRef.current = navigate;
   const [onboarded, setOnboarded] = useState<boolean | null>(null);
   const { azanState, closeAzan } = useAzanTrigger(settings);
+  // A single boolean, so the engine's per-ayah patches while a surah sounds do not
+  // re-render this component — only the bar appearing or going away does.
+  const recitationVisible = useRecitationVisible();
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -663,6 +746,13 @@ function AppContent({
     document.documentElement.dataset.iconStyle = settings?.iconStyle ?? 'lucide';
   }, [settings?.iconStyle]);
 
+  // The text-scale hold, applied on every boot as well as on change: without the boot
+  // application the app would open at the system's scale and only settle once Settings
+  // was visited, which is the flash this switch exists to prevent.
+  useEffect(() => {
+    void applySystemFontScale(settings?.ignoreSystemFontScale === true);
+  }, [settings?.ignoreSystemFontScale]);
+
   // Which settings actually change what is armed on the device. Everything else
   // (font size, palette, icon style, tips…) must not pay for a queue rebuild:
   // the effect below used to key on the whole settings object, so every slider
@@ -680,7 +770,12 @@ function AppContent({
       settings.snoozeMinutes,
       settings.adhanSound,
       settings.adhanVoiceId,
+      // The iqamah's own sound rebuilds its channel (Android fixes a channel's sound
+      // at creation), so the switch has to reach the scheduler as its own fingerprint
+      // entry — the offsets above move *when* the alert rings, this one moves *what*.
+      settings.iqamahSound,
       settings.notificationSound,
+      settings.notificationVoiceId,
       settings.randomDhikrEnabled,
       settings.randomDhikrCategory,
       settings.randomDhikrIntervalMinutes,
@@ -699,9 +794,11 @@ function AppContent({
   // the fingerprint goes from '' to its real value once settings arrive).
   useEffect(() => {
     if (!scheduleFingerprint) return;
-    generateDailyTasks();
-    markMissedTasks();
-    rescheduleAllNotifications();
+    void (async () => {
+      await generateDailyTasks();
+      await markMissedTasks();
+      await rescheduleAllNotifications();
+    })();
     // Initialize auto-backup system (latched inside — runs once per session).
     initAutoBackup();
   }, [scheduleFingerprint]);
@@ -826,9 +923,11 @@ function AppContent({
     let remove: (() => void) | undefined;
 
     CapApp.addListener('resume', () => {
-      generateDailyTasks();
-      markMissedTasks();
-      rescheduleAllNotifications();
+      void (async () => {
+        await generateDailyTasks();
+        await markMissedTasks();
+        await rescheduleAllNotifications();
+      })();
     })
       .then((handle) => {
         if (disposed) void handle.remove();
@@ -851,6 +950,11 @@ function AppContent({
     }
     localStorage.setItem(ONBOARDED_KEY, 'true');
     setOnboarded(true);
+    // The second attempt at the persist mark, and the one that counts: a cold-start
+    // request on a brand-new install is often declined for lack of engagement, while
+    // finishing this setup is the first real interaction the browser has seen. Silent
+    // either way — see storagePersistence.ts.
+    void ensurePersistentStorage();
     // The first session's own arming moment. The open-time attempt above ran
     // *before* the permission existed (onboarding asks for it mid-flow), and the
     // settings fingerprint need not move at all — keeping the default city
@@ -907,9 +1011,23 @@ function AppContent({
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-surface-light dark:bg-surface-dark text-primary-900 dark:text-primary-50" dir="rtl">
-        <main className="min-h-screen min-h-dvh px-4 pt-4 pb-24 sm:px-6 md:pr-24 md:pl-8 md:pt-8 md:pb-8 lg:pr-32 xl:pr-36">
+        <main className={`min-h-screen min-h-dvh px-4 pt-4 sm:px-6 md:pr-24 md:pl-8 md:pt-8 lg:pr-32 xl:pr-36 ${
+          /* Room for the tab bar — plus, on mobile, the recitation's mini bar stacked
+             on top of it; on desktop the mini bar floats near the bottom instead, so it
+             gets its own clearance rather than the tab bar's. Without this the last row
+             of a list sits under the player forever. */
+          recitationVisible ? 'pb-[9.5rem] md:pb-28' : 'pb-24 md:pb-8'
+        }`}>
           <div className="w-full max-w-md mx-auto sm:max-w-xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl 2xl:max-w-6xl">
             <SyncNotice syncState={syncState} onSyncNow={onSyncNow} />
+            {/* Hidden while the reader is on Settings: the very switch this points at is
+                already on that screen, so repeating the pitch there would be noise. */}
+            <DhikrReminderNotice
+              settings={settings}
+              onSaveSettings={save}
+              navigate={navigate}
+              hidden={screen === 'settings'}
+            />
             <Suspense fallback={<ScreenLoading />}>
               {/* Selecting the active tab again remounts its screen. */}
               {screen === 'home' && <HomeScreen key={`home-${resetNonce}`} settings={settings} navigate={navigate} />}
@@ -918,6 +1036,8 @@ function AppContent({
               {screen === 'prayer' && <PrayerScreen key={`prayer-${resetNonce}`} settings={settings} onSaveSettings={save} navigate={navigate} params={params} />}
               {screen === 'salah' && <PrayerGuideScreen key={`salah-${resetNonce}`} navigate={navigate} />}
               {screen === 'hadith' && <HadithScreen key={`hadith-${resetNonce}`} params={params} />}
+              {screen === 'sunnah' && <SunnahScreen key={`sunnah-${resetNonce}`} navigate={navigate} />}
+              {screen === 'nawafil' && <NawafilScreen key={`nawafil-${resetNonce}`} settings={settings} />}
               {screen === 'progress' && <ProgressScreen key={`progress-${resetNonce}`} settings={settings} />}
               {/* Selecting the active tab again remounts its screen. A cloud
                   sync does not: it reloads settings, which re-render — the
@@ -928,6 +1048,7 @@ function AppContent({
                   key={`settings-${resetNonce}`}
                   settings={settings}
                   onSaveSettings={save}
+                  params={params}
                   themeMode={themeMode}
                   onChangeTheme={changeTheme}
                   colorPalette={colorPalette}
@@ -937,6 +1058,8 @@ function AppContent({
                   onSyncNow={onSyncNow}
                   onSignOut={onSignOut}
                   onOpenAdmin={onOpenAdmin}
+                  onCreateAccount={onCreateAccount}
+                  navigate={navigate}
                 />
               )}
               {screen === 'more' && <MoreScreen key={`more-${resetNonce}`} navigate={navigate} />}
@@ -957,13 +1080,25 @@ function AppContent({
               {screen === 'tasbih' && <TasbihScreen key={`tasbih-${resetNonce}`} params={params} />}
               {screen === 'bookmarks' && <BookmarksScreen key={`bookmarks-${resetNonce}`} navigate={navigate} />}
               {screen === 'search' && <SearchScreen key={`search-${resetNonce}`} navigate={navigate} />}
+              {screen === 'iqamah' && (
+                <IqamahScreen
+                  key={`iqamah-${resetNonce}`}
+                  settings={settings}
+                  onSaveSettings={save}
+                  onClose={() => navigate('settings')}
+                />
+              )}
             </Suspense>
           </div>
         </main>
         <BottomNav current={screen} onNavigate={navigate} />
+        {/* The recitation, wherever the listener is in the app — dormant until one is
+            actually playing. */}
+        <RecitationPlayer />
         {settings && (
           <AzanOverlayModal
             isOpen={azanState.isOpen}
+            mode={azanState.mode}
             prayerKey={azanState.prayerKey}
             prayerName={azanState.prayerName}
             prayerTime={azanState.prayerTime}
