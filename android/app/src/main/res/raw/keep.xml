@@ -1,11 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The adhan voices and the notification tap sound are addressed by NAME at
-  runtime: Capacitor's channel builder resolves `sound: 'adhan_….mp3'` through
-  getIdentifier("raw"), which R8's resource shrinker cannot see — it keeps only
-  compile-time references, so without this file it strips every voice, and the
-  prayer channels would arm, ring "successfully", and stay silent. tools:keep
-  pins them (and any future adhan_*) regardless of how minify/shrink evolves.
+  Every sound this app rings is addressed by NAME at runtime, never through a
+  compile-time R.raw reference: Capacitor's channel builder resolves
+  `sound: 'msg_bell'` into `android.resource://<pkg>/raw/msg_bell` purely from
+  the string. The resource shrinker sees only compile-time references, so
+  without this file it strips whichever sound no Java/Kotlin line mentions —
+  and the channel still arms and "rings" against a Uri that resolves to nothing.
+
+  That failure is silent in both senses. The reminder picker keeps working,
+  because its preview plays from assets/public/audio/, which shrinkResources
+  never touches — so the choice looks saved while the notification that arrives
+  wears the default chime instead of it. Only the notification itself tells you.
+
+  Hence every name here:
+    adhan_*  — the prayer voices (also passed as plain file names)
+    iqama_*  — the جماعة's own recordings: the full iqamah, the mosque fragment,
+               and the quiet chime, all addressed by name the same way
+    msg_*    — the four «رنين» reminder tones behind صوت التنبيه
+    notification — the app's own chime: the default tone, and the tap the
+                   iqamah falls back to when «أذان الإقامة» is switched off
+
+  tools:keep pins them regardless of how minify/shrink evolves; a sound added
+  later must be listed here too or it will not survive packaging.
 -->
 <resources xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="@raw/adhan_*,@raw/notification" />
+    tools:keep="@raw/adhan_*,@raw/msg_*,@raw/iqama*,@raw/notification" />

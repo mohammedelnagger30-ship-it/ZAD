@@ -34,7 +34,7 @@ export interface IqamahScreenProps {
 const SOUND_DESCRIPTIONS: Record<string, string> = {
   kamil_iqamah: 'الإقامة كاملة: التكبيرات، الشهادتان، حي على الصلاة، قد قامت الصلاة — ٣٤ ثانية',
   masjid_iqamah: 'مقطع من أذان إقامة رمضان في المسجد — ٢٠ ثانية',
-  soft_tone: 'نغمة قصيرة لمن يفضل تنبيهًا هادئًا',
+  soft_tone: 'جرس دافئ قصير لمن يفضل تنبيهًا هادئًا',
 };
 
 /** Default iqamah offsets for the times overview (minutes after each adhan). */

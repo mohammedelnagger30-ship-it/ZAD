@@ -11,6 +11,13 @@
  * `android/app/src/main/res/raw` for the notification channel), so it works on a fresh
  * install with no network — the prayer minute cannot wait for a download.
  *
+ * Both recordings are *restored*, not shipped as-is: the sources are quiet and — in the
+ * mosque's case — heavily muffled (most of the voice sat under 100-300 Hz rumble). Each
+ * was re-extracted from its highest-quality master, then denoised, de-boomed, brought
+ * back to the speech presence band and normalised to −14 LUFS, so «حان وقت الإقامة» is
+ * loud and intelligible on a phone speaker. CC BY / CC BY-SA both permit modification;
+ * what they require — the credit — is kept below and in `SOURCES.md`.
+ *
  * The source, author and licence are part of the record, not decoration: the file is
  * CC BY-SA 4.0 / CC BY 4.0, which requires attribution wherever it is redistributed.
  * They are documented in `src/data/SOURCES.md` and read by {@link iqamahSoundAttribution}.
@@ -38,9 +45,9 @@ export const IQAMAH_KAMIL: IqamahSound = {
   name: 'الإقامة الكاملة — من تسجيل الصلاة',
   file: 'iqama_kamil.mp3',
   source: 'Internet Archive',
-  sourceUrl: 'https://archive.org/details/salah-3',
+  sourceUrl: 'https://archive.org/details/salah-islamic-prayer-translation-with-audio',
   title: 'Islamic Salat Procedure',
-  author: 'Islamic Archive',
+  author: 'Joseph Lloyd Zacker',
   license: 'CC BY 4.0',
   licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
   bundled: true,
@@ -60,14 +67,14 @@ export const IQAMAH_MASJID: IqamahSound = {
   bundled: true,
 };
 
-/** A soft chime for users who prefer a gentle tone. */
+/** A soft chime for users who prefer a gentle tone (synthesised in-app, no source file). */
 export const IQAMAH_SOFT_TONE: IqamahSound = {
   id: 'soft_tone',
   name: 'نغمة إقامة هادئة',
-  file: 'msg_soft.wav',
+  file: 'iqama_tone.wav',
   source: 'Bundled app asset',
   sourceUrl: '',
-  title: 'Soft notification tone',
+  title: 'Soft iqamah chime',
   author: 'Hifzi App',
   license: 'App bundled (CC0-like)',
   licenseUrl: '',
