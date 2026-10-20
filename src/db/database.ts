@@ -1,6 +1,5 @@
 import Dexie, { type Table } from 'dexie';
 import { DEFAULT_NOTIFICATION_VOICE_ID } from '@/data/notificationSounds';
-import { DEFAULT_IQAMAH_SOUND_ID } from '@/data/iqamahSound';
 import { type ColorPalette } from '@/utils/colorThemes';
 import {
   CITY_PRESETS,
@@ -112,6 +111,17 @@ export interface HifzProgress {
   ratedAt: number;
 }
 
+/** A user-marked ayah where they stopped their hifz session. */
+export interface HifzStop {
+  id?: number;
+  syncId?: string;
+  syncModifiedAt?: number;
+  surahId: number;
+  ayahNumber: number;
+  page: number;
+  createdAt: number;
+}
+
 export type HifzGrade = 'again' | 'hard' | 'good' | 'easy';
 
 /**
@@ -172,14 +182,6 @@ export interface Settings {
   notificationVoiceId: string;
   adhanSound: boolean;
   adhanVoiceId: string;
-  /**
-   * Ring the iqamah's own recording (أذان الإقامة) at the جماعة's minute, after the
-   * adhan. Master switch is `adhanSound`: with the adhan silenced there is no call to
-   * repeat, so this one is read as `adhanSound && iqamahSound` everywhere it matters.
-   */
-  iqamahSound: boolean;
-  /** Which iqamah sound to play — an id from `IQAMAH_SOUNDS`. */
-  iqamahSoundId: string;
   randomDhikrEnabled: boolean;
   randomDhikrCategory: 'varied' | 'morning' | 'evening' | 'istighfar';
   randomDhikrIntervalMinutes: number;
@@ -187,6 +189,18 @@ export interface Settings {
   randomDhikrEndTime: string;
   snoozeMinutes: number;
   prePrayerReminder: number; // minutes before, 0 = off
+  /**
+   * What time each day the four daily content notifications arrive ? the hadith of
+   * the day, the Qur'an message, a Sunnah about the Prophet ﷺ and a fact about him ﷺ.
+   *
+   * `'HH:MM'` in the phone's own clock. Stored as strings so the rows read like the
+   * dhikr window's, and spread from DEFAULT_SETTINGS by `getSettings`, so an install
+   * that predates them simply gets the old fixed hours.
+   */
+  hadithNotificationTime: string;
+  quranMessageTime: string;
+  sunnahNotificationTime: string;
+  prophetNotificationTime: string;
   calcMethod: string; // adhan calculation method
   asrMadhab: 'standard' | 'hanafi';
   latitude?: number;
@@ -263,6 +277,7 @@ export class HifziDB extends Dexie {
   sunnahRecords!: Table<SunnahRecord, number>;
   hifzProgress!: Table<HifzProgress, number>;
   hifzReviews!: Table<HifzReview, number>;
+  hifzStops!: Table<HifzStop, number>;
   hadithFavorites!: Table<HadithFavorite, number>;
   settings!: Table<Settings, number>;
   khatmah!: Table<KhatmahPlan, number>;
@@ -320,7 +335,7 @@ export class HifziDB extends Dexie {
       .upgrade(async (tx) => {
         const syncableTables = [
           'settings', 'plans', 'tasks', 'bookmarks', 'pageBookmarks',
-          'prayerRecords', 'sunnahRecords', 'hifzProgress', 'hadithFavorites',
+          'prayerRecords', 'sunnahRecords', 'hifzProgress', 'hifzStops', 'hadithFavorites',
         ];
         const plans = await tx.table('plans').toArray();
         const planSyncIds = new Map<number, string>();
@@ -397,6 +412,7 @@ export class HifziDB extends Dexie {
       prayerRecords: '++id, date, prayer, [date+prayer], confirmedAt, syncId',
       sunnahRecords: '++id, date, type, [date+type], done, syncId',
       hifzProgress: '++id, surahId, status, [surahId+status], ratedAt, syncId',
+      hifzStops: '++id, surahId, ayahNumber, page, createdAt, [surahId+ayahNumber], syncId',
       hadithFavorites: '++id, hadithId, collection, [collection+hadithId], createdAt, syncId',
     });
 
@@ -407,6 +423,13 @@ export class HifziDB extends Dexie {
     this.version(9).stores({
       khatmah: '++id, updatedAt, startDate, syncId',
       hifzReviews: '++id, key, dueAt, surahId, syncId',
+    });
+
+    // v10: memorization stops — a user-marked ayah where they stopped their
+    // hifz session. Different from a page bookmark: this is per-ayah and
+    // explicitly means "this is where I stopped memorizing".
+    this.version(10).stores({
+      hifzStops: '++id, surahId, ayahNumber, page, createdAt, [surahId+ayahNumber]',
     });
   }
 }
@@ -423,6 +446,7 @@ function legacySyncId(table: string, row: Record<string, unknown>, index: number
     case 'plans': return `plan:${row.createdAt}:${row.type}:${row.portion}:${row.time}`;
     case 'bookmarks': return `bookmark:${row.surahId}:${row.ayahNumber}`;
     case 'hifzProgress': return `progress:${row.surahId}:${row.ayahStart}:${row.ayahEnd}:${row.ratedAt}`;
+    case 'hifzStops': return `hifzstop:${row.surahId}:${row.ayahNumber}`;
     default: return `legacy:${table}:${row.id ?? index}`;
   }
 }
@@ -440,8 +464,6 @@ export const DEFAULT_SETTINGS: Settings = {
   notificationVoiceId: DEFAULT_NOTIFICATION_VOICE_ID,
   adhanSound: true,
   adhanVoiceId: 'makkah_masjid',
-  iqamahSound: true,
-  iqamahSoundId: DEFAULT_IQAMAH_SOUND_ID,
   randomDhikrEnabled: false,
   randomDhikrCategory: 'varied',
   randomDhikrIntervalMinutes: 60,
@@ -449,6 +471,10 @@ export const DEFAULT_SETTINGS: Settings = {
   randomDhikrEndTime: '21:00',
   snoozeMinutes: 15,
   prePrayerReminder: 10,
+  hadithNotificationTime: '09:00',
+  quranMessageTime: '10:00',
+  sunnahNotificationTime: '14:00',
+  prophetNotificationTime: '16:00',
   calcMethod: 'Egyptian',
   asrMadhab: 'standard',
   locationMethod: 'manual',

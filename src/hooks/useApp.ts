@@ -156,6 +156,8 @@ const SCREEN_NAMES = [
   'hadith',
   'sunnah',
   'nawafil',
+  'prophet',
+  'huwaini',
   'library',
   'progress',
   'settings',
@@ -164,7 +166,6 @@ const SCREEN_NAMES = [
   'tasbih',
   'bookmarks',
   'search',
-  'iqamah',
 ] as const;
 
 export type ScreenName = (typeof SCREEN_NAMES)[number];

@@ -28,7 +28,9 @@ import type { Session } from '@supabase/supabase-js';
 import type { Settings } from '@/db/database';
 import { AzanOverlayModal } from '@/components/AzanOverlayModal';
 import { RecitationPlayer } from '@/components/RecitationPlayer';
+import { LecturePlayerBar } from '@/components/LecturePlayerBar';
 import { useRecitationVisible } from '@/hooks/useRecitation';
+import { useLecturePlayer } from '@/hooks/useLecturePlayer';
 import { useAzanTrigger } from '@/hooks/useAzanTrigger';
 import { useWirdWidget } from '@/hooks/useWirdWidget';
 import {
@@ -104,12 +106,13 @@ const PrayerScreen = lazyWithRetry(() => import('@/screens/PrayerScreen').then((
 const PrayerGuideScreen = lazyWithRetry(() => import('@/screens/PrayerGuideScreen').then((module) => ({ default: module.PrayerGuideScreen })));
 const HadithScreen = lazyWithRetry(() => import('@/screens/HadithScreen').then((module) => ({ default: module.HadithScreen })));
 const SunnahScreen = lazyWithRetry(() => import('@/screens/SunnahScreen').then((module) => ({ default: module.default })));
+const ProphetScreen = lazyWithRetry(() => import('@/screens/ProphetScreen').then((module) => ({ default: module.ProphetScreen })));
+const HuwainiScreen = lazyWithRetry(() => import('@/screens/HuwainiScreen').then((module) => ({ default: module.HuwainiScreen })));
 const NawafilScreen = lazyWithRetry(() => import('@/screens/NawafilScreen').then((module) => ({ default: module.default })));
 const ProgressScreen = lazyWithRetry(() => import('@/screens/ProgressScreen').then((module) => ({ default: module.ProgressScreen })));
 const SettingsScreen = lazyWithRetry(() => import('@/screens/SettingsScreen').then((module) => ({ default: module.SettingsScreen })));
 const MoreScreen = lazyWithRetry(() => import('@/screens/MoreScreen').then((module) => ({ default: module.MoreScreen })));
 const ContentLibrary = lazyWithRetry(() => import('@/screens/ContentLibrary').then((module) => ({ default: module.ContentLibrary })));
-const IqamahScreen = lazyWithRetry(() => import('@/screens/IqamahScreen').then((module) => ({ default: module.IqamahScreen })));
 const AdhkarScreen = lazyWithRetry(() => import('@/screens/AdhkarScreen').then((module) => ({ default: module.AdhkarScreen })));
 const TasbihScreen = lazyWithRetry(() => import('@/screens/TasbihScreen').then((module) => ({ default: module.TasbihScreen })));
 const BookmarksScreen = lazyWithRetry(() => import('@/screens/BookmarksScreen').then((module) => ({ default: module.BookmarksScreen })));
@@ -546,13 +549,14 @@ function AdminApp({ session }: { session: Session }) {
 
 
 /**
- * Shown when cloud sync is failing or the device is offline.
+ * Shown when the device is offline and sync cannot run at all.
  *
- * Once the app stopped treating a failed first sync as fatal, a sync problem could
- * otherwise pass completely unnoticed — the only place sync status appeared was the
- * settings screen, so a user whose data had not reached the cloud would have no reason to
- * look. This says so plainly and says what is still true: everything works, and the
- * changes are waiting.
+ * A *failed* sync is deliberately not shown here. Sync retries on its own — on reconnect,
+ * on foreground, on the next local write — so a transient server or network failure used to
+ * raise and re-raise this banner every few seconds, which told the listener nothing they
+ * could act on and only shouted over the app. Failures are still reported where a listener
+ * would go looking for them, in Settings › الحساب والمزامنة السحابية. Being offline is the one
+ * state worth interrupting for, because it is the one the listener can fix.
  */
 function SyncNotice({
   syncState,
@@ -561,17 +565,13 @@ function SyncNotice({
   syncState: CloudSyncState | null;
   onSyncNow: (() => Promise<void>) | undefined;
 }) {
-  // Dismissal lasts for the session, the same as the update banner. Re-arming it on recovery
-  // looked tidier but needed a 'synced' state to key off, and sync goes error → syncing →
-  // error on every retry, so it re-armed mid-outage or not at all depending on whether a
-  // given attempt finished. A notice the user has read once does not need to come back.
-  const failing = syncState?.status === 'error' || syncState?.status === 'offline';
+  // Dismissal lasts for the session, the same as the update banner.
+  const offline = syncState?.status === 'offline';
   const [dismissed, setDismissed] = useState(false);
   const [retrying, setRetrying] = useState(false);
 
-  if (!failing || dismissed) return null;
+  if (!offline || dismissed) return null;
 
-  const offline = syncState?.status === 'offline';
   const retry = async () => {
     if (!onSyncNow) return;
     setRetrying(true);
@@ -590,13 +590,9 @@ function SyncNotice({
     >
       <CloudOff size={18} className="mt-0.5 shrink-0 text-gold-600 dark:text-gold-300" />
       <div className="flex-1">
-        <p className="font-semibold text-primary-900 dark:text-primary-50">
-          {offline ? 'لا يوجد اتصال بالإنترنت' : 'تعذّرت مزامنة بياناتك'}
-        </p>
+        <p className="font-semibold text-primary-900 dark:text-primary-50">لا يوجد اتصال بالإنترنت</p>
         <p className="mt-0.5 text-primary-800 dark:text-primary-100">
-          {offline
-            ? 'التطبيق يعمل ببياناته المحفوظة على الجهاز، وستُرفع تعديلاتك تلقائياً عند عودة الاتصال.'
-            : 'التطبيق يعمل ببياناته المحفوظة على الجهاز، وتعديلاتك لم تُرفع بعد إلى حسابك.'}
+          التطبيق يعمل ببياناته المحفوظة على الجهاز، وستُرفع تعديلاتك تلقائياً عند عودة الاتصال.
         </p>
         {onSyncNow && (
           <button
@@ -648,6 +644,7 @@ function AppContent({
   // A single boolean, so the engine's per-ayah patches while a surah sounds do not
   // re-render this component — only the bar appearing or going away does.
   const recitationVisible = useRecitationVisible();
+  const lectureActive = useLecturePlayer().current !== null;
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -767,13 +764,16 @@ function AppContent({
       settings.latitude,
       settings.longitude,
       settings.prePrayerReminder,
+      // The four daily content notifications (hadith, Qur'an message, Sunnah, Prophet
+      // ﷺ) are armed at exactly these hours. Leaving them out would let a row move a
+      // notification on screen while every alarm kept ringing at the old time.
+      settings.hadithNotificationTime,
+      settings.quranMessageTime,
+      settings.sunnahNotificationTime,
+      settings.prophetNotificationTime,
       settings.snoozeMinutes,
       settings.adhanSound,
       settings.adhanVoiceId,
-      // The iqamah's own sound rebuilds its channel (Android fixes a channel's sound
-      // at creation), so the switch has to reach the scheduler as its own fingerprint
-      // entry — the offsets above move *when* the alert rings, this one moves *what*.
-      settings.iqamahSound,
       settings.notificationSound,
       settings.notificationVoiceId,
       settings.randomDhikrEnabled,
@@ -1016,7 +1016,7 @@ function AppContent({
              on top of it; on desktop the mini bar floats near the bottom instead, so it
              gets its own clearance rather than the tab bar's. Without this the last row
              of a list sits under the player forever. */
-          recitationVisible ? 'pb-[9.5rem] md:pb-28' : 'pb-24 md:pb-8'
+          recitationVisible || lectureActive ? 'pb-[9.5rem] md:pb-28' : 'pb-24 md:pb-8'
         }`}>
           <div className="w-full max-w-md mx-auto sm:max-w-xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl 2xl:max-w-6xl">
             <SyncNotice syncState={syncState} onSyncNow={onSyncNow} />
@@ -1037,6 +1037,8 @@ function AppContent({
               {screen === 'salah' && <PrayerGuideScreen key={`salah-${resetNonce}`} navigate={navigate} />}
               {screen === 'hadith' && <HadithScreen key={`hadith-${resetNonce}`} params={params} />}
               {screen === 'sunnah' && <SunnahScreen key={`sunnah-${resetNonce}`} navigate={navigate} />}
+              {screen === 'prophet' && <ProphetScreen key={`prophet-${resetNonce}`} navigate={navigate} />}
+              {screen === 'huwaini' && <HuwainiScreen key={`huwaini-${resetNonce}`} navigate={navigate} />}
               {screen === 'nawafil' && <NawafilScreen key={`nawafil-${resetNonce}`} settings={settings} />}
               {screen === 'progress' && <ProgressScreen key={`progress-${resetNonce}`} settings={settings} />}
               {/* Selecting the active tab again remounts its screen. A cloud
@@ -1059,7 +1061,6 @@ function AppContent({
                   onSignOut={onSignOut}
                   onOpenAdmin={onOpenAdmin}
                   onCreateAccount={onCreateAccount}
-                  navigate={navigate}
                 />
               )}
               {screen === 'more' && <MoreScreen key={`more-${resetNonce}`} navigate={navigate} />}
@@ -1080,14 +1081,6 @@ function AppContent({
               {screen === 'tasbih' && <TasbihScreen key={`tasbih-${resetNonce}`} params={params} />}
               {screen === 'bookmarks' && <BookmarksScreen key={`bookmarks-${resetNonce}`} navigate={navigate} />}
               {screen === 'search' && <SearchScreen key={`search-${resetNonce}`} navigate={navigate} />}
-              {screen === 'iqamah' && (
-                <IqamahScreen
-                  key={`iqamah-${resetNonce}`}
-                  settings={settings}
-                  onSaveSettings={save}
-                  onClose={() => navigate('settings')}
-                />
-              )}
             </Suspense>
           </div>
         </main>
@@ -1095,15 +1088,17 @@ function AppContent({
         {/* The recitation, wherever the listener is in the app — dormant until one is
             actually playing. */}
         <RecitationPlayer />
+        {/* The lecture player, same contract: nothing at all until a lecture starts. */}
+        <LecturePlayerBar />
         {settings && (
           <AzanOverlayModal
             isOpen={azanState.isOpen}
-            mode={azanState.mode}
             prayerKey={azanState.prayerKey}
             prayerName={azanState.prayerName}
             prayerTime={azanState.prayerTime}
             settings={settings}
             isPreview={azanState.isPreview}
+            isTest={azanState.isTest}
             fromNotification={azanState.fromNotification}
             onClose={closeAzan}
             onNavigateToAdhkar={() => navigate('adhkar')}

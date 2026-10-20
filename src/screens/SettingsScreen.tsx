@@ -40,8 +40,6 @@ interface SettingsScreenProps {
   onOpenAdmin?: () => void;
   /** Supplied only to a guest — the way from here to the sign-up form. */
   onCreateAccount?: () => void;
-  /** Navigation function to push other screens. */
-  navigate: (screen: string) => void;
 }
 
 export function SettingsScreen({
@@ -58,7 +56,6 @@ export function SettingsScreen({
   onSignOut,
   onOpenAdmin,
   onCreateAccount,
-  navigate,
 }: SettingsScreenProps) {
   // Reached from the dhikr reminder notice on the home screen. Settings is a single page, so
   // the deep link is a smooth scroll to the section rather than a URL.
@@ -127,7 +124,7 @@ export function SettingsScreen({
         onChangeColorPalette={onChangeColorPalette}
       />
       <UISettingsSection settings={settings} onSaveSettings={onSaveSettings} />
-      <NotificationsSection settings={settings} onSaveSettings={onSaveSettings} navigate={navigate} />
+      <NotificationsSection settings={settings} onSaveSettings={onSaveSettings} />
       <PrayerTimesSection settings={settings} onSaveSettings={onSaveSettings} />
       <HijriSection settings={settings} onSaveSettings={onSaveSettings} />
       <FontSection settings={settings} onSaveSettings={onSaveSettings} />

@@ -7,16 +7,20 @@ import {
   calculatePrayerTimesForDay,
   calendarDayInZone,
   formatTime12h,
-  getIqamahTime,
   getPrayerTimeZone,
 } from '@/utils/prayerTimes';
 import { deviceClockDriftMs, toDeviceClock, trustedNow, trustedNowMs } from '@/utils/clock';
 import { describePortion, generateDailyTasks, getTodayTasks } from '@/utils/taskManager';
+import { getDailyQuranMessage, type DailyMessageStorage } from '@/utils/dailyQuranMessage';
+import { SUNNAH_CATEGORIES, type SunnahItem } from '@/data/sunnah';
+import { PROPHET_SECTIONS, type ProphetEntry } from '@/screens/ProphetScreen';
 import { assembleNotificationQueue, dhikrFillerBudget } from '@/utils/notificationQueue';
 import {
+  getProtectionStatus,
   scheduleAdhanOverlay,
   setAdhanChannel,
   type AdhanOverlayAlarm,
+  type AdhanScheduleResult,
 } from '@/utils/adhanOverlay';
 import {
   ensureAdhanVoicesLoaded,
@@ -30,7 +34,6 @@ import {
   usableNotificationVoice,
 } from '@/data/notificationSounds';
 import { ADHKAR_CATEGORIES, ISTIGHFAR_DHIKR, type Dhikr } from '@/data/adhkar';
-import { getIqamahSound } from '@/data/iqamahSound';
 import {
   cancelAllNotifications,
   canScheduleExactAlarms,
@@ -95,6 +98,16 @@ const DAILY_ALERT_DAYS = 2;
  */
 const MAX_SCHEDULED_NOTIFICATIONS = 50;
 const MAX_HIFZ_REVIEW_REMINDERS = 15;
+
+/**
+ * How many days of the daily content notifications — hadith of the day, the Qur'an
+ * message, a Sunnah, a fact about the Prophet ﷺ — travel in the queue.
+ *
+ * A week matches the prayer-fallback horizon, but unlike it the content is bounded
+ * again at assembly (see the budget in `rescheduleAllNotifications`), so a busy week
+ * gives up its far days rather than today's task.
+ */
+const CONTENT_NOTIFICATION_DAYS = 7;
 
 /**
  * The identity every notification carries: the small icon (the open Mushaf,
@@ -279,6 +292,36 @@ function timeToMinutes(value: string): number | null {
   return match ? Number(match[1]) * 60 + Number(match[2]) : null;
 }
 
+/**
+ * A configured `'HH:MM'` settings row as the wall-clock fields to arm.
+ *
+ * The fallback is the hour the notification used before the row existed. An empty
+ * or malformed value — a row from an older install, or a hand-edited backup —
+ * therefore keeps the notification where it always was, rather than sliding it to
+ * midnight.
+ */
+function configuredClockTime(
+  value: string | undefined,
+  fallbackHour: number,
+): { hour: number; minute: number } {
+  const minutes = timeToMinutes(value ?? '');
+  if (minutes === null) return { hour: fallbackHour, minute: 0 };
+  return { hour: Math.floor(minutes / 60), minute: minutes % 60 };
+}
+
+/**
+ * The channel the adhan itself rings on.
+ *
+ * `prayer-muted` when the reader switched the adhan's sound off — that channel is
+ * silent by design, so it is never probed for a sound and never repaired. Exported
+ * because the settings banner has to ask the system about this exact channel, and it
+ * must not re-derive the id by hand: a drift between the two would have the banner
+ * reporting on a channel nothing rings on.
+ */
+export function adhanChannelId(settings: Settings): string {
+  return settings.adhanSound ? `prayer-${usableAdhanSound(settings.adhanVoiceId).id}` : 'prayer-muted';
+}
+
 export async function createNotificationChannels(settings: Settings): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
   // The chosen voice may be one the user downloaded; knowing what is on disk decides
@@ -325,82 +368,54 @@ export async function createNotificationChannels(settings: Settings): Promise<vo
     vibration: true,
     visibility: 1,
   });
-  await applyIqamahChannel(settings);
   await applyNotificationVoiceChannels(settings);
 }
 
 /**
- * What the جماعة's alert rings — the iqamah's own recording, or the short tap.
+ * Put the sound back on a prayer channel that exists but is silent.
  *
- * The adhan is the master switch: with it silenced nothing is calling anyone to
- * prayer, so repeating the iqamah call would announce a prayer the user asked the app
- * not to sound. Hence the two read as `adhanSound && iqamahSound` — which is what this
- * one function decides for both the channel and the notification payload, so the two
- * can never drift apart.
+ * This is the state Android hands an app that created the channel before its sound
+ * existed — and it is exactly what the native receiver's own fallback used to do: when
+ * an alarm fired for a channel that was not there, `ensureChannel()` minted one with
+ * **no** sound, and a later `createChannel` with a sound cannot change it, because a
+ * channel is immutable from the moment it exists. Delete-then-create is the only route
+ * back, the same one the reminder channels already use when the voice changes. The
+ * reader's own per-channel preferences are lost with the old channel, which is the
+ * price of a channel that could not ring at all.
  */
-export const IQAMAH_TAP_SOUND = 'notification.wav';
-
-export function iqamahChannelSound(settings: Settings): { enabled: boolean; file: string } {
-  const enabled = settings.iqamahSound === true && settings.adhanSound;
-  const sound = enabled ? getIqamahSound(settings.iqamahSoundId) : null;
-  return { enabled, file: enabled && sound ? sound.file : IQAMAH_TAP_SOUND };
-}
-
-/**
- * Which sound «إقامة الصلاة» was last built with.
- *
- * Android fixes a channel's sound the moment the channel is created: recreating it
- * with a different sound changes nothing unless the old channel is deleted first, and
- * deleting throws away the user's own per-channel preferences (vibration off, or
- * «صامت» in system settings). So the rebuild below is paid for only when the sound
- * actually changes — switching the iqamah on or off, or the adhan behind it — and every
- * other reschedule leaves the channel and the user's choices alone.
- */
-const IQAMAH_SOUND_APPLIED_KEY = 'zad:iqamah-sound-applied';
-
-function appliedIqamahSoundKey(): string | null {
+async function rebuildSilentPrayerChannel(settings: Settings): Promise<void> {
+  const adhan = usableAdhanSound(settings.adhanVoiceId);
+  const id = `prayer-${adhan.id}`;
   try {
-    return localStorage.getItem(IQAMAH_SOUND_APPLIED_KEY);
+    await LocalNotifications.deleteChannel({ id });
   } catch {
-    return null;
+    // Not readable as an existing channel (Android < 8): recreating is still safe.
   }
-}
-
-function rememberIqamahSoundKey(key: string): void {
   try {
-    localStorage.setItem(IQAMAH_SOUND_APPLIED_KEY, key);
-  } catch {
-    // Private mode: the channel still rings, it is simply rebuilt next time too.
+    const storedPath = await resolveAdhanSoundPath(adhan);
+    if (storedPath) {
+      await setAdhanChannel({
+        id,
+        name: `الأذان — ${adhan.name}`,
+        description: 'تنبيه عند دخول وقت الصلاة',
+        soundPath: storedPath,
+      });
+    } else {
+      await LocalNotifications.createChannel({
+        id,
+        name: `الأذان — ${adhan.name}`,
+        description: 'تنبيه عند دخول وقت الصلاة',
+        importance: 4,
+        sound: adhan.file,
+        vibration: true,
+        visibility: 1,
+      });
+    }
+    notifyNotificationWarning('channel-silent');
+  } catch (err) {
+    console.error('Could not recreate the silent prayer channel:', err);
+    notifyNotificationWarning('channel-failed');
   }
-}
-
-/**
- * Build the جماعة's channel: the iqamah recording while «تشغيل صوت الإقامة» is on, the
- * short tap it always had when it is off. High importance either way, so the alert
- * heads-up over whatever is on screen at the minute the congregation starts.
- */
-async function applyIqamahChannel(settings: Settings): Promise<void> {
-  const sound = iqamahChannelSound(settings);
-  const appliedKey = `${sound.enabled}:${sound.file}`;
-  if (appliedIqamahSoundKey() === appliedKey) return;
-
-  try {
-    await LocalNotifications.deleteChannel({ id: 'iqamah' });
-  } catch {
-    // Never created (or Android < 8, where channels do not exist): nothing to remove.
-  }
-  await LocalNotifications.createChannel({
-    id: 'iqamah',
-    name: 'إقامة الصلاة',
-    description: sound.enabled
-      ? 'تشغيل أذان الإقامة عند دخول وقت الجماعة'
-      : 'تنبيه عند دخول وقت الإقامة',
-    importance: 4,
-    sound: sound.file,
-    vibration: true,
-    visibility: 1,
-  });
-  rememberIqamahSoundKey(appliedKey);
 }
 
 /** The channels a reminder lands in — the ones whose sound the picker owns. */
@@ -413,13 +428,30 @@ const REMINDER_CHANNELS: Array<{
   { id: 'hifz', name: 'الحفظ', description: 'تذكيرات حفظ القرآن', importance: 4 },
   { id: 'review', name: 'المراجعة', description: 'تذكيرات مراجعة القرآن', importance: 4 },
   { id: 'hadith', name: 'حديث اليوم', description: 'تنبيه حديث اليوم', importance: 3 },
+  { id: 'quran', name: 'رسالة القرآن', description: 'رسالة يومية من القرآن', importance: 3 },
+  { id: 'sunnah', name: 'سنن عن النبي', description: 'سنّة يومية عن النبي ﷺ', importance: 3 },
+  { id: 'prophet', name: 'النبي محمد ﷺ', description: 'معلومات عن النبي ﷺ', importance: 3 },
   { id: 'azkar', name: 'الأذكار', description: 'تذكيرات أذكار الصباح والمساء', importance: 3 },
 ];
 
 /** Which voice the reminder channels were last built with (see below). */
 const NOTIFICATION_VOICE_APPLIED_KEY = 'zad:notification-voice-applied';
 
-function appliedNotificationVoiceId(): string | null {
+/**
+ * The stamp the memo is compared against: the voice *and* the set of channel ids.
+ *
+ * The memo used to hold only the voice id, so an upgrade that adds a channel (the
+ * daily Qur'an / Sunnah / Prophet ones did) found the old voice still "applied" and
+ * returned early — the new ids were never created, and Android then drops every
+ * notification posted to a channel that does not exist. The ids are part of the
+ * stamp, so any change to the channel set rebuilds them once, while the user's own
+ * per-channel preferences still survive a rebuild that changes nothing.
+ */
+function notificationChannelsStamp(voiceId: string): string {
+  return `${voiceId}#${REMINDER_CHANNELS.map((channel) => channel.id).join(',')}`;
+}
+
+function appliedNotificationChannelsStamp(): string | null {
   try {
     return localStorage.getItem(NOTIFICATION_VOICE_APPLIED_KEY);
   } catch {
@@ -427,9 +459,9 @@ function appliedNotificationVoiceId(): string | null {
   }
 }
 
-function rememberNotificationVoiceId(id: string): void {
+function rememberNotificationChannelsStamp(stamp: string): void {
   try {
-    localStorage.setItem(NOTIFICATION_VOICE_APPLIED_KEY, id);
+    localStorage.setItem(NOTIFICATION_VOICE_APPLIED_KEY, stamp);
   } catch {
     // Private mode: the channels still ring, they are simply rebuilt next time too.
   }
@@ -456,7 +488,8 @@ async function applyNotificationVoiceChannels(settings: Settings): Promise<void>
   const voice = settings.notificationSound
     ? usableNotificationVoice(settings.notificationVoiceId, downloadedAdhanVoiceIds())
     : getNotificationVoice(NOTIFICATION_VOICE_NONE);
-  if (appliedNotificationVoiceId() === voice.id) return;
+  const stamp = notificationChannelsStamp(voice.id);
+  if (appliedNotificationChannelsStamp() === stamp) return;
 
   // A downloaded adhan voice has no res/raw entry, so the plugin's builder would name a
   // resource that is not there and the reminder would arrive silent. The native side
@@ -507,7 +540,7 @@ async function applyNotificationVoiceChannels(settings: Settings): Promise<void>
     });
   }
 
-  rememberNotificationVoiceId(target.id);
+  rememberNotificationChannelsStamp(notificationChannelsStamp(target.id));
 }
 
 /**
@@ -532,8 +565,23 @@ function reminderNotificationSound(settings: Settings): string | undefined {
  * reboots, and stale rows would otherwise accumulate). The only notifications kept
  * through the swap are active snoozes the user asked for. A failed swap restores the
  * previous queue rather than leaving the adhan silent.
+ *
+ * Every call runs on one shared chain (below): two rebuilds interleaving is exactly how
+ * an armed batch gets cancelled out from under the rebuild that just scheduled it,
+ * leaving the queue empty until the next resume. Serialising them means the last
+ * rebuild wins, and no rebuild can cancel another's work mid-flight.
  */
+let rebuildChain: Promise<void> = Promise.resolve();
+
 export async function rescheduleAllNotifications(): Promise<void> {
+  const run = rebuildChain.then(rebuildNotifications, rebuildNotifications);
+  // The chain must never break: a failed rebuild is reported by its own warning, and
+  // the next call has to be able to run regardless.
+  rebuildChain = run.catch(() => {});
+  return run;
+}
+
+async function rebuildNotifications(): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
 
   // Scheduling without the grant rejects the call (and would cancel-first for nothing),
@@ -584,6 +632,25 @@ export async function rescheduleAllNotifications(): Promise<void> {
     return;
   }
 
+  // …and then ask the device whether that channel really carries a sound. Creating a
+  // channel is not the same as having one that rings: an install created the prayer
+  // channel long before the adhan sound existed, and Android fixes a channel's sound
+  // the instant it exists — no later createChannel call can put it back. Every alarm
+  // armed below would then post a card nobody hears, which is the reported «التنبيه
+  // بيوصل من غير صوت» exactly. The check runs on every rebuild because an update or a
+  // cleared cache can reintroduce it at any moment. A channel the reader muted
+  // themselves is a preference, not a bug, and is left alone.
+  if (settings.adhanSound) {
+    const status = await getProtectionStatus(adhanChannelId(settings));
+    // A channel the reader silenced themselves is a choice, not a bug: rebuilding it
+    // would put a sound back they had asked to remove. Only the app's own mistake —
+    // a channel that was born without a sound — is repaired here.
+    if (status?.channelSoundOk === false && status?.channelMuted !== true) {
+      console.warn('[notify] prayer channel has no sound — rebuilding it');
+      await rebuildSilentPrayerChannel(settings);
+    }
+  }
+
   // The reminder voice, resolved once: Android 7 and older have no channels, so there
   // the sound has to be named on each notification instead.
   const reminderSound = reminderNotificationSound(settings);
@@ -600,14 +667,15 @@ export async function rescheduleAllNotifications(): Promise<void> {
 
   // 1. Native prayer alarms for the next PRAYER_NOTIFICATION_DAYS days.
   //
-  // Native alarms are kept for a month so the adhan continues if the app is not
-  // opened for a while. The notification fallback remains a separate, shorter
-  // window because it shares the bounded queue with the rest of the app.
+  // Native alarms are kept for a month so the adhan — and now the iqamah — continues if
+  // the app is not opened for a while. The notification fallbacks remain a separate,
+  // shorter window because they share the bounded queue with the rest of the app.
   //
   // On Android the prayer alert itself is armed natively (full-screen intent — see
   // @/utils/adhanOverlay): that is what lets the adhan *page* open while the app is
-  // closed. The sound notification below is kept as the fallback for the case where
-  // that native arming fails, so the adhan never goes silent either way.
+  // closed, and the جماعة is armed the same way under its own type. The sound
+  // notifications below are kept as the fallback for the case where that native arming
+  // fails, so neither goes silent either way.
   const overlayAlarms: AdhanOverlayAlarm[] = [];
   const prayerFallbacks: LocalNotificationSchema[] = [];
   if (settings.latitude != null && settings.longitude != null) {
@@ -616,10 +684,19 @@ export async function rescheduleAllNotifications(): Promise<void> {
     const now = trustedNowMs();
     const adhan = usableAdhanSound(settings.adhanVoiceId);
     const channelId = settings.adhanSound ? `prayer-${adhan.id}` : 'prayer-muted';
-    // Resolved once for the whole window: the جماعة's channel and its notification
-    // must agree on the sound, or an old device would tap while a modern one sang.
-    const iqamahSound = iqamahChannelSound(settings);
-
+    // The channel's sound travels with each alarm, so the receiver can build the
+    // channel *with* it when the channel is missing. Android fixes a channel's sound at
+    // creation, so a receiver-minted silent channel is silent for good — this is what
+    // keeps the fallback ringing instead of posting a card nobody hears.
+    //
+    // Exactly one of the two carries the voice: a bundled one is its res/raw name, a
+    // downloaded one is the stored path the FileProvider publishes (it has no res/raw
+    // entry). When the reader silenced the adhan, neither rides — `prayer-muted` is
+    // silent by design, and the receiver must not resurrect a sound it was told to drop.
+    const adhanSoundPath = settings.adhanSound && !adhan.bundled
+      ? await resolveAdhanSoundPath(adhan)
+      : null;
+    const adhanSound = settings.adhanSound && adhan.bundled ? adhan.file : undefined;
     // One slot number per prayer, shared by the prayer alert and its reminder: the two
     // live in disjoint id ranges, while every prayer across the window gets its own.
     let armSlot = 0;
@@ -641,35 +718,6 @@ export async function rescheduleAllNotifications(): Promise<void> {
         // buckets, and a month of them would fill the queue on its own (see the
         // constant). The adhan itself keeps the full horizon above.
         const withinDailyAlerts = dayOffset < DAILY_ALERT_DAYS;
-
-        // The iqamah (الإقامة) is armed on its own clock, ahead of the adhan's
-        // own fate: a prayer whose adhan has already passed but whose جماعة is
-        // still minutes away still gets its «حان وقت الإقامة» at the right
-        // minute. Its extra.type is 'iqamah', so the takeover listeners — which
-        // read only type 'prayer' — leave the adhan page alone; the sound is the
-        // iqamah's own recording (or the short tap when that is switched off),
-        // resolved once above so channel and payload cannot disagree.
-        const iqamahAt = getIqamahTime(prayer.time, prayer.name, settings.iqamahOffsets);
-        if (withinDailyAlerts && iqamahAt.getTime() > now) {
-          iqamahAlerts.push({
-            id: notificationId.iqamah(slot),
-            title: `حان وقت إقامة ${prayer.arabicName}`,
-            body: `${formatTime12h(iqamahAt, timeZone)} — حان وقت الجماعة`,
-            schedule: { at: armedAt(iqamahAt), allowWhileIdle: true },
-            channelId: 'iqamah',
-            // Named for Android 7 and older, which have no channels to carry it: the
-            // sound has to sit on the notification itself (see `reminderNotificationSound`).
-            sound: iqamahSound.file,
-            ...NOTIFICATION_BRAND,
-            extra: {
-              type: 'iqamah',
-              prayerKey: prayer.name,
-              prayerName: prayer.arabicName,
-              time: iqamahAt.toISOString(),
-            },
-          });
-        }
-
         if (prayer.time.getTime() <= now) continue;
 
         const title = `حان وقت صلاة ${prayer.arabicName}`;
@@ -685,6 +733,10 @@ export async function rescheduleAllNotifications(): Promise<void> {
           prayerName: prayer.arabicName,
           time: prayer.time.toISOString(),
           type: 'prayer',
+          // Nothing rides when the reader silenced the adhan: `prayer-muted` is silent
+          // by design, and the receiver must not resurrect a sound it was told to drop.
+          sound: adhanSound,
+          soundPath: adhanSoundPath ?? undefined,
         });
         if (dayOffset < PRAYER_FALLBACK_DAYS) {
           prayerFallbacks.push({
@@ -789,25 +841,165 @@ export async function rescheduleAllNotifications(): Promise<void> {
     });
   });
 
-  // 3. Hadith of the day (9:00 AM)
-  const hadithTime = trustedNow();
-  hadithTime.setHours(9, 0, 0, 0);
-  hadithTime.setDate(hadithTime.getDate() + (hadithTime < trustedNow() ? 1 : 0));
-  if (hadithTime > trustedNow()) {
-    hadithReminders.push({
-      id: notificationId.hadith(),
-      title: 'حديث اليوم',
-      body: 'حديثٌ مختار لك اليوم — اقرأه في دقيقة',
-      // `hadithTime` is a *true* instant, derived from trustedNow(). Android fires
-      // when the *device* clock reaches the target, so it carries the drift like
-      // every other entry here — without it the hadith sounded drift-shifted while
-      // every prayer alarm around it was corrected.
-      schedule: { at: armedAt(hadithTime), allowWhileIdle: true },
-      channelId: 'hadith',
-      sound: reminderSound,
-      ...NOTIFICATION_BRAND,
-      extra: { type: 'hadith' },
-    });
+  // 3. The daily content notifications, armed for the next several days:
+  //    the hadith of the day (09:00), the Qur'an message (10:00), a Sunnah about the
+  //    Prophet ﷺ (14:00) and a fact about him ﷺ (16:00).
+  //
+  //    The queue is rebuilt when the app opens, so a *today only* horizon made all of
+  //    these stop the moment the app stayed closed for a day — which is exactly what a
+  //    user reads as «الإشعارات مش شغالة». The native prayer alarms keep a month for
+  //    the same reason; these keep a few days, bounded below by what still has to fit.
+  //
+  //    The bound is spent on the buckets ranked above them (tasks, spaced reviews,
+  //    pre-prayer reminders) first, and only *today's* four join the hadith block:
+  //    the days still to come travel in their own bucket, ranked just ahead of the
+  //    dhikr filler, so a queue that fills up gives up its farthest day long before
+  //    it gives up the جماعة or tomorrow's task.
+  const contentBudget = Math.max(
+    0,
+    MAX_SCHEDULED_NOTIFICATIONS
+      - taskReminders.length
+      - hifzReviewReminders.length
+      - prePrayerReminders.length
+      - iqamahAlerts.length,
+  );
+  /** The next days' four-per-day content; see {@link NotificationQueueParts}. */
+  const futureContentReminders: LocalNotificationSchema[] = [];
+  const sunnahItems: SunnahItem[] = SUNNAH_CATEGORIES.flatMap((category) => category.items);
+  const prophetEntries: ProphetEntry[] = PROPHET_SECTIONS.flatMap((section) => section.entries);
+  /** Seeded so re-arming the queue never swaps the verse of the day under the user. */
+  const seededRandom = (seed: number): (() => number) => {
+    let state = seed >>> 0;
+    return () => {
+      state = (state + 0x6d2b79f5) >>> 0;
+      let t = state;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
+    };
+  };
+  /**
+   * Future days are picked without touching the real store: `getDailyQuranMessage`
+   * persists whatever it chooses, and arming a week ahead would otherwise overwrite
+   * today's verse (the one the home screen shows) with a future day's.
+   */
+  const ephemeralStorage: DailyMessageStorage = { getItem: () => null, setItem: () => {} };
+  const queueNow = trustedNow();
+  const dayNumber = Math.floor(trustedNowMs() / 86_400_000);
+  let contentSlot = 0;
+
+  /**
+   * The hour each of the four arrives, as set in Settings — with the hour it had
+   * before the setting existed as its default, so an install whose rows are still
+   * empty keeps waking to the same clock it always did.
+   */
+  const contentTimes = {
+    hadith: configuredClockTime(settings.hadithNotificationTime, 9),
+    quran: configuredClockTime(settings.quranMessageTime, 10),
+    sunnah: configuredClockTime(settings.sunnahNotificationTime, 14),
+    prophet: configuredClockTime(settings.prophetNotificationTime, 16),
+  };
+
+  const contentCount = () => hadithReminders.length + futureContentReminders.length;
+  /** Only *today's* content belongs to the hadith block; the rest waits its turn. */
+  const pushContent = (notification: LocalNotificationSchema) => {
+    const dayOffset = (notification.extra?.dayOffset as number | undefined) ?? 0;
+    (dayOffset === 0 ? hadithReminders : futureContentReminders).push(notification);
+  };
+
+  for (
+    let dayOffset = 0;
+    dayOffset < CONTENT_NOTIFICATION_DAYS && contentCount() < contentBudget;
+    dayOffset += 1
+  ) {
+    const dayDate = new Date(queueNow);
+    dayDate.setDate(dayDate.getDate() + dayOffset);
+    const atTime = ({ hour, minute }: { hour: number; minute: number }): Date => {
+      const at = new Date(dayDate);
+      at.setHours(hour, minute, 0, 0);
+      return at;
+    };
+    const claim = () => contentCount() < contentBudget;
+
+    // Hadith of the day. Its clock is a *true* instant derived from trustedNow():
+    // Android fires when the *device* clock reaches the target, so it carries the
+    // drift like every other entry here — without it the hadith sounded drift-shifted
+    // while every prayer alarm around it was corrected.
+    const hadithTime = atTime(contentTimes.hadith);
+    if (hadithTime > queueNow && claim()) {
+      pushContent({
+        id: notificationId.hadith(contentSlot++),
+        title: 'حديث اليوم',
+        body: 'حديثٌ مختار لك اليوم — اقرأه في دقيقة',
+        schedule: { at: armedAt(hadithTime), allowWhileIdle: true },
+        channelId: 'hadith',
+        sound: reminderSound,
+        ...NOTIFICATION_BRAND,
+        extra: { type: 'hadith', dayOffset },
+      });
+    }
+
+    // The Qur'an message of the day — one verse, read where it belongs.
+    const quranTime = atTime(contentTimes.quran);
+    if (quranTime > queueNow && claim()) {
+      try {
+        const message = getDailyQuranMessage(
+          dayDate,
+          dayOffset === 0 ? undefined : ephemeralStorage,
+          seededRandom(dayNumber + dayOffset),
+        );
+        const text = message.text.length > 120 ? `${message.text.slice(0, 117)}…` : message.text;
+        pushContent({
+          id: notificationId.hadith(contentSlot++),
+          title: 'رسالة اليوم من القرآن',
+          body: `${text} — سورة ${message.surahName}`,
+          schedule: { at: armedAt(quranTime), allowWhileIdle: true },
+          channelId: 'quran',
+          sound: reminderSound,
+          ...NOTIFICATION_BRAND,
+          extra: {
+            type: 'quran-message',
+            surahId: message.surahId,
+            ayahNumber: message.ayahNumber,
+            dayOffset,
+          },
+        });
+      } catch (err) {
+        console.warn('Could not schedule the daily Quran message notification:', err);
+      }
+    }
+
+    // A Sunnah of the day, rotated through the narration library.
+    const sunnahTime = atTime(contentTimes.sunnah);
+    if (sunnahTime > queueNow && sunnahItems.length > 0 && claim()) {
+      const item = sunnahItems[(dayNumber + dayOffset) % sunnahItems.length];
+      pushContent({
+        id: notificationId.hadith(contentSlot++),
+        title: item.title || 'سنّة عن النبي ﷺ',
+        body: item.text || item.benefit || '',
+        schedule: { at: armedAt(sunnahTime), allowWhileIdle: true },
+        channelId: 'sunnah',
+        sound: reminderSound,
+        ...NOTIFICATION_BRAND,
+        extra: { type: 'sunnah', dayOffset },
+      });
+    }
+
+    // A fact about the Prophet ﷺ from the Prophet page.
+    const prophetTime = atTime(contentTimes.prophet);
+    if (prophetTime > queueNow && prophetEntries.length > 0 && claim()) {
+      const entry = prophetEntries[(dayNumber + dayOffset) % prophetEntries.length];
+      pushContent({
+        id: notificationId.hadith(contentSlot++),
+        title: entry.title || 'النبي محمد ﷺ',
+        body: entry.text || entry.hint || '',
+        schedule: { at: armedAt(prophetTime), allowWhileIdle: true },
+        channelId: 'prophet',
+        sound: reminderSound,
+        ...NOTIFICATION_BRAND,
+        extra: { type: 'prophet', dayOffset },
+      });
+    }
   }
 
   // 4. Random text-only dhikr reminders for today and tomorrow — the queue's
@@ -831,7 +1023,14 @@ export async function rescheduleAllNotifications(): Promise<void> {
       const now = trustedNow();
       const nextDhikr = createDhikrRotation();
       const budget = dhikrFillerBudget(
-        { taskReminders, hadithReminders, iqamahAlerts, hifzReviewReminders, prePrayerReminders },
+        {
+          taskReminders,
+          hadithReminders,
+          iqamahAlerts,
+          hifzReviewReminders,
+          prePrayerReminders,
+          futureContentReminders,
+        },
         MAX_SCHEDULED_NOTIFICATIONS,
       );
 
@@ -862,6 +1061,26 @@ export async function rescheduleAllNotifications(): Promise<void> {
     }
   }
 
+  // One line describing what this rebuild actually produced — the only way to tell,
+  // from a log, whether an entry was never built (a throw above) or built and refused
+  // by the platform (a rejection below).
+  console.log(
+    '[notify] built',
+    JSON.stringify({
+      prayerFallbacks: prayerFallbacks.length,
+      iqamah: iqamahAlerts.length,
+      overlay: overlayAlarms.length,
+      tasks: taskReminders.length,
+      reviews: hifzReviewReminders.length,
+      content: hadithReminders.map(
+        (notification) => `${notification.title}@${(notification.schedule?.at as Date | undefined)?.toISOString?.() ?? '?'}`,
+      ),
+      prePrayer: prePrayerReminders.length,
+      futureContent: futureContentReminders.length,
+      dhikr: dhikrFiller.length,
+    }),
+  );
+
   // --- Swap phase: one cancel, one schedule, restore on failure. -------------
   // The snapshot is taken first so a rejected schedule() can put the previous queue
   // back instead of leaving nothing armed at all. Active snoozes (the adhan overlay's
@@ -879,16 +1098,32 @@ export async function rescheduleAllNotifications(): Promise<void> {
     console.warn('Could not snapshot the pending notification queue:', err);
   }
 
+  // Whether the takeover alarms can be trusted to speak for the adhan.
+  //
+  // Arming is not the same as being armed. Android 12+ can refuse exact alarms, an OEM
+  // cleaner can drop the batch the instant it is written, and a downgraded (inexact)
+  // alarm fires whenever the phone wakes — which for an adhan is the same as not
+  // ringing. The native side answers by asking the platform itself rather than trusting
+  // the return of the arming call, and that answer decides whether the sound fallbacks
+  // below are needed at all. Assuming success (as this used to) is what left a phone
+  // with neither a takeover nor a sound notification: «التنبيه وصل من غير صوت».
   let overlayArmed = true;
   try {
-    await scheduleAdhanOverlay(overlayAlarms);
+    const result: AdhanScheduleResult = await scheduleAdhanOverlay(overlayAlarms);
+    overlayArmed = result.verified && !result.inexact;
+    if (!overlayArmed) {
+      console.warn(
+        `[notify] adhan takeover not verified (armed=${result.armed}, inexact=${result.inexact}) — keeping sound fallbacks`,
+      );
+      notifyNotificationWarning('scheduled-inexact');
+    }
   } catch (err) {
     // Takeover unavailable (old install, native error): keep the sound notifications.
     console.error('Adhan overlay arming failed — falling back to sound notifications.', err);
     overlayArmed = false;
   }
 
-  // One assembly, one cap: the fallbacks join only when the takeover failed, and the
+  // One assembly, one cap: both fallbacks join only when the takeover failed, and the
   // trim eats the filler first, so a full queue drops far-future dhikr and reminders
   // rather than the adhan or today's tasks — the previous build capped only the
   // filler, then pushed the fallbacks last, so an over-full day had Android drop the
@@ -898,9 +1133,10 @@ export async function rescheduleAllNotifications(): Promise<void> {
       prayerFallbacks: overlayArmed ? [] : prayerFallbacks,
       taskReminders,
       hadithReminders,
-      iqamahAlerts,
+      iqamahAlerts: overlayArmed ? [] : iqamahAlerts,
       hifzReviewReminders,
       prePrayerReminders,
+      futureContentReminders,
       dhikrFiller,
     },
     MAX_SCHEDULED_NOTIFICATIONS,
@@ -911,6 +1147,8 @@ export async function rescheduleAllNotifications(): Promise<void> {
     if (scheduled.length > 0) {
       const result = (await LocalNotifications.schedule({ notifications: scheduled })) as unknown as
         { warning?: unknown } | void;
+      console.log('[notify] armed', scheduled.length, 'notifications');
+      console.log('[notify] armed list', scheduled.map((n) => `${n.extra?.type ?? '?'}@${(n.schedule?.at as Date)?.toISOString?.() ?? '?'}`));
       // The plugin reports a refused downgrade (e.g. the exact-alarm permission
       // vanished mid-call) as `warning` — a string on some versions, an object
       // with details on others. Its mere presence means the alarms will still

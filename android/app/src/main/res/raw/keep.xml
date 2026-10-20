@@ -14,14 +14,11 @@
 
   Hence every name here:
     adhan_*  — the prayer voices (also passed as plain file names)
-    iqama_*  — the جماعة's own recordings: the full iqamah, the mosque fragment,
-               and the quiet chime, all addressed by name the same way
     msg_*    — the four «رنين» reminder tones behind صوت التنبيه
-    notification — the app's own chime: the default tone, and the tap the
-                   iqamah falls back to when «أذان الإقامة» is switched off
+    notification — the app's own chime: the default tone
 
   tools:keep pins them regardless of how minify/shrink evolves; a sound added
   later must be listed here too or it will not survive packaging.
 -->
 <resources xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="@raw/adhan_*,@raw/msg_*,@raw/iqama*,@raw/notification" />
+    tools:keep="@raw/adhan_*,@raw/msg_*,@raw/notification" />

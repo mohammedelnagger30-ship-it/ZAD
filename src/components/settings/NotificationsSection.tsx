@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Bell, Download, Play, Sparkles, Square, Trash2, Volume2 } from 'lucide-react';
+import { Bell, BellRing, Download, Play, Sparkles, Square, Trash2, Volume2 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Card, Button, ToggleRow } from '@/components/ui';
 import { TimeOptionButton } from '@/components/TimeOptionButton';
@@ -25,15 +25,16 @@ import {
   deleteAdhanVoice,
   downloadAdhanVoice,
   resolveAdhanPlayUrl,
+  resolveAdhanSoundPath,
 } from '@/utils/adhanStore';
-import { rescheduleAllNotifications } from '@/utils/notificationScheduler';
+import { rescheduleAllNotifications, adhanChannelId } from '@/utils/notificationScheduler';
+import { armTestAdhanAlarm } from '@/utils/adhanOverlay';
 import { canScheduleExactAlarms, hasNotificationPermission, NOTIFICATION_WARNING_EVENT, requestExactAlarms, requestNotificationPermission } from '@/utils/notifications';
 import { type Settings } from '@/db/database';
 
 interface NotificationsSectionProps {
   settings: Settings;
   onSaveSettings: (patch: Partial<Settings>) => void;
-  navigate: (screen: string) => void;
 }
 
 /** "3.1 ميجا" — how the download list states what a voice will cost the user. */
@@ -41,7 +42,7 @@ function adhanSizeLabel(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} ميجا`;
 }
 
-export function NotificationsSection({ settings, onSaveSettings, navigate }: NotificationsSectionProps) {
+export function NotificationsSection({ settings, onSaveSettings }: NotificationsSectionProps) {
   const [adhanPreviewStatus, setAdhanPreviewStatus] = useState('');
   const [previewingAdhanId, setPreviewingAdhanId] = useState<string | null>(null);
   /**
@@ -73,7 +74,7 @@ export function NotificationsSection({ settings, onSaveSettings, navigate }: Not
    * page — sits exactly where the sound settings are.
    */
   const [exactAlarmNotice, setExactAlarmNotice] = useState<
-    '' | 'denied' | 'inexact' | 'failed' | 'channel-failed'
+    '' | 'denied' | 'inexact' | 'failed' | 'channel-failed' | 'channel-silent'
   >('');
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -87,6 +88,7 @@ export function NotificationsSection({ settings, onSaveSettings, navigate }: Not
       else if (type === 'scheduled-inexact') setExactAlarmNotice('inexact');
       else if (type === 'schedule-failed') setExactAlarmNotice('failed');
       else if (type === 'channel-failed') setExactAlarmNotice('channel-failed');
+      else if (type === 'channel-silent') setExactAlarmNotice('channel-silent');
       else if (type === 'schedule-ready') setExactAlarmNotice('');
     };
     window.addEventListener(NOTIFICATION_WARNING_EVENT, onWarning);
@@ -95,6 +97,69 @@ export function NotificationsSection({ settings, onSaveSettings, navigate }: Not
       window.removeEventListener(NOTIFICATION_WARNING_EVENT, onWarning);
     };
   }, []);
+
+  /**
+   * The «اختبار الأذان» self-test.
+   *
+   * The only honest answer to «هل الأذان شغّال على ده الموبايل؟» is to run the whole
+   * chain and listen: the platform's alarm-clock registration, the receiver, the prayer
+   * channel's sound, the full-screen takeover, the page. All of that is normally only
+   * exercised at the next prayer — which may be hours away, and which a person who has
+   * just been handed a silent phone cannot use to find out *why*. This arms one
+   * throwaway alarm a few seconds out through the very same receiver.
+   *
+   * It is a preview end to end: the page it raises carries `type: 'test'`, so the
+   * trigger opens it as a preview that writes no prayer record, and its id sits in the
+   * range reserved for the native side, outside every queued notification.
+   */
+  const [testStatus, setTestStatus] = useState('');
+  const [testing, setTesting] = useState(false);
+  const runAdhanSelfTest = useCallback(async () => {
+    if (!Capacitor.isNativePlatform() || testing) return;
+    setTesting(true);
+    setTestStatus('');
+    try {
+      const adhan = getAdhanSound(settings.adhanVoiceId);
+      // The voice may be one the reader downloaded; the alarm carries the stored path
+      // so the receiver can build the channel *with* a sound if the channel is missing.
+      // Exactly one of the two carries it: a bundled voice is its res/raw name, a
+      // downloaded one has no res/raw entry and travels as its stored path.
+      let soundPath: string | undefined;
+      if (!adhan.bundled) {
+        try {
+          soundPath = (await resolveAdhanSoundPath(adhan)) ?? undefined;
+        } catch {
+          soundPath = undefined;
+        }
+      }
+      const delayMs = 10_000;
+      const result = await armTestAdhanAlarm({
+        channelId: adhanChannelId(settings),
+        prayerKey: 'fajr',
+        prayerName: 'الفجر',
+        title: 'حان وقت صلاة الفجر — اختبار',
+        body: 'اختبار الأذان: إن سمعت هذا التنبيه فالأذان يعمل على هاتفك.',
+        delayMs,
+        sound: adhan.bundled ? adhan.file : undefined,
+        soundPath,
+      });
+      if (!result) {
+        setTestStatus('تعذّر تشغيل الاختبار على هذا الجهاز.');
+        return;
+      }
+      setTestStatus(
+        result.inexact
+          ? 'تم إرسال تنبيه الاختبار، لكن الهاتف لا يسمح بالمنبهات الدقيقة — قد يتأخر ثوانٍ. انتظر عشر ثوانٍ: إن لم يصل، فالمشكلة من إعدادات الهاتف.'
+          : 'تم إرسال تنبيه الاختبار — انتظر عشر ثوانٍ. إن لم يصل، فالمشكلة من إعدادات الهاتف، وستجدها في التحذيرات أعلاه.',
+      );
+    } catch (error) {
+      setTestStatus(
+        error instanceof Error ? `تعذّر تشغيل الاختبار: ${error.message}` : 'تعذّر تشغيل الاختبار.',
+      );
+    } finally {
+      setTesting(false);
+    }
+  }, [settings, testing]);
 
   /**
    * Silences every preview this section can start.
@@ -426,9 +491,11 @@ export function NotificationsSection({ settings, onSaveSettings, navigate }: Not
                     ? 'شُغّلت تنبيهات هذا الدور بنظام تقريبي — الأذان قد يتأخر دقائق أثناء السكون.'
                     : exactAlarmNotice === 'channel-failed'
                       ? 'تعذّر تجهيز قناة صوت الأذان؛ أبقينا التنبيهات السابقة كما هي لتجنب جدولة أذان صامت.'
-                      : 'تعذّرت جدولة تنبيهات هذا الدور، وعادت التنبيهات السابقة إلى مكانها؛ ستُعاد المحاولة عند فتح التطبيق.'}
+                      : exactAlarmNotice === 'channel-silent'
+                        ? 'قناة صوت الأذان كانت بلا صوت على هذا الهاتف، فتم إصلاحها وتجهيزها من جديد — الصوت سيعود في التنبيه القادم.'
+                        : 'تعذّرت جدولة تنبيهات هذا الدور، وعادت التنبيهات السابقة إلى مكانها؛ ستُعاد المحاولة عند فتح التطبيق.'}
               </p>
-              {exactAlarmNotice === 'channel-failed' ? (
+              {exactAlarmNotice === 'channel-failed' || exactAlarmNotice === 'channel-silent' ? (
                 <Button
                   size="sm"
                   variant="secondary"
@@ -598,30 +665,37 @@ export function NotificationsSection({ settings, onSaveSettings, navigate }: Not
                   </Button>
                 </div>
 
-                {/* أذان الإقامة — the sound of the جماعة itself, a separate recording:
-                    ringing the full adhan again minutes after it played would announce
-                    the same prayer twice. */}
-                <Card className="p-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <Bell size={18} className="text-primary-600 dark:text-gold-400" aria-hidden="true" />
-                      <div>
-                        <p className="font-medium">صوت الإقامة عند وقت الجماعة</p>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">
-                          اختيار صوت الإقامة وضبط سلوك الصفحة التلقائية
-                        </p>
-                      </div>
-                    </div>
+                {/*
+                  The self test: the one button that answers «هل الأذان شغّال على ده
+                  الموبايل؟» without waiting for the next prayer. It runs the real chain —
+                  the platform's alarm-clock registration, the receiver, the prayer
+                  channel's sound, the takeover, the page — so a silent phone can be
+                  diagnosed in ten seconds by whoever is holding it.
+                */}
+                {Capacitor.isNativePlatform() && (
+                  <div className="space-y-2 rounded-2xl border border-primary-100 bg-primary-50/50 p-3.5 dark:border-primary-800/80 dark:bg-primary-900/30">
                     <Button
-                      variant="ghost"
+                      variant="secondary"
                       size="sm"
-                      className="min-w-[120px] min-h-[40px]"
-                      onClick={() => navigate('iqamah')}
+                      onClick={() => void runAdhanSelfTest()}
+                      disabled={testing}
+                      className="w-full font-semibold text-xs"
                     >
-                      فتح الصفحة
+                      <BellRing size={15} /> {testing ? 'جارٍ إرسال الاختبار…' : 'اختبار الأذان على هذا الهاتف'}
                     </Button>
+                    <p className="text-[0.625rem] md:text-xs text-primary-700 dark:text-primary-300">
+                      يرسل تنبيهًا حقيقيًا بعد عشر ثوانٍ عبر نفس مسار الأذان تمامًا: نفس المنبه،
+                      نفس القناة، نفس فتح الصفحة. إن لم يرن الصوت، فالمشكلة من إعدادات الهاتف
+                      وستجدها مذكورة في التحذيرات أعلاه.
+                    </p>
+                    {testStatus && (
+                      <p role="status" className="text-xs font-semibold text-primary-700 dark:text-gold-300">
+                        {testStatus}
+                      </p>
+                    )}
                   </div>
-                </Card>
+                )}
+
 
                 {adhanNotice && (
                   <p role="status" className="text-xs font-semibold text-primary-700 dark:text-gold-300 text-center">
@@ -725,6 +799,56 @@ export function NotificationsSection({ settings, onSaveSettings, navigate }: Not
               options={[0, 5, 10, 15, 20]}
               onSelect={(v) => onSaveSettings({ prePrayerReminder: v })}
             />
+          </div>
+
+          {/* The four daily content notifications, each at the hour the reader chose.
+              The defaults are the hours they had before these rows existed, so an
+              install that never opens this block keeps the schedule it already had. */}
+          <div className="border-t border-primary-100 dark:border-primary-800/60 pt-3 space-y-2">
+            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+              مواقيت الإشعارات اليومية
+            </p>
+            <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+              حديث اليوم، رسالة من القرآن، سنّة عن النبي ﷺ، ومعجزات النبي ﷺ — تُجدول لسبعة أيام قادمة، فتصل حتى لو فتحت التطبيق بعد يوم.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                حديث اليوم
+                <input
+                  type="time"
+                  value={settings.hadithNotificationTime ?? '09:00'}
+                  onChange={(e) => onSaveSettings({ hadithNotificationTime: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-primary-200 bg-white px-3 py-2 text-sm text-primary-900 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
+                />
+              </label>
+              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                رسالة من القرآن
+                <input
+                  type="time"
+                  value={settings.quranMessageTime ?? '10:00'}
+                  onChange={(e) => onSaveSettings({ quranMessageTime: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-primary-200 bg-white px-3 py-2 text-sm text-primary-900 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
+                />
+              </label>
+              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                سنّة عن النبي ﷺ
+                <input
+                  type="time"
+                  value={settings.sunnahNotificationTime ?? '14:00'}
+                  onChange={(e) => onSaveSettings({ sunnahNotificationTime: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-primary-200 bg-white px-3 py-2 text-sm text-primary-900 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
+                />
+              </label>
+              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                معجزات النبي ﷺ
+                <input
+                  type="time"
+                  value={settings.prophetNotificationTime ?? '16:00'}
+                  onChange={(e) => onSaveSettings({ prophetNotificationTime: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-primary-200 bg-white px-3 py-2 text-sm text-primary-900 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
+                />
+              </label>
+            </div>
           </div>
         </Card>
       </section>

@@ -4,28 +4,23 @@ import { Capacitor } from '@capacitor/core';
 import type { PluginListenerHandle } from '@capacitor/core';
 import type { Settings } from '@/db/database';
 import {
-  addCalendarDays,
   calculatePrayerTimes,
-  calculatePrayerTimesForDay,
-  calendarDayInZone,
-  getIqamahTime,
   getNextPrayer,
   getPrayerTimeZone,
   type PrayerTimeInfo,
 } from '@/utils/prayerTimes';
 import { hasNotificationPermission } from '@/utils/notifications';
 import { onAdhanOverlay } from '@/utils/adhanOverlay';
-import { iqamahPlayUrl } from '@/data/iqamahSound';
 import { onClockChange, trustedNow, trustedNowMs } from '@/utils/clock';
 import type { PrayerKey } from '@/utils/prayerTracker';
 
 export interface AzanTriggerState {
   isOpen: boolean;
-  mode: 'adhan' | 'iqamah';
   prayerKey: PrayerKey;
   prayerName?: string;
   prayerTime?: Date;
   isPreview?: boolean;
+  isTest?: boolean;
   /**
    * The system notification already sounded for this prayer, so the overlay must not
    * start a second recording on top of it.
@@ -43,17 +38,6 @@ export interface AzanTriggerState {
 const CATCH_UP_MS = 5 * 60_000;
 
 /**
- * How late the in-app iqamah may still ring.
- *
- * Shorter than the adhan's window on purpose: the adhan announces the *start* of a
- * window of time, but the جماعة is a moment — a congregation standing in prayer, and
- * the phone then calling it two minutes late, is worse than silence. Past this the
- * alert has had its say; the notification (when there is permission for one) has
- * already rung at the right minute regardless.
- */
-const IQAMAH_CATCH_UP_MS = 2 * 60_000;
-
-/**
  * Grace period before falling back to the in-app player on native.
  *
  * The scheduled notification is an exact system alarm: it is the thing that sounds the
@@ -69,20 +53,17 @@ const SWEEP_MS = 30_000;
 const MAX_TIMEOUT_MS = 2_147_000_000;
 
 const FIRED_STORAGE_KEY = 'zad-azan-fired-prayers';
-const FIRED_IQAMAH_STORAGE_KEY = 'zad-azan-fired-iqamah';
 const FIRED_RETENTION_MS = 24 * 60 * 60_000;
 
 /**
  * Prayers that already triggered, keyed by their exact instant.
  *
  * Kept across remounts (settings changes re-run the effect) and reloads, otherwise a
- * refresh a few seconds after the adhan would open the page a second time. The iqamah
- * keeps its own set for the same reason: a page reload between the adhan and the
- * جماعة must not ring the iqamah twice, and must not lose the one that already rang.
+ * refresh a few seconds after the adhan would open the page a second time.
  */
-function readFired(storageKey: string): Set<number> {
+function readFiredPrayers(): Set<number> {
   try {
-    const raw = sessionStorage.getItem(storageKey);
+    const raw = sessionStorage.getItem(FIRED_STORAGE_KEY);
     if (!raw) return new Set<number>();
     const cutoff = trustedNowMs() - FIRED_RETENTION_MS;
     const parsed: unknown = JSON.parse(raw);
@@ -93,30 +74,21 @@ function readFired(storageKey: string): Set<number> {
   }
 }
 
-function writeFired(storageKey: string, fired: Set<number>): void {
+function writeFiredPrayers(fired: Set<number>): void {
   try {
     const cutoff = trustedNowMs() - FIRED_RETENTION_MS;
     const kept = [...fired].filter((instant) => instant > cutoff);
     fired.clear();
     for (const instant of kept) fired.add(instant);
-    sessionStorage.setItem(storageKey, JSON.stringify(kept));
+    sessionStorage.setItem(FIRED_STORAGE_KEY, JSON.stringify(kept));
   } catch {
-    // Storage unavailable: worst case a sound can repeat after a reload.
+    // Storage unavailable: worst case the adhan page can open twice after a reload.
   }
-}
-
-function readFiredPrayers(): Set<number> {
-  return readFired(FIRED_STORAGE_KEY);
-}
-
-function writeFiredPrayers(fired: Set<number>): void {
-  writeFired(FIRED_STORAGE_KEY, fired);
 }
 
 export function useAzanTrigger(settings: Settings | null) {
   const [azanState, setAzanState] = useState<AzanTriggerState>({
     isOpen: false,
-    mode: 'adhan',
     prayerKey: 'fajr',
     isPreview: false,
   });
@@ -125,15 +97,6 @@ export function useAzanTrigger(settings: Settings | null) {
   if (firedRef.current === null) {
     firedRef.current = readFiredPrayers();
   }
-
-  /** جماعة instants that already rang in the WebView — see {@link readFired}. */
-  const firedIqamahRef = useRef<Set<number> | null>(null);
-  if (firedIqamahRef.current === null) {
-    firedIqamahRef.current = readFired(FIRED_IQAMAH_STORAGE_KEY);
-  }
-
-  /** The iqamah's own audio element — one at a time, stopped when the hook goes away. */
-  const iqamahAudioRef = useRef<HTMLAudioElement | null>(null);
 
   /** True while notifications can actually be delivered — then the system alarm owns the sound. */
   const notificationsUsableRef = useRef(false);
@@ -148,59 +111,6 @@ export function useAzanTrigger(settings: Settings | null) {
     firedRef.current = fired;
     fired.add(instant);
     writeFiredPrayers(fired);
-  }, []);
-
-  const isIqamahFired = useCallback(
-    (instant: number) => firedIqamahRef.current?.has(instant) ?? false,
-    [],
-  );
-
-  const markIqamahFired = useCallback((instant: number) => {
-    const fired = firedIqamahRef.current ?? new Set<number>();
-    firedIqamahRef.current = fired;
-    fired.add(instant);
-    writeFired(FIRED_IQAMAH_STORAGE_KEY, fired);
-  }, []);
-
-  const unmarkIqamahFired = useCallback((instant: number) => {
-    firedIqamahRef.current?.delete(instant);
-    if (firedIqamahRef.current) writeFired(FIRED_IQAMAH_STORAGE_KEY, firedIqamahRef.current);
-  }, []);
-
-  /**
-   * Ring the جماعة's own recording from the WebView — the path used whenever the
-   * system alarm is not there to do it (notification permission refused, or the web
-   * build, which arms no native queue at all).
-   *
-   * The instant is marked *before* the call: a sound that starts must not be replayed
-   * by the next sweep. If the WebView refuses playback — Chrome's autoplay rule can
-   * still say no when nothing has been touched yet — the mark is lifted so the sweep
-   * inside the catch-up window can try again, rather than the إقامة silently vanishing.
-   */
-  const playIqamah = useCallback(
-    (instant: number) => {
-      markIqamahFired(instant);
-      iqamahAudioRef.current?.pause();
-      const audio = new Audio(iqamahPlayUrl());
-      iqamahAudioRef.current = audio;
-      const release = () => {
-        if (iqamahAudioRef.current === audio) iqamahAudioRef.current = null;
-      };
-      audio.addEventListener('ended', release);
-      void audio.play().catch(() => {
-        release();
-        unmarkIqamahFired(instant);
-      });
-    },
-    [markIqamahFired, unmarkIqamahFired],
-  );
-
-  // Whatever is still speaking when the app (or this hook) goes away must stop: an
-  // orphaned recording would keep playing over the next screen with no way to silence
-  // it, and a settings change re-runs this hook and would otherwise stack a second one.
-  useEffect(() => () => {
-    iqamahAudioRef.current?.pause();
-    iqamahAudioRef.current = null;
   }, []);
 
   const openAzan = useCallback(
@@ -222,7 +132,6 @@ export function useAzanTrigger(settings: Settings | null) {
           ? prev
           : {
               isOpen: true,
-              mode: 'adhan',
               prayerKey,
               prayerName,
               prayerTime,
@@ -236,45 +145,14 @@ export function useAzanTrigger(settings: Settings | null) {
 
   const triggerAzan = useCallback(
     (prayerKey: PrayerKey, prayerName?: string, prayerTime?: Date, isPreview = false) => {
-      setAzanState({ isOpen: true, mode: 'adhan', prayerKey, prayerName, prayerTime, isPreview, fromNotification: false });
+      setAzanState({ isOpen: true, prayerKey, prayerName, prayerTime, isPreview, fromNotification: false });
     },
     [],
   );
 
   const closeAzan = useCallback(() => {
-    setAzanState((prev) => ({ ...prev, isOpen: false, isPreview: false, mode: 'adhan' }));
+    setAzanState((prev) => ({ ...prev, isOpen: false, isPreview: false }));
   }, []);
-
-  /** Open the iqamah page (for the جماعة call). Mirrors openAzan but for the iqamah. */
-  const openIqamah = useCallback(
-    (
-      prayerKey: PrayerKey,
-      prayerName: string | undefined,
-      iqamahTime: Date | undefined,
-      options: { fromNotification?: boolean; force?: boolean } = {},
-    ) => {
-      const instant = iqamahTime?.getTime();
-      // `force` is for notification taps: the user asked for the page explicitly.
-      if (instant != null && !options.force && isIqamahFired(instant)) return;
-      if (instant != null) markIqamahFired(instant);
-
-      setAzanState((prev) =>
-        // Same prayer already on screen: leave it alone so the audio is not restarted.
-        prev.isOpen && prev.prayerKey === prayerKey && prev.mode === 'iqamah'
-          ? prev
-          : {
-              isOpen: true,
-              mode: 'iqamah',
-              prayerKey,
-              prayerName,
-              prayerTime: iqamahTime,
-              isPreview: false,
-              fromNotification: options.fromNotification ?? false,
-            },
-      );
-    },
-    [isIqamahFired, markIqamahFired],
-  );
 
   const refreshNotificationPermission = useCallback(async () => {
     if (!Capacitor.isNativePlatform()) {
@@ -303,21 +181,7 @@ export function useAzanTrigger(settings: Settings | null) {
       force: boolean,
     ) => {
       const extra = notification?.extra;
-      if (!extra || !extra.prayerKey) return;
-
-      // Handle iqamah notifications (type 'iqamah') — open the iqamah page
-      if (extra.type === 'iqamah') {
-        openIqamah(
-          extra.prayerKey as PrayerKey,
-          typeof extra.prayerName === 'string' ? extra.prayerName : undefined,
-          typeof extra.time === 'string' ? new Date(extra.time) : undefined,
-          { fromNotification: true, force },
-        );
-        return;
-      }
-
-      // Handle prayer notifications (type 'prayer') — open the adhan page
-      if (extra.type !== 'prayer') return;
+      if (!extra || extra.type !== 'prayer' || !extra.prayerKey) return;
       openAzan(
         extra.prayerKey as PrayerKey,
         typeof extra.prayerName === 'string' ? extra.prayerName : undefined,
@@ -364,22 +228,12 @@ export function useAzanTrigger(settings: Settings | null) {
 
     void onAdhanOverlay((data, source) => {
       if (!data?.prayerKey) return;
-      const isIqamah = data.type === 'iqamah';
-      if (isIqamah) {
-        openIqamah(
-          data.prayerKey as PrayerKey,
-          data.prayerName,
-          typeof data.time === 'string' ? new Date(data.time) : undefined,
-          { fromNotification: true, force: source === 'launch' },
-        );
-      } else {
-        openAzan(
-          data.prayerKey as PrayerKey,
-          data.prayerName,
-          typeof data.time === 'string' ? new Date(data.time) : undefined,
-          { fromNotification: true, force: source === 'launch' },
-        );
-      }
+      openAzan(
+        data.prayerKey as PrayerKey,
+        data.prayerName,
+        typeof data.time === 'string' ? new Date(data.time) : undefined,
+        { fromNotification: true, force: source === 'launch' },
+      );
     })
       .then((remove) => {
         if (cancelled) remove();
@@ -402,26 +256,6 @@ export function useAzanTrigger(settings: Settings | null) {
 
   // 3. Exact trigger: one timeout aimed at the next prayer, plus a sweep that catches
   // prayers that came due while timers were frozen.
-  //
-  // The timers below read nine settings and no more, so the effect is aimed by those
-  // nine and not by the object: saving anything else — font size, a translation toggle,
-  // the snooze length — used to tear down and re-arm every pending adhan and جماعة
-  // timeout, which is precisely where a missed or doubled call would be born. Same idea
-  // as `scheduleFingerprint` in App.tsx.
-  const scheduleFingerprint = settings
-    ? [
-        settings.latitude,
-        settings.longitude,
-        settings.calcMethod,
-        settings.asrMadhab,
-        settings.timeZone,
-        settings.cityName,
-        settings.adhanSound,
-        settings.iqamahSound,
-        JSON.stringify(settings.prayerTimeAdjustments),
-        JSON.stringify(settings.iqamahOffsets),
-      ].join('|')
-    : '';
   useEffect(() => {
     if (!settings || settings.latitude == null || settings.longitude == null) return;
 
@@ -430,82 +264,8 @@ export function useAzanTrigger(settings: Settings | null) {
 
     let disposed = false;
     let dueTimer: number | undefined;
-    let iqamahTimer: number | undefined;
     let fallbackTimer: number | undefined;
-    let iqamahFallbackTimer: number | undefined;
     let pendingInstant: number | undefined;
-    let pendingIqamahInstant: number | undefined;
-
-    /**
-     * Whether anything in the WebView should ring the جماعة at all. The adhan is the
-     * master switch: with it off there is no call being made to, so repeating it for
-     * the إقامة would announce a prayer the user asked the app not to sound.
-     */
-    const iqamahSoundEnabled = settings.iqamahSound !== false && settings.adhanSound;
-
-    /**
-     * Every جماعة instant still computable — today's and tomorrow's — sorted, each one
-     * its prayer's own time plus the offset the mosque is set to.
-     *
-     * Tomorrow is included because the last prayer of the day has tomorrow's إقامة
-     * nowhere near it: when the queue is rebuilt late at night, fajr's جماعة is the
-     * only one ahead, and it lives on the next calendar day.
-     */
-    const iqamahTimes = (): Date[] => {
-      return iqamahTimesWithInfo().map((i) => i.time);
-    };
-
-    /** Same times but with prayerKey and prayerName for opening the page. */
-    const iqamahTimesWithInfo = (): Array<{
-      time: Date;
-      prayerKey: PrayerKey;
-      prayerName: string;
-    }> => {
-      const baseDay = calendarDayInZone(trustedNow(), timeZone);
-      const out: Array<{ time: Date; prayerKey: PrayerKey; prayerName: string }> = [];
-      for (const day of [baseDay, addCalendarDays(baseDay, 1)]) {
-        let prayers;
-        try {
-          prayers = calculatePrayerTimesForDay(
-            latitude, longitude, day, calcMethod, asrMadhab, settings.prayerTimeAdjustments,
-          ).prayers;
-        } catch (err) {
-          console.warn('Iqamah time calculation failed:', err);
-          continue;
-        }
-        for (const prayer of prayers) {
-          if (prayer.name === 'sunrise') continue;
-          out.push({
-            time: getIqamahTime(prayer.time, prayer.name, settings.iqamahOffsets),
-            prayerKey: prayer.name as PrayerKey,
-            prayerName: prayer.arabicName,
-          });
-        }
-      }
-      return out.sort((a, b) => a.time.getTime() - b.time.getTime());
-    };
-
-    /**
-     * Ring the إقامة from the WebView — only where nothing else is going to.
-     *
-     * The native notification owns this sound whenever notifications are usable: it is
-     * armed at the exact minute and fires whether or not anything in the WebView is
-     * awake, so playing here as well would put two copies of the same call in the air,
-     * a beat apart — the exact failure the adhan's own grace window exists to avoid.
-     */
-    const ringIqamahIfDue = () => {
-      if (disposed || !iqamahSoundEnabled) return;
-      if (notificationsUsableRef.current) return;
-      const now = trustedNowMs();
-      for (const at of iqamahTimes()) {
-        const instant = at.getTime();
-        const lateBy = now - instant;
-        if (lateBy < 0 || lateBy > IQAMAH_CATCH_UP_MS) continue;
-        if (isIqamahFired(instant)) continue;
-        playIqamah(instant);
-        break; // at most one جماعة minute is inside the window
-      }
-    };
 
     const openForPrayer = (prayer: PrayerTimeInfo) => {
       const instant = prayer.time.getTime();
@@ -534,28 +294,6 @@ export function useAzanTrigger(settings: Settings | null) {
         openAzan(prayer.name as PrayerKey, prayer.arabicName, prayer.time, {
           fromNotification: true,
         });
-      }, NOTIFICATION_GRACE_MS);
-    };
-
-    const openForIqamah = (prayerKey: PrayerKey, prayerName: string, iqamahTime: Date) => {
-      const instant = iqamahTime.getTime();
-
-      if (!notificationsUsableRef.current) {
-        openIqamah(prayerKey, prayerName, iqamahTime);
-        return;
-      }
-      if (pendingIqamahInstant === instant) return;
-
-      // Give the exact system alarm time to deliver before opening the page.
-      if (iqamahFallbackTimer !== undefined) window.clearTimeout(iqamahFallbackTimer);
-      pendingIqamahInstant = instant;
-      iqamahFallbackTimer = window.setTimeout(() => {
-        iqamahFallbackTimer = undefined;
-        pendingIqamahInstant = undefined;
-        if (disposed || isIqamahFired(instant)) return;
-        // Open the iqamah page as if the notification arrived — within the ring window
-        // it stays quiet (the notification is already ringing), past it the page speaks.
-        openIqamah(prayerKey, prayerName, iqamahTime, { fromNotification: true });
       }, NOTIFICATION_GRACE_MS);
     };
 
@@ -594,10 +332,6 @@ export function useAzanTrigger(settings: Settings | null) {
           openForPrayer(prayer);
           break; // at most one prayer is inside the window
         }
-        // The إقامة is checked after the permission refresh for the same reason the
-        // adhan is: that flag decides whether this branch rings at all, and it is read
-        // immediately before the decision rather than trusted from mount.
-        ringIqamahIfDue();
       });
     };
 
@@ -606,31 +340,6 @@ export function useAzanTrigger(settings: Settings | null) {
       if (dueTimer !== undefined) {
         window.clearTimeout(dueTimer);
         dueTimer = undefined;
-      }
-      if (iqamahTimer !== undefined) {
-        window.clearTimeout(iqamahTimer);
-        iqamahTimer = undefined;
-      }
-
-      // The جماعة's own clock, armed apart from the prayer's: the notification side
-      // runs on exactly this minute too, and without a timer here the WebView would
-      // only notice on the next 30-second sweep — half a minute late for a moment
-      // that is defined by the minute it happens.
-      if (iqamahSoundEnabled) {
-        const nextIqamah = iqamahTimesWithInfo().find((at) => at.time.getTime() > trustedNowMs());
-        if (nextIqamah) {
-          const iqamahDelay = Math.min(
-            Math.max(nextIqamah.time.getTime() - trustedNowMs(), 0),
-            MAX_TIMEOUT_MS,
-          );
-          iqamahTimer = window.setTimeout(() => {
-            void refreshNotificationPermission().then(() => {
-              if (disposed) return;
-              openForIqamah(nextIqamah.prayerKey, nextIqamah.prayerName, nextIqamah.time);
-              arm();
-            });
-          }, iqamahDelay);
-        }
       }
 
       let next: PrayerTimeInfo | null = null;
@@ -674,17 +383,12 @@ export function useAzanTrigger(settings: Settings | null) {
     return () => {
       disposed = true;
       if (dueTimer !== undefined) window.clearTimeout(dueTimer);
-      if (iqamahTimer !== undefined) window.clearTimeout(iqamahTimer);
       if (fallbackTimer !== undefined) window.clearTimeout(fallbackTimer);
-      if (iqamahFallbackTimer !== undefined) window.clearTimeout(iqamahFallbackTimer);
       window.clearInterval(sweepTimer);
       document.removeEventListener('visibilitychange', handleWake);
       offClockChange();
     };
-  // `settings` is read inside for the fields folded into the fingerprint above — and
-  // for nothing else, which is what makes the narrow dependency safe.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scheduleFingerprint, openAzan, isFired, isIqamahFired, playIqamah, refreshNotificationPermission]);
+  }, [settings, openAzan, isFired, refreshNotificationPermission]);
 
   // 4. Custom window event (PrayerScreen / Settings test buttons) previews the page.
   useEffect(() => {
@@ -707,6 +411,5 @@ export function useAzanTrigger(settings: Settings | null) {
     azanState,
     triggerAzan,
     closeAzan,
-    openIqamah,
   };
 }

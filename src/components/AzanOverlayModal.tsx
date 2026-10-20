@@ -13,19 +13,23 @@ import { setAdhanKeepScreenOn } from '@/utils/adhanOverlay';
 import { useOverlayDismiss } from '@/hooks/useOverlayDismiss';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
-import { iqamahPlayUrl, getIqamahSound } from '@/data/iqamahSound';
-
-export type OverlayMode = 'adhan' | 'iqamah';
 
 export interface AzanOverlayProps {
   isOpen: boolean;
-  /** Which call this overlay represents — the adhan or the iqamah. */
-  mode?: OverlayMode;
   prayerKey: PrayerKey;
   prayerName?: string;
   prayerTime?: Date;
   settings: Settings;
   isPreview?: boolean;
+  /**
+   * This page is the «اختبار الأذان» self-test.
+   *
+   * The page stays silent for it whatever the channel did — a page that played its own
+   * copy would report a working adhan on a phone whose channel is dead, which is the
+   * one failure the test exists to catch. The replay button stays visible, so the
+   * reader can tell a dead channel from a dead page.
+   */
+  isTest?: boolean;
   /**
    * Opened by the native adhan/iqamah notification. The notification posts at the
    * instant itself and rings from its own channel, so the page must not start a second
@@ -63,6 +67,17 @@ const SYSTEM_RING_WINDOW_MS = 4 * 60_000;
  */
 const KEEP_SCREEN_ON_MAX_MS = 5 * 60_000;
 
+/**
+ * How long the "first touch starts it" retry stays armed after auto-play was refused.
+ *
+ * A takeover can open while nobody holds the phone (over the lock screen, screen on in
+ * a pocket), and the WebView then needs a gesture before it will make a sound. That
+ * retry is the right answer for the moment — but not hours later: the first touch of a
+ * person picking the phone up at Asr must not start a Dhuhr that never rang. Past this
+ * window the visible fallback button remains the deliberate way in.
+ */
+const BLOCKED_RETRY_MAX_MS = 2 * 60_000;
+
 export function AzanOverlayModal({
   isOpen,
   prayerKey,
@@ -70,16 +85,22 @@ export function AzanOverlayModal({
   prayerTime,
   settings,
   isPreview = false,
+  isTest = false,
   fromNotification = false,
   onClose,
   onNavigateToAdhkar,
-  mode = 'adhan',
 }: AzanOverlayProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   /** The WebView refused to start the adhan/iqamah without a gesture — fallback control. */
   const [blocked, setBlocked] = useState(false);
   /** The notification is ringing right now; the page's own audio stays out. */
   const [systemRinging, setSystemRinging] = useState(false);
+  /**
+   * A «اختبار الأذان» page: the channel is being tested, so this page stays quiet too —
+   * but the replay button stays visible, which is how a dead channel gets told apart
+   * from a dead page.
+   */
+  const [selfTestQuiet, setSelfTestQuiet] = useState(false);
   const [ended, setEnded] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
@@ -91,21 +112,13 @@ export function AzanOverlayModal({
   useOverlayDismiss(isOpen, onClose);
 
   const displayName = prayerName || PRAYER_LABELS_AR[prayerKey] || 'الصلاة';
-  const isIqamah = mode === 'iqamah';
+  // Whether this open may make noise at all.
+  const soundEnabled = settings.adhanSound;
 
-  // Whether this open may make noise at all: an iqamah needs the iqamah sound
-  // *and* the adhan sound enabled; a plain adhan only the adhan setting. Derived
-  // once for the effect below and the sound chip in the JSX — it used to be
-  // computed inside the effect, where the render could not see it.
-  const soundEnabled = isIqamah
-    ? settings.iqamahSound && settings.adhanSound
-    : settings.adhanSound;
-
-  // Select the correct sound based on mode
+  // Select the adhan sound.
   const adhanSound = getAdhanSound(settings.adhanVoiceId);
-  const iqamahSound = getIqamahSound(settings.iqamahSoundId ?? 'kamil_iqamah');
-  const selectedSound = isIqamah ? iqamahSound : adhanSound;
-  const selectedPlayUrl = isIqamah ? iqamahPlayUrl(settings.iqamahSoundId) : `/audio/${adhanSound.file}`;
+  const selectedSound = adhanSound;
+  const selectedPlayUrl = `/audio/${adhanSound.file}`;
 
   /**
    * Where the recording lives. A bundled voice is in the package, so its URL is known
@@ -122,15 +135,14 @@ export function AzanOverlayModal({
       return;
     }
     let alive = true;
-    // For iqamah, the URL is already known (bundled); for adhan, resolve if needed
-    const promise = isIqamah ? Promise.resolve(selectedPlayUrl) : resolveAdhanPlayUrl(adhanSound);
+    const promise = resolveAdhanPlayUrl(adhanSound);
     void promise.then((url) => {
       if (alive) setAudioUrl(url);
     });
     return () => {
       alive = false;
     };
-  }, [selectedSound, isIqamah, selectedPlayUrl]);
+  }, [selectedSound, selectedPlayUrl]);
 
   const timeZone = getPrayerTimeZone(settings.timeZone, settings.cityName);
   const displayTime = prayerTime
@@ -154,6 +166,7 @@ export function AzanOverlayModal({
       setIsPlaying(false);
       setBlocked(false);
       setSystemRinging(false);
+      setSelfTestQuiet(false);
       setEnded(false);
       setConfirmed(false);
       setSnoozed(false);
@@ -176,10 +189,20 @@ export function AzanOverlayModal({
     };
     audio.addEventListener('ended', handleEnded);
 
-    // Fired only by the retry path below (a first touch, or the fallback control).
-    const startOnFirstTouch = () => {
+    let retryTimer: number | undefined;
+
+    const stopFirstTouchRetry = () => {
       window.removeEventListener('pointerdown', startOnFirstTouch, true);
       window.removeEventListener('keydown', startOnFirstTouch, true);
+      if (retryTimer !== undefined) {
+        window.clearTimeout(retryTimer);
+        retryTimer = undefined;
+      }
+    };
+
+    // Fired only by the retry path below (a first touch, or the fallback control).
+    const startOnFirstTouch = () => {
+      stopFirstTouchRetry();
       start();
     };
 
@@ -193,12 +216,15 @@ export function AzanOverlayModal({
         .catch((err: unknown) => {
           // The WebView refused to start on its own. Arm a retry on the first touch, so
           // the adhan begins the moment the screen is touched instead of waiting for a
-          // button hunt — and keep that button visible as the very last resort.
+          // button hunt — and keep that button visible as the very last resort. The
+          // retry is time-boxed (see BLOCKED_RETRY_MAX_MS) so it cannot detonate on a
+          // touch that comes hours later.
           console.warn('Audio auto-play failed (user interaction required):', err);
           setIsPlaying(false);
           setBlocked(true);
           window.addEventListener('pointerdown', startOnFirstTouch, true);
           window.addEventListener('keydown', startOnFirstTouch, true);
+          retryTimer = window.setTimeout(stopFirstTouchRetry, BLOCKED_RETRY_MAX_MS);
         });
     };
 
@@ -215,20 +241,35 @@ export function AzanOverlayModal({
       prayerTime != null &&
       trustedNow().getTime() - prayerTime.getTime() < SYSTEM_RING_WINDOW_MS;
 
+    /*
+     * The self-test's own case, kept apart from the one above on purpose.
+     *
+     * A «اختبار الأذان» alarm opens the page as a *preview* while posting through the
+     * prayer channel — the channel is what the test is about. So the page must not play
+     * its own copy (a test that passes because the page sang would say nothing about the
+     * channel), but it must keep the replay button visible: that is how a reader tells a
+     * dead channel from a dead page. It is quiet whatever the channel did, which is why
+     * it is keyed on the test itself and not on what came back from the receiver.
+     */
+    const selfTestQuiet = isTest;
+
     if (systemRingingNow) {
       setSystemRinging(true);
+      setSelfTestQuiet(false);
+    } else if (selfTestQuiet) {
+      setSystemRinging(false);
+      setSelfTestQuiet(true);
     } else if (soundEnabled || isPreview) {
       start();
     }
 
     return () => {
       audio.removeEventListener('ended', handleEnded);
-      window.removeEventListener('pointerdown', startOnFirstTouch, true);
-      window.removeEventListener('keydown', startOnFirstTouch, true);
+      stopFirstTouchRetry();
       audio.pause();
       audioRef.current = null;
     };
-  }, [isOpen, audioUrl, soundEnabled, isPreview, fromNotification, prayerTime, isIqamah]);
+  }, [isOpen, audioUrl, soundEnabled, isPreview, isTest, fromNotification, prayerTime]);
 
   /*
    * The takeover wakes the screen at prayer time, but Android's screen timeout would
@@ -248,15 +289,31 @@ export function AzanOverlayModal({
     };
   }, [isOpen]);
 
-  /** Fallback control, rendered only when auto-start was refused. */
-  const startAudio = useCallback(() => {
+  /**
+   * Play (or replay) this page's own copy of the call.
+   *
+   * Always offered, not only when auto-play was refused. The page is the one place a
+   * reader can hear the adhan again after a phone came out of Doze with the volume
+   * down, a channel the system had muted, or a takeover that arrived while the ringer
+   * was on silent — the states this whole reliability work is about. Before, the button
+   * existed only when the WebView refused to start, so a person who had heard nothing
+   * had nothing to press.
+   */
+  const replayAudio = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
+    // Already speaking: restart rather than stacking a second position on top of it.
+    if (!audio.paused) {
+      audio.currentTime = 0;
+      return;
+    }
+    audio.currentTime = 0;
     audio
       .play()
       .then(() => {
         setIsPlaying(true);
         setBlocked(false);
+        setEnded(false);
       })
       .catch(() => setBlocked(true));
   }, []);
@@ -270,13 +327,15 @@ export function AzanOverlayModal({
   /** One line telling the person what the sound is doing — never «اضغط للتشغيل». */
   const soundStatus = systemRinging
     ? 'الأذان يُشغَّل تلقائيًا مع التنبيه'
-    : blocked
-      ? 'تعذّر التشغيل التلقائي — اضغط للتشغيل'
-      : isPlaying
-        ? 'جارٍ تشغيل الأذان الآن…'
-        : ended
-          ? 'انتهى الأذان'
-          : 'يبدأ صوت الأذان تلقائيًا…';
+    : selfTestQuiet
+      ? 'اختبار: انتظر صوت التنبيه — إن لم يرن فالمشكلة في قناة الهاتف'
+      : blocked
+        ? 'تعذّر التشغيل التلقائي — اضغط زر التشغيل'
+        : isPlaying
+          ? 'جارٍ تشغيل الأذان الآن…'
+          : ended
+            ? 'انتهى الأذان — يمكنك تشغيله من جديد'
+            : 'يبدأ صوت الأذان تلقائيًا…';
 
   const handleConfirmPrayer = useCallback(async () => {
     // A preview is a look at the page, never an answer: it must not write a record for
@@ -410,12 +469,10 @@ export function AzanOverlayModal({
               <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
             </span>
             <span className="text-xs font-semibold text-emerald-400 tracking-wide">
-              {isPreview
-                ? isIqamah
-                  ? 'معاينة صفحة الإقامة'
-                  : 'معاينة صفحة الأذان'
-                : isIqamah
-                  ? 'حَانَ الآنْ وَقْتُ الإِقَامَة'
+              {isTest
+                ? 'اختبار الأذان — تحقّق من وصول الصوت'
+                : isPreview
+                  ? 'معاينة صفة الأذان'
                   : 'حَانَ الآنْ مَوْعِدُ الأَذَانْ'}
             </span>
           </div>
@@ -478,15 +535,17 @@ export function AzanOverlayModal({
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 overflow-hidden">
                 {/*
-                  Rendered only when the WebView refused to auto-start the call: a
-                  safety net, not the normal way to hear it.
+                  Always rendered: the reader who heard nothing (Doze held the channel,
+                  the ringer was on silent, the phone was in ДND) needs a way to hear the
+                  call without hunting. It doubles as the safety net when the WebView
+                  refused to auto-start.
                 */}
-                {blocked && (
+                {!systemRinging && (
                   <button
                     type="button"
-                    onClick={startAudio}
+                    onClick={replayAudio}
                     className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-slate-950 font-bold hover:bg-amber-400 transition"
-                    aria-label={isIqamah ? 'تشغيل الإقامة' : 'تشغيل الأذان'}
+                    aria-label="تشغيل الأذان"
                   >
                     <Play size={22} className="mr-0.5" />
                   </button>
@@ -527,7 +586,7 @@ export function AzanOverlayModal({
         )}
 
         {/* Supplication After Azan Card — only for adhan, not iqamah */}
-        {!isIqamah && (
+        {(
           <div className="mb-6 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
