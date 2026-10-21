@@ -82,7 +82,7 @@ interface CategoryStyle {
 }
 
 const DEFAULT_CATEGORY_STYLE: CategoryStyle = {
-  chip: 'bg-primary-100 text-primary-700 dark:bg-primary-800 dark:text-primary-200',
+  chip: 'bg-primary-100 text-primary-800 dark:bg-primary-800 dark:text-primary-200',
   icon: 'from-primary-400 to-primary-600',
   bar: 'bg-primary-500',
   ring: 'stroke-primary-500',
@@ -91,99 +91,99 @@ const DEFAULT_CATEGORY_STYLE: CategoryStyle = {
 
 const CATEGORY_STYLES: Record<string, CategoryStyle> = {
   morning: {
-    chip: 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300',
-    icon: 'from-amber-300 to-orange-400',
+    chip: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300',
+    icon: 'from-amber-400 to-orange-500',
     bar: 'bg-amber-500',
     ring: 'stroke-amber-500',
     hero: 'from-amber-600 to-orange-800',
   },
   evening: {
-    chip: 'bg-violet-50 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300',
-    icon: 'from-violet-400 to-indigo-600',
+    chip: 'bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-300',
+    icon: 'from-violet-500 to-indigo-700',
     bar: 'bg-violet-500',
     ring: 'stroke-violet-500',
     hero: 'from-violet-600 to-indigo-800',
   },
   after_prayer: {
-    chip: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
-    icon: 'from-emerald-400 to-teal-600',
+    chip: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300',
+    icon: 'from-emerald-500 to-teal-700',
     bar: 'bg-emerald-500',
     ring: 'stroke-emerald-500',
     hero: 'from-emerald-600 to-teal-800',
   },
   sleep: {
-    chip: 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300',
-    icon: 'from-blue-400 to-blue-700',
+    chip: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300',
+    icon: 'from-blue-500 to-blue-800',
     bar: 'bg-blue-500',
     ring: 'stroke-blue-500',
     hero: 'from-blue-600 to-blue-900',
   },
   wakeup: {
-    chip: 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300',
-    icon: 'from-rose-400 to-pink-600',
+    chip: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300',
+    icon: 'from-rose-500 to-pink-700',
     bar: 'bg-rose-500',
     ring: 'stroke-rose-500',
     hero: 'from-rose-600 to-pink-800',
   },
   general_adhkar: {
-    chip: 'bg-gold-50 text-gold-700 dark:bg-gold-950/60 dark:text-gold-300',
-    icon: 'from-gold-300 to-gold-500',
+    chip: 'bg-gold-100 text-gold-800 dark:bg-gold-950/60 dark:text-gold-300',
+    icon: 'from-gold-400 to-gold-600',
     bar: 'bg-gold-500',
     ring: 'stroke-gold-500',
     hero: 'from-gold-500 to-amber-700',
   },
   wudu: {
-    chip: 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/60 dark:text-cyan-300',
-    icon: 'from-cyan-400 to-sky-600',
+    chip: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-300',
+    icon: 'from-cyan-500 to-sky-700',
     bar: 'bg-cyan-500',
     ring: 'stroke-cyan-500',
     hero: 'from-cyan-600 to-sky-800',
   },
   mosque: {
-    chip: 'bg-primary-100 text-primary-700 dark:bg-primary-800 dark:text-primary-200',
-    icon: 'from-primary-400 to-primary-700',
+    chip: 'bg-primary-100 text-primary-800 dark:bg-primary-800 dark:text-primary-200',
+    icon: 'from-primary-500 to-primary-800',
     bar: 'bg-primary-500',
     ring: 'stroke-primary-500',
     hero: 'from-primary-600 to-primary-950',
   },
   food: {
-    chip: 'bg-orange-50 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300',
-    icon: 'from-orange-400 to-amber-600',
+    chip: 'bg-orange-100 text-orange-800 dark:bg-orange-950/60 dark:text-orange-300',
+    icon: 'from-orange-500 to-amber-700',
     bar: 'bg-orange-500',
     ring: 'stroke-orange-500',
     hero: 'from-orange-600 to-amber-800',
   },
   home: {
-    chip: 'bg-lime-50 text-lime-700 dark:bg-lime-950/60 dark:text-lime-300',
-    icon: 'from-lime-400 to-emerald-600',
+    chip: 'bg-lime-100 text-lime-800 dark:bg-lime-950/60 dark:text-lime-300',
+    icon: 'from-lime-500 to-emerald-700',
     bar: 'bg-lime-500',
     ring: 'stroke-lime-500',
     hero: 'from-lime-600 to-emerald-800',
   },
   travel: {
-    chip: 'bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300',
-    icon: 'from-sky-400 to-indigo-500',
+    chip: 'bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300',
+    icon: 'from-sky-500 to-indigo-600',
     bar: 'bg-sky-500',
     ring: 'stroke-sky-500',
     hero: 'from-sky-600 to-indigo-800',
   },
   deceased: {
-    chip: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
-    icon: 'from-slate-400 to-slate-600',
+    chip: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300',
+    icon: 'from-slate-500 to-slate-700',
     bar: 'bg-slate-500',
     ring: 'stroke-slate-500',
     hero: 'from-slate-600 to-slate-800',
   },
   general_duas: {
-    chip: 'bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300',
-    icon: 'from-purple-400 to-fuchsia-500',
+    chip: 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300',
+    icon: 'from-purple-500 to-fuchsia-600',
     bar: 'bg-purple-500',
     ring: 'stroke-purple-500',
     hero: 'from-purple-600 to-fuchsia-800',
   },
   quranic_duas: {
-    chip: 'bg-gold-50 text-gold-700 dark:bg-gold-950/60 dark:text-gold-300',
-    icon: 'from-gold-400 to-primary-600',
+    chip: 'bg-gold-100 text-gold-800 dark:bg-gold-950/60 dark:text-gold-300',
+    icon: 'from-gold-500 to-primary-700',
     bar: 'bg-gold-500',
     ring: 'stroke-gold-500',
     hero: 'from-gold-600 to-primary-950',
@@ -367,7 +367,7 @@ function FilterChips({
             className={`inline-flex min-h-10 items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold transition-smooth ${
               active
                 ? 'bg-primary-600 text-white shadow-sm'
-                : 'bg-primary-50 text-primary-700 hover:bg-primary-100 dark:bg-primary-800/60 dark:text-primary-200 dark:hover:bg-primary-800'
+                : 'bg-primary-100 text-primary-800 hover:bg-primary-100 dark:bg-primary-800/60 dark:text-primary-200 dark:hover:bg-primary-800'
             }`}
           >
             <Icon size={14} className={active && id === 'favorites' ? 'fill-white' : ''} />
@@ -568,14 +568,14 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
             <button
               onClick={() => setState((previous) => ({ ...previous, fontSize: Math.max(18, previous.fontSize - 2) }))}
               aria-label="تصغير الخط"
-              className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary-50 text-primary-700 dark:bg-primary-800 dark:text-primary-200"
+              className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary-100 text-primary-800 dark:bg-primary-800 dark:text-primary-200"
             >
               <span className="text-sm font-bold">أ−</span>
             </button>
             <button
               onClick={() => setState((previous) => ({ ...previous, fontSize: Math.min(32, previous.fontSize + 2) }))}
               aria-label="تكبير الخط"
-              className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary-50 text-primary-700 dark:bg-primary-800 dark:text-primary-200"
+              className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary-100 text-primary-800 dark:bg-primary-800 dark:text-primary-200"
             >
               <span className="text-sm font-bold">أ+</span>
             </button>
@@ -659,7 +659,7 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
       title: 'روتينك اليومي',
       note: 'يُحتسب في إنجاز اليوم',
       Icon: Sunrise,
-      iconClass: 'text-amber-500',
+      iconClass: 'text-amber-600',
       categories: ADHKAR_CATEGORIES.filter((category) => category.daily !== false),
     },
     {
@@ -667,7 +667,7 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
       title: 'أذكار المناسبات ونداؤها',
       note: 'تُقرأ عند الحاجة ولا تُحتسب يومياً',
       Icon: Sparkles,
-      iconClass: 'text-gold-500',
+      iconClass: 'text-gold-600',
       categories: ADHKAR_CATEGORIES.filter((category) => category.daily === false),
     },
   ];
@@ -686,7 +686,7 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
           className={`flex h-11 w-11 items-center justify-center rounded-xl transition-smooth ${
             state.haptics
               ? 'bg-primary-600 text-white'
-              : 'bg-primary-50 text-primary-600 dark:bg-primary-800 dark:text-gold-400'
+              : 'bg-primary-100 text-primary-600 dark:bg-primary-800 dark:text-gold-400'
           }`}
         >
           <Vibrate size={19} />
@@ -843,7 +843,7 @@ function DailyHero({
   const last7 = getLast7Days();
   return (
     <Card className="relative overflow-hidden border-primary-700 bg-linear-to-br from-primary-800 via-primary-900 to-primary-950 text-white dark:border-primary-800">
-      <div className="pointer-events-none absolute -top-16 -left-14 h-44 w-44 rounded-full bg-gold-400/15 blur-3xl" aria-hidden="true" />
+      <div className="pointer-events-none absolute -top-16 -left-14 h-44 w-44 rounded-full bg-gold-400/20 blur-3xl" aria-hidden="true" />
       <div className="pointer-events-none absolute -bottom-20 -right-10 h-40 w-40 rounded-full bg-primary-400/20 blur-3xl" aria-hidden="true" />
 
       <div className="flex items-center gap-4">
@@ -852,13 +852,13 @@ function DailyHero({
           size={104}
           stroke={9}
           trackClass="stroke-white/15"
-          fillClass={isComplete ? 'stroke-emerald-300' : 'stroke-gold-300'}
+          fillClass={isComplete ? 'stroke-emerald-400' : 'stroke-gold-400'}
         >
           <div className="text-center leading-none">
             {isComplete ? (
               <>
-                <CheckCircle size={26} className="mx-auto text-emerald-300" />
-                <span className="mt-1 block text-[10px] font-bold text-emerald-200">اكتمل</span>
+                <CheckCircle size={26} className="mx-auto text-emerald-400" />
+                <span className="mt-1 block text-[10px] font-bold text-emerald-300">اكتمل</span>
               </>
             ) : (
               <span className="text-2xl font-bold">
@@ -899,7 +899,7 @@ function DailyHero({
                     done
                       ? 'bg-emerald-400 text-gray-950'
                       : isToday
-                        ? 'bg-white/15 text-white ring-2 ring-gold-300'
+                        ? 'bg-white/15 text-white ring-2 ring-gold-400'
                         : 'bg-white/10 text-primary-200'
                   }`}
                 >
@@ -1087,7 +1087,7 @@ function DhikrCard({
         >
           <span
             className={`flex items-center justify-center text-sm font-bold ${
-              isDone ? 'text-success-600 dark:text-success-400' : 'text-primary-700 dark:text-primary-200'
+              isDone ? 'text-success-600 dark:text-success-400' : 'text-primary-800 dark:text-primary-200'
             }`}
           >
             {isDone ? <Check size={18} strokeWidth={3} /> : toArabicNumber(index + 1)}
@@ -1101,9 +1101,9 @@ function DhikrCard({
         </p>
       </div>
 
-      <div className="mt-3 rounded-xl bg-primary-50/70 px-3 py-2.5 dark:bg-primary-800/30">
+      <div className="mt-3 rounded-xl bg-primary-100/70 px-3 py-2.5 dark:bg-primary-800/30">
         {dhikr.virtue && (
-          <p className="text-sm leading-6 text-gold-700 dark:text-gold-300">
+          <p className="text-sm leading-6 text-gold-800 dark:text-gold-300">
             <span className="font-semibold">الفضل المذكور:</span> {dhikr.virtue}
           </p>
         )}
@@ -1164,7 +1164,7 @@ function DhikrCard({
             onClick={onFavorite}
             aria-label={favorite ? 'إزالة من المفضلة' : 'إضافة إلى المفضلة'}
             aria-pressed={favorite}
-            className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-900/20 md:h-11 md:w-11"
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-100 hover:text-rose-500 dark:hover:bg-rose-900/20 md:h-11 md:w-11"
           >
             <Heart size={17} className={favorite ? 'fill-rose-500 text-rose-500' : ''} />
           </button>
@@ -1172,7 +1172,7 @@ function DhikrCard({
             type="button"
             onClick={onCopy}
             aria-label="نسخ الذكر ومرجعه"
-            className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-400 hover:bg-primary-50 hover:text-primary-600 dark:hover:bg-primary-800/40 md:h-11 md:w-11"
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-400 hover:bg-primary-100 hover:text-primary-600 dark:hover:bg-primary-800/40 md:h-11 md:w-11"
           >
             <Copy size={16} />
           </button>
