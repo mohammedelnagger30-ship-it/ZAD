@@ -1,13 +1,13 @@
 /**
  * The reminder voice.
  *
- * What is on the device decides what a task, a review, the hadith of the day or a dhikr
- * reminder can actually ring: a channel pointed at a file that is not there rings
- * nothing at all, and the failure is only discovered when a reminder never arrives.
- * The fallback is therefore the whole point of this module.
+ * A reminder is not the adhan: it lands in the middle of work or study and only needs to
+ * be noticed, so the picker offers short message ringtones rather than adhan voices. Every
+ * tone ships inside the package — there is nothing to download — so the one thing that must
+ * never happen is a channel pointed at a file that is not on the device, which would ring
+ * nothing at all and be discovered only when a reminder never arrives.
  */
 import { describe, it, expect } from '@jest/globals';
-import { ADHAN_SOUNDS } from '@/data/adhanSounds';
 import {
   DEFAULT_NOTIFICATION_VOICE_ID,
   NOTIFICATION_VOICES,
@@ -18,53 +18,54 @@ import {
   usableNotificationVoice,
 } from '@/data/notificationSounds';
 
-const DOWNLOADABLE = ADHAN_SOUNDS.find((sound) => !sound.bundled);
-if (!DOWNLOADABLE) throw new Error('the adhan list must keep at least one downloadable voice');
-
-const BUNDLED_ADHAN = ADHAN_SOUNDS.find((sound) => sound.bundled);
-if (!BUNDLED_ADHAN) throw new Error('the adhan list must keep at least one bundled voice');
-
 describe('notification voices', () => {
-  it('offers every adhan voice, the app chime and silence', () => {
+  it('offers the app chime, the message ringtones and silence', () => {
     const ids = NOTIFICATION_VOICES.map((voice) => voice.id);
 
     expect(ids).toContain(NOTIFICATION_VOICE_DEFAULT);
     expect(ids).toContain(NOTIFICATION_VOICE_NONE);
-    for (const sound of ADHAN_SOUNDS) expect(ids).toContain(sound.id);
-    // The adhan entries are derived, so the two pickers cannot drift apart.
+    expect(ids).toEqual(expect.arrayContaining(['msg_chime', 'msg_bell', 'msg_pop', 'msg_soft']));
+    // Ids are the identity; a duplicate would make the picker select the wrong tone.
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('names the app chime for both defaults', () => {
+  /**
+   * The design decision the old adhan-derived list did not have: the ringtones are all
+   * in the package, so no chosen voice can be missing its file.
+   */
+  it('bundles every audible tone, so none of them needs a download', () => {
+    const audible = NOTIFICATION_VOICES.filter((voice) => !voice.silent);
+
+    expect(audible.length).toBeGreaterThan(1);
+    expect(audible.every((voice) => voice.bundled)).toBe(true);
+    expect(audible.every((voice) => voice.file.length > 0)).toBe(true);
+    // None of them is an adhan voice any more.
+    expect(audible.every((voice) => voice.adhan === null)).toBe(true);
+  });
+
+  it('gives «بدون صوت» no file at all', () => {
+    const none = getNotificationVoice(NOTIFICATION_VOICE_NONE);
+
+    expect(none.silent).toBe(true);
+    expect(none.file).toBe('');
+  });
+
+  it('names the app chime for the default', () => {
     expect(DEFAULT_NOTIFICATION_VOICE_ID).toBe(NOTIFICATION_VOICE_DEFAULT);
     expect(getNotificationVoice(undefined).id).toBe(NOTIFICATION_VOICE_DEFAULT);
     // An id from a build that no longer exists degrades instead of throwing.
     expect(getNotificationVoice('a-voice-from-2024').id).toBe(NOTIFICATION_VOICE_DEFAULT);
   });
 
-  it('keeps a bundled voice with nothing downloaded', () => {
-    const chosen = usableNotificationVoice(BUNDLED_ADHAN.id);
-    expect(chosen.id).toBe(BUNDLED_ADHAN.id);
+  it('resolves a chosen ringtone with nothing downloaded', () => {
+    const chosen = usableNotificationVoice('msg_bell');
+
+    expect(chosen.id).toBe('msg_bell');
     expect(isNotificationVoiceReady(chosen, new Set())).toBe(true);
   });
 
-  /**
-   * The picker offers a voice the user may never have downloaded — the download button
-   * sits right under it. Until that button is pressed, the reminders must ring the app
-   * chime rather than a file that is not on the device.
-   */
-  it('falls back to the app chime for a voice that was never downloaded', () => {
-    const chosen = usableNotificationVoice(DOWNLOADABLE.id, new Set());
-
-    expect(chosen.id).toBe(DEFAULT_NOTIFICATION_VOICE_ID);
-    expect(chosen.bundled).toBe(true);
-  });
-
-  it('uses a downloaded voice once it is on the device', () => {
-    const chosen = usableNotificationVoice(DOWNLOADABLE.id, new Set([DOWNLOADABLE.id]));
-
-    expect(chosen.id).toBe(DOWNLOADABLE.id);
-    expect(isNotificationVoiceReady(chosen, new Set([DOWNLOADABLE.id]))).toBe(true);
+  it('falls back to the app chime for an unknown voice', () => {
+    expect(usableNotificationVoice('a-voice-from-2024').id).toBe(DEFAULT_NOTIFICATION_VOICE_ID);
   });
 
   it('leaves «بدون صوت» alone — it is a choice, not a missing file', () => {

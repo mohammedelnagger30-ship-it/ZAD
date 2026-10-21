@@ -10,6 +10,9 @@
 # (AppUpdater) or the adhan overlay (AdhanOverlay).
 -keep class com.hifzi.app.AppUpdater { *; }
 -keep class com.hifzi.app.AdhanOverlay { *; }
+-keep class com.hifzi.app.WirdWidget { *; }
+-keep class com.hifzi.app.DisplayScale { *; }
+-keep class com.hifzi.app.PhoneStorage { *; }
 # The recitation player card. The service is what the platform starts and what
 # JS reaches through `RecitationMedia`, and the receiver is the target of the
 # notification's own buttons — neither may be renamed or stripped.

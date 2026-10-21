@@ -714,6 +714,9 @@ console.log('\n== prayer week grid ==');
     isToday: true,
     isPast: false,
     due: allDue,
+    // A synthetic "today, every window open" row: `summariseGrid` reads `due`
+    // and `status` only, so this just keeps the object the type the app builds.
+    open: allDue,
     status: { fajr: null, dhuhr: null, asr: null, maghrib: null, isha: null },
     // `sunnah` joined the grid after this script was written. An empty slot
     // list is the honest value for a synthetic day that records prayers only,

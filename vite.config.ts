@@ -19,6 +19,13 @@ export default defineConfig(({ mode }) => {
       cssEngineCompat(),
       VitePWA({
       registerType: 'autoUpdate',
+      // The plugin used to inject `navigator.serviceWorker.register` into the bundle,
+      // which also ran inside the Capacitor WebView. There it did harm: each install
+      // ships a new bundle, but a service worker from the previous one kept serving the
+      // old assets until the app had been opened twice, so a fix appeared to do nothing
+      // on the first launch. The app registers the worker itself — on the web only —
+      // and clears any leftover one on native (see src/main.tsx).
+      injectRegister: null,
       includeAssets: ['icon.svg', 'icons/*.png'],
       manifest: {
         name: 'قُرّة',
@@ -26,7 +33,7 @@ export default defineConfig(({ mode }) => {
         description: 'قُرّة — القرآن والصلاة والعبادة اليومية',
         dir: 'rtl',
         lang: 'ar',
-        theme_color: '#1f734e',
+        theme_color: '#0369a1',
         background_color: '#0f1a14',
         display: 'standalone',
         orientation: 'portrait',

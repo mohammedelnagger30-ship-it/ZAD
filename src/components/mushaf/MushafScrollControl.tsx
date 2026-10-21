@@ -1,4 +1,5 @@
-import { ArrowDown, Pause, Play } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowDown, Pause, Play, ChevronUp } from 'lucide-react';
 import { toArabicNumber } from '@/data/surahs';
 
 interface MushafScrollControlProps {
@@ -14,8 +15,10 @@ export function MushafScrollControl({
   onToggle,
   onSpeedChange,
 }: MushafScrollControlProps) {
+  const [expanded, setExpanded] = useState(false);
+
   return (
-    <aside className="mushaf-scroll-control" aria-label="التمرير التلقائي">
+    <aside className={`mushaf-scroll-control ${expanded ? 'mushaf-scroll-control--expanded' : ''}`} aria-label="التمرير التلقائي">
       <button
         className="mushaf-scroll-control__toggle"
         type="button"
@@ -24,7 +27,17 @@ export function MushafScrollControl({
         aria-pressed={active}
         title={active ? 'إيقاف التمرير التلقائي' : 'تشغيل التمرير التلقائي'}
       >
-        {active ? <Pause size={17} fill="currentColor" /> : <Play size={17} fill="currentColor" />}
+        {active ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+      </button>
+      <button
+        className="mushaf-scroll-control__expand"
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        aria-label={expanded ? 'إخفاء سرعة التمرير' : 'ضبط سرعة التمرير'}
+        aria-expanded={expanded}
+        title={expanded ? 'إخفاء سرعة التمرير' : 'ضبط سرعة التمرير'}
+      >
+        <ChevronUp size={16} className={expanded ? 'rotate-180' : ''} />
       </button>
       <div className="mushaf-scroll-control__speed">
         <ArrowDown size={14} aria-hidden="true" />

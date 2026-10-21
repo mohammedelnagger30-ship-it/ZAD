@@ -32,7 +32,7 @@ import {
 } from '@/components/mushaf/readerConfig';
 import { TafsirBottomSheet } from '@/components/TafsirBottomSheet';
 import { useWordMeanings } from '@/hooks/useContent';
-import { getWordMeanings } from '@/utils/wordMeaningsService';
+import { getWordMeanings, getSurahWordMeanings } from '@/utils/wordMeaningsService';
 import {
   getSurah,
   getAyahPage,
@@ -752,6 +752,44 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
   const currentJuz = useMemo(() => getJuzForPage(currentPage), [currentPage]);
   const currentHizb = useMemo(() => getHizbForPage(currentPage), [currentPage]);
 
+  // Inline word-by-word glosses: load meanings for all surahs on the current page
+  // when the meanings pack is installed. The map is keyed by `${surahId}:${ayahNumber}`
+  // with a sub-map of wordIndex -> meaning text.
+  const [pageWordMeanings, setPageWordMeanings] = useState<
+    Map<string, Map<number, string>>
+  >(new Map());
+
+  useEffect(() => {
+    if (!wordMeaningsInstalled || surahsOnPage.length === 0) {
+      setPageWordMeanings(new Map());
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const combined = new Map<string, Map<number, string>>();
+      for (const surah of surahsOnPage) {
+        if (cancelled) break;
+        const meanings = await getSurahWordMeanings(surah.id);
+        if (cancelled) break;
+        for (const [ayahNumber, hits] of meanings) {
+          const key = `${surah.id}:${ayahNumber}`;
+          const wordMap = new Map<number, string>();
+          for (const hit of hits) {
+            // Keep the shortest gloss for each word position (first match wins)
+            if (!wordMap.has(hit.wordIndex)) {
+              wordMap.set(hit.wordIndex, hit.gloss.meaning);
+            }
+          }
+          if (wordMap.size > 0) combined.set(key, wordMap);
+        }
+      }
+      if (!cancelled) setPageWordMeanings(combined);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [surahsOnPage, wordMeaningsInstalled]);
+
   const isBookmarked = bookmarkedPages.has(currentPage);
   const zoomPercent = Math.round(prefs.zoom * 100);
   // The reader's own size keeps the reader's zoom and reading scale multiplying it exactly
@@ -832,6 +870,7 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
                 letterSpacing={0.01 + Math.max(0, prefs.lineSpacing - 1) * 0.01}
                 wordSpacing={prefs.wordSpacing}
                 wordMeaningsInstalled={wordMeaningsInstalled}
+                pageWordMeanings={pageWordMeanings}
                 onAyahPress={handleAyahPress}
                 onWordPress={handleWordPress}
                 activeAyah={activeReadingAyah}
@@ -854,6 +893,7 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
               letterSpacing={0.01 + Math.max(0, prefs.lineSpacing - 1) * 0.01}
               wordSpacing={prefs.wordSpacing}
               wordMeaningsInstalled={wordMeaningsInstalled}
+              pageWordMeanings={pageWordMeanings}
               onAyahPress={handleAyahPress}
               onWordPress={handleWordPress}
               activeAyah={activeReadingAyah}
@@ -968,6 +1008,8 @@ interface MushafLeafProps {
   letterSpacing: number;
   wordSpacing: number;
   wordMeaningsInstalled: boolean;
+  /** Meanings for words on this page, keyed by `${surahId}:${ayahNumber}` -> Map<wordIndex, meaning>. */
+  pageWordMeanings?: Map<string, Map<number, string>>;
   onAyahPress: (surahId: number, ayahNumber: number) => void;
   onWordPress: (surahId: number, ayahNumber: number, word: string, wordPosition: number) => void;
   activeAyah: { surahId: number; ayahNumber: number } | null;
@@ -979,10 +1021,25 @@ interface MushafLeafProps {
  * sheets themselves, so a leaf whose props have not changed is not re-rendered. It
  * carries `data-page` because that is what the scroll maths reads to know where it is.
  */
-const MushafLeaf = memo(function MushafLeaf({ page, readingPosition, bookmarked, ...sheet }: MushafLeafProps) {
+const MushafLeaf = memo(function MushafLeaf({
+  page,
+  readingPosition,
+  bookmarked,
+  ...sheet
+}: MushafLeafProps) {
   return (
     <div className="mushaf-leaf mushaf-leaf--column" data-page={page}>
-      <MushafPage page={page} readingPosition={readingPosition} bookmarked={bookmarked} {...sheet} />
+      <MushafPage
+        page={page}
+        readingPosition={readingPosition}
+        bookmarked={bookmarked}
+        {...sheet}
+      />
     </div>
   );
 });
+
+
+
+
+

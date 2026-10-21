@@ -8,11 +8,19 @@ interface AuthScreenProps {
   onAuthenticated: () => void;
   /** The on-device passage: use the app without an account, and without the network. */
   onContinueOffline: () => void;
+  /**
+   * Set when the screen is opened from inside the app (Settings → الحساب) instead of at
+   * the launch gate: the passage out is then "back to the app", not "keep using it as a
+   * guest" — the reader is already using it.
+   */
+  onClose?: () => void;
+  /** Which half of the form to show first; the guest journey arrives wanting an account. */
+  initialMode?: 'sign-in' | 'sign-up';
 }
 
-export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenProps) {
+export function AuthScreen({ onAuthenticated, onContinueOffline, onClose, initialMode = 'sign-in' }: AuthScreenProps) {
   const { themeMode, changeTheme, colorPalette, changeColorPalette } = useTheme();
-  const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
+  const [mode, setMode] = useState<'sign-in' | 'sign-up'>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
@@ -26,7 +34,7 @@ export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenPro
     // Force immediate update of CSS variables
     document.documentElement.dataset.palette = palette;
     const themeColor = COLOR_PALETTES.find((item) => item.id === palette)?.color;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor ?? '#1f734e');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor ?? '#0369a1');
   };
 
   const resendConfirmation = async () => {
@@ -342,14 +350,16 @@ export function AuthScreen({ onAuthenticated, onContinueOffline }: AuthScreenPro
         {/* The account is an extra, not the door: the app is offline-first, and
             signing in is the one thing here that needs the network. Anyone without
             it — or simply without wanting an account — walks straight in, and the
-            choice is remembered so this gate does not return on every launch. */}
+            choice is remembered so this gate does not return on every launch.
+            Opened from Settings the reader is already inside the app, so the same
+            button is the way back out instead of the way in. */}
         <div className="mt-6 border-t border-primary-100 pt-4 dark:border-primary-900">
           <button
             type="button"
-            onClick={onContinueOffline}
+            onClick={onClose ?? onContinueOffline}
             className="w-full rounded-xl border border-primary-200 bg-primary-50/60 py-2.5 text-xs font-semibold text-primary-800 transition hover:bg-primary-100 dark:border-primary-700 dark:bg-primary-900/50 dark:text-primary-200 dark:hover:bg-primary-900"
           >
-            المتابعة بدون حساب
+            {onClose ? 'العودة إلى التطبيق' : 'المتابعة بدون حساب'}
           </button>
           <p className="mt-2 text-center text-[0.6875rem] leading-relaxed text-primary-700/70 dark:text-primary-300/70">
             كل بياناتك تبقى على هذا الجهاز، ويمكنك إنشاء حساب لاحقًا لمزامنتها بين أجهزتك.

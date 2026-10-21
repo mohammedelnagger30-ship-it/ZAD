@@ -1,0 +1,130 @@
+{
+  "stats": {
+    "courses": 17,
+    "series": 69,
+    "lectures": 840,
+    "seconds": 2694469,
+    "bytes": 22283224431
+  },
+  "courses": [
+    {
+      "id": "nobala",
+      "title": "سلسلة النبلاء",
+      "item": "Nobala_Howayni-mp3",
+      "kbps": 192,
+      "lessons": 30
+    },
+    {
+      "id": "taysir-uloom",
+      "title": "سلسلة تيسير علوم الحديث",
+      "item": "Taysir3olomAlhadith-QN",
+      "kbps": 190,
+      "lessons": 9
+    },
+    {
+      "id": "akhlaq-alnabi",
+      "title": "سلسلة أخلاق النبي ﷺ",
+      "item": "Akhla9-anabi_Al7waynee",
+      "kbps": 128,
+      "lessons": 36
+    },
+    {
+      "id": "sifat-alsalah",
+      "title": "شرح كتاب صفة الصلاة للألباني",
+      "item": "sefa_salah_howainy",
+      "kbps": 128,
+      "lessons": 7
+    },
+    {
+      "id": "sharh-alreqaq",
+      "title": "شرح كتاب الرقاق من صحيح البخاري",
+      "item": "4-islamic-1108",
+      "kbps": 65,
+      "lessons": 22
+    },
+    {
+      "id": "bara2at-alsharia",
+      "title": "سلسلة براءة الشريعة من التناقض",
+      "item": "Bara2et-chari3a-mina-tana9od-Howaini-Up-By-MusleM",
+      "kbps": 64,
+      "lessons": 4
+    },
+    {
+      "id": "fak-alwathaq",
+      "title": "فك الوثاق بشرح كتاب الرقاق",
+      "item": "fakalwasak1177",
+      "kbps": 34,
+      "lessons": 51
+    },
+    {
+      "id": "madrasat-alhayah",
+      "title": "مدرسة الحياة — كتاب صيد الخاطر (١٤٢٨هـ)",
+      "item": "1428-1",
+      "kbps": 32,
+      "lessons": 27
+    },
+    {
+      "id": "taysir-uloom-kamil",
+      "title": "تيسير علوم الحديث — السلسلة الكاملة",
+      "item": "4-islamic-1104",
+      "kbps": 32,
+      "lessons": 15
+    },
+    {
+      "id": "zad-alghareeb",
+      "title": "زاد الغريب",
+      "item": "4-islamic-1526",
+      "kbps": 32,
+      "lessons": 9
+    },
+    {
+      "id": "walaa-baraa",
+      "title": "إتحاف النبلاء بمسائل الولاء والبراء",
+      "item": "Howainy_walaa_baraa",
+      "kbps": 23,
+      "lessons": 4
+    },
+    {
+      "id": "ibrahim-ummah",
+      "title": "سلسلة إن إبراهيم كان أمة",
+      "item": "ansarel7abib_443",
+      "kbps": 32,
+      "lessons": 4
+    },
+    {
+      "id": "salam-alsuud",
+      "title": "سلسلة سلم الصعود",
+      "item": "Solem-Saud_Howaini_uP_bY_mUSLEm",
+      "kbps": 0,
+      "lessons": 9
+    },
+    {
+      "id": "alghawwas",
+      "title": "الغواص في استنباط الأحكام من الحديث",
+      "item": "AlGhawas",
+      "kbps": 0,
+      "lessons": 23
+    },
+    {
+      "id": "sharh-bukhari",
+      "title": "شرح صحيح البخاري",
+      "item": "ansarel7abib_235",
+      "kbps": 0,
+      "lessons": 13
+    },
+    {
+      "id": "albaqooniyah",
+      "title": "شرح المنظومة البيقونية",
+      "item": "xboxgamer-4642",
+      "kbps": 0,
+      "lessons": 10
+    },
+    {
+      "id": "tark-alhawa",
+      "title": "ترك الهوى عز الدنيا وشرف الآخرة",
+      "item": "Al_Houwaini_Tark_Al-hawa_uP_bY_mUSLEm",
+      "kbps": 0,
+      "lessons": 5
+    }
+  ]
+}

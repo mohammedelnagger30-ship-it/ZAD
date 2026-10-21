@@ -119,12 +119,12 @@ export function WordAnalysisSheet({ selectedWord, onClose }: WordAnalysisSheetPr
       panelRef={panelRef}
     >
       <div className="mushaf-word-analysis">
-        <p className="mushaf-word-analysis__word" lang="ar" dir="rtl">
-          {selectedWord.word}
-        </p>
         <p className="mushaf-word-analysis__location">
           سورة {selectedWord.surahName} · الآية {toArabicNumber(selectedWord.ayahNumber)} · الكلمة{' '}
           {toArabicNumber(selectedWord.wordPosition)}
+        </p>
+        <p className="mushaf-word-analysis__word" lang="ar" dir="rtl">
+          {selectedWord.word}
         </p>
 
         {/* ---- The meaning, from the books on the device ---- */}

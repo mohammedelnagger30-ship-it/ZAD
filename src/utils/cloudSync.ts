@@ -3,6 +3,7 @@ import { App } from '@capacitor/app';
 import { db, DEFAULT_SETTINGS, type HifzPlan } from '@/db/database';
 import { supabase } from '@/utils/supabaseClient';
 import { clearAllBackups } from '@/utils/autoBackup';
+import { clearReadingHistory } from '@/utils/readingHistory';
 import { isSyncSuppressed, suppressSyncWrites, withSyncSuppressed } from '@/utils/syncSuppression';
 
 const SYNC_TABLES = [
@@ -16,6 +17,13 @@ const SYNC_TABLES = [
   'hifzProgress',
   'hadithFavorites',
   'adhkar',
+  // Joined in v2.0.6: both used to be device-local, so signing in on a second
+  // device silently started a second khatmah and an independent SM-2 schedule
+  // over the same ranges. The server constraint that admits these names is in
+  // `supabase/migrations/20261019000000_sync_khatmah_hifz_reviews.sql` — run it
+  // before this build ships, the same as the adhkar migration before it.
+  'khatmah',
+  'hifzReviews',
 ] as const;
 
 type SyncTableName = (typeof SYNC_TABLES)[number];
@@ -35,6 +43,19 @@ export interface CloudSyncState {
   lastSyncedAt: string | null;
   error: string | null;
 }
+
+/**
+ * Signing out uploads this device's rows and then deletes the local copy, so the
+ * upload is not an optimisation — it is the difference between the data surviving
+ * the sign-out and it being gone. The attempt therefore reports which of the two
+ * happened, and the screen asks the reader before continuing when it is the second.
+ */
+export interface SignOutOptions {
+  /** Skip the pre-sign-out upload. Offered only after the reader was told it failed. */
+  skipUpload?: boolean;
+}
+
+export type SignOutResult = 'signed-out' | 'upload-failed';
 
 const DELETE_QUEUE_PREFIX = 'zad-delete-queue:';
 const DEVICE_ID_KEY = 'zad:device-id';
@@ -75,6 +96,18 @@ function syncIdFor(table: SyncTableName, row: SyncRow): string {
   switch (table) {
     case 'adhkar': return 'adhkar';
     case 'settings': return 'settings';
+    // A singleton the way `settings` is one: the table is cleared wholesale when
+    // a plan ends, so every row that ever exists competes for the single slot
+    // `khatmah` and merges by modified_at like every other singleton here. A
+    // random id per row would leave both devices' plans alive forever — two
+    // rows, both pushing, neither ever winning, and `loadKhatmah` silently
+    // picking between them on every device for good.
+    case 'khatmah': return 'khatmah';
+    // Keyed by the range, so the two devices' SM-2 states for «البقرة ١-٥» are
+    // one record rather than two rows that each keep rescheduling on their own.
+    case 'hifzReviews': return typeof row.key === 'string' && row.key.length > 0
+      ? row.key
+      : crypto.randomUUID();
     case 'pageBookmarks': return `page:${row.page}`;
     case 'prayerRecords': return `${row.date}:${row.prayer}`;
     case 'sunnahRecords': return `${row.date}:${row.type}`;
@@ -303,6 +336,14 @@ function pickSyncRow(table: SyncTableName, a: SyncRow, b: SyncRow): SyncRow {
     const bAt = typeof b.confirmedAt === 'number' ? b.confirmedAt : 0;
     if (aAt !== bAt) return aAt > bAt ? a : b;
   }
+  if (table === 'khatmah') {
+    // The plan last actually *read* is the plan the reader means to continue;
+    // a later insert with an older `updatedAt` is a fresh row holding stale
+    // progress, and the larger id would hand it the slot.
+    const aAt = typeof a.updatedAt === 'number' ? a.updatedAt : 0;
+    const bAt = typeof b.updatedAt === 'number' ? b.updatedAt : 0;
+    if (aAt !== bAt) return aAt > bAt ? a : b;
+  }
   return (typeof b.id === 'number' ? b.id : 0) > (typeof a.id === 'number' ? a.id : 0) ? b : a;
 }
 
@@ -376,13 +417,21 @@ async function getLocalRecords(): Promise<Map<string, { table: SyncTableName; ro
       // Rows written before sync existed carry no modification time. Pushed as-is
       // they would reach the cloud stamped 1970, and every later conflict would
       // resolve against that baseline instead of when the row actually changed.
-      // Stamp once, with the best evidence of when it really was written.
+      // Stamp once, with the best evidence of when it really was written. The
+      // khatmah plan knows it as `updatedAt` and the SM-2 schedule as
+      // `lastReviewedAt`; stamping those two with `Date.now()` instead would
+      // make an untouched plan or a long-dormant range look freshly edited and
+      // beat a genuinely newer copy from another device.
       if (typeof row.syncModifiedAt !== 'number') {
         row.syncModifiedAt = typeof row.confirmedAt === 'number'
           ? row.confirmedAt
           : typeof row.createdAt === 'number'
             ? row.createdAt
-            : Date.now();
+            : typeof row.updatedAt === 'number'
+              ? row.updatedAt
+              : typeof row.lastReviewedAt === 'number'
+                ? row.lastReviewedAt
+                : Date.now();
         changed = true;
       }
       if (changed) await repairSilently(() => db.table(name).put(row));
@@ -915,19 +964,19 @@ function teardownSyncRuntime(): void {
  * Empties the device of one account's data, at sign-out.
  *
  * The dialog promises "رفع بياناتك إلى حسابك أولًا، ثم تُحذف من هذا الجهاز",
- * so this must cover *everything* the account left behind — not only the tables
- * that happen to sync. Two kinds of user data never sync and used to survive
- * here: `khatmah` (the reading plan and its page) and `hifzReviews` (the
- * memorisation schedule, `lapses` and all). Both travel in backups, so the
- * previous owner's progress was restorable by the next person on the same
- * phone. The stored snapshots go too: they are full dumps, one tap from being
- * written over the next account.
+ * so this must cover *everything* the account left behind. `khatmah` (the
+ * reading plan) and `hifzReviews` (the memorisation schedule, `lapses` and all)
+ * sync now but are still wiped here for the same reason the synced tables are:
+ * the next person on this phone must not inherit the previous owner's progress,
+ * one tap from being restored over their own. The hooks stay quiet for the
+ * whole wipe, so none of it becomes tombstones against the account being
+ * signed *out* of. The stored snapshots go too: they are full dumps, one tap
+ * from being written over the next account.
  *
- * `hifzReviews` and `khatmah` are named rather than imported from
- * `@/utils/backup`: that module pulls in the adhkar corpus, which pulls in the
- * full Quran text — a 1.3 MB chain that has no business sitting behind a
- * sign-out button. They are duplicated here deliberately; `backup.test.ts`
- * keeps the two lists honest.
+ * The table names are listed rather than imported from `@/utils/backup`: that
+ * module pulls in the adhkar corpus, which pulls in the full Quran text — a
+ * 1.3 MB chain that has no business sitting behind a sign-out button. They are
+ * duplicated here deliberately; `backup.test.ts` keeps the two lists honest.
  */
 export async function clearLocalUserData(): Promise<void> {
   // Quiet for the whole wipe: without this every `clear()` below would queue a
@@ -936,23 +985,19 @@ export async function clearLocalUserData(): Promise<void> {
   try {
     await db.transaction(
       'rw',
-      [
-        ...SYNC_TABLES.filter((name) => name !== 'adhkar').map((name) => db.table(name)),
-        // Local-only user data: not in SYNC_TABLES, so no hooks are installed on
-        // them and clearing them cannot raise a tombstone.
-        db.khatmah,
-        db.hifzReviews,
-      ],
+      SYNC_TABLES.filter((name) => name !== 'adhkar').map((name) => db.table(name)),
       async () => {
         for (const name of SYNC_TABLES) {
           if (name !== 'adhkar') await db.table(name).clear();
         }
-        await db.khatmah.clear();
-        await db.hifzReviews.clear();
         await db.settings.put({ ...DEFAULT_SETTINGS, id: 1, syncId: 'settings', syncModifiedAt: 0 });
       },
     );
     localStorage.removeItem(ADHKAR_STORAGE_KEY);
+    // Reading recency and the reader's saved position are local-only by design
+    // (see `readingHistory`), so they are in no sync table and would otherwise
+    // outlive the account on a shared phone.
+    clearReadingHistory();
   } finally {
     releaseHooks();
   }

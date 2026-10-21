@@ -104,11 +104,16 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- No WRITE/READ_EXTERNAL_STORAGE and no MANAGE_EXTERNAL_STORAGE: every file
-         the app writes (adhan voices, update APK, PDF export) lands in its private
-         data/cache dirs or goes through the DownloadManager/FileProvider, none of
-         which need shared-storage access. Dropping MANAGE_EXTERNAL_STORAGE also
-         keeps the app clear of Play's restricted-permission review. -->
+    <!-- No MANAGE_EXTERNAL_STORAGE ("all files access"): every file the app writes (adhan
+         voices, update APK, PDF export) lands in its private data/cache dirs or goes
+         through the DownloadManager/FileProvider, none of which need shared-storage
+         access. Dropping MANAGE_EXTERNAL_STORAGE also keeps the app clear of Play's
+         restricted-permission review. The one exception is «حفظ على الهاتف», which copies
+         a lecture into the public Download/قُرّة folder: on Android 10+ that goes through
+         MediaStore and needs no permission at all, and below 10 it needs the legacy pair —
+         hence maxSdkVersion="28" and nothing above it (scoped storage replaced them). -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- The WebView's own geolocation prompt (PrayerScreen «موقعي الحالي») resolves
          through these host permissions; without them the callback always errors. -->

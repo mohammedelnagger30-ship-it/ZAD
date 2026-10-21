@@ -1,7 +1,8 @@
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Loader2, Pause, Play, SkipBack, SkipForward, Square, X } from 'lucide-react';
 import { AUDIO_RECITERS } from '@/data/audioReciters';
 import { toArabicDigits } from '@/data/surahs';
+import { formatClock } from '@/utils/formatClock';
 import { useDialogBehavior } from '@/hooks/useDialogBehavior';
 import {
   useRecitation,
@@ -39,6 +40,15 @@ import { setRecitationSheetOpen } from '@/utils/recitationPlayerUi';
 
 const ARTWORK = '/icons/icon-512.png';
 
+// Module-level so the dismissed state survives the bar unmounting.
+let miniBarDismissed = false;
+export function dismissMiniBar(): void {
+  miniBarDismissed = true;
+}
+export function resetMiniBarDismissed(): void {
+  miniBarDismissed = false;
+}
+
 const SPEED_OPTIONS = [
   { value: 0.75, label: '٠٫٧٥×' },
   { value: 1, label: '١×' },
@@ -55,12 +65,6 @@ const REPEAT_OPTIONS = [
 ];
 
 /** `3:05` in Arabic-Indic digits — a clock, not an ayah number. */
-function formatClock(ms: number): string {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return toArabicDigits(`${minutes}:${String(seconds).padStart(2, '0')}`);
-}
 
 function useReciterName(reciterId: string | null): string {
   return AUDIO_RECITERS.find((item) => item.id === reciterId)?.name ?? 'قارئ';
@@ -95,6 +99,15 @@ function RecitationMiniBar() {
   const state = useRecitation();
   const progress = useRecitationProgress();
   const reciterName = useReciterName(state.reciterId);
+  const [, force] = useState(0);
+
+  // Reset dismissal when a new surah starts playing.
+  useEffect(() => {
+    resetMiniBarDismissed();
+    force((n) => n + 1);
+  }, [state.surahId]);
+
+  if (miniBarDismissed) return null;
 
   const percent =
     progress.durationMs > 0
@@ -143,6 +156,19 @@ function RecitationMiniBar() {
                 {state.sourceLoading ? 'جار تجهيز التلاوة…' : reciterName}
               </span>
             </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              dismissMiniBar();
+              force((n) => n + 1);
+            }}
+            aria-label="إخفاء المشغل"
+            title="إخفاء"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-100 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-gray-300 dark:hover:bg-primary-800"
+          >
+            <X size={16} aria-hidden="true" />
           </button>
 
           <button

@@ -463,7 +463,7 @@ export const DEFAULT_SETTINGS: Settings = {
   notificationSound: true,
   notificationVoiceId: DEFAULT_NOTIFICATION_VOICE_ID,
   adhanSound: true,
-  adhanVoiceId: 'makkah_masjid',
+  adhanVoiceId: 'sayyid_naqshbandi',
   randomDhikrEnabled: false,
   randomDhikrCategory: 'varied',
   randomDhikrIntervalMinutes: 60,
@@ -497,10 +497,11 @@ export async function getSettings(): Promise<Settings> {
   }
   // Rows are kept sorted by id so the read result is deterministic.
   const first = existing.reduce((min, row) => (row.id! < min.id! ? row : min));
-  // Earlier versions defaulted the adhan voice to عاصم جاويد; the Makkah adhan is now the
-  // out-of-the-box voice. Migrate only that exact untouched default — a deliberately
-  // chosen voice is any other value and is preserved.
-  const isLegacyDefaultAdhan = first.adhanVoiceId === 'asim_javed';
+  // Earlier versions defaulted the adhan voice to عاصم جاويد, then to أذان المسجد الحرام;
+  // أذان السيد النقشبندي is now the out-of-the-box voice. Migrate only those exact
+  // untouched defaults — a deliberately chosen voice is any other value and is preserved.
+  const isLegacyDefaultAdhan =
+    first.adhanVoiceId === 'asim_javed' || first.adhanVoiceId === 'makkah_masjid';
   const settings = normalizeEgyptPrayerSettings({ ...DEFAULT_SETTINGS, ...first });
   if (
     first.calcMethod !== settings.calcMethod ||

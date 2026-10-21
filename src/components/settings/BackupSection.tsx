@@ -1,9 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Download, Upload, Database } from 'lucide-react';
 import { Card, Button } from '@/components/ui';
 import { SectionTitle } from '@/components/settings/SectionTitle';
 import { db } from '@/db/database';
 import { withSyncSuppressed } from '@/utils/syncSuppression';
+import { isStoragePersisted } from '@/utils/storagePersistence';
 import {
   ADHKAR_STATE_KEY,
   BACKUP_TABLES,
@@ -23,6 +24,20 @@ import {
  */
 export function BackupSection() {
   const [exportStatus, setExportStatus] = useState('');
+  // Asked once on mount: a granted persist mark is remembered by the browser, and a
+  // refusal is exactly what the reader needs to be told — silently unprotected storage
+  // only ever announces itself on the day the data is already gone.
+  const [persisted, setPersisted] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void isStoragePersisted().then((value) => {
+      if (alive) setPersisted(value);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const handleExport = useCallback(async () => {
     try {
@@ -119,6 +134,18 @@ export function BackupSection() {
         <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-300">
           يمكنك حفظ نسخة احتياطية من جميع بياناتك (خطط الحفظ، الورد اليومي، الفواصل، وإعدادات الصلاة) واستعادتها في أي وقت.
         </p>
+
+        {persisted === true && (
+          <p className="text-xs text-gray-500 dark:text-gray-400">بيانات هذا الجهاز محمية من الحذف التلقائي.</p>
+        )}
+        {persisted === false && (
+          <p
+            role="alert"
+            className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+          >
+            هذا المتصفح لا يحمي البيانات المحلية من الحذف عند ضغط التخزين، فاحتفظ بنسخة خارج الجهاز.
+          </p>
+        )}
 
         <div className="grid grid-cols-2 gap-2.5">
           <Button variant="secondary" size="sm" onClick={handleExport} className="text-xs font-bold">

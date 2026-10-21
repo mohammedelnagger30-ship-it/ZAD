@@ -12,6 +12,7 @@ import {
 import { hasNotificationPermission } from '@/utils/notifications';
 import { onAdhanOverlay } from '@/utils/adhanOverlay';
 import { onClockChange, trustedNow, trustedNowMs } from '@/utils/clock';
+import { isNativeOpenFresh } from '@/utils/azanOpenPolicy';
 import type { PrayerKey } from '@/utils/prayerTracker';
 
 export interface AzanTriggerState {
@@ -118,7 +119,12 @@ export function useAzanTrigger(settings: Settings | null) {
       prayerKey: PrayerKey,
       prayerName: string | undefined,
       prayerTime: Date | undefined,
-      options: { fromNotification?: boolean; force?: boolean } = {},
+      options: {
+        fromNotification?: boolean;
+        force?: boolean;
+        isPreview?: boolean;
+        isTest?: boolean;
+      } = {},
     ) => {
       const instant = prayerTime?.getTime();
       // `force` is for notification taps: the user asked for the adhan page explicitly,
@@ -135,7 +141,8 @@ export function useAzanTrigger(settings: Settings | null) {
               prayerKey,
               prayerName,
               prayerTime,
-              isPreview: false,
+              isPreview: options.isPreview ?? false,
+              isTest: options.isTest ?? false,
               fromNotification: options.fromNotification ?? false,
             },
       );
@@ -181,12 +188,17 @@ export function useAzanTrigger(settings: Settings | null) {
       force: boolean,
     ) => {
       const extra = notification?.extra;
-      if (!extra || extra.type !== 'prayer' || !extra.prayerKey) return;
+      if (!extra || !extra.prayerKey) return;
+      if (extra.type !== 'prayer' && extra.type !== 'test') return;
+      const isTest = extra.type === 'test';
+      if (!isTest && typeof extra.time === 'string' && !isNativeOpenFresh(extra.time, trustedNowMs())) {
+        return;
+      }
       openAzan(
         extra.prayerKey as PrayerKey,
         typeof extra.prayerName === 'string' ? extra.prayerName : undefined,
         typeof extra.time === 'string' ? new Date(extra.time) : undefined,
-        { fromNotification: true, force },
+        { fromNotification: true, force, isPreview: isTest, isTest },
       );
     };
 
@@ -228,11 +240,15 @@ export function useAzanTrigger(settings: Settings | null) {
 
     void onAdhanOverlay((data, source) => {
       if (!data?.prayerKey) return;
+      const isTest = data.type === 'test';
+      if (!isTest && typeof data.time === 'string' && !isNativeOpenFresh(data.time, trustedNowMs())) {
+        return;
+      }
       openAzan(
         data.prayerKey as PrayerKey,
         data.prayerName,
         typeof data.time === 'string' ? new Date(data.time) : undefined,
-        { fromNotification: true, force: source === 'launch' },
+        { fromNotification: true, force: source === 'launch', isPreview: isTest, isTest },
       );
     })
       .then((remove) => {

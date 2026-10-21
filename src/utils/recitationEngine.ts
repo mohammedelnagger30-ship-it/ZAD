@@ -38,6 +38,7 @@ import {
   updateMediaPosition,
 } from '@/utils/mediaSession';
 import { openRecitationPlayer, setRecitationSheetOpen } from '@/utils/recitationPlayerUi';
+import { registerAudioSource, takeAudioFocus } from '@/utils/audioFocus';
 
 export interface RecitationState {
   /** The surah held by the engine; null until the reader first mounts. */
@@ -424,6 +425,8 @@ export function stop(): void {
 
 /** Playback genuinely started — the moment the Media Session becomes real. */
 function markPlaying(): void {
+  // Whatever else was sounding — a lecture, most of all — stands down: one voice at a time.
+  takeAudioFocus('recitation');
   patch({ isPlaying: true, sessionOpen: true });
   // Freeze the system's idea of where this started: it takes it from here by
   // extrapolating with the speed, and a stale position would drift the lock-screen
@@ -1040,3 +1043,9 @@ function pausePlayback(): void {
   // showing wherever it last heard from if this were not sent.
   reportProgressFromAudio();
 }
+
+// The recitation can be silenced by anything else that asks for the floor — a lecture
+// starting, most of all. Registering `stop` (rather than a plain pause) is right here:
+// whoever takes over is playing speech, and a half-finished surah left paused behind it
+// would only be confusing when the listener comes back.
+registerAudioSource('recitation', stop);

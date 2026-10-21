@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, Heart, BookText, X, ChevronLeft, ChevronRight, Filter, AlertTriangle, Library, Loader2, Download, Copy } from 'lucide-react';
 import { Card, Badge, EmptyState } from '@/components/ui';
+import { HadithSharh } from '@/components/HadithSharh';
 import { ContentLibrary } from '@/screens/ContentLibrary';
 import {
   GRADE_INFO,
@@ -10,6 +11,8 @@ import {
   type HadithCollection,
   type HadithRecord,
 } from '@/data/hadiths';
+import { carriesDistinctiveTerms, countMatches } from '@/utils/hadithService';
+import { arabicQueryTerms } from '@/utils/arabic';
 import { HADITH_BOOKS, HADITH_OF_DAY_BOOK, getHadithBook } from '@/data/contentCatalog';
 import type { HadithGrade } from '@/data/hadithCollections';
 import { toArabicNumber } from '@/data/surahs';
@@ -86,9 +89,13 @@ export function HadithScreen({ params }: HadithScreenProps) {
   const [copyError, setCopyError] = useState<string | null>(null);
   const [copiedHadithId, setCopiedHadithId] = useState<string | null>(null);
   const [detailReturnView, setDetailReturnView] = useState<ViewMode>('search');
+  // The query whose results are in `hits`. Distinguishes "search done, nothing found"
+  // from "debounce still pending", which keeps a deep-link fallback from firing early.
+  const [completedQuery, setCompletedQuery] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    const ranFor = query;
     const run = async () => {
       setSearching(true);
       setSearchError(null);
@@ -109,7 +116,10 @@ export function HadithScreen({ params }: HadithScreenProps) {
           setSearchError(error instanceof Error ? error.message : 'تعذّر البحث في كتب الحديث المحمّلة');
         }
       } finally {
-        if (!cancelled) setSearching(false);
+        if (!cancelled) {
+          setCompletedQuery(ranFor);
+          setSearching(false);
+        }
       }
     };
     const timer = setTimeout(run, query.trim() ? 220 : 0);
@@ -145,6 +155,87 @@ export function HadithScreen({ params }: HadithScreenProps) {
       }
     })();
   }, [deepLinkId]);
+
+  // Deep-link by search term: other screens ("سنن عن النبي") quote a hadith fragment and
+  // want a tap to land on the full text here. Depends on the query string itself, for the
+  // same reason as `deepLinkId` above.
+  //
+  // A citation is a paraphrase more often than a verbatim excerpt — "من توضأ فأحسن وضوءه"
+  // against a source that reads "فَأَحْسَنَ الْوُضُوءَ" — and the index matches every term,
+  // so a literal quote can find nothing. Candidates therefore fall back to the most
+  // distinctive words of the quote (the longest ones), never to the generic openers like
+  // "من" that a drop-from-the-end trim would have kept.
+  const deepLinkQuery = typeof params?.query === 'string' ? params.query.trim() : null;
+  const deepLinkCandidates = useMemo(() => {
+    if (!deepLinkQuery) return [];
+    const byLength = [...arabicQueryTerms(deepLinkQuery)].sort((a, b) => b.length - a.length);
+    const candidates = [deepLinkQuery];
+    if (byLength.length >= 2) candidates.push(byLength.slice(0, 2).join(' '));
+    if (byLength.length >= 1) candidates.push(byLength[0]);
+    return [...new Set(candidates)];
+  }, [deepLinkQuery]);
+  const [deepLinkStage, setDeepLinkStage] = useState(0);
+  useEffect(() => {
+    if (!deepLinkQuery) return;
+    setDeepLinkStage(0);
+    setCompletedQuery(null);
+    setQuery(deepLinkQuery);
+    setShowFavoritesOnly(false);
+    setCollectionFilter('all');
+    setSahihOnly(false);
+    setSearchPage(1);
+    setViewMode('search');
+  }, [deepLinkQuery]);
+
+  // Empty result? Try the next candidate. Only after the search for the current candidate
+  // has actually finished (`completedQuery`), otherwise the debounce window reads as "no
+  // results" and the walk skips ahead. A search that finished on a query outside the
+  // candidate list can only be the user's own typing — that stops the walk.
+  useEffect(() => {
+    if (!deepLinkQuery || searching) return;
+    if (completedQuery !== deepLinkCandidates[deepLinkStage]) {
+      if (completedQuery !== null && completedQuery === query && !deepLinkCandidates.includes(query)) {
+        setDeepLinkStage(deepLinkCandidates.length);
+      }
+      return;
+    }
+    if (hits.length > 0) return;
+    const next = deepLinkStage + 1;
+    if (next >= deepLinkCandidates.length) return;
+    setDeepLinkStage(next);
+    setCompletedQuery(null);
+    setQuery(deepLinkCandidates[next]);
+    setSearchPage(1);
+  }, [deepLinkQuery, deepLinkCandidates, deepLinkStage, searching, hits, query, completedQuery]);
+
+  // Once results are in, open the closest one instead of leaving the user in a list.
+  // Candidates are ranked on the whole original quote, and opening needs at least two of
+  // its words in the hadith — and, past that, every long one: two shared fillers are a
+  // keyword collision, not an identification, and the list stays for the user to pick.
+  // State resets when the screen unmounts, so tapping the same citation again reopens it.
+  const [openedDeepLink, setOpenedDeepLink] = useState<string | null>(null);
+  useEffect(() => {
+    if (!deepLinkQuery || searching || hits.length === 0) return;
+    if (completedQuery !== query) return;
+    if (openedDeepLink === deepLinkQuery) return;
+    // Only the quotation itself identifies a hadith. The shorter candidates are what
+    // give the list something to show when a citation turns out to be a paraphrase —
+    // opening on one of them is opening on a guess, and the guess that got measured
+    // here opened «لشيء» (21 unrelated narrations) on the urination-in-the-mosque
+    // hadith when the citation was Anas's «ما قال لشيء كُنتُه…». So a candidate
+    // shorter than the quote may inform the list, never the detail view.
+    if (query !== deepLinkQuery) return;
+    if (arabicQueryTerms(deepLinkQuery).length < 2) return;
+    const best = hits.reduce((top, hit) => (
+      countMatches(hit, deepLinkQuery) > countMatches(top, deepLinkQuery) ? hit : top
+    ), hits[0]);
+    if (countMatches(best, deepLinkQuery) < 2) return;
+    if (!carriesDistinctiveTerms(best, deepLinkQuery)) return;
+    setOpenedDeepLink(deepLinkQuery);
+    setSelected(best);
+    setDetailReturnView('search');
+    setViewMode('detail');
+  }, [deepLinkQuery, searching, hits, openedDeepLink, completedQuery, query]);
 
   // ---- browse ----
   const openCollection = useCallback(async (id: string) => {
@@ -267,6 +358,8 @@ export function HadithScreen({ params }: HadithScreenProps) {
               </button>
               {copyError && <p role="alert" className="text-xs text-error-600 dark:text-error-300">{copyError}</p>}
             </div>
+
+            <HadithSharh hadithId={selected.id} text={selected.text} />
 
             <div className="border-t border-primary-100 dark:border-primary-800 pt-3 space-y-1">
               {selected.sectionTitle && (

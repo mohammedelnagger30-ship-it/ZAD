@@ -20,11 +20,15 @@ interface MushafWordButtonProps {
   word: string;
   wordIndex: number;
   meaningWords: ReadonlyMap<string, ReadonlySet<number>>;
+  /** Inline word-by-word glosses for this page. */
+  pageWordMeanings?: Map<string, Map<number, string>>;
   onWordPress?: MushafPageProps['onWordPress'];
 }
 
-function MushafWordButton({ ayah, word, wordIndex, meaningWords, onWordPress }: MushafWordButtonProps) {
-  const hasMeaning = meaningWords.get(`${ayah.surahId}:${ayah.ayahNumber}`)?.has(wordIndex) ?? false;
+function MushafWordButton({ ayah, word, wordIndex, meaningWords, pageWordMeanings, onWordPress }: MushafWordButtonProps) {
+  const key = `${ayah.surahId}:${ayah.ayahNumber}`;
+  const meaning = pageWordMeanings?.get(key)?.get(wordIndex);
+  const hasMeaning = meaningWords.get(key)?.has(wordIndex) ?? false;
   const action = hasMeaning ? 'اضغط لمعرفة معنى الكلمة' : 'اضغط لخيارات الآية';
   return (
     <button
@@ -35,6 +39,11 @@ function MushafWordButton({ ayah, word, wordIndex, meaningWords, onWordPress }: 
       onClick={() => onWordPress?.(ayah.surahId, ayah.ayahNumber, word, wordIndex + 1)}
     >
       {word}
+      {meaning && (
+        <span className="mushaf-word-gloss" aria-hidden="true">
+          {meaning}
+        </span>
+      )}
     </button>
   );
 }
@@ -61,6 +70,8 @@ export interface MushafPageProps {
   letterSpacing?: number;
   wordSpacing?: number;
   wordMeaningsInstalled?: boolean;
+  /** Meanings for words on this page, keyed by `${surahId}:${ayahNumber}` -> Map<wordIndex, meaning>. */
+  pageWordMeanings?: Map<string, Map<number, string>>;
   onAyahPress?: (surahId: number, ayahNumber: number) => void;
   onWordPress?: (surahId: number, ayahNumber: number, word: string, wordPosition: number) => void;
   /** The ayah currently selected in the reader, so the page can highlight it. */
@@ -104,6 +115,7 @@ export function MushafPage({
   letterSpacing = 0.01,
   wordSpacing = 0,
   wordMeaningsInstalled = false,
+  pageWordMeanings,
   onAyahPress,
   onWordPress,
   activeAyah,
@@ -208,7 +220,7 @@ export function MushafPage({
     '--fs': `${fontSize}px`,
     '--lh': `${lineHeight}`,
     '--letter-gap': `${letterSpacing}em`,
-    '--word-gap': wordSpacing === 0 ? 'normal' : `${wordSpacing}em`,
+    '--word-gap': wordSpacing === 0 ? '-0.025em' : `${(wordSpacing - 0.025).toFixed(3)}em`,
   } as CSSProperties;
 
   return (
@@ -284,6 +296,7 @@ export function MushafPage({
                           word={word}
                           wordIndex={index}
                           meaningWords={meaningWords}
+                          pageWordMeanings={pageWordMeanings}
                           onWordPress={onWordPress}
                         />{' '}
                       </span>
@@ -294,6 +307,7 @@ export function MushafPage({
                         word={words[words.length - 1]}
                         wordIndex={words.length - 1}
                         meaningWords={meaningWords}
+                        pageWordMeanings={pageWordMeanings}
                         onWordPress={onWordPress}
                       />
                       <button

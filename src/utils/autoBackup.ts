@@ -16,6 +16,16 @@ const AUTO_BACKUP_KEY = 'zad:auto-backup-config';
 const LAST_BACKUP_KEY = 'zad:last-backup';
 /** Every snapshot is stored under this prefix; the writer and every reader agree on it here, in one place. */
 const AUTO_BACKUP_PREFIX = 'zad:backup:';
+/**
+ * Why the most recent backup attempt did not land, in words the reader can act on.
+ *
+ * The schedule runs on its own and used to swallow its own failures: the settings
+ * section could read «آخر نسخة: …» and «weekly, on» for weeks while the newest snapshot
+ * was never written, because nobody read the `false` the job returned. This is the
+ * receipt that says otherwise, and it is cleared by the next backup that does land —
+ * manual or scheduled, since either proves storage is accepting writes again.
+ */
+const BACKUP_FAILURE_KEY = 'zad:backup-failure';
 
 export interface AutoBackupConfig {
   enabled: boolean;
@@ -63,6 +73,40 @@ export function setLastBackupDate(date: string): void {
   } catch (error) {
     console.error('Failed to save last backup date:', error);
   }
+}
+
+/**
+ * The last backup failure as a sentence, or null when the last attempt succeeded.
+ *
+ * Read by the settings section so a schedule that is quietly failing says so where the
+ * reader would look for it — the one place «آخر نسخة» already lives.
+ */
+export function getLastBackupFailure(): string | null {
+  try {
+    return localStorage.getItem(BACKUP_FAILURE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setLastBackupFailure(reason: string | null): void {
+  try {
+    if (reason === null) localStorage.removeItem(BACKUP_FAILURE_KEY);
+    else localStorage.setItem(BACKUP_FAILURE_KEY, reason);
+  } catch {
+    // Storage is the very thing likely to be failing here. Not being able to record
+    // the report is the smaller of the two problems and must never add a crash to it.
+  }
+}
+
+/** Which failure it was, because the two need different advice from the reader. */
+function describeBackupFailure(error: unknown): string {
+  const quota =
+    typeof DOMException !== 'undefined' &&
+    error instanceof DOMException &&
+    (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED');
+  if (quota) return 'مساحة الجهاز ممتلئة، فلم تُكتب آخر نسخة. احذف نسخًا قديمة أو فسّح مساحة ثم أعد المحاولة.';
+  return 'تعذّرت كتابة آخر نسخة احتياطية تلقائية.';
 }
 
 /**
@@ -130,9 +174,13 @@ export async function performAutoBackup(): Promise<boolean> {
     // more than asked for when today's key was already the one being evicted.
     await cleanupOldBackups(config.maxBackups);
 
+    // A backup that landed means storage is accepting writes again, whether this
+    // was the schedule or the button — so the last complaint stands retracted.
+    setLastBackupFailure(null);
     return true;
   } catch (error) {
     console.error('Auto backup failed:', error);
+    setLastBackupFailure(describeBackupFailure(error));
     return false;
   }
 }

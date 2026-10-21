@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { toArabicNumber } from '@/data/surahs';
+import { highlightWash } from '@/utils/ayahHighlights';
 import type { AyahText } from '@/data/quranText';
 
 interface AyahSpanProps {
   ayah: AyahText;
   isHifz: boolean;
   bookmarked: boolean;
+  /** Highlight colour id when the ayah is marked with a colour, else undefined. */
+  color?: string;
   hideText: boolean;
   hideWordByWord: boolean;
   selected: boolean;
@@ -32,6 +35,7 @@ export function AyahSpan({
   ayah,
   isHifz,
   bookmarked,
+  color,
   hideText,
   hideWordByWord,
   selected,
@@ -86,7 +90,7 @@ export function AyahSpan({
   const stateStyle = selected
     ? { background: 'var(--selected-wash)' }
     : bookmarked
-      ? { background: 'var(--bookmark-wash)' }
+      ? { background: highlightWash(color) ?? 'var(--bookmark-wash)' }
       : undefined;
 
   // The last word carries the medallion inside one unbreakable tail, so the two are cut

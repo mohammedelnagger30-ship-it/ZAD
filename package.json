@@ -1,7 +1,7 @@
 {
   "name": "vite-react-typescript-starter",
   "private": true,
-  "version": "1.24.0",
+  "version": "2.0.9",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -22,12 +22,14 @@
     "data:fetch": "tsx scripts/fetch-content.ts",
     "data:tafsir": "tsx scripts/fetch-tafsir.ts",
     "data:catalog": "tsx scripts/build-content-catalog.ts",
+    "data:huwaini": "tsx scripts/build-huwaini-catalog.ts",
     "data:mushaf-pages": "node scripts/fetch-tanzil-page-starts.mjs",
     "check:text": "tsx --tsconfig tsconfig.app.json scripts/check-quran-text.ts",
     "check:content": "tsx --tsconfig tsconfig.app.json scripts/check-content.ts",
     "check:word-split": "tsx --tsconfig tsconfig.app.json scripts/check-word-split.ts",
     "build:flow": "node scripts/measure-word-widths.mjs && tsx scripts/build-mushaf-flow.ts",
-    "build:flow:only": "tsx scripts/build-mushaf-flow.ts"
+    "build:flow:only": "tsx scripts/build-mushaf-flow.ts",
+    "build:word-meaning-index": "tsx --tsconfig tsconfig.app.json scripts/build-word-meaning-index.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",

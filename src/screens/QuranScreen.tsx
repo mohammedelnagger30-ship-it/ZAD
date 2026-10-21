@@ -23,6 +23,7 @@ import { ReaderChoiceSheet } from '@/components/quran/ReaderChoiceSheet';
 import { ReaderNavigation } from '@/components/quran/ReaderNavigation';
 import { splitBasmala } from '@/utils/basmala';
 import { searchAyahs } from '@/utils/ayahSearch';
+import { recordReading, READING_STATE_KEY as QURAN_READER_STORAGE_KEY } from '@/utils/readingHistory';
 import { getRecitationState, subscribeSurahChange } from '@/utils/recitationEngine';
 
 interface QuranScreenProps {
@@ -35,7 +36,7 @@ type BrowseMode = 'surah' | 'juz' | 'page' | 'ayah';
 type ViewMode = 'list' | 'reader' | 'hifz' | 'mushaf';
 type RevelationFilter = 'all' | 'meccan' | 'medinan';
 
-const QURAN_READER_STORAGE_KEY = 'zad:quran-reader-state';
+/** Key constant lives with the history module that owns resume-from-position. */
 
 const READER_VIEW_MODES: ViewMode[] = ['list', 'reader', 'hifz', 'mushaf'];
 
@@ -231,6 +232,9 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
       setTafsirAyah(params.openTafsir === true ? { surahId: surah.id, ayah } : null);
       setViewMode(params.openHifzTest === true ? 'hifz' : 'reader');
       setShowHifzTest(params.openHifzTest === true);
+      // An explicit tap is a reading: the history follows bookmarks and search
+      // results the same way it follows a browse through the list.
+      recordReading({ kind: 'surah', surahId: surah.id, ayah });
       return;
     }
     if (
@@ -242,6 +246,7 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
       setMushafPage(params.openPage);
       setHasMushafPosition(true);
       setViewMode('mushaf');
+      recordReading({ kind: 'page', page: params.openPage });
     }
     // Keyed on the params object identity: navigate() creates a new object per call,
     // so re-tapping a bookmark with the same target still re-runs this.
@@ -249,6 +254,12 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
 
   const bookmarkedKeys = useMemo(
     () => new Set(bookmarks.map((b) => `${b.surahId}:${b.ayahNumber}`)),
+    [bookmarks]
+  );
+
+  /** The bookmark record per ayah key, so the reader can read its colour and note. */
+  const bookmarkByKey = useMemo(
+    () => new Map(bookmarks.map((b) => [`${b.surahId}:${b.ayahNumber}`, b])),
     [bookmarks]
   );
 
@@ -299,6 +310,7 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
     setToAyah(null);
     setTafsirAyah(null);
     setViewMode('reader');
+    recordReading({ kind: 'surah', surahId: surah.id });
   };
 
   /** A search result opens the reader starting at that very ayah. */
@@ -310,6 +322,7 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
     setToAyah(null);
     setTafsirAyah(null);
     setViewMode('reader');
+    recordReading({ kind: 'surah', surahId, ayah: ayahNumber });
   };
 
   const openHifzMode = (surah: SurahMeta) => {
@@ -318,6 +331,7 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
     setToAyah(surah.ayahCount);
     setTafsirAyah(null);
     setViewMode('hifz');
+    recordReading({ kind: 'surah', surahId: surah.id });
   };
 
   // Opening a juz means "take me to where this juz starts", i.e. its first page. Resolving
@@ -334,11 +348,16 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
     setMushafPage(page);
     setHasMushafPosition(true);
     setViewMode('mushaf');
+    recordReading({ kind: 'page', page });
   };
 
   const updateMushafPage = (page: number) => {
     setMushafPage(page);
     setHasMushafPosition(true);
+    // Every settled page — the reader reports it on arrival and on each turn —
+    // so «متابعة القراءة» walks with the reader instead of freezing at the
+    // jump that opened it. The history dedups re-reads of the same position.
+    recordReading({ kind: 'page', page });
   };
 
   /** Step through ayahs while the tafsir sheet is open, rolling over into the next surah. */
@@ -357,15 +376,51 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
     });
   }, []);
 
+  /**
+   * Writes a patch onto an ayah's bookmark, creating it when there is none yet.
+   *
+   * A colour or a note is a *reason* to keep an ayah, so asking for one keeps the
+   * ayah too — the same record the «حفظ» button writes, only with more on it. A
+   * patch value of `null` (or a note that trims to nothing) clears that field;
+   * the mark itself survives, because the user chose to keep the ayah.
+   */
+  const saveBookmark = async (
+    surahId: number,
+    ayahNumber: number,
+    patch: { color?: string | null; note?: string },
+  ) => {
+    const key = `${surahId}:${ayahNumber}`;
+    const found = bookmarks.find((b) => `${b.surahId}:${b.ayahNumber}` === key);
+    const next: BookmarkType = found
+      ? { ...found }
+      : { surahId, ayahNumber, createdAt: Date.now() };
+
+    if ('color' in patch) {
+      if (patch.color) next.color = patch.color;
+      else delete next.color;
+    }
+    if ('note' in patch) {
+      const trimmed = patch.note?.trim();
+      if (trimmed) next.note = trimmed;
+      else delete next.note;
+    }
+
+    // `put` keeps the id when the row exists and inserts when it does not; the
+    // date is what the sync layer reads to decide which side is newer.
+    next.syncModifiedAt = Date.now();
+    await db.bookmarks.put(next);
+    await loadBookmarks();
+  };
+
   const toggleBookmark = async (surahId: number, ayahNumber: number) => {
     const key = `${surahId}:${ayahNumber}`;
     const found = bookmarks.find((b) => `${b.surahId}:${b.ayahNumber}` === key);
     if (found) {
       await db.bookmarks.delete(found.id!);
     } else {
-      await db.bookmarks.add({ surahId, ayahNumber, createdAt: Date.now() });
+      await saveBookmark(surahId, ayahNumber, {});
     }
-    loadBookmarks();
+    await loadBookmarks();
   };
 
   const changeReciter = (id: string) => {
@@ -677,6 +732,7 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
                 ayah={ayah.ayahNumber === 1 && separateBasmala ? { ...ayah, text: opening!.rest } : ayah}
                 isHifz={isHifz}
                 bookmarked={bookmarkedKeys.has(`${ayah.surahId}:${ayah.ayahNumber}`)}
+                color={bookmarkByKey.get(`${ayah.surahId}:${ayah.ayahNumber}`)?.color}
                 hideText={hideText}
                 hideWordByWord={hideWordByWord}
                 selected={selectedAyah === ayah.ayahNumber}
@@ -741,6 +797,22 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
                   }
                   onToggleBookmark={() => {
                     if (ayahChoice !== null) toggleBookmark(selectedSurah.id, ayahChoice);
+                  }}
+                  highlightColor={
+                    ayahChoice !== null
+                      ? bookmarkByKey.get(`${selectedSurah.id}:${ayahChoice}`)?.color
+                      : undefined
+                  }
+                  onPickColor={(colorId) => {
+                    if (ayahChoice !== null) saveBookmark(selectedSurah.id, ayahChoice, { color: colorId });
+                  }}
+                  note={
+                    ayahChoice !== null
+                      ? bookmarkByKey.get(`${selectedSurah.id}:${ayahChoice}`)?.note
+                      : undefined
+                  }
+                  onSaveNote={(note) => {
+                    if (ayahChoice !== null) saveBookmark(selectedSurah.id, ayahChoice, { note });
                   }}
                   ayahChoicePanelRef={ayahChoicePanelRef}
                 />

@@ -1,8 +1,7 @@
-import { Check, Clock, X, Minus } from 'lucide-react';
+import { Check, Clock, X, Minus, Sun, Moon } from 'lucide-react';
 import {
   FIVE_PRAYERS,
   PRAYER_LABELS_AR,
-  canEditPrayerDate,
   type DayPrayerGrid,
   type PrayerKey,
   type PrayerStatus,
@@ -17,53 +16,63 @@ interface PrayerWeekGridProps {
 /**
  * Seven days × five prayers, newest day last.
  *
- * Two things make this honest rather than decorative:
- *
- *  - A cell that had not come round yet is a faint dash, never a red cross, so
- *    "I did not pray" and "it is not time yet" cannot be confused.
- *  - Today and yesterday can be opened to record; older days stay read-only.
- *
- * The dots under each cell are that prayer's rawatib: filled = recorded,
- * hollow = not recorded yet — never a failure mark, the same honesty rule the
- * prayer itself follows. Pressing an openable cell shows that day's sheet: it
- * saves the prayer when it has none and always carries its rawatib.
+ * Layout redesign:
+ *  - Column headers = prayer names (with sun/moon hint for fajr/isha)
+ *  - Row headers = day name + date, right-aligned, today marked with a dot
+ *  - Cells = larger touch targets, clear status icons, rawatib dots beneath
+ *  - Not-yet-due = faint dash, never a red cross (honesty rule kept)
+ *  - Today / yesterday editable; older days read-only
  */
 export function PrayerWeekGrid({ grid, onEdit }: PrayerWeekGridProps) {
+
+  // Prayer icons: fajr = sunrise (sun), isha = night (moon), others = neutral clock
+  const PRAYER_ICONS = {
+    fajr: Sun,
+    dhuhr: Sun,
+    asr: Sun,
+    maghrib: Moon,
+    isha: Moon,
+  };
+
   return (
     <div className="lg:max-w-3xl mx-auto">
-      {/* Column headers */}
+      {/* Section title area handled by caller; this is just the grid */}
+      {/* Column headers — prayer names across the top */}
       <div
-        className="grid gap-1 mb-1.5 lg:max-w-3xl mx-auto"
-        style={{ gridTemplateColumns: 'minmax(3.25rem,1fr) repeat(5,minmax(0,1fr))' }}
+        className="grid gap-1 mb-3"
+        style={{ gridTemplateColumns: 'minmax(4rem,1fr) repeat(5,minmax(0,1fr))' }}
       >
-        <span />
-        {FIVE_PRAYERS.map((key) => (
-          <span
-            key={key}
-            className="text-center text-[0.6875rem] md:text-xs font-semibold text-gray-500 dark:text-gray-400"
-          >
-            {PRAYER_LABELS_AR[key]}
-          </span>
-        ))}
+        <span className="sr-only">الأسبوع</span>
+        {FIVE_PRAYERS.map((key) => {
+          const Icon = PRAYER_ICONS[key];
+          return (
+            <span
+              key={key}
+              className={`flex flex-col items-center gap-1 pt-1 pb-2 text-center font-semibold ${
+                key === 'fajr' || key === 'isha'
+                  ? 'text-accent-600 dark:text-accent-400'
+                  : 'text-gray-600 dark:text-gray-400'
+              }`}
+            >
+              <Icon size={12} className="mb-0.5" />
+              {PRAYER_LABELS_AR[key]}
+            </span>
+          );
+        })}
       </div>
 
+      {/* Day rows */}
       <div className="space-y-1">
         {grid.map((day) => (
           <div
             key={day.date}
-            className={`grid gap-1 items-center rounded-xl px-1.5 py-1 lg:max-w-3xl mx-auto ${
-              day.isToday ? 'bg-primary-50 dark:bg-primary-800/40 ring-1 ring-primary-200 dark:ring-primary-700' : ''
-            }`}
-            style={{ gridTemplateColumns: 'minmax(3.25rem,1fr) repeat(5,minmax(0,1fr))' }}
+            className={`grid gap-1 items-start rounded-xl px-2 py-2 ${day.isToday ? 'bg-primary-50/60 dark:bg-primary-900/40 ring-1 ring-inset ring-primary-200 dark:ring-primary-700/50 shadow-sm' : 'hover:bg-gray-50 dark:hover:bg-primary-800/20'}`}
+            style={{ gridTemplateColumns: 'minmax(4rem,1fr) repeat(5,minmax(0,1fr))' }}
           >
-            {/* Day label */}
-            <div className="flex items-baseline gap-1 min-w-0">
+            {/* Day label — fixed left column */}
+            <div className="flex flex-col items-end min-w-[4rem]">
               <span
-                className={`text-xs font-semibold truncate ${
-                  day.isToday
-                    ? 'text-primary-700 dark:text-primary-100'
-                    : 'text-gray-600 dark:text-gray-300'
-                }`}
+                className={`text-xs font-semibold leading-none ${day.isToday ? 'text-primary-700 dark:text-primary-100' : 'text-gray-600 dark:text-gray-300'}`}
               >
                 {day.isToday ? 'اليوم' : day.dayName}
               </span>
@@ -107,11 +116,11 @@ function GridCell({
   if (!due && !status) {
     return (
       <span
-        className="h-11 md:h-14 rounded-lg bg-gray-100/60 dark:bg-primary-800/20 flex items-center justify-center text-gray-300 dark:text-primary-700"
+        className="h-12 md:h-16 rounded-xl bg-gray-100/50 dark:bg-primary-800/20 flex items-center justify-center text-gray-300 dark:text-primary-700/50"
         aria-label={`${name} لم يحن وقتها بعد`}
         title="لم يحن وقتها بعد"
       >
-        <Minus size={15} />
+        <Minus size={13} />
       </span>
     );
   }
@@ -120,12 +129,11 @@ function GridCell({
   const Icon = visual.icon;
   const stateLabel = status ? AR_STATE[status] : 'لم تسجّلها';
 
-  // Today and yesterday open the sheet: recording a forgotten prayer, reading
-  // back a saved answer, and the rawatib either way.
-  const editable = !!onEdit && canEditPrayerDate(day.date);
+  // Today's cell opens only inside the prayer's window — its own adhan until the
+  // next adhan. Yesterday stays open for corrections all day and older days stay
+  // shut: `getPrayerGrid` already packed that whole rule into `open`.
+  const editable = !!onEdit && day.open[prayer];
 
-  // The dots under the icon are this prayer's rawatib; the label carries the same
-  // fact for anyone reading the cell with a screen reader or a hover tooltip.
   const doneCount = slots.filter((slot) => slot.done).length;
   const rawatibLabel =
     slots.length === 0
@@ -134,21 +142,25 @@ function GridCell({
         ? '، السنة الراتبة لم تُسجَّل'
         : doneCount === slots.length
           ? '، السنة الراتبة صُلّيت'
-          : `، ${doneCount} من ${slots.length} رواتب مسجّلة`;
-  const label = `${name} — ${stateLabel}${rawatibLabel}`;
+          : `، ${doneCount} من ${slots.length} رواتب`;
+
+  // Due but shut is its own state: the cell says why instead of silently
+  // refusing a tap. The correction opens again when the date turns it to أمس.
+  const closedNote =
+    day.isToday && !day.open[prayer]
+      ? ' — انتهى وقت التسجيل، يُصحَّح غدًا كأمس'
+      : '';
+
+  const label = `${name} — ${stateLabel}${rawatibLabel}${closedNote}`;
 
   const dots =
     slots.length > 0 ? (
-      <span className="flex gap-1" aria-hidden="true">
+      <span className="flex gap-1 mt-0.5" aria-hidden="true">
         {slots.map((slot) => (
           <span
             key={slot.type}
             title={slot.label}
-            className={`h-1.5 w-1.5 rounded-full ${
-              slot.done
-                ? 'bg-success-600 dark:bg-success-400'
-                : 'border border-gray-400 dark:border-gray-500'
-            }`}
+            className={`h-2 w-2 rounded-full shrink-0 ${slot.done ? 'bg-success-600 dark:bg-success-400' : 'border border-gray-400 dark:border-gray-500'}`}
           />
         ))}
       </span>
@@ -157,11 +169,11 @@ function GridCell({
   if (!editable) {
     return (
       <span
-        className={`h-11 md:h-14 rounded-lg flex flex-col items-center justify-center gap-1 ${visual.cell}`}
+        className={`h-12 md:h-16 rounded-xl flex flex-col items-center justify-center gap-1 ${visual.cell}`}
         aria-label={label}
         title={label}
       >
-        <Icon size={16} className={visual.iconClass} />
+        <Icon size={14} className={visual.iconClass} />
         {dots}
       </span>
     );
@@ -172,9 +184,9 @@ function GridCell({
       onClick={() => onEdit(day.date, prayer, status, `${day.isToday ? 'اليوم' : day.dayName} ${day.dayNumber}`)}
       aria-label={label}
       title={label}
-      className={`h-11 md:h-14 rounded-lg flex flex-col items-center justify-center gap-1 ${visual.cell} ring-offset-1 hover:ring-2 hover:ring-primary-300 dark:hover:ring-primary-500 transition-shadow active:scale-95`}
+      className={`h-12 md:h-16 rounded-xl flex flex-col items-center justify-center gap-1 ${visual.cell} ring-offset-1 hover:ring-2 hover:ring-primary-300 dark:hover:ring-primary-500 transition-shadow active:scale-95`}
     >
-      <Icon size={16} className={visual.iconClass} />
+      <Icon size={14} className={visual.iconClass} />
       {dots}
     </button>
   );
@@ -225,7 +237,7 @@ function Legend() {
     { label: 'راتبة لم تُسجَّل', cls: 'rounded-full bg-transparent border border-gray-400 dark:border-gray-500' },
   ];
   return (
-    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3 pt-2.5 border-t border-primary-100 dark:border-primary-800/50">
+    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-4 pt-2.5 border-t border-primary-100 dark:border-primary-800/50">
       {items.map((i) => (
         <span key={i.label} className="inline-flex items-center gap-1.5 text-[0.6875rem] md:text-xs text-gray-500 dark:text-gray-400">
           <span className={`w-3.5 h-3.5 shrink-0 ${i.cls}`} />

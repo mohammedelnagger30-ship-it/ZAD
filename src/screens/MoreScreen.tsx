@@ -1,4 +1,4 @@
-import { Calendar, BarChart3, Settings as SettingsIcon, ChevronLeft, Info, Shield, Heart, Repeat, Sparkles, BookOpen, Bookmark, Search, Music2, BookText } from 'lucide-react';
+import { Calendar, BarChart3, Settings as SettingsIcon, ChevronLeft, Info, Shield, Heart, Repeat, Sparkles, BookOpen, Bookmark, Search, Music2, BookText, Moon, Star, Mic2 } from 'lucide-react';
 import { Card } from '@/components/ui';
 import type { ScreenName, NavParams } from '@/hooks/useApp';
 
@@ -8,6 +8,14 @@ interface MoreScreenProps {
 
 export function MoreScreen({ navigate }: MoreScreenProps) {
   const items = [
+    {
+      screen: 'huwaini' as ScreenName,
+      label: 'الشيخ أبو إسحاق الحويني',
+      description: 'كل دوراته العلمية وسلاسله ومحاضراته، مرتّبة بأجود الأصوات، مع تنزيل ما تريد للاستماع بلا إنترنت',
+      icon: Mic2,
+      badge: 'جديد',
+      color: 'from-amber-600 to-yellow-800',
+    },
     {
       screen: 'search' as ScreenName,
       label: 'البحث الشامل',
@@ -71,6 +79,29 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
       description: 'تنزيل كتب الحديث وإدارة المجموعات المحفوظة',
       icon: BookText,
       color: 'from-indigo-600 to-indigo-700',
+    },
+    {
+      screen: 'nawafil' as ScreenName,
+      label: 'النوافل',
+      description: 'السنن الرواتب والوتر والضحى وقيام الليل ونوافل الصلوات بأوقاتها وأفضلها',
+      icon: Moon,
+      badge: 'جديد',
+      color: 'from-violet-600 to-violet-700',
+    },
+    {
+      screen: 'sunnah' as ScreenName,
+      label: 'سنن عن النبي',
+      description: 'سنن يومية وصفات وأخلاق وتعامل، مع الأدلة',
+      icon: Sparkles,
+      color: 'from-amber-500 to-orange-600',
+    },
+    {
+      screen: 'prophet' as ScreenName,
+      label: 'النبي محمد ﷺ',
+      description: 'اسمه ونسبه وشمائل خَلْقه وأخلاقه وأسرته وسيرته ومعجزاته',
+      icon: Star,
+      badge: 'جديد',
+      color: 'from-rose-600 to-rose-700',
     },
     {
       screen: 'planner' as ScreenName,

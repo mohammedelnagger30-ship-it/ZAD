@@ -109,14 +109,14 @@ export function OptionsSheet({ open, onClose, panelRef, prefs, updatePrefs, onOr
           <label className="mushaf-field">
             <span className="mushaf-field__label">
               مسافة الكلمات
-              <span className="mushaf-field__value">{toArabicNumber(Math.round(prefs.wordSpacing * 100))}%</span>
+              <span className="mushaf-field__value">{toArabicNumber(Math.round(100 + prefs.wordSpacing * 200))}%</span>
             </span>
             <input
               className="mushaf-range"
               type="range"
-              min={0}
-              max={0.3}
-              step={0.02}
+              min={-0.06}
+              max={0.14}
+              step={0.01}
               value={prefs.wordSpacing}
               onChange={(event) => updatePrefs({ wordSpacing: Number(event.target.value) })}
             />

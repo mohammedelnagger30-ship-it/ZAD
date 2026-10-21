@@ -82,7 +82,9 @@ export function getNotificationDestination(value: unknown): NotificationDestinat
       return { screen: 'hadith', params: {} };
     case 'dhikr':
       if (value.category === 'morning' || value.category === 'evening') {
-        return { screen: 'adhkar', params: { categoryId: value.category } };
+        const params: Record<string, unknown> = { categoryId: value.category };
+        if (typeof value.dhikrId === 'string') params.dhikrId = value.dhikrId;
+        return { screen: 'adhkar', params };
       }
       if (value.category === 'istighfar') {
         return { screen: 'tasbih', params: { presetIndex: 4 } };

@@ -1,19 +1,10 @@
-import { ADHAN_SOUNDS, type AdhanSound } from '@/data/adhanSounds';
-
 /**
  * What a *reminder* notification rings — the picker behind «أصوات تنبيهات المهام
  * والحفظ»، distinct from the adhan's own voice.
  *
  * A reminder is not the adhan: it lands in the middle of work or study and only needs
- * to be noticed, so it defaults to the app's own short chime rather than an adhan that
- * would be confusing outside a prayer context. Every voice the app already owns is
- * still on offer, because a memoriser may well want «مشاري العفاسي» to be the voice
- * that tells them their hifz portion is due — and there is no reason to ship a second
- * set of files for it.
- *
- * The adhan entries are *derived* from `ADHAN_SOUNDS` rather than copied, so a voice
- * added for the adhan appears here for free and the two pickers can never disagree
- * about which voices exist.
+ * to be noticed, so it offers short message-style ringtones rather than adhan voices.
+ * The app's own chime stays the default; «بدون صوت» silences it entirely.
  */
 
 /** Sentinel: reminders ring nothing at all. */
@@ -28,8 +19,8 @@ export interface NotificationVoice {
   /** File name inside `public/audio` — and inside `res/raw` for the bundled ones. */
   file: string;
   bundled: boolean;
-  /** The adhan voice this entry reuses; null for the app chime and for «بدون صوت». */
-  adhan: AdhanSound | null;
+  /** The adhan voice this entry reuses; null for the app chime and message tones. */
+  adhan: null;
   /** Offered in the picker but never resolvable to a file. */
   silent: boolean;
 }
@@ -43,16 +34,38 @@ export const NOTIFICATION_VOICES: NotificationVoice[] = [
     adhan: null,
     silent: false,
   },
-  ...ADHAN_SOUNDS.map(
-    (sound): NotificationVoice => ({
-      id: sound.id,
-      name: `${sound.name} — صوت الأذان`,
-      file: sound.file,
-      bundled: sound.bundled,
-      adhan: sound,
-      silent: false,
-    }),
-  ),
+  {
+    id: 'msg_chime',
+    name: 'رنين — نغمة قصيرة',
+    file: 'msg_chime.wav',
+    bundled: true,
+    adhan: null,
+    silent: false,
+  },
+  {
+    id: 'msg_bell',
+    name: 'رنين — جرس',
+    file: 'msg_bell.wav',
+    bundled: true,
+    adhan: null,
+    silent: false,
+  },
+  {
+    id: 'msg_pop',
+    name: 'رنين — نقرة',
+    file: 'msg_pop.wav',
+    bundled: true,
+    adhan: null,
+    silent: false,
+  },
+  {
+    id: 'msg_soft',
+    name: 'رنين — هادئ',
+    file: 'msg_soft.wav',
+    bundled: true,
+    adhan: null,
+    silent: false,
+  },
   {
     id: NOTIFICATION_VOICE_NONE,
     name: 'بدون صوت — تنبيه صامت',
@@ -70,7 +83,7 @@ export function getNotificationVoice(id: string | undefined): NotificationVoice 
 /** Whether this voice can play right now, without a download. */
 export function isNotificationVoiceReady(
   voice: NotificationVoice,
-  downloaded: ReadonlySet<string>,
+  downloaded: ReadonlySet<string> = new Set(),
 ): boolean {
   if (voice.silent) return true;
   return voice.bundled || downloaded.has(voice.id);
@@ -79,9 +92,8 @@ export function isNotificationVoiceReady(
 /**
  * The voice the reminders should actually ring.
  *
- * An adhan voice that was picked but never downloaded — or was deleted afterwards —
- * cannot be pointed at, and a channel naming a sound that is not there rings nothing
- * at all. The fallback is the app's own chime, which always ships inside the package.
+ * All message ringtones ship inside the package, so no download check is needed;
+ * an unknown id falls back to the app's own chime.
  */
 export function usableNotificationVoice(
   requestedId: string | undefined,

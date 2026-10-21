@@ -13,7 +13,7 @@ import { deviceClockDriftMs, toDeviceClock, trustedNow, trustedNowMs } from '@/u
 import { describePortion, generateDailyTasks, getTodayTasks } from '@/utils/taskManager';
 import { getDailyQuranMessage, type DailyMessageStorage } from '@/utils/dailyQuranMessage';
 import { SUNNAH_CATEGORIES, type SunnahItem } from '@/data/sunnah';
-import { PROPHET_SECTIONS, type ProphetEntry } from '@/screens/ProphetScreen';
+import { PROPHET_SECTIONS, type ProphetEntry } from '@/data/prophetData';
 import { assembleNotificationQueue, dhikrFillerBudget } from '@/utils/notificationQueue';
 import {
   getProtectionStatus,

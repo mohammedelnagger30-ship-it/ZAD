@@ -18,26 +18,41 @@ import type { LocalNotificationSchema } from '@capacitor/local-notifications';
  *  1. prayer fallbacks — the adhan itself, armed only when the native full-screen
  *     path failed;
  *  2. today's task reminders (hifz / review);
- *  3. the hadith of the day;
+ *  3. today's content — the hadith of the day, the Qur'an message, the Sunnah, the
+ *     fact about the Prophet ﷺ;
  *  4. iqamah alerts (الإقامة) — the جماعة's minute, ahead of the purely advisory
- *     pre-prayer reminders because it is when the prayer actually starts;
+ *     pre-prayer reminders because it is when the prayer actually starts. Like the
+ *     adhan, the جماعة is armed as a native takeover first; these join the queue
+ *     only when that arming failed;
  *  5. spaced-repetition review alerts, soonest first;
  *  6. pre-prayer reminders, soonest first as generated;
- *  7. the dhikr filler.
+ *  7. the *future days'* content, farthest day last — kept for the day-after-tomorrow
+ *     that would otherwise go silent when the app stays closed, but the first thing
+ *     to give up, because everything ranked above it is about a prayer or a day the
+ *     user is actually living through;
+ *  8. the dhikr filler.
  *
- * Trimming therefore eats the filler first, then the far-future pre-prayer
- * reminders, then spaced reviews, then — only under heavier overflow — later
- * iqamah alerts, and never reaches the adhan or today's tasks. Each bucket's own
- * order is preserved, so what survives of any bucket is its soonest entries.
+ * Trimming therefore eats the filler first, then the farthest content day, then
+ * the far-future pre-prayer reminders, then spaced reviews, then — only under
+ * heavier overflow — later iqamah alerts, and never reaches the adhan or today's
+ * tasks. Each bucket's own order is preserved, so what survives of any bucket is
+ * its soonest entries.
  */
 export interface NotificationQueueParts {
   /** Armed only when `scheduleAdhanOverlay` failed; empty otherwise. */
   prayerFallbacks: LocalNotificationSchema[];
   taskReminders: LocalNotificationSchema[];
   hadithReminders: LocalNotificationSchema[];
+  /**
+   * The جماعة's own cards — the shorter daily-alert window only, and kept solely for
+   * the same failed-takeover case as {@link prayerFallbacks} (the takeover owns every
+   * iqamah otherwise, so the two always travel together).
+   */
   iqamahAlerts: LocalNotificationSchema[];
   hifzReviewReminders: LocalNotificationSchema[];
   prePrayerReminders: LocalNotificationSchema[];
+  /** The same content as {@link hadithReminders}, for the days still to come. */
+  futureContentReminders?: LocalNotificationSchema[];
   dhikrFiller: LocalNotificationSchema[];
 }
 
@@ -59,6 +74,7 @@ export function assembleNotificationQueue(
     ...parts.iqamahAlerts,
     ...parts.hifzReviewReminders,
     ...parts.prePrayerReminders,
+    ...(parts.futureContentReminders ?? []),
     ...parts.dhikrFiller,
   ].slice(0, limit);
 }
@@ -86,6 +102,8 @@ export function dhikrFillerBudget(
     iqamahAlerts: LocalNotificationSchema[];
     hifzReviewReminders: LocalNotificationSchema[];
     prePrayerReminders: LocalNotificationSchema[];
+    /** Optional: the future days' content, which assembly trims before the filler. */
+    futureContentReminders?: LocalNotificationSchema[];
   },
   max: number,
 ): number {
@@ -97,6 +115,7 @@ export function dhikrFillerBudget(
       - certainlyArmed.iqamahAlerts.length
       - certainlyArmed.hifzReviewReminders.length
       - certainlyArmed.taskReminders.length
+      - (certainlyArmed.futureContentReminders?.length ?? 0)
       - certainlyArmed.hadithReminders.length,
   );
 }

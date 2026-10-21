@@ -3,7 +3,7 @@
  * Uses jsPDF and jsPDF-AutoTable for generating professional reports
  */
 
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { db } from '@/db/database';
 import { getStreakCount } from '@/utils/taskManager';

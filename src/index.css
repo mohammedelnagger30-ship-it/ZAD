@@ -1155,16 +1155,23 @@ button.mushaf-ayah-mark:focus-visible {
 }
 
 /* Use the bundled Quran font's printed ayah-end sign so its numeral and ornament stay
-   together and scale with the page without changing the ayah's line rhythm. */
+   together and scale with the page without changing the ayah's line rhythm.
+
+   The button hugs the glyph. It used to be a fixed 1.45em circle, which left ~6px of
+   hollow ring on each side of the ornament at page size; add the space that already
+   separates one ayah from the next and every ayah began after a double-wide hole. A
+   printed mushaf leaves nothing but the ordinary word space there. Keeping the old
+   height keeps the glyph exactly where it sat — vertical-align: middle aligns the
+   box's midpoint, and the glyph stays centred in the box whatever its width. */
 button.mushaf-ayah-mark {
   position: relative;
   isolation: isolate;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: calc(var(--fs) * 1.45);
+  width: auto;
   height: calc(var(--fs) * 1.45);
-  margin: 0 0.12em;
+  margin: 0 0.06em;
   border: 0;
   border-radius: 50%;
   color: var(--frame);
@@ -2664,4 +2671,305 @@ button.mushaf-ayah-mark:focus-visible {
 /* Smooth transitions */
 .transition-smooth {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ===========================================================================
+   صفحة الشيخ — a hall, not a list
+   ---------------------------------------------------------------------------
+   The catalogue is eight hundred recordings by one man, and a page that opened
+   with a plain stack of rows would read like a database. These rules give the
+   page a frontispiece — a patterned panel that names the الشيخ the way a book
+   does on its cover — and turn each course and series into a spine-wrapped
+   card whose cover is drawn from a fixed palette, so no two collections look
+   alike and none of them need an image file to say so.
+
+   The palette below is derived from the same raw triplets the theme uses, so a
+   reader who picks the green or the plum scheme gets covers tinted to match.
+   Everything is declared on :root because the raw tokens (--primary-600 and
+   friends) hold bare "r g b" triples and are only meaningful inside rgb().
+   =========================================================================== */
+
+/* The frontispiece. Layered gradients draw the panel; a tiled SVG renders the
+   repeating star-and-cross lattice a printed cover would carry. Both are pure
+   CSS, so the page opens instantly and works with no network at all.
+
+   Every colour here is written as channels plus an alpha — `rgb(var(--x) / .5)`
+   — rather than with color-mix. The Capacitor WebView on the reference tablet is
+   Chrome 101, which has no color-mix at all and drops such a declaration whole;
+   the channel form it does understand, and it follows the palette switcher just
+   the same. */
+.scholar-hero {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid rgb(var(--accent-600) / 0.32);
+  border-radius: 2rem;
+  background:
+    radial-gradient(120% 90% at 50% -20%, rgb(var(--accent-500) / 0.15), transparent 62%),
+    linear-gradient(160deg, rgb(var(--accent-100) / 0.45) 0%, rgb(var(--surface-light)) 58%);
+  box-shadow:
+    0 1px 0 rgb(var(--accent-600) / 0.14) inset,
+    0 18px 40px -24px rgb(15 23 42 / 0.35);
+}
+
+.scholar-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Cg fill='none' stroke='%23a16207' stroke-width='1' stroke-opacity='0.28'%3E%3Cpath d='M32 2 L62 32 L32 62 L2 32 Z'/%3E%3Cpath d='M32 20 L44 32 L32 44 L20 32 Z'/%3E%3Ccircle cx='32' cy='32' r='3'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 64px 64px;
+  -webkit-mask-image: radial-gradient(130% 110% at 50% 0%, #000 0%, transparent 72%);
+  mask-image: radial-gradient(130% 110% at 50% 0%, #000 0%, transparent 72%);
+}
+
+.dark .scholar-hero {
+  background:
+    radial-gradient(120% 90% at 50% -20%, rgb(var(--accent-500) / 0.2), transparent 62%),
+    linear-gradient(160deg, rgb(var(--primary-800) / 0.75) 0%, rgb(var(--surface-dark)) 62%);
+  box-shadow:
+    0 1px 0 rgb(var(--accent-500) / 0.18) inset,
+    0 18px 40px -24px rgb(0 0 0 / 0.7);
+}
+
+/* The medallion that crowns the panel: a rounded frame with a thin double ring
+   around the icon, standing in for a calligraphed roundel. */
+.scholar-hero__medallion {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 5rem;
+  height: 5rem;
+  margin-inline: auto;
+  border-radius: 1.6rem;
+  color: #fff;
+  background: linear-gradient(150deg, rgb(var(--accent-500)), rgb(var(--primary-800)));
+  box-shadow: 0 10px 24px -10px rgb(var(--primary-800) / 0.7);
+}
+
+.scholar-hero__medallion::after {
+  content: '';
+  position: absolute;
+  inset: -0.4rem;
+  border: 1px solid rgb(var(--accent-500) / 0.45);
+  border-radius: 1.95rem;
+}
+
+/* The name, and the small caps line beneath it. Display face, generous size,
+   and a short rule between the two so the panel reads as a title page. */
+.scholar-hero__name {
+  font-family: var(--font-display);
+  font-size: clamp(1.7rem, 5.2vw, 2.4rem);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.scholar-hero__rule {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  color: rgb(var(--accent-700));
+}
+
+.scholar-hero__rule::before,
+.scholar-hero__rule::after {
+  content: '';
+  height: 1px;
+  width: clamp(1.5rem, 12vw, 4rem);
+  background: linear-gradient(to var(--dir, left), transparent, currentColor);
+}
+
+.scholar-hero__rule::after {
+  --dir: right;
+}
+
+/* One figure in the hero's row of counters. Each sits in its own soft tile so
+   the numbers read as a single instrument panel rather than loose text. */
+.scholar-stat {
+  border: 1px solid rgb(var(--accent-500) / 0.24);
+  border-radius: 1.1rem;
+  background: rgb(var(--surface-light) / 0.7);
+  padding: 0.65rem 0.5rem;
+  text-align: center;
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+
+.dark .scholar-stat {
+  background: rgb(var(--surface-dark) / 0.7);
+}
+
+.scholar-stat:hover {
+  transform: translateY(-2px);
+  border-color: rgb(var(--accent-500) / 0.5);
+}
+
+.scholar-stat__value {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: rgb(var(--primary-800));
+}
+
+.dark .scholar-stat__value {
+  color: rgb(var(--accent-300));
+}
+
+/* ---------------------------------------------------------------------------
+   The dashboard's four counters
+   ---------------------------------------------------------------------------
+   These sit below the hero, on the progress section, and they carry their own
+   colour rather than the page's: each one is filled with its accent gradient,
+   which is what makes the row read as a panel of instruments instead of four
+   more bordered cards. Text is white throughout, and the tint behind it is an
+   inset wash so the fill never competes with the figure it is carrying.
+
+   Written with the channel-alpha form — `rgb(var(--x) / .4)` — for the same
+   reason as the hero above: the reference tablet's WebView is Chrome 101, which
+   has no color-mix at all and would drop such a declaration whole.
+   --------------------------------------------------------------------------- */
+
+.huwaini-stat {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.25rem;
+  padding: 0.9rem 0.75rem;
+  color: #fff;
+  text-align: center;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.25),
+    0 10px 24px -16px rgb(15 23 42 / 0.55);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.huwaini-stat:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.3),
+    0 16px 30px -16px rgb(15 23 42 / 0.6);
+}
+
+/* A soft highlight in the corner, so the fill has a light source. */
+.huwaini-stat__glow {
+  position: absolute;
+  inset-block-start: -2rem;
+  inset-inline-end: -2rem;
+  width: 6rem;
+  height: 6rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.16);
+  pointer-events: none;
+}
+
+.huwaini-stat__icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  margin-inline: auto;
+  margin-block-end: 0.5rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.2);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.25);
+}
+
+.huwaini-stat__value {
+  position: relative;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.huwaini-stat__unit {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+.huwaini-stat__label {
+  position: relative;
+  margin-block-start: 0.15rem;
+  font-size: 0.6875rem;
+  opacity: 0.9;
+}
+
+/* ---------------------------------------------------------------------------
+   A course or series, wrapped like a spine
+   ---------------------------------------------------------------------------
+   The cover is a fixed gradient chosen from the collection's own id, so the
+   same course keeps the same colour every visit and across devices. The tile
+   sits in a padded well with an inset highlight, which is what gives it the
+   build of a bound volume rather than a flat swatch. */
+
+.collection-card {
+  overflow: hidden;
+  border-radius: 1.5rem;
+  border: 1px solid rgb(var(--accent-600) / 0.22);
+  background: linear-gradient(180deg, rgb(var(--accent-100) / 0.35) 0%, rgb(var(--surface-light)) 42%);
+  box-shadow: 0 12px 30px -22px rgb(15 23 42 / 0.4);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.collection-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 38px -22px rgb(15 23 42 / 0.5);
+}
+
+.dark .collection-card {
+  background: linear-gradient(180deg, rgb(var(--primary-800) / 0.55) 0%, rgb(var(--surface-dark)) 46%);
+  box-shadow: 0 12px 30px -22px rgb(0 0 0 / 0.75);
+}
+
+.collection-card__cover {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 3.4rem;
+  height: 3.4rem;
+  flex: 0 0 auto;
+  border-radius: 1.05rem;
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.35),
+    0 8px 18px -10px rgb(15 23 42 / 0.6);
+}
+
+/* A faint medial line across the cover, the way a spine carries a title panel. */
+.collection-card__cover::after {
+  content: '';
+  position: absolute;
+  inset-inline: 22%;
+  top: 50%;
+  height: 1px;
+  background: rgb(255 255 255 / 0.4);
+}
+
+/* The cover palette. Six pairings, picked by hashing the id, all built from the
+   theme's own tokens so they follow the colour the reader chose. */
+.collection-cover--a { background: linear-gradient(150deg, rgb(var(--primary-600)), rgb(var(--primary-800))); }
+.collection-cover--b { background: linear-gradient(150deg, rgb(var(--accent-500)), rgb(var(--primary-700))); }
+.collection-cover--c { background: linear-gradient(150deg, rgb(var(--primary-700)), rgb(var(--accent-700))); }
+.collection-cover--d { background: linear-gradient(150deg, rgb(var(--primary-500)), rgb(var(--primary-700))); }
+.collection-cover--e { background: linear-gradient(150deg, rgb(var(--accent-600)), rgb(var(--primary-800))); }
+.collection-cover--f { background: linear-gradient(150deg, rgb(var(--primary-800)), rgb(var(--accent-600))); }
+
+/* The thin progress rule under a collection's head. */
+.collection-card__progress {
+  height: 0.3rem;
+  border-radius: 999px;
+  background: rgb(var(--accent-500) / 0.18);
+  overflow: hidden;
+}
+
+.collection-card__progress > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(to left, rgb(var(--primary-600)), rgb(var(--accent-500)));
+  transition: width 0.5s ease;
 }

@@ -3,6 +3,7 @@ import { Directory, Filesystem } from '@capacitor/filesystem';
 import {
   ADHAN_SOUNDS,
   adhanDownloadUrl,
+  DEFAULT_ADHAN_SOUND_ID,
   getAdhanSound,
   type AdhanSound,
 } from '@/data/adhanSounds';
@@ -238,5 +239,5 @@ export function usableAdhanSound(
   downloaded: ReadonlySet<string> = downloadedIds,
 ): AdhanSound {
   const sound = getAdhanSound(requestedId);
-  return sound.bundled || downloaded.has(sound.id) ? sound : getAdhanSound('makkah_masjid');
+  return sound.bundled || downloaded.has(sound.id) ? sound : getAdhanSound(DEFAULT_ADHAN_SOUND_ID);
 }

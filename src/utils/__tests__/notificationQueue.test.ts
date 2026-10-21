@@ -136,6 +136,72 @@ describe('assembleNotificationQueue', () => {
     );
     expect(ids(scheduled)).toEqual([2001, 3001]);
   });
+
+  /**
+   * The far days' content is the *only* new bucket that is meant to be given up: it
+   * is about a day the user is not living through yet, while everything it sits
+   * behind is about a prayer or about today. A queue that fills therefore spends it
+   * first — and the day it drops is always the farthest one, so what survives is
+   * always the nearest.
+   */
+  it('drops the future days before it drops a prayer, and the farthest day first', () => {
+    const taskReminders = [n(2001)];
+    const hadithReminders = [n(3001)]; // today's content
+    const futureContentReminders = Array.from({ length: 6 }, (_, i) => n(8000 + i));
+    const prePrayerReminders = Array.from({ length: 5 }, (_, i) => n(4000 + i));
+    const dhikrFiller = Array.from({ length: 5 }, (_, i) => n(5000 + i));
+
+    const scheduled = assembleNotificationQueue(
+      {
+        ...emptyParts,
+        taskReminders,
+        hadithReminders,
+        futureContentReminders,
+        prePrayerReminders,
+        dhikrFiller,
+      },
+      10,
+    );
+
+    // 1 task + today's content + all 5 reminders, then the three *nearest* far days:
+    // the filler never gets a look in, and the day that was dropped is day six.
+    expect(ids(scheduled)).toEqual([
+      2001,
+      3001,
+      ...ids(prePrayerReminders),
+      8000,
+      8001,
+      8002,
+    ]);
+  });
+
+  it('loses the far days long before it loses a single prayer reminder', () => {
+    const taskReminders = [n(2001)];
+    const hadithReminders = [n(3001)];
+    const futureContentReminders = Array.from({ length: 10 }, (_, i) => n(8000 + i));
+    const prePrayerReminders = Array.from({ length: 40 }, (_, i) => n(4000 + i));
+    const dhikrFiller = Array.from({ length: 5 }, (_, i) => n(5000 + i));
+
+    const scheduled = assembleNotificationQueue(
+      {
+        ...emptyParts,
+        taskReminders,
+        hadithReminders,
+        futureContentReminders,
+        prePrayerReminders,
+        dhikrFiller,
+      },
+      50,
+    );
+
+    expect(scheduled).toHaveLength(50);
+    // Every one of the 40 reminders the reader was promised survives…
+    expect(ids(scheduled)).toEqual(expect.arrayContaining(ids(prePrayerReminders)));
+    // …and the far end of the week is what pays for the ceiling, filler first.
+    expect(ids(scheduled)).toEqual(expect.arrayContaining(ids(futureContentReminders.slice(0, 8))));
+    expect(ids(scheduled)).not.toEqual(expect.arrayContaining(ids(futureContentReminders.slice(8))));
+    expect(ids(scheduled)).not.toEqual(expect.arrayContaining(ids(dhikrFiller)));
+  });
 });
 
 describe('dhikrFillerBudget', () => {
@@ -156,6 +222,17 @@ describe('dhikrFillerBudget', () => {
 
   it('hands the whole ceiling to the filler when nothing else is armed', () => {
     expect(dhikrFillerBudget(certainlyArmed(), 50)).toBe(50);
+  });
+
+  it('counts the future days\u2019 content the filler is ranked beside', () => {
+    // The far days sit just ahead of the filler in the queue, so they are spent
+    // before it is: funding the filler for days the assembly would only trim is
+    // work thrown away, exactly like the certainly-armed buckets above.
+    const budget = dhikrFillerBudget(
+      certainlyArmed({ futureContentReminders: many(8000, 20), prePrayerReminders: many(4000, 10) }),
+      50,
+    );
+    expect(budget).toBe(20);
   });
 
   /**
