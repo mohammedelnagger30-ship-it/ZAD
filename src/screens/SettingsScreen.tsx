@@ -94,7 +94,7 @@ export function SettingsScreen({
   }, [requestedSection]);
 
   return (
-    <div className="space-y-6 md:space-y-0 md:grid md:grid-cols-2 md:items-start md:gap-x-6 md:gap-y-8 pb-8" dir="rtl">
+    <div className="space-y-6 pb-8" dir="rtl">
       {/* Top Main Header */}
       <div className="flex items-center justify-between border-b border-primary-100 pb-4 dark:border-primary-800">
         <div>
@@ -108,29 +108,39 @@ export function SettingsScreen({
         </div>
       </div>
 
-      <AccountSection
-        accountEmail={accountEmail}
-        syncState={syncState}
-        onSyncNow={onSyncNow}
-        onSignOut={onSignOut}
-        onOpenAdmin={onOpenAdmin}
-        onCreateAccount={onCreateAccount}
-      />
-      <AppUpdatesSection />
-      <ThemeSection
-        themeMode={themeMode}
-        onChangeTheme={onChangeTheme}
-        colorPalette={colorPalette}
-        onChangeColorPalette={onChangeColorPalette}
-      />
-      <UISettingsSection settings={settings} onSaveSettings={onSaveSettings} />
-      <NotificationsSection settings={settings} onSaveSettings={onSaveSettings} />
-      <PrayerTimesSection settings={settings} onSaveSettings={onSaveSettings} />
-      <HijriSection settings={settings} onSaveSettings={onSaveSettings} />
-      <FontSection settings={settings} onSaveSettings={onSaveSettings} />
-      <AutoBackupSection />
-      <BackupSection />
-      <AboutSection />
+      {/* Two balanced columns on tablets/desktop. Flex, not a grid: section heights differ
+          wildly (notifications vs prayer times), and grid rows would stretch a short section's
+          cell to its tall neighbour, leaving ~1000px of empty card. Each column stacks its own
+          sections back-to-back; on phones they collapse to the original single column. */}
+      <div className="md:flex md:items-start md:gap-6">
+        <div className="space-y-6 md:flex-1 md:min-w-0">
+          <AccountSection
+            accountEmail={accountEmail}
+            syncState={syncState}
+            onSyncNow={onSyncNow}
+            onSignOut={onSignOut}
+            onOpenAdmin={onOpenAdmin}
+            onCreateAccount={onCreateAccount}
+          />
+          <AppUpdatesSection />
+          <ThemeSection
+            themeMode={themeMode}
+            onChangeTheme={onChangeTheme}
+            colorPalette={colorPalette}
+            onChangeColorPalette={onChangeColorPalette}
+          />
+          <PrayerTimesSection settings={settings} onSaveSettings={onSaveSettings} />
+          <FontSection settings={settings} onSaveSettings={onSaveSettings} />
+          <BackupSection />
+          <AboutSection />
+        </div>
+        <div className="space-y-6 md:flex-1 md:min-w-0">
+          <NotificationsSection settings={settings} onSaveSettings={onSaveSettings} />
+          <UISettingsSection settings={settings} onSaveSettings={onSaveSettings} />
+          <HijriSection settings={settings} onSaveSettings={onSaveSettings} />
+          <AutoBackupSection />
+        </div>
+      </div>
     </div>
   );
 }

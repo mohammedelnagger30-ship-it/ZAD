@@ -53,7 +53,7 @@ export function ThemeSection({ themeMode, onChangeTheme, colorPalette, onChangeC
               <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">نغمة ألوان الواجهة</p>
               <span className="text-[10px] text-gray-400 dark:text-gray-500 mr-auto">{COLOR_PALETTES.length} سمة</span>
             </div>
-            <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6">
+            <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-4 lg:grid-cols-6">
               {COLOR_PALETTES.map((palette) => {
                 const selected = colorPalette === palette.id;
                 return (

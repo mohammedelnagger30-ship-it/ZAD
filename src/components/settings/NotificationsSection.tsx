@@ -521,333 +521,344 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
             </div>
           )}
 
-          <ToggleRow
-            label="أصوات تنبيهات المهام والحفظ"
-            icon={<Volume2 size={18} className="text-primary-600 dark:text-gold-400" />}
-            value={settings.notificationSound}
-            onChange={(v) => onSaveSettings({ notificationSound: v })}
-          />
+          {/* Two columns once the card is wide enough (2xl+): sounds on the right, reminders
+              and daily times on the left. Stacked into one column this card measured ~1212px
+              tall - a screen of scrolling for two independent groups of settings. Below 2xl
+              the card sits in a narrower page column, and two sub-columns here would starve
+              the selects, time inputs and buttons of width. */}
+          <div className="2xl:flex 2xl:items-start 2xl:gap-6">
+            <div className="space-y-4 2xl:flex-1 2xl:min-w-0">
+              <ToggleRow
+                label="أصوات تنبيهات المهام والحفظ"
+                icon={<Volume2 size={18} className="text-primary-600 dark:text-gold-400" />}
+                value={settings.notificationSound}
+                onChange={(v) => onSaveSettings({ notificationSound: v })}
+              />
 
-          {settings.notificationSound && (
-            <div className="mt-3 space-y-3 rounded-2xl border border-primary-100 bg-primary-50/50 p-3.5 dark:border-primary-800/80 dark:bg-primary-900/30">
-              <div>
-                <label
-                  htmlFor="notification-voice"
-                  className="text-xs font-semibold text-primary-900 dark:text-primary-100 mb-1.5 block"
-                >
-                  صوت التنبيه
-                </label>
-                <select
-                  id="notification-voice"
-                  value={selectedVoice.id}
-                  onChange={(e) => onSaveSettings({ notificationVoiceId: e.target.value })}
-                  className="w-full md:max-w-md bg-white dark:bg-primary-900 border border-primary-200 dark:border-primary-700 rounded-xl py-2.5 px-3 text-sm text-primary-900 dark:text-primary-100 font-semibold focus:outline-hidden focus:ring-2 focus:ring-primary-500"
-                >
-                  {NOTIFICATION_VOICES.map((voice) => (
-                    <option key={voice.id} value={voice.id}>
-                      {voice.name}
-                      {isNotificationVoiceReady(voice, downloadedAdhanVoices) ? '' : ' — تنزيل'}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <p className="text-[0.625rem] md:text-xs text-primary-700 dark:text-primary-300">
-                يُطبَّق على تذكيرات المراجعة والحفظ وحديث اليوم والأذكار. أما صوت الأذان نفسه فله
-                اختياره الخاص أدناه.
-              </p>
-
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => void playVoicePreview()}
-                disabled={selectedVoice.silent}
-                className="font-semibold text-xs"
-              >
-                {previewingVoiceId === selectedVoice.id ? <Square size={15} /> : <Play size={15} />}
-                {previewingVoiceId === selectedVoice.id ? 'إيقاف الصوت' : 'استماع للصوت'}
-              </Button>
-            </div>
-          )}
-
-          <div className="border-t border-primary-100 dark:border-primary-800/60 pt-3">
-            <ToggleRow
-              label="تفعيل صوت الأذان عند وقت الصلاة"
-              icon={<Volume2 size={18} className="text-primary-600 dark:text-gold-400" />}
-              value={settings.adhanSound}
-              onChange={(v) => onSaveSettings({ adhanSound: v })}
-            />
-
-            {settings.adhanSound && (
-              <div className="mt-3 space-y-3 rounded-2xl border border-primary-100 bg-primary-50/50 p-3.5 dark:border-primary-800/80 dark:bg-primary-900/30">
-                <div>
-                  <label htmlFor="adhan-sound" className="text-xs font-semibold text-primary-900 dark:text-primary-100 mb-1.5 block">
-                    صوت وشكل الأذان
-                  </label>
-                  <select
-                    id="adhan-sound"
-                    value={selectedAdhan.id}
-                    onChange={(e) => onSaveSettings({ adhanVoiceId: e.target.value })}
-                    className="w-full md:max-w-md bg-white dark:bg-primary-900 border border-primary-200 dark:border-primary-700 rounded-xl py-2.5 px-3 text-sm text-primary-900 dark:text-primary-100 font-semibold focus:outline-hidden focus:ring-2 focus:ring-primary-500"
-                  >
-                    {ADHAN_SOUNDS.map((sound) => (
-                      <option key={sound.id} value={sound.id}>
-                        {sound.name}
-                        {isAdhanSoundReady(sound, downloadedAdhanVoices) ? '' : ' — تنزيل'}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {!selectedAdhanReady && (
-                  <div className="space-y-2 rounded-2xl border border-primary-100 bg-white/70 p-3 dark:border-primary-800/80 dark:bg-primary-900/20">
-                    <div className="flex items-center gap-2">
-                      <span className="flex-1 text-[0.6875rem] md:text-xs font-semibold text-primary-900 dark:text-primary-100">
-                        {selectedAdhan.name}
-                        {selectedAdhan.remote ? ` — ${adhanSizeLabel(selectedAdhan.remote.sizeBytes)}` : ''}
-                      </span>
-                      {adhanDownloadingId === selectedAdhan.id ? (
-                        <button
-                          type="button"
-                          onClick={cancelAdhanDownload}
-                          className="rounded-lg bg-amber-100 px-2.5 py-1 text-[0.6875rem] md:text-xs font-bold text-amber-800 dark:bg-amber-900/50 dark:text-amber-200"
-                        >
-                          {adhanProgress && adhanProgress.total > 0
-                            ? `${Math.floor((adhanProgress.received / adhanProgress.total) * 100)}٪ — إيقاف`
-                            : 'جارٍ التنزيل — إيقاف'}
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => void downloadAdhan(selectedAdhan)}
-                          className="flex items-center gap-1 rounded-lg bg-primary-600 px-2.5 py-1 text-[0.6875rem] md:text-xs font-bold text-white hover:bg-primary-700"
-                        >
-                          <Download size={12} /> تنزيل
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-[0.625rem] md:text-xs text-primary-700 dark:text-primary-300">
-                      يُنزَّل مرة واحدة فيصير صالحًا للأذان وصفحة الصلاة والإشعار بلا إنترنت — وحتى يكتمل التنزيل يواصل إشعار الصلاة بصوت المسجد الحرام.
-                    </p>
-                  </div>
-                )}
-
-                {selectedAdhanReady && !selectedAdhan.bundled && (
-                  <div className="flex items-center gap-2 rounded-2xl border border-primary-100 bg-white/70 px-3 py-2.5 dark:border-primary-800/80 dark:bg-primary-900/20">
-                    <span className="flex-1 text-[0.6875rem] md:text-xs font-semibold text-primary-900 dark:text-primary-100">
-                      {selectedAdhan.name} — مُنزَّل على الجهاز
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => void removeAdhan(selectedAdhan)}
-                      className="flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1 text-[0.6875rem] md:text-xs font-bold text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/40"
+              {settings.notificationSound && (
+                <div className="mt-3 space-y-3 rounded-2xl border border-primary-100 bg-primary-50/50 p-3.5 dark:border-primary-800/80 dark:bg-primary-900/30">
+                  <div>
+                    <label
+                      htmlFor="notification-voice"
+                      className="text-xs font-semibold text-primary-900 dark:text-primary-100 mb-1.5 block"
                     >
-                      <Trash2 size={12} /> حذف
-                    </button>
+                      صوت التنبيه
+                    </label>
+                    <select
+                      id="notification-voice"
+                      value={selectedVoice.id}
+                      onChange={(e) => onSaveSettings({ notificationVoiceId: e.target.value })}
+                      className="w-full md:max-w-md bg-white dark:bg-primary-900 border border-primary-200 dark:border-primary-700 rounded-xl py-2.5 px-3 text-sm text-primary-900 dark:text-primary-100 font-semibold focus:outline-hidden focus:ring-2 focus:ring-primary-500"
+                    >
+                      {NOTIFICATION_VOICES.map((voice) => (
+                        <option key={voice.id} value={voice.id}>
+                          {voice.name}
+                          {isNotificationVoiceReady(voice, downloadedAdhanVoices) ? '' : ' — تنزيل'}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                )}
 
-                <div className="grid grid-cols-2 gap-2">
-                  {/* Play audio preview */}
-                  <Button variant="secondary" size="sm" onClick={() => void playAdhanPreview()} className="font-semibold text-xs">
-                    {previewingAdhanId === settings.adhanVoiceId ? <Square size={15} /> : <Play size={15} />}
-                    {previewingAdhanId === settings.adhanVoiceId ? 'إيقاف الصوت' : 'استماع للصوت'}
-                  </Button>
+                  <p className="text-[0.625rem] md:text-xs text-primary-700 dark:text-primary-300">
+                    يُطبَّق على تذكيرات المراجعة والحفظ وحديث اليوم والأذكار. أما صوت الأذان نفسه فله
+                    اختياره الخاص أدناه.
+                  </p>
 
-                  {/* Trigger Fullscreen Azan Overlay Preview */}
                   <Button
-                    variant="primary"
+                    variant="secondary"
                     size="sm"
-                    onClick={triggerAzanOverlayPreview}
-                    className="font-bold text-xs bg-linear-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950"
+                    onClick={() => void playVoicePreview()}
+                    disabled={selectedVoice.silent}
+                    className="font-semibold text-xs"
                   >
-                    <Sparkles size={15} /> معاينة صفحة الأذان
+                    {previewingVoiceId === selectedVoice.id ? <Square size={15} /> : <Play size={15} />}
+                    {previewingVoiceId === selectedVoice.id ? 'إيقاف الصوت' : 'استماع للصوت'}
                   </Button>
                 </div>
+              )}
 
-                {/*
-                  The self test: the one button that answers «هل الأذان شغّال على ده
-                  الموبايل؟» without waiting for the next prayer. It runs the real chain —
-                  the platform's alarm-clock registration, the receiver, the prayer
-                  channel's sound, the takeover, the page — so a silent phone can be
-                  diagnosed in ten seconds by whoever is holding it.
-                */}
-                {Capacitor.isNativePlatform() && (
-                  <div className="space-y-2 rounded-2xl border border-primary-100 bg-primary-50/50 p-3.5 dark:border-primary-800/80 dark:bg-primary-900/30">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => void runAdhanSelfTest()}
-                      disabled={testing}
-                      className="w-full font-semibold text-xs"
-                    >
-                      <BellRing size={15} /> {testing ? 'جارٍ إرسال الاختبار…' : 'اختبار الأذان على هذا الهاتف'}
-                    </Button>
-                    <p className="text-[0.625rem] md:text-xs text-primary-700 dark:text-primary-300">
-                      يرسل تنبيهًا حقيقيًا بعد عشر ثوانٍ عبر نفس مسار الأذان تمامًا: نفس المنبه،
-                      نفس القناة، نفس فتح الصفحة. إن لم يرن الصوت، فالمشكلة من إعدادات الهاتف
-                      وستجدها مذكورة في التحذيرات أعلاه.
-                    </p>
-                    {testStatus && (
-                      <p role="status" className="text-xs font-semibold text-primary-700 dark:text-gold-300">
-                        {testStatus}
+              <div className="border-t border-primary-100 dark:border-primary-800/60 pt-3">
+                <ToggleRow
+                  label="تفعيل صوت الأذان عند وقت الصلاة"
+                  icon={<Volume2 size={18} className="text-primary-600 dark:text-gold-400" />}
+                  value={settings.adhanSound}
+                  onChange={(v) => onSaveSettings({ adhanSound: v })}
+                />
+
+                {settings.adhanSound && (
+                  <div className="mt-3 space-y-3 rounded-2xl border border-primary-100 bg-primary-50/50 p-3.5 dark:border-primary-800/80 dark:bg-primary-900/30">
+                    <div>
+                      <label htmlFor="adhan-sound" className="text-xs font-semibold text-primary-900 dark:text-primary-100 mb-1.5 block">
+                        صوت وشكل الأذان
+                      </label>
+                      <select
+                        id="adhan-sound"
+                        value={selectedAdhan.id}
+                        onChange={(e) => onSaveSettings({ adhanVoiceId: e.target.value })}
+                        className="w-full md:max-w-md bg-white dark:bg-primary-900 border border-primary-200 dark:border-primary-700 rounded-xl py-2.5 px-3 text-sm text-primary-900 dark:text-primary-100 font-semibold focus:outline-hidden focus:ring-2 focus:ring-primary-500"
+                      >
+                        {ADHAN_SOUNDS.map((sound) => (
+                          <option key={sound.id} value={sound.id}>
+                            {sound.name}
+                            {isAdhanSoundReady(sound, downloadedAdhanVoices) ? '' : ' — تنزيل'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {!selectedAdhanReady && (
+                      <div className="space-y-2 rounded-2xl border border-primary-100 bg-white/70 p-3 dark:border-primary-800/80 dark:bg-primary-900/20">
+                        <div className="flex items-center gap-2">
+                          <span className="flex-1 text-[0.6875rem] md:text-xs font-semibold text-primary-900 dark:text-primary-100">
+                            {selectedAdhan.name}
+                            {selectedAdhan.remote ? ` — ${adhanSizeLabel(selectedAdhan.remote.sizeBytes)}` : ''}
+                          </span>
+                          {adhanDownloadingId === selectedAdhan.id ? (
+                            <button
+                              type="button"
+                              onClick={cancelAdhanDownload}
+                              className="rounded-lg bg-amber-100 px-2.5 py-1 text-[0.6875rem] md:text-xs font-bold text-amber-800 dark:bg-amber-900/50 dark:text-amber-200"
+                            >
+                              {adhanProgress && adhanProgress.total > 0
+                                ? `${Math.floor((adhanProgress.received / adhanProgress.total) * 100)}٪ — إيقاف`
+                                : 'جارٍ التنزيل — إيقاف'}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => void downloadAdhan(selectedAdhan)}
+                              className="flex items-center gap-1 rounded-lg bg-primary-600 px-2.5 py-1 text-[0.6875rem] md:text-xs font-bold text-white hover:bg-primary-700"
+                            >
+                              <Download size={12} /> تنزيل
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-[0.625rem] md:text-xs text-primary-700 dark:text-primary-300">
+                          يُنزَّل مرة واحدة فيصير صالحًا للأذان وصفحة الصلاة والإشعار بلا إنترنت — وحتى يكتمل التنزيل يواصل إشعار الصلاة بصوت المسجد الحرام.
+                        </p>
+                      </div>
+                    )}
+
+                    {selectedAdhanReady && !selectedAdhan.bundled && (
+                      <div className="flex items-center gap-2 rounded-2xl border border-primary-100 bg-white/70 px-3 py-2.5 dark:border-primary-800/80 dark:bg-primary-900/20">
+                        <span className="flex-1 text-[0.6875rem] md:text-xs font-semibold text-primary-900 dark:text-primary-100">
+                          {selectedAdhan.name} — مُنزَّل على الجهاز
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void removeAdhan(selectedAdhan)}
+                          className="flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1 text-[0.6875rem] md:text-xs font-bold text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/40"
+                        >
+                          <Trash2 size={12} /> حذف
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-2">
+                      {/* Play audio preview */}
+                      <Button variant="secondary" size="sm" onClick={() => void playAdhanPreview()} className="font-semibold text-xs">
+                        {previewingAdhanId === settings.adhanVoiceId ? <Square size={15} /> : <Play size={15} />}
+                        {previewingAdhanId === settings.adhanVoiceId ? 'إيقاف الصوت' : 'استماع للصوت'}
+                      </Button>
+
+                      {/* Trigger Fullscreen Azan Overlay Preview */}
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={triggerAzanOverlayPreview}
+                        className="font-bold text-xs bg-linear-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950"
+                      >
+                        <Sparkles size={15} /> معاينة صفحة الأذان
+                      </Button>
+                    </div>
+
+                    {/*
+                      The self test: the one button that answers «هل الأذان شغّال على ده
+                      الموبايل؟» without waiting for the next prayer. It runs the real chain —
+                      the platform's alarm-clock registration, the receiver, the prayer
+                      channel's sound, the takeover, the page — so a silent phone can be
+                      diagnosed in ten seconds by whoever is holding it.
+                    */}
+                    {Capacitor.isNativePlatform() && (
+                      <div className="space-y-2 rounded-2xl border border-primary-100 bg-primary-50/50 p-3.5 dark:border-primary-800/80 dark:bg-primary-900/30">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => void runAdhanSelfTest()}
+                          disabled={testing}
+                          className="w-full font-semibold text-xs"
+                        >
+                          <BellRing size={15} /> {testing ? 'جارٍ إرسال الاختبار…' : 'اختبار الأذان على هذا الهاتف'}
+                        </Button>
+                        <p className="text-[0.625rem] md:text-xs text-primary-700 dark:text-primary-300">
+                          يرسل تنبيهًا حقيقيًا بعد عشر ثوانٍ عبر نفس مسار الأذان تمامًا: نفس المنبه،
+                          نفس القناة، نفس فتح الصفحة. إن لم يرن الصوت، فالمشكلة من إعدادات الهاتف
+                          وستجدها مذكورة في التحذيرات أعلاه.
+                        </p>
+                        {testStatus && (
+                          <p role="status" className="text-xs font-semibold text-primary-700 dark:text-gold-300">
+                            {testStatus}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+
+                    {adhanNotice && (
+                      <p role="status" className="text-xs font-semibold text-primary-700 dark:text-gold-300 text-center">
+                        {adhanNotice}
+                      </p>
+                    )}
+
+                    {adhanPreviewStatus && (
+                      <p role="status" className="text-xs font-semibold text-primary-700 dark:text-gold-300 text-center">
+                        {adhanPreviewStatus}
                       </p>
                     )}
                   </div>
                 )}
-
-
-                {adhanNotice && (
-                  <p role="status" className="text-xs font-semibold text-primary-700 dark:text-gold-300 text-center">
-                    {adhanNotice}
-                  </p>
-                )}
-
-                {adhanPreviewStatus && (
-                  <p role="status" className="text-xs font-semibold text-primary-700 dark:text-gold-300 text-center">
-                    {adhanPreviewStatus}
-                  </p>
-                )}
               </div>
-            )}
-          </div>
+            </div>
 
-          {/* Random Dhikr Notifications */}
-          <div className="border-t border-primary-100 dark:border-primary-800/60 pt-3">
-            <ToggleRow
-              label="تذكير عشوائي بالأذكار"
-              icon={<Bell size={18} className="text-primary-600 dark:text-gold-400" />}
-              value={settings.randomDhikrEnabled}
-              onChange={(v) => void handleRandomDhikrToggle(v)}
-            />
-
-            {dhikrPermissionStatus && (
-              <p role="status" className="mt-2 text-xs text-primary-600 dark:text-gold-400 font-semibold">
-                {dhikrPermissionStatus}
-              </p>
-            )}
-
-            {settings.randomDhikrEnabled && (
-              <div className="mt-3 space-y-3 rounded-2xl border border-primary-100 bg-primary-50/50 p-3.5 dark:border-primary-800/80 dark:bg-primary-900/30">
-                <label htmlFor="dhikr-reminder-category" className="block text-xs font-semibold text-primary-900 dark:text-primary-100">
-                  نوع رسائل التذكير
-                  <select
-                    id="dhikr-reminder-category"
-                    value={settings.randomDhikrCategory ?? 'varied'}
-                    onChange={(e) =>
-                      onSaveSettings({
-                        randomDhikrCategory: e.target.value as Settings['randomDhikrCategory'],
-                      })
-                    }
-                    className="mt-1.5 w-full rounded-xl border border-primary-200 bg-white px-3 py-2 text-sm text-primary-900 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100 font-semibold"
-                  >
-                    <option value="varied">متنوع حسب الوقت</option>
-                    <option value="morning">أذكار الصباح</option>
-                    <option value="evening">أذكار المساء</option>
-                    <option value="istighfar">الاستغفار</option>
-                  </select>
-                </label>
-
-                <TimeOptionButton
-                  label="الفاصل الزمني (دقيقة)"
-                  value={settings.randomDhikrIntervalMinutes}
-                  options={[15, 30, 60, 120]}
-                  onSelect={(v) => onSaveSettings({ randomDhikrIntervalMinutes: v })}
+            <div className="space-y-4 2xl:flex-1 2xl:min-w-0">
+              {/* Random Dhikr Notifications */}
+              <div className="border-t border-primary-100 dark:border-primary-800/60 pt-3 2xl:border-t-0 2xl:pt-0">
+                <ToggleRow
+                  label="تذكير عشوائي بالأذكار"
+                  icon={<Bell size={18} className="text-primary-600 dark:text-gold-400" />}
+                  value={settings.randomDhikrEnabled}
+                  onChange={(v) => void handleRandomDhikrToggle(v)}
                 />
 
+                {dhikrPermissionStatus && (
+                  <p role="status" className="mt-2 text-xs text-primary-600 dark:text-gold-400 font-semibold">
+                    {dhikrPermissionStatus}
+                  </p>
+                )}
+
+                {settings.randomDhikrEnabled && (
+                  <div className="mt-3 space-y-3 rounded-2xl border border-primary-100 bg-primary-50/50 p-3.5 dark:border-primary-800/80 dark:bg-primary-900/30">
+                    <label htmlFor="dhikr-reminder-category" className="block text-xs font-semibold text-primary-900 dark:text-primary-100">
+                      نوع رسائل التذكير
+                      <select
+                        id="dhikr-reminder-category"
+                        value={settings.randomDhikrCategory ?? 'varied'}
+                        onChange={(e) =>
+                          onSaveSettings({
+                            randomDhikrCategory: e.target.value as Settings['randomDhikrCategory'],
+                          })
+                        }
+                        className="mt-1.5 w-full rounded-xl border border-primary-200 bg-white px-3 py-2 text-sm text-primary-900 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100 font-semibold"
+                      >
+                        <option value="varied">متنوع حسب الوقت</option>
+                        <option value="morning">أذكار الصباح</option>
+                        <option value="evening">أذكار المساء</option>
+                        <option value="istighfar">الاستغفار</option>
+                      </select>
+                    </label>
+
+                    <TimeOptionButton
+                      label="الفاصل الزمني (دقيقة)"
+                      value={settings.randomDhikrIntervalMinutes}
+                      options={[15, 30, 60, 120]}
+                      onSelect={(v) => onSaveSettings({ randomDhikrIntervalMinutes: v })}
+                    />
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        من الساعة
+                        <input
+                          type="time"
+                          value={settings.randomDhikrStartTime}
+                          onChange={(e) => onSaveSettings({ randomDhikrStartTime: e.target.value })}
+                          className="mt-1 w-full rounded-xl border border-primary-200 bg-white px-3 py-2 text-sm text-primary-900 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
+                        />
+                      </label>
+                      <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        إلى الساعة
+                        <input
+                          type="time"
+                          value={settings.randomDhikrEndTime}
+                          onChange={(e) => onSaveSettings({ randomDhikrEndTime: e.target.value })}
+                          className="mt-1 w-full rounded-xl border border-primary-200 bg-white px-3 py-2 text-sm text-primary-900 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
+                        />
+                      </label>
+                    </div>
+
+                    <Button variant="secondary" size="sm" onClick={enableRandomDhikrNotifications} className="w-full md:w-auto md:px-5 font-semibold">
+                      <Bell size={16} /> تفعيل صلاحية الإشعارات للهاتف
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-primary-100 dark:border-primary-800/60 pt-3">
+                <TimeOptionButton
+                  label="مدة تأجيل التذكيرات (دقائق)"
+                  value={settings.snoozeMinutes}
+                  options={[5, 10, 15, 30]}
+                  onSelect={(v) => onSaveSettings({ snoozeMinutes: v })}
+                />
+              </div>
+
+              <div className="border-t border-primary-100 dark:border-primary-800/60 pt-3">
+                <TimeOptionButton
+                  label="التذكير المسبق قبل وقت الصلاة (دقائق)"
+                  value={settings.prePrayerReminder}
+                  options={[0, 5, 10, 15, 20]}
+                  onSelect={(v) => onSaveSettings({ prePrayerReminder: v })}
+                />
+              </div>
+
+              {/* The four daily content notifications, each at the hour the reader chose.
+                  The defaults are the hours they had before these rows existed, so an
+                  install that never opens this block keeps the schedule it already had. */}
+              <div className="border-t border-primary-100 dark:border-primary-800/60 pt-3 space-y-2">
+                <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                  مواقيت الإشعارات اليومية
+                </p>
+                <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                  حديث اليوم، رسالة من القرآن، سنّة عن النبي ﷺ، ومعجزات النبي ﷺ — تُجدول لسبعة أيام قادمة، فتصل حتى لو فتحت التطبيق بعد يوم.
+                </p>
                 <div className="grid grid-cols-2 gap-3">
                   <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                    من الساعة
+                    حديث اليوم
                     <input
                       type="time"
-                      value={settings.randomDhikrStartTime}
-                      onChange={(e) => onSaveSettings({ randomDhikrStartTime: e.target.value })}
+                      value={settings.hadithNotificationTime ?? '09:00'}
+                      onChange={(e) => onSaveSettings({ hadithNotificationTime: e.target.value })}
                       className="mt-1 w-full rounded-xl border border-primary-200 bg-white px-3 py-2 text-sm text-primary-900 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
                     />
                   </label>
                   <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                    إلى الساعة
+                    رسالة من القرآن
                     <input
                       type="time"
-                      value={settings.randomDhikrEndTime}
-                      onChange={(e) => onSaveSettings({ randomDhikrEndTime: e.target.value })}
+                      value={settings.quranMessageTime ?? '10:00'}
+                      onChange={(e) => onSaveSettings({ quranMessageTime: e.target.value })}
+                      className="mt-1 w-full rounded-xl border border-primary-200 bg-white px-3 py-2 text-sm text-primary-900 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
+                    />
+                  </label>
+                  <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                    سنّة عن النبي ﷺ
+                    <input
+                      type="time"
+                      value={settings.sunnahNotificationTime ?? '14:00'}
+                      onChange={(e) => onSaveSettings({ sunnahNotificationTime: e.target.value })}
+                      className="mt-1 w-full rounded-xl border border-primary-200 bg-white px-3 py-2 text-sm text-primary-900 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
+                    />
+                  </label>
+                  <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                    معجزات النبي ﷺ
+                    <input
+                      type="time"
+                      value={settings.prophetNotificationTime ?? '16:00'}
+                      onChange={(e) => onSaveSettings({ prophetNotificationTime: e.target.value })}
                       className="mt-1 w-full rounded-xl border border-primary-200 bg-white px-3 py-2 text-sm text-primary-900 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
                     />
                   </label>
                 </div>
-
-                <Button variant="secondary" size="sm" onClick={enableRandomDhikrNotifications} className="w-full md:w-auto md:px-5 font-semibold">
-                  <Bell size={16} /> تفعيل صلاحية الإشعارات للهاتف
-                </Button>
               </div>
-            )}
-          </div>
-
-          <div className="border-t border-primary-100 dark:border-primary-800/60 pt-3">
-            <TimeOptionButton
-              label="مدة تأجيل التذكيرات (دقائق)"
-              value={settings.snoozeMinutes}
-              options={[5, 10, 15, 30]}
-              onSelect={(v) => onSaveSettings({ snoozeMinutes: v })}
-            />
-          </div>
-
-          <div className="border-t border-primary-100 dark:border-primary-800/60 pt-3">
-            <TimeOptionButton
-              label="التذكير المسبق قبل وقت الصلاة (دقائق)"
-              value={settings.prePrayerReminder}
-              options={[0, 5, 10, 15, 20]}
-              onSelect={(v) => onSaveSettings({ prePrayerReminder: v })}
-            />
-          </div>
-
-          {/* The four daily content notifications, each at the hour the reader chose.
-              The defaults are the hours they had before these rows existed, so an
-              install that never opens this block keeps the schedule it already had. */}
-          <div className="border-t border-primary-100 dark:border-primary-800/60 pt-3 space-y-2">
-            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-              مواقيت الإشعارات اليومية
-            </p>
-            <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-              حديث اليوم، رسالة من القرآن، سنّة عن النبي ﷺ، ومعجزات النبي ﷺ — تُجدول لسبعة أيام قادمة، فتصل حتى لو فتحت التطبيق بعد يوم.
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                حديث اليوم
-                <input
-                  type="time"
-                  value={settings.hadithNotificationTime ?? '09:00'}
-                  onChange={(e) => onSaveSettings({ hadithNotificationTime: e.target.value })}
-                  className="mt-1 w-full rounded-xl border border-primary-200 bg-white px-3 py-2 text-sm text-primary-900 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
-                />
-              </label>
-              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                رسالة من القرآن
-                <input
-                  type="time"
-                  value={settings.quranMessageTime ?? '10:00'}
-                  onChange={(e) => onSaveSettings({ quranMessageTime: e.target.value })}
-                  className="mt-1 w-full rounded-xl border border-primary-200 bg-white px-3 py-2 text-sm text-primary-900 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
-                />
-              </label>
-              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                سنّة عن النبي ﷺ
-                <input
-                  type="time"
-                  value={settings.sunnahNotificationTime ?? '14:00'}
-                  onChange={(e) => onSaveSettings({ sunnahNotificationTime: e.target.value })}
-                  className="mt-1 w-full rounded-xl border border-primary-200 bg-white px-3 py-2 text-sm text-primary-900 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
-                />
-              </label>
-              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                معجزات النبي ﷺ
-                <input
-                  type="time"
-                  value={settings.prophetNotificationTime ?? '16:00'}
-                  onChange={(e) => onSaveSettings({ prophetNotificationTime: e.target.value })}
-                  className="mt-1 w-full rounded-xl border border-primary-200 bg-white px-3 py-2 text-sm text-primary-900 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-100"
-                />
-              </label>
             </div>
           </div>
         </Card>
