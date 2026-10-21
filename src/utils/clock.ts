@@ -20,9 +20,29 @@
  *    the correction added to every absolute alarm target before handing it to
  *    Android, whose alarms fire when the *device* clock reaches them.
  *
- * Honest limitation: with the phone offline, fully closed, and its clock changed
- * while off, there is no second source to consult — the device clock is all there
- * is until the next successful sync. Everything detectable is detected.
+ * ## What may, and what may not, second-guess the phone's clock
+ *
+ * The device clock is the one the reader can see, and on a phone with automatic
+ * time enabled it is the one the *system* maintains. It moves for ordinary
+ * reasons: an NTP correction after a night offline, a timezone change, the
+ * reader setting it by hand. The app cannot tell those apart.
+ *
+ * So the app only believes the phone's clock is wrong when **something outside
+ * the phone says so** — the network time source. Only then may the trusted clock
+ * outrank the device clock, and only then may the drift shift an armed alarm.
+ * Without that proof the trusted clock *is* the device clock, re-anchored
+ * whenever the device clock moves.
+ *
+ * The alternative — freezing the trusted clock at whatever it read before the
+ * jump and carrying that offset into every armed alarm — is how a phone that
+ * corrected its own clock ends up ringing the adhan hours late, with a
+ * countdown that contradicts the prayer table beside it. A guess must never move
+ * a prayer alarm.
+ *
+ * Honest limitation: with the phone offline and its clock moved while off, there
+ * is no second source to consult — the device clock is all there is until the
+ * next successful sync, and the app follows it. Everything detectable is
+ * detected, and nothing unproven is guessed at.
  */
 
 const ANCHOR_KEY = 'zad:clock-anchor';
@@ -45,11 +65,19 @@ interface Anchor {
   deviceMs: number;
   /** Monotonic reading at the same moment. */
   perfMs: number;
+  /**
+   * Whether an external source (the network time service) vouched for
+   * `trustedMs`. Only then may the app believe the device clock is the wrong
+   * one — see the module note.
+   */
+  corroborated: boolean;
 }
 
 interface StoredAnchor {
   t: number;
   d: number;
+  /** `v` — vouched: an external source set the trusted time. */
+  v?: 1;
 }
 
 /* ------------------------------------------------------------------ *
@@ -61,10 +89,21 @@ interface StoredAnchor {
  * much the device clock says time passed since it was written. This trusts the
  * clock across the gap — with nothing else to consult, that is the only move —
  * but every in-session change after this point is caught by the monotonic side.
+ *
+ * The projection is only taken when the stored anchor was **vouched for** by an
+ * external source: then the trusted time it carries is known to be right, and
+ * carrying it forward is exactly right. An unvouched anchor is just the device
+ * clock of an earlier session — projecting it would carry an unverifiable
+ * offset forward, and that offset ends up in every armed alarm.
  */
 export function projectStoredAnchor(stored: StoredAnchor, deviceNow: number, perfNow: number): Anchor {
   const trusted = stored.t + (deviceNow - stored.d);
-  return { trustedMs: trusted, deviceMs: deviceNow, perfMs: perfNow };
+  return {
+    trustedMs: trusted,
+    deviceMs: deviceNow,
+    perfMs: perfNow,
+    corroborated: stored.v === 1,
+  };
 }
 
 /** Believed-true wall time, projected by monotonic elapsed time. */

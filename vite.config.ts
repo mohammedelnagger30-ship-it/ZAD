@@ -147,6 +147,7 @@ export default defineConfig(({ mode }) => {
       exclude: ['lucide-react'],
     },
     build: {
+      target: ['es2019', 'chrome70'],
       rollupOptions: {
         output: {
           manualChunks(id) {
