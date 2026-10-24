@@ -457,5 +457,7 @@ export function useAyahVoice({
     voicePrimaryLabel,
     voicePrimaryDisabled,
     voiceHint,
+    /** Whether the element is sounding right now — the reader marks the ayah it is on. */
+    voicePlaying,
   };
 }

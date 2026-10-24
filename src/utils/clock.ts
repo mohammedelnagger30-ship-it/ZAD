@@ -70,14 +70,14 @@ interface Anchor {
    * `trustedMs`. Only then may the app believe the device clock is the wrong
    * one — see the module note.
    */
-  corroborated: boolean;
+  corroborated?: boolean;
 }
 
 interface StoredAnchor {
   t: number;
   d: number;
   /** `v` — vouched: an external source set the trusted time. */
-  v?: 1;
+  v?: boolean;
 }
 
 /* ------------------------------------------------------------------ *
@@ -102,7 +102,7 @@ export function projectStoredAnchor(stored: StoredAnchor, deviceNow: number, per
     trustedMs: trusted,
     deviceMs: deviceNow,
     perfMs: perfNow,
-    corroborated: stored.v === 1,
+    corroborated: stored.v === true,
   };
 }
 
@@ -178,7 +178,16 @@ function ensureAnchor(): Anchor {
   const deviceNow = Date.now();
   const perfNow = nowPerf();
   const stored = readStoredAnchor();
-  anchor = stored ? projectStoredAnchor(stored, deviceNow, perfNow) : { trustedMs: deviceNow, deviceMs: deviceNow, perfMs: perfNow };
+  // Only carry an external verdict forward: an anchor the network never
+  // vouched for is just an earlier reading of the device clock, and projecting
+  // it would bake a stale offset into every alarm this session. Start from the
+  // device clock itself instead; drift then reads 0 and every armed alarm fires
+  // at the instant this clock says it should.
+  if (stored && stored.v === true) {
+    anchor = projectStoredAnchor(stored, deviceNow, perfNow);
+  } else {
+    anchor = { trustedMs: deviceNow, deviceMs: deviceNow, perfMs: perfNow, corroborated: false };
+  }
   lastKnownDrift = computeDrift(projectTrustedNow(anchor, perfNow), deviceNow);
   return anchor;
 }
@@ -199,7 +208,8 @@ export function deviceClockDriftMs(): number {
 }
 
 function persistAnchor(): void {
-  writeStoredAnchor({ t: trustedNowMs(), d: Date.now() });
+  const a = ensureAnchor();
+  writeStoredAnchor({ t: a.trustedMs, d: Date.now(), v: a.corroborated === true });
 }
 
 function emitClockChange(): void {
@@ -342,7 +352,7 @@ export async function syncTrustedTime(): Promise<boolean> {
         ]);
         const before = trustedNowMs();
         const perfNow = nowPerf();
-        anchor = { trustedMs: externalMs, deviceMs: Date.now(), perfMs: perfNow };
+        anchor = { trustedMs: externalMs, deviceMs: Date.now(), perfMs: perfNow, corroborated: true };
         lastKnownDrift = computeDrift(externalMs, Date.now());
         persistAnchor();
         if (Math.abs(externalMs - before) >= JUMP_THRESHOLD_MS) emitClockChange();

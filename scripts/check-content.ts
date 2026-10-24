@@ -441,6 +441,7 @@ for (const [categoryId, expectedMinimum] of [
   ['travel', 3],
   ['deceased', 7],
   ['general_duas', 8],
+  ['friday', 5],
 ] as const) {
   const category = ADHKAR_CATEGORIES.find((item) => item.id === categoryId);
   check(
@@ -454,6 +455,19 @@ check(
     .map((category) => category.id)
     .join(',') === 'morning,evening,after_prayer,sleep,wakeup',
   'only the daily routine collections count toward the daily adhkar progress',
+);
+const fridayCategory = ADHKAR_CATEGORIES.find((item) => item.id === 'friday');
+check(
+  fridayCategory !== undefined &&
+    fridayCategory.daily === false &&
+    fridayCategory.icon === 'calendar-heart',
+  'the Friday collection exists as a non-daily calendar collection',
+);
+check(
+  (fridayCategory?.items.length ?? 0) >= 5 &&
+    (fridayCategory?.items.length ?? 0) <= 8,
+  'the Friday collection stays inside the scheduled slot window',
+  `got ${fridayCategory?.items.length ?? 0}`,
 );
 check(
   ['m14', 'm15', 'e13', 'e14'].every((id) =>

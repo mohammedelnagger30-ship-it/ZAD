@@ -730,6 +730,13 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
                   onChange={(v) => void handleRandomDhikrToggle(v)}
                 />
 
+                <p className="mt-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                  تذكيرات لطيفة تذكّرك بالله على مدار اليوم: أذكار الصباح والمساء والاستيقاظ
+                  والنوم، والاستغفار، وأذكار بعد الصلاة والمنزل والطعام والأذكار العامة —
+                  وحديثٌ ورسالةٌ من القرآن وسننٌ عن النبي ﷺ ومعجزاته ضمن تذكيرات اليوم.
+                  وأذكار يوم الجمعة تصل تلقائيًا كل جمعة في مواعيدها، مهما اخترت هنا.
+                </p>
+
                 {dhikrPermissionStatus && (
                   <p role="status" className="mt-2 text-xs text-primary-600 dark:text-gold-400 font-semibold">
                     {dhikrPermissionStatus}
@@ -762,6 +769,13 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
                       value={settings.randomDhikrIntervalMinutes}
                       options={[15, 30, 60, 120]}
                       onSelect={(v) => onSaveSettings({ randomDhikrIntervalMinutes: v })}
+                    />
+
+                    <TimeOptionButton
+                      label="أقصى عدد في اليوم"
+                      value={settings.randomDhikrMaxPerDay ?? 16}
+                      options={[4, 8, 12, 16, 24, 32, 48]}
+                      onSelect={(v) => onSaveSettings({ randomDhikrMaxPerDay: v })}
                     />
 
                     <div className="grid grid-cols-2 gap-3">
@@ -818,7 +832,9 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
                   مواقيت الإشعارات اليومية
                 </p>
                 <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-                  حديث اليوم، رسالة من القرآن، سنّة عن النبي ﷺ، ومعجزات النبي ﷺ — تُجدول لسبعة أيام قادمة، فتصل حتى لو فتحت التطبيق بعد يوم.
+                  حديث اليوم ورسالة من القرآن، وثلاث سنن عن النبي ﷺ، وثلاث من معجزاته وشمائله —
+                  تُجدول لسبعة أيام قادمة، فتصل حتى لو فتحت التطبيق بعد يوم. وما زاد على واحد في
+                  اليوم يتوزّع على الساعة نفسها كل بضع دقائق.
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
@@ -840,7 +856,7 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
                     />
                   </label>
                   <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                    سنّة عن النبي ﷺ
+                    سنن عن النبي ﷺ (٣ يوميًا)
                     <input
                       type="time"
                       value={settings.sunnahNotificationTime ?? '14:00'}
@@ -849,7 +865,7 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
                     />
                   </label>
                   <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                    معجزات النبي ﷺ
+                    معجزاته وشمائله ﷺ (٣ يوميًا)
                     <input
                       type="time"
                       value={settings.prophetNotificationTime ?? '16:00'}

@@ -6,6 +6,7 @@ import { ContentLibrary } from '@/screens/ContentLibrary';
 import {
   GRADE_INFO,
   getHadithCollection,
+  hadithOfDay,
   installedCollections,
   searchInstalledHadiths,
   type HadithCollection,
@@ -155,6 +156,35 @@ export function HadithScreen({ params }: HadithScreenProps) {
       }
     })();
   }, [deepLinkId]);
+
+  // "Hadith of the day" deep link — the notification that quotes a hadith's opening
+  // words. Unlike a bookmark or a search hit it cannot carry an id: the hadith is
+  // derived from the day of the year over whichever collection is on the device, and
+  // the scheduler cannot know that. It resolves the same entry the home card shows,
+  // through the same path, so the tap lands on exactly the hadith that was announced.
+  const deepLinkHadithOfDay = params?.hadithOfDay === true;
+  useEffect(() => {
+    if (!deepLinkHadithOfDay) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const installed = await installedCollections();
+        const id = installed.has(HADITH_OF_DAY_BOOK) ? HADITH_OF_DAY_BOOK : [...installed].sort()[0];
+        await getHadithCollection(id ?? HADITH_OF_DAY_BOOK);
+        if (cancelled) return;
+        const record = hadithOfDay();
+        if (!record) return;
+        setSelected(record);
+        setDetailReturnView('search');
+        setViewMode('detail');
+      } catch {
+        // The collection is not on the device; the empty state explains how to get it.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [deepLinkHadithOfDay]);
 
   // Deep-link by search term: other screens ("سنن عن النبي") quote a hadith fragment and
   // want a tap to land on the full text here. Depends on the query string itself, for the

@@ -224,7 +224,9 @@ export async function resolveAdhanPlayUrl(sound: AdhanSound): Promise<string> {
  * null when there is nothing to point a channel at (web build, or not downloaded).
  */
 export async function resolveAdhanSoundPath(sound: AdhanSound): Promise<string | null> {
-  if (!Capacitor.isNativePlatform()) return null;
+  // A bundled voice lives in the package (res/raw), never in the app's data
+  // directory — stat-ing it there can only ever reject, so bail out up front.
+  if (!Capacitor.isNativePlatform() || sound.bundled) return null;
   const uri = await fileUriOf(sound);
   return uri ? uri.replace(/^file:\/\//, '') : null;
 }

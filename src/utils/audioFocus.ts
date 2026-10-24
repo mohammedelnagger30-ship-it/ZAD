@@ -15,6 +15,9 @@ type StopSource = () => void;
 
 const sources = new Map<string, StopSource>();
 
+/** Which source currently holds the floor. `null` before anything has sounded. */
+let holder: string | null = null;
+
 /** Announce a source that can be silenced. Re-registering replaces the previous stopper. */
 export function registerAudioSource(id: string, stop: StopSource): void {
   sources.set(id, stop);
@@ -22,12 +25,29 @@ export function registerAudioSource(id: string, stop: StopSource): void {
 
 /** Silence every source except `id`, then hand control to it. */
 export function takeAudioFocus(id: string): void {
+  // The floor changes hands before anything is silenced, so a stopper that asks
+  // {@link hasAudioFocus} sees the new order of things rather than the old one.
+  holder = id;
   for (const [sourceId, stop] of sources) {
     if (sourceId !== id) stop();
   }
 }
 
+/**
+ * Whether `id` currently holds the floor.
+ *
+ * Silencing is not instantaneous: `audio.pause()` fires its `pause` event on a queued
+ * task, so a player that has just been interrupted still gets to run its own handlers a
+ * moment later. Those handlers must not act — in particular they must not write to the
+ * shared player card, which the new holder has already claimed. Asking here is how a
+ * silenced source keeps quiet.
+ */
+export function hasAudioFocus(id: string): boolean {
+  return holder === id;
+}
+
 /** Test seam — the registry is module state and would otherwise leak between tests. */
 export function resetAudioFocus(): void {
   sources.clear();
+  holder = null;
 }

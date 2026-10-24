@@ -1,19 +1,32 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { BookOpen, ChevronLeft, Heart, Sparkles } from 'lucide-react';
 import { Card } from '@/components/ui';
 import type { NavParams, ScreenName } from '@/hooks/useApp';
 
 interface ProphetScreenProps {
   navigate: (screen: ScreenName, params?: NavParams) => void;
+  /** Deep links: a notification opens its own section and lands on the card it announced. */
+  params?: Record<string, unknown>;
 }
 
 import { PROPHET_SECTIONS, QUOTE_FRAME, type ProphetEntry, type ProphetSection } from '@/data/prophetData';
 export { PROPHET_SECTIONS, type ProphetEntry, type ProphetSection };
 
 
-function EntryCard({ entry }: { entry: ProphetEntry }) {
+function EntryCard({
+  entry,
+  highlight = false,
+}: {
+  entry: ProphetEntry;
+  /** The card a notification deep link landed on — ringed so the reader sees it at once. */
+  highlight?: boolean;
+}) {
   return (
-    <Card className="shadow-md">
+    <Card
+      className={`shadow-md ${
+        highlight ? 'ring-2 ring-gold-400/80 dark:ring-gold-500/70' : ''
+      }`}
+    >
       <p className="flex items-center gap-2 text-sm font-bold text-primary-900 dark:text-primary-50">
         <span
           className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-gold-500 dark:bg-gold-400"
@@ -63,7 +76,7 @@ function SectionHeading({
   );
 }
 
-export function ProphetScreen({ navigate }: ProphetScreenProps) {
+export function ProphetScreen({ navigate, params }: ProphetScreenProps) {
   const [activeSection, setActiveSection] = useState(PROPHET_SECTIONS[0].id);
 
   useEffect(() => {
@@ -84,6 +97,34 @@ export function ProphetScreen({ navigate }: ProphetScreenProps) {
   }, []);
 
   const goTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  const deepLinkSectionId = typeof params?.sectionId === 'string' ? params.sectionId : null;
+  const deepLinkEntryTitle = typeof params?.entryTitle === 'string' ? params.entryTitle : null;
+
+  // The card a notification announced: the section pins it down, the title picks the
+  // card inside it (a card has no id of its own, and titles are unique per section).
+  const deepLinkTarget = useMemo(() => {
+    if (!deepLinkSectionId) return null;
+    const section = PROPHET_SECTIONS.find((candidate) => candidate.id === deepLinkSectionId);
+    if (!section) return null;
+    const index = deepLinkEntryTitle
+      ? section.entries.findIndex((entry) => entry.title === deepLinkEntryTitle)
+      : -1;
+    return { sectionId: section.id, index };
+  }, [deepLinkSectionId, deepLinkEntryTitle]);
+
+  useEffect(() => {
+    if (!deepLinkTarget) return;
+    // The page is long; the card needs a paint before it can be measured.
+    const frame = requestAnimationFrame(() => {
+      const target = deepLinkTarget.index >= 0
+        ? document.getElementById(`prophet-entry-${deepLinkTarget.sectionId}-${deepLinkTarget.index}`)
+        : document.getElementById(deepLinkTarget.sectionId);
+      target?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    });
+    if (deepLinkTarget.index >= 0) setActiveSection(deepLinkTarget.sectionId);
+    return () => cancelAnimationFrame(frame);
+  }, [deepLinkTarget]);
 
   return (
     <div className="space-y-5 pb-8" dir="rtl">
@@ -156,8 +197,17 @@ export function ProphetScreen({ navigate }: ProphetScreenProps) {
             subtitle={section.subtitle}
             icon={<section.icon size={20} />}
           />
-          {section.entries.map((entry) => (
-            <EntryCard key={entry.title} entry={entry} />
+          {section.entries.map((entry, index) => (
+            <div
+              key={entry.title}
+              id={`prophet-entry-${section.id}-${index}`}
+              className="scroll-mt-24"
+            >
+              <EntryCard
+                entry={entry}
+                highlight={deepLinkTarget?.sectionId === section.id && deepLinkTarget.index === index}
+              />
+            </div>
           ))}
         </section>
       ))}

@@ -32,7 +32,7 @@ import {
 } from '@/components/mushaf/readerConfig';
 import { TafsirBottomSheet } from '@/components/TafsirBottomSheet';
 import { useWordMeanings } from '@/hooks/useContent';
-import { getWordMeanings, getSurahWordMeanings } from '@/utils/wordMeaningsService';
+import { getWordMeanings } from '@/utils/wordMeaningsService';
 import {
   getSurah,
   getAyahPage,
@@ -542,14 +542,35 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
     [resetVoice],
   );
   const handleWordPress = useCallback(
-    async (surahId: number, ayahNumber: number, word: string, wordPosition: number) => {
+    async (
+      surahId: number,
+      ayahNumber: number,
+      word: string,
+      wordPosition: number,
+      hasMeaning: boolean,
+    ) => {
       const surahName = getSurah(surahId)?.name;
       if (!surahName) return;
       const lookupId = ++wordLookupRef.current;
+      // A marked word opens its meaning at once. The mark came from the index that ships
+      // with the app, so the reader has already been told this word is worth pressing —
+      // and the sheet is where the meaning lives, whether or not the books that write it
+      // out have been downloaded yet: it says what it is waiting for, and offers the one
+      // tap that fetches them. Asking the dump first and falling back to the ayah's
+      // options when it had nothing was the wrong answer for a reader who had never been
+      // to the content library: they saw a coloured, underlined word, pressed it, and got
+      // the same sheet every plain word gets.
+      if (hasMeaning) {
+        setSelectedWord({ surahId, surahName, ayahNumber, word, wordPosition });
+        return;
+      }
       if (!wordMeaningsInstalled) {
         handleAyahPress(surahId, ayahNumber);
         return;
       }
+      // An unmarked word is still worth one query while a dump is on the device: the books
+      // annotate in their own spelling, so a word the index passed over may still be one
+      // that some book knows. Nothing is queried for an unmarked word when it is not.
       try {
         const meanings = await getWordMeanings(surahId, ayahNumber, wordPosition);
         if (lookupId !== wordLookupRef.current) return;
@@ -752,43 +773,12 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
   const currentJuz = useMemo(() => getJuzForPage(currentPage), [currentPage]);
   const currentHizb = useMemo(() => getHizbForPage(currentPage), [currentPage]);
 
-  // Inline word-by-word glosses: load meanings for all surahs on the current page
-  // when the meanings pack is installed. The map is keyed by `${surahId}:${ayahNumber}`
-  // with a sub-map of wordIndex -> meaning text.
-  const [pageWordMeanings, setPageWordMeanings] = useState<
-    Map<string, Map<number, string>>
-  >(new Map());
-
-  useEffect(() => {
-    if (!wordMeaningsInstalled || surahsOnPage.length === 0) {
-      setPageWordMeanings(new Map());
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      const combined = new Map<string, Map<number, string>>();
-      for (const surah of surahsOnPage) {
-        if (cancelled) break;
-        const meanings = await getSurahWordMeanings(surah.id);
-        if (cancelled) break;
-        for (const [ayahNumber, hits] of meanings) {
-          const key = `${surah.id}:${ayahNumber}`;
-          const wordMap = new Map<number, string>();
-          for (const hit of hits) {
-            // Keep the shortest gloss for each word position (first match wins)
-            if (!wordMap.has(hit.wordIndex)) {
-              wordMap.set(hit.wordIndex, hit.gloss.meaning);
-            }
-          }
-          if (wordMap.size > 0) combined.set(key, wordMap);
-        }
-      }
-      if (!cancelled) setPageWordMeanings(combined);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [surahsOnPage, wordMeaningsInstalled]);
+  // Word meanings are read from the sheet that opens on a pressed word, and are never
+  // printed on the page itself. They used to be: a gloss under every unusual word turned
+  // the mushaf into a glossary — 371 sentences of 30px running text on one page — which
+  // is not a mushaf anyone can read, and the meaning is a thing you ask for, not a thing
+  // you read past. The page keeps the marker that says *this* word is worth pressing;
+  // everything the books have to say stays behind the tap.
 
   const isBookmarked = bookmarkedPages.has(currentPage);
   const zoomPercent = Math.round(prefs.zoom * 100);
@@ -870,7 +860,6 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
                 letterSpacing={0.01 + Math.max(0, prefs.lineSpacing - 1) * 0.01}
                 wordSpacing={prefs.wordSpacing}
                 wordMeaningsInstalled={wordMeaningsInstalled}
-                pageWordMeanings={pageWordMeanings}
                 onAyahPress={handleAyahPress}
                 onWordPress={handleWordPress}
                 activeAyah={activeReadingAyah}
@@ -893,7 +882,6 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
               letterSpacing={0.01 + Math.max(0, prefs.lineSpacing - 1) * 0.01}
               wordSpacing={prefs.wordSpacing}
               wordMeaningsInstalled={wordMeaningsInstalled}
-              pageWordMeanings={pageWordMeanings}
               onAyahPress={handleAyahPress}
               onWordPress={handleWordPress}
               activeAyah={activeReadingAyah}
@@ -1007,11 +995,16 @@ interface MushafLeafProps {
   lineHeight: number;
   letterSpacing: number;
   wordSpacing: number;
+  /** Whether the meanings pack is on the device — decides what a pressed word can offer. */
   wordMeaningsInstalled: boolean;
-  /** Meanings for words on this page, keyed by `${surahId}:${ayahNumber}` -> Map<wordIndex, meaning>. */
-  pageWordMeanings?: Map<string, Map<number, string>>;
   onAyahPress: (surahId: number, ayahNumber: number) => void;
-  onWordPress: (surahId: number, ayahNumber: number, word: string, wordPosition: number) => void;
+  onWordPress: (
+    surahId: number,
+    ayahNumber: number,
+    word: string,
+    wordPosition: number,
+    hasMeaning: boolean,
+  ) => void;
   activeAyah: { surahId: number; ayahNumber: number } | null;
 }
 

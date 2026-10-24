@@ -27,8 +27,7 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import type { Session } from '@supabase/supabase-js';
 import type { Settings } from '@/db/database';
 import { AzanOverlayModal } from '@/components/AzanOverlayModal';
-import { RecitationPlayer } from '@/components/RecitationPlayer';
-import { LecturePlayerBar } from '@/components/LecturePlayerBar';
+import { AudioPlayer } from '@/components/AudioPlayer';
 import { useRecitationVisible } from '@/hooks/useRecitation';
 import { useLecturePlayer } from '@/hooks/useLecturePlayer';
 import { useAzanTrigger } from '@/hooks/useAzanTrigger';
@@ -279,14 +278,16 @@ function readOfflineUsage(): boolean {
 
 function Application() {
   const [session, setSession] = useState<Session | null>(null);
-  const [authChecked, setAuthChecked] = useState(!isSupabaseConfigured);
+  // Don't block the UI waiting for Supabase: read cached session in background
+  // and let the app open immediately so it works fully offline.
   const [offlineUsage, setOfflineUsage] = useState(readOfflineUsage);
   // Opened from Settings → الحساب: the reader who walked in as a guest decides later
   // that they want their data on more than one device. Held here rather than in
   // Settings so a session appearing mid-sign-up swaps the whole view over, as at the gate.
   const [showAuthForGuest, setShowAuthForGuest] = useState(false);
-  // 'unknown' until the allow-list has answered for this account — see below.
-  const [adminState, setAdminState] = useState<'unknown' | 'admin' | 'user'>('unknown');
+  // Default to 'user' so a logged-in account never gets stuck behind a slow/admin
+  // check on poor connections or offline. Upgraded to 'admin' in the background if confirmed.
+  const [adminState, setAdminState] = useState<'unknown' | 'admin' | 'user'>('user');
   // كل مستخدم — أدمن أو لا — يفتح التطبيق العادى، ولوحة الإدارة تُفتح بالطلب من
   // الإعدادات. الحالة هنا لا داخل `AdminApp`: زر «لوحة الإدارة» يصل إلى هذا المكوّن
   // من تحت، فلا بدّ أن يرفع الطلب إلى هذا المستوى ليُبدّل العرض.
@@ -303,22 +304,23 @@ function Application() {
   /**
    * Whether this account opens the dashboard or the ordinary app is decided
    * server-side by `public.admin_emails` — the client only ever learns a yes or
-   * a no, and a project without the migration simply reports "no" and carries
-   * on as the app it was.
-   *
-   * The answer is held as 'unknown' rather than guessed: an admin on a slow
-   * link would otherwise flash the whole app before landing on the dashboard.
+   * a no. The check runs in the background and never blocks rendering; on failure
+   * or offline the account stays as a normal user.
    */
   useEffect(() => {
     if (!sessionUserId) {
-      setAdminState('unknown');
+      setAdminState('user');
       return;
     }
     let alive = true;
-    setAdminState('unknown');
-    void isAdminAccount().then((isAdmin) => {
-      if (alive) setAdminState(isAdmin ? 'admin' : 'user');
-    });
+    setAdminState('user');
+    void isAdminAccount()
+      .then((isAdmin) => {
+        if (alive && isAdmin) setAdminState('admin');
+      })
+      .catch(() => {
+        if (alive) setAdminState('user');
+      });
     return () => {
       alive = false;
     };
@@ -338,16 +340,48 @@ function Application() {
   useEffect(() => {
     if (!supabase) return;
     let alive = true;
-    void supabase.auth.getSession().then(({ data, error }) => {
-      if (error) console.error('Could not restore Supabase session:', error.message);
-      if (alive) {
-        setSession(data.session);
-        setAuthChecked(true);
+    // Read cached session first; never block UI on network. Supabase persists
+    // tokens in localStorage so getSession() resolves from cache quickly even offline.
+    // Try to read from localStorage immediately for instant boot, then verify in background.
+    try {
+      // Supabase v2 stores session under keys like sb-<project-ref>-auth-token
+      const keys = Object.keys(localStorage);
+      for (const key of keys) {
+        if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              const session = parsed?.currentSession || parsed?.session || parsed;
+              if (session?.access_token && session?.user) {
+                if (alive) {
+                  setSession(session as Session);
+                }
+                break;
+              }
+            } catch {
+              // ignore parse errors
+            }
+          }
+        }
       }
-    });
+    } catch {
+      // ignore localStorage errors
+    }
+
+    // Also call getSession() in background to refresh/validate without blocking
+    void supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (alive) {
+          setSession(data.session ?? null);
+        }
+      })
+      .catch(() => {
+        // ignore
+      });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
-      setAuthChecked(true);
     });
     return () => {
       alive = false;
@@ -355,17 +389,8 @@ function Application() {
     };
   }, []);
 
-  if (isSupabaseConfigured && !authChecked) {
-    // The session check reads local storage, so this is a beat, not a wait.
-    // Mounting AppContent here — the whole shell, settings from IndexedDB and
-    // navigation and the sync loop — and then mounting it again as
-    // AuthenticatedApp ran every hook in it twice on every single launch, and
-    // flashed the app under the gate while doing it. Holding here costs one
-    // icon and one line of text.
-    return <GateLoading message="جارٍ فحص الحساب..." />;
-  }
+  // Auth check is non-blocking: the app opens immediately (works offline).
   if (isSupabaseConfigured && session) {
-    if (adminState === 'unknown') return <GateLoading message="جارٍ فتح الحساب..." />;
     // كل المستخدمين — כולל الأدمن — يفتحوا التطبيق العادى. صفحة الإدارة يمكن
     // فتحها من داخل التطبيق لو احتجنا لاحقًا، لكن مش تلقائياً عند تسجيل الدخول.
     // لوحة الإدارة لا تُفتح تلقائيًا عند تسجيل الدخول: كل الحسابات تدخل التطبيق
@@ -1036,10 +1061,10 @@ function AppContent({
               {screen === 'prayer' && <PrayerScreen key={`prayer-${resetNonce}`} settings={settings} onSaveSettings={save} navigate={navigate} params={params} />}
               {screen === 'salah' && <PrayerGuideScreen key={`salah-${resetNonce}`} navigate={navigate} />}
               {screen === 'hadith' && <HadithScreen key={`hadith-${resetNonce}`} params={params} />}
-              {screen === 'sunnah' && <SunnahScreen key={`sunnah-${resetNonce}`} navigate={navigate} />}
-              {screen === 'prophet' && <ProphetScreen key={`prophet-${resetNonce}`} navigate={navigate} />}
+              {screen === 'sunnah' && <SunnahScreen key={`sunnah-${resetNonce}`} navigate={navigate} params={params} />}
+              {screen === 'prophet' && <ProphetScreen key={`prophet-${resetNonce}`} navigate={navigate} params={params} />}
               {screen === 'huwaini' && <HuwainiScreen key={`huwaini-${resetNonce}`} navigate={navigate} />}
-              {screen === 'nawafil' && <NawafilScreen key={`nawafil-${resetNonce}`} settings={settings} />}
+              {screen === 'nawafil' && <NawafilScreen key={`nawafil-${resetNonce}`} settings={settings} params={params} />}
               {screen === 'progress' && <ProgressScreen key={`progress-${resetNonce}`} settings={settings} />}
               {/* Selecting the active tab again remounts its screen. A cloud
                   sync does not: it reloads settings, which re-render — the
@@ -1085,11 +1110,9 @@ function AppContent({
           </div>
         </main>
         <BottomNav current={screen} onNavigate={navigate} />
-        {/* The recitation, wherever the listener is in the app — dormant until one is
-            actually playing. */}
-        <RecitationPlayer />
-        {/* The lecture player, same contract: nothing at all until a lecture starts. */}
-        <LecturePlayerBar />
+        {/* One player for whichever of the two engines holds the sound — recitation or
+            lecture — dormant until something has actually been started. */}
+        <AudioPlayer />
         {settings && (
           <AzanOverlayModal
             isOpen={azanState.isOpen}

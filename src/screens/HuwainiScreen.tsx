@@ -182,7 +182,7 @@ function LectureRow({ lecture, item, album, queue }: LectureRowProps) {
         <p className="truncate text-sm font-semibold text-primary-900 dark:text-primary-100" title={lecture.title}>
           {lecture.title}
         </p>
-        <p className="mt-0.5 flex items-center gap-2 text-[0.6875rem] text-gray-500 dark:text-gray-400">
+        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.6875rem] text-gray-500 dark:text-gray-400">
           <span className="inline-flex items-center gap-1">
             <Clock size={11} aria-hidden="true" />
             {lectureDuration(lecture)}
@@ -240,10 +240,19 @@ function LectureRow({ lecture, item, album, queue }: LectureRowProps) {
           onClick={() => void shareLecture({ lecture, item }, album)}
           aria-label={`مشاركة ${lecture.title}`}
           title="مشاركة المحاضرة على أي تطبيق"
-          className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-emerald-600 px-3 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-emerald-500 dark:bg-emerald-500 dark:hover:bg-emerald-600"
+          className="inline-flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-600 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-emerald-500 sm:w-auto sm:justify-start sm:px-3 dark:bg-emerald-500 dark:hover:bg-emerald-600"
         >
           <Share2 size={15} aria-hidden="true" />
-          مشاركة
+          {/* On a phone the row is too narrow for a labelled share button beside the
+              delete button — the title collapses to a dozen characters. The word is
+              dropped below `sm` and the icon carries it, with the label still on the
+              element for assistive technology and long-press.
+              The box is pinned to 40×40 while it is icon-only, because that is what the
+              rest of the row's controls are: sized by `px-2.5` alone it came out 35px
+              wide against the delete button's 40, and two controls of different widths
+              in one line read as a line that has slipped. `sm:w-auto` hands it back its
+              natural width the moment there is room for the word. */}
+          <span className="hidden sm:inline">مشاركة</span>
         </button>
       ) : phoneError ? (
         <button

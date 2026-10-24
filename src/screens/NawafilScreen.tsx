@@ -85,6 +85,11 @@ interface NawafilItem {
 interface NawafilScreenProps {
   /** Drives the hero's Hijri date and the opportunity card's timetable. */
   settings: Settings;
+  /**
+   * Where the screen was opened from. A rawatib reminder names the item it is about
+   * (`nawafilKey`), so the reader lands on that toggle instead of the page top.
+   */
+  params?: Record<string, unknown>;
 }
 
 /** Per-prayer header for the rawatib cards (icon, gradient, blurb, virtue). */
@@ -338,12 +343,43 @@ const OPPORTUNITY_CONTENT: Record<
   },
 };
 
-export default function NawafilScreen({ settings }: NawafilScreenProps) {
+export default function NawafilScreen({ settings, params }: NawafilScreenProps) {
   const [records, setRecords] = useState<Record<string, boolean>>({});
   const [weekCounts, setWeekCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<CategoryFilter>('all');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  /**
+   * The item a notification pointed at, highlighted until the reader leaves.
+   *
+   * The ring is deliberately static rather than a fading flash: on a cold start the
+   * scroll can land before the page has finished laying out, and a highlight that has
+   * already faded by then is the same as none.
+   */
+  const deepLinkKey = typeof params?.nawafilKey === 'string' ? params.nawafilKey : null;
+  const [highlightKey, setHighlightKey] = useState<string | null>(deepLinkKey);
+
+  useEffect(() => {
+    if (!deepLinkKey) return;
+    const item = NAWAFIL_ITEMS.find((candidate) => candidate.key === deepLinkKey);
+    if (!item) return;
+    // The filter chips decide what is rendered at all, so the item's own category is
+    // shown before anything is scrolled to — a card the filter has hidden cannot be
+    // highlighted.
+    setFilter(item.category);
+    setHighlightKey(deepLinkKey);
+  }, [deepLinkKey]);
+
+  useEffect(() => {
+    if (!highlightKey || loading) return;
+    const node = document.getElementById(`nawafil-${highlightKey}`);
+    if (!node) return;
+    const id = window.setTimeout(() => {
+      node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 120);
+    return () => window.clearTimeout(id);
+  }, [highlightKey, loading, filter]);
 
   // The live clock behind the opportunity card: it names the window open
   // right now, so it has to follow the wall clock — and rolling past midnight
@@ -712,21 +748,23 @@ export default function NawafilScreen({ settings }: NawafilScreenProps) {
             </div>
 
             {category === 'rawatib' ? (
-              <RawatibCards items={items} records={records} onToggle={handleToggle} />
+              <RawatibCards items={items} records={records} onToggle={handleToggle} highlightKey={highlightKey} />
             ) : (
               <div className="space-y-2.5">
                 {items.map((item) => {
                   const itemDone = !!records[item.key];
                   const isOpen = !!expanded[item.key];
+                  const isHighlighted = highlightKey === item.key;
                   const Icon = item.icon ?? Sparkles;
                   return (
                     <div
                       key={item.key}
+                      id={`nawafil-${item.key}`}
                       className={`rounded-2xl border p-3.5 transition-all ${
                         itemDone
                           ? 'border-success-200 bg-success-50/40 dark:border-success-800 dark:bg-success-900/10'
                           : 'border-gray-200 bg-white dark:border-white/10 dark:bg-white/5'
-                      }`}
+                      } ${isHighlighted ? 'ring-2 ring-gold-400 ring-offset-2 ring-offset-white dark:ring-[#cfa95c] dark:ring-offset-gray-950' : ''}`}
                     >
                       <div className="flex items-center gap-3">
                         <div
@@ -878,10 +916,13 @@ function RawatibCards({
   items,
   records,
   onToggle,
+  highlightKey,
 }: {
   items: NawafilItem[];
   records: Record<string, boolean>;
   onToggle: (type: string) => void;
+  /** The row a reminder pointed at, to ring so the reader can see where they landed. */
+  highlightKey?: string | null;
 }) {
   const prayers = Array.from(
     new Set(items.map((item) => item.prayer).filter((p): p is PrayerKey => !!p)),
@@ -935,17 +976,19 @@ function RawatibCards({
             <div className="space-y-2.5 p-3.5">
               {slots.map((slot) => {
                 const slotDone = !!records[slot.key];
+                const slotHighlighted = highlightKey === slot.key;
                 return (
                   <button
                     key={slot.key}
                     type="button"
+                    id={`nawafil-${slot.key}`}
                     aria-pressed={slotDone}
                     onClick={() => void onToggle(slot.key)}
                     className={`flex w-full items-center justify-between gap-3 rounded-2xl px-3.5 py-3 text-right transition-all active:scale-[0.99] ${
                       slotDone
                         ? 'border-2 border-success-200 bg-success-50 dark:border-success-800 dark:bg-success-900/20'
                         : 'border-2 border-gray-200 bg-white hover:border-primary-300 dark:border-gray-700 dark:bg-primary-900/40 dark:hover:border-primary-600'
-                    }`}
+                    } ${slotHighlighted ? 'ring-2 ring-gold-400 ring-offset-2 ring-offset-white dark:ring-[#cfa95c] dark:ring-offset-gray-950' : ''}`}
                   >
                     <span className="min-w-0 flex-1">
                       <span className="flex flex-wrap items-center gap-2">

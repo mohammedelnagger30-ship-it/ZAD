@@ -1,6 +1,6 @@
 ﻿import { LocalNotifications, type Importance, type LocalNotificationSchema } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
-import { db, getSettings } from '@/db/database';
+import { db, getSettings, DEFAULT_SETTINGS } from '@/db/database';
 import type { Settings } from '@/db/database';
 import {
   addCalendarDays,
@@ -43,7 +43,27 @@ import {
   preserveActiveSnooze,
 } from '@/utils/notifications';
 
-type DhikrReminderCategory = 'morning' | 'evening' | 'istighfar';
+/**
+ * Which collection a dhikr reminder may draw from.
+ *
+ * The three the reader can pin by hand — `morning`, `evening`, `istighfar` — plus the
+ * situational collections the «متنوع» rotation reaches for by the clock: after-prayer,
+ * sleep, wake-up, the general set, home and food. `friday` joins them on Fridays (see
+ * `getDhikrReminderCategory` and `fridayDhikrSlots`). The occasion-only collections
+ * (السفر، الميت) are deliberately absent: a reminder to read the travel or funeral
+ * adhkar, arriving unbidden, is not a kindness.
+ */
+type DhikrReminderCategory =
+  | 'morning'
+  | 'evening'
+  | 'istighfar'
+  | 'after_prayer'
+  | 'sleep'
+  | 'wakeup'
+  | 'general_adhkar'
+  | 'home'
+  | 'food'
+  | 'friday';
 
 /**
  * How many days of native prayer alarms are kept armed.
@@ -54,9 +74,10 @@ type DhikrReminderCategory = 'morning' | 'evening' | 'istighfar';
 const PRAYER_NOTIFICATION_DAYS = 30;
 
 /**
- * Sound-notification fallbacks share Android's bounded notification queue with the
- * rest of the app. Keep them to a week (35 prayer alerts) so they still fit the
- * existing 50-entry ceiling if native full-screen alarm arming fails.
+ * Sound-notification fallbacks share the app's alarm budget with the rest of the
+ * queue. Keep them to a week (35 prayer alerts) so they still fit the ceiling in
+ * `MAX_SCHEDULED_NOTIFICATIONS` even when every other bucket is full — the fallback
+ * path is the one that must never be the thing that gets trimmed.
  */
 const PRAYER_FALLBACK_DAYS = 7;
 
@@ -83,31 +104,60 @@ const DAILY_ALERT_DAYS = 2;
 
 /**
  * The queue is capped at this many entries, in priority order: prayer fallback
- * alerts, today's task reminders, the hadith, the iqamah alerts, the pre-prayer
- * reminders, and finally the dhikr filler. It used to reach 100–250 entries — seven
- * days of prayer alerts plus two days of fifteen-minute dhikr slots — and Android's
- * notification store drops the tail of a batch this size, which could take the
- * hadith or a task reminder with it. Fifty is room for every prayer fallback on
- * the horizon plus a full day of tasks, the iqamah alerts and dhikr; what does not
- * fit is filler, cut from the end.
+ * alerts, today's task reminders, the nafl windows, the hadith, the iqamah alerts,
+ * the pre-prayer reminders, and finally the dhikr filler.
  *
- * Enforced in one place, at assembly — see assembleNotificationQueue. Capping
- * only the filler was not enough: with the fallbacks appended afterwards, a day
- * whose takeover had failed overflowed anyway, and the tail Android then dropped
- * was the fallbacks themselves.
+ * The plugin turns every scheduled entry into its own `AlarmManager` alarm, and the
+ * whole batch is additionally written as one row per id into a single preferences
+ * store from which it is restored after a reboot. The ceiling exists to keep that
+ * batch — and the alarm registrations behind it — modest, and to leave room under
+ * Android's own PendingIntent ceiling, which the platform enforces in the hundreds.
+ *
+ * It used to be fifty, which was a hard choice between the prayers and everything
+ * else: two days of iqamah plus pre-prayer reminders plus a full day of dhikr is
+ * already forty-odd entries, so on a busy day the random dhikr reminders — and with a
+ * wide window, most of them — were simply never generated, and what did fit was
+ * trimmed from the end. A reader asking for «كثيرة» got one or two. The ceiling now
+ * covers the whole default week of prayer fallbacks (the largest single bucket), two
+ * days of the daily alerts, a full day of content and a full day of dhikr at any
+ * interval the settings allow, with room to spare: the priority order, not the
+ * ceiling, is what decides who gives way.
  */
-const MAX_SCHEDULED_NOTIFICATIONS = 50;
+const MAX_SCHEDULED_NOTIFICATIONS = 150;
 const MAX_HIFZ_REVIEW_REMINDERS = 15;
 
 /**
- * How many days of the daily content notifications — hadith of the day, the Qur'an
- * message, a Sunnah, a fact about the Prophet ﷺ — travel in the queue.
+ * The id slot Friday's own dhikr cards start at.
  *
- * A week matches the prayer-fallback horizon, but unlike it the content is bounded
- * again at assembly (see the budget in `rescheduleAllNotifications`), so a busy week
- * gives up its far days rather than today's task.
+ * A dhikr card's id is `dayOffset * 1000 + slot`, and the filler's day offsets are under
+ * two with fewer than a hundred slots a day — so anything from twenty thousand up is
+ * clear of them. Two buckets sharing an id would let one notification silently replace
+ * the other, which is how a Friday card would take a filler card's place.
  */
-const CONTENT_NOTIFICATION_DAYS = 7;
+const FRIDAY_DHIKR_ID_SLOT_BASE = 20_000;
+
+/**
+ * How many of the Prophet's own facts never travel as notifications.
+ *
+ * The Prophet page's «أسماءه وكنيته ولقائه», its nasab, its family and its خطبة الوداع
+ * are worth reading where they are written; as a phone alert they are a paragraph in
+ * the status bar, and the daily rotation would spend a week of them on lineage. The
+ * sections that do travel are the ones a single card can carry whole.
+ */
+const PROPHET_NOTIFICATION_EXCLUDED_SECTIONS = new Set(['names', 'birth', 'family', 'sermon']);
+
+/**
+ * How many days of the daily content notifications — the hadith of the day, the
+ * Qur'an message, the Sunnahs about the Prophet ﷺ and his facts and miracles —
+ * travel in the queue.
+ *
+ * The queue is rebuilt on every open and resume, so this only has to cover a closed
+ * app: four days is enough that a long weekend without opening the app still wakes to
+ * content, while a busy day still gives up its farthest day at assembly long before it
+ * touches today's task. It is deliberately shorter than the prayer-fallback week
+ * because each content day is now seven entries rather than four.
+ */
+const CONTENT_NOTIFICATION_DAYS = 4;
 
 /**
  * The identity every notification carries: the small icon (the open Mushaf,
@@ -125,27 +175,76 @@ export const NOTIFICATION_BRAND = {
 } as const;
 
 /**
- * Which collection a reminder draws from when the user leaves the category on
- * «متنوع حسب الوقت». The clock decides: morning adhkar before noon, evening adhkar from
- * Asr onwards, and a lighter istighfar in the middle of the day — alternating with the
- * collection of the period so a long window is not one theme end to end.
+ * Which collection a reminder draws from.
+ *
+ * A pinned choice (`randomDhikrCategory`) is honoured as-is. On «متنوع حسب الوقت» the
+ * clock picks from a small timetable of the daily sets — the waking adhkar in the
+ * morning, the general and home sets through the middle of the day, the evening adhkar
+ * and the sleep adhkar at night — alternating with a lighter istighfar so a long window
+ * is not one theme end to end. On a Friday the daytime slots alternate with the Friday
+ * set instead, so يوم الجمعة carries أذكار يوم الجمعة. The occasion-only sets are never
+ * chosen.
  */
-function getDhikrReminderCategory(
+const VARIED_DHIKR_TIMETABLE: { fromHour: number; toHour: number; categories: DhikrReminderCategory[] }[] = [
+  { fromHour: 4, toHour: 8, categories: ['wakeup', 'morning'] },
+  { fromHour: 8, toHour: 12, categories: ['morning', 'general_adhkar'] },
+  { fromHour: 12, toHour: 16, categories: ['general_adhkar', 'food', 'home'] },
+  { fromHour: 16, toHour: 19, categories: ['evening', 'general_adhkar'] },
+  { fromHour: 19, toHour: 22, categories: ['evening', 'home', 'sleep'] },
+  { fromHour: 22, toHour: 4, categories: ['sleep'] },
+];
+
+/**
+ * The hours a Friday's own adhkar are mixed into the «متنوع» rotation.
+ *
+ * The Friday set is not the whole day: it belongs to the day's first half and its
+ * afternoon, so the reader meets it before the Jumu'ah prayer and just after it, while
+ * the evening and the night keep the sets they have always had.
+ */
+const FRIDAY_DHIKR_FROM_HOUR = 8;
+const FRIDAY_DHIKR_TO_HOUR = 16;
+
+/** Friday, as `Date#getDay` reports it. */
+export function isFriday(at: Date): boolean {
+  return at.getDay() === 5;
+}
+
+export function getDhikrReminderCategory(
   preference: Settings['randomDhikrCategory'] | undefined,
   at: Date,
   slot: number,
 ): DhikrReminderCategory {
   if (preference && preference !== 'varied') return preference;
   const hour = at.getHours();
-  if (hour < 12) return slot % 2 === 0 ? 'morning' : 'istighfar';
-  if (hour >= 17) return slot % 2 === 0 ? 'evening' : 'istighfar';
-  return 'istighfar';
+  // On a Friday every second slot of the waking day is a Friday dhikr — so even a
+  // reader who never changes anything still reaches for يوم الجمعة on يوم الجمعة,
+  // whatever the clock and the slot index happen to say about the other half.
+  if (
+    isFriday(at) &&
+    slot % 2 === 0 &&
+    hour >= FRIDAY_DHIKR_FROM_HOUR &&
+    hour < FRIDAY_DHIKR_TO_HOUR
+  ) {
+    return 'friday';
+  }
+  const band =
+    VARIED_DHIKR_TIMETABLE.find((entry) =>
+      entry.fromHour < entry.toHour
+        ? hour >= entry.fromHour && hour < entry.toHour
+        : hour >= entry.fromHour || hour < entry.toHour,
+    ) ?? VARIED_DHIKR_TIMETABLE[0];
+  const choices = band.categories;
+  // Every third slot is istighfar, so a long morning or evening is broken up rather
+  // than becoming an unbroken run of the same collection.
+  if (slot % 3 === 2) return 'istighfar';
+  return choices[slot % choices.length];
 }
 
 /**
  * The pool a reminder category draws from, with the collection id the notification's
  * deep link needs. Istighfar has no collection of its own in the adhkar pages, so it
- * uses its dedicated set rather than the generic fallback.
+ * uses its dedicated set rather than the generic fallback; يوم الجمعة resolves like
+ * every other collection, straight from its own page.
  */
 function dhikrPool(category: DhikrReminderCategory): { items: Dhikr[]; categoryId: string } {
   if (category === 'istighfar') return { items: ISTIGHFAR_DHIKR, categoryId: 'istighfar' };
@@ -235,11 +334,81 @@ export function createDhikrRotation(): (
 }
 
 /**
+ * The clock each Friday reminder lands on, as an hour and a minute.
+ *
+ * Five of them across the day: after the Fajr prayer, in the late morning before the
+ * Jumu'ah, right after it, in the afternoon, and in the evening — so the Friday set
+ * reaches the reader before the prayer, around it, and after it, instead of arriving
+ * as a burst of five cards inside one minute.
+ */
+export const FRIDAY_DHIKR_CLOCK: ReadonlyArray<{ hour: number; minute: number }> = [
+  { hour: 7, minute: 0 },
+  { hour: 10, minute: 30 },
+  { hour: 13, minute: 0 },
+  { hour: 16, minute: 30 },
+  { hour: 20, minute: 0 },
+];
+
+/**
+ * How many days ahead the Friday reminders are armed.
+ *
+ * Eight is a whole week plus a day, so whatever day the queue is rebuilt on, the next
+ * Friday is inside the window: a phone opened only on a Thursday still spends Friday
+ * morning arming that day's adhkar, and an app left closed across a Friday had its
+ * cards posted from the week before.
+ */
+export const FRIDAY_NOTIFICATION_DAYS = 8;
+
+/**
+ * When the next Friday's adhkar should be delivered.
+ *
+ * Pure and clock-free — it is handed the moment the queue is being built, so the arming
+ * is testable: every returned instant falls on a Friday, lies in the future, and sits
+ * inside the window. Clock times already passed on today's Friday are dropped rather
+ * than armed, which is what would otherwise make a Friday-afternoon rebuild post the
+ * whole day's cards at once.
+ */
+export function fridayDhikrSlots(now: Date): Array<{ at: Date; dayOffset: number; slot: number }> {
+  const slots: Array<{ at: Date; dayOffset: number; slot: number }> = [];
+  for (let dayOffset = 0; dayOffset <= FRIDAY_NOTIFICATION_DAYS; dayOffset += 1) {
+    const day = new Date(now);
+    day.setHours(0, 0, 0, 0);
+    day.setDate(day.getDate() + dayOffset);
+    if (!isFriday(day)) continue;
+    FRIDAY_DHIKR_CLOCK.forEach(({ hour, minute }, slot) => {
+      const at = new Date(day);
+      at.setHours(hour, minute, 0, 0);
+      if (at <= now) return;
+      slots.push({ at, dayOffset, slot });
+    });
+  }
+  return slots;
+}
+
+/**
  * Classify dhikr as "short" (fits fully in expanded notification) or "long" (needs deep link).
  * Threshold: ~180 chars — short dhikr like tasbih/istighfar fit; long ones like Ayat al-Kursi don't.
  */
 function isShortDhikr(dhikr: Dhikr): boolean {
   return dhikr.text.length <= 180;
+}
+
+/**
+ * The heading a dhikr reminder carries, per collection.
+ *
+ * It used to name only the morning or the evening set — every other collection the
+ * rotation draws from (بعد الصلاة، النوم، المسجد، الطعام، السفر…) arrived under the
+ * wrong heading, which is worse than no heading at all. The collection's own title is
+ * read from the same data the page shows, with the istighfar set — which has no page
+ * of its own — keeping its dedicated wording.
+ */
+function dhikrNotificationTitle(category: DhikrReminderCategory, categoryId: string): string {
+  if (category === 'istighfar') return 'تذكير بالاستغفار';
+  // The Friday cards arrive on the day itself, so they carry the day's own name rather
+  // than «تذكير — …»: the reader should see what Friday is for at a glance.
+  if (category === 'friday') return 'أذكار يوم الجمعة';
+  const collection = ADHKAR_CATEGORIES.find((candidate) => candidate.id === categoryId);
+  return collection ? `تذكير — ${collection.title}` : 'تذكير بذكر';
 }
 
 /**
@@ -259,7 +428,7 @@ function buildDhikrNotification(
   const notificationIdValue = notificationId.dhikr(dayOffset * 1000 + slot);
   const base = {
     id: notificationIdValue,
-    title: category === 'istighfar' ? 'تذكير بالاستغفار' : `أذكار ${category === 'morning' ? 'الصباح' : 'المساء'}`,
+    title: dhikrNotificationTitle(category, categoryId),
     channelId: 'azkar',
     schedule: { at: new Date(), allowWhileIdle: true }, // placeholder, set by caller
     sound: reminderSound,
@@ -290,6 +459,21 @@ function buildDhikrNotification(
 function timeToMinutes(value: string): number | null {
   const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(value);
   return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+}
+
+/**
+ * How many reminders a day may carry, read off the settings row.
+ *
+ * The ceiling is what the window itself can hold at the finest interval the settings
+ * offer (fifteen-minute slots), so a large number is not a lie — it is simply more
+ * than any window can produce, and the window wins. A missing or malformed row (an
+ * install that predates it, a hand-edited backup) falls back to the default rather
+ * than to zero, which would silently turn the switch off.
+ */
+export function dhikrPerDayLimit(value: number | undefined): number {
+  const ceiling = 96;
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_SETTINGS.randomDhikrMaxPerDay;
+  return Math.min(ceiling, Math.max(1, Math.trunc(value)));
 }
 
 /**
@@ -621,6 +805,11 @@ async function rebuildNotifications(): Promise<void> {
   const taskReminders: LocalNotificationSchema[] = [];
   const hadithReminders: LocalNotificationSchema[] = [];
   const dhikrFiller: LocalNotificationSchema[] = [];
+  /**
+   * أذكار يوم الجمعة — بطاقات لها مواعيدها الخاصة، تصل يوم الجمعة تلقائياً ومهما كان
+   * اختيار القارئ لنوع التذكير (انظر `fridayDhikrSlots`).
+   */
+  const fridayReminders: LocalNotificationSchema[] = [];
 
   // The native alarm posts into the prayer channel, so do not replace the working
   // queue with alarms that may open a silent page if channel creation failed.
@@ -786,7 +975,6 @@ async function rebuildNotifications(): Promise<void> {
   //    they win the queue cap (see MAX_SCHEDULED_NOTIFICATIONS).
   await generateDailyTasks();
   const tasks = await getTodayTasks();
-
   for (const task of tasks) {
     if (task.status === 'done' || task.status === 'missed') continue;
     const scheduledAt = task.status === 'snoozed' && task.snoozedUntil
@@ -810,6 +998,59 @@ async function rebuildNotifications(): Promise<void> {
         portion: task.portion,
       },
     });
+  }
+
+  // 2b. Today's nafl windows — the Sunnah-rawatib slot and the two voluntary prayers
+  //     whose time is computed rather than configured: الضحى opens with the sunrise
+  //     and الوتر with the عشاء, and the night's last third is the best of the
+  //     Nawafil. They are named here, so tapping one opens the Nawafil page on the
+  //     very item it is about (see getNawafilDestination).
+  //
+  //     They need a location like the adhan does, and they ride *after* the tasks so
+  //     the planned ورد always keeps its slot — these are invitations, not dues.
+  const naflReminders: LocalNotificationSchema[] = [];
+  if (settings.latitude != null && settings.longitude != null) {    const timeZone = getPrayerTimeZone(settings.timeZone, settings.cityName);
+    const today = calculatePrayerTimesForDay(
+      settings.latitude,
+      settings.longitude,
+      calendarDayInZone(trustedNow(), timeZone),
+      settings.calcMethod,
+      settings.asrMadhab,
+      settings.prayerTimeAdjustments,
+    );
+    const atPrayer = (name: string) => today.prayers.find((prayer) => prayer.name === name)?.time;
+    const fajr = atPrayer('fajr');
+    const sunrise = atPrayer('sunrise');
+    const isha = atPrayer('isha');
+    const naflNow = trustedNow();
+    let naflSlot = 0;
+    const pushNafl = (
+      at: Date | undefined,
+      title: string,
+      body: string,
+      nawafilKey: string,
+    ) => {
+      if (!at || at <= naflNow) return;
+      naflReminders.push({
+        id: notificationId.nafl(naflSlot++),
+        title,
+        body,
+        schedule: { at: armedAt(at), allowWhileIdle: true },
+        channelId: 'sunnah',
+        sound: reminderSound,
+        ...NOTIFICATION_BRAND,
+        extra: { type: 'nawafil', nawafilKey },
+      });
+    };
+    pushNafl(sunrise, 'وقت صلاة الضحى', 'من الشروق حتى قبيل الظهر — ركعتان تكفيانك صدقة', 'duha');
+    pushNafl(isha, 'وقت صلاة الوتر', 'من أذان العشاء حتى الفجر — اختم بها صلاتك', 'witr');
+    // The last third of the night: `maghrib + 2/3` of the span to Fajr, the same
+    // arithmetic `nawafilOpportunity` uses for its "النافلة المناسبة الآن" card.
+    const maghrib = atPrayer('maghrib');
+    if (maghrib && fajr) {
+      const thirdStart = new Date(fajr.getTime() - (fajr.getTime() - maghrib.getTime()) / 3);
+      pushNafl(thirdStart, 'الثلث الأخير من الليل', 'قيام الليل — خير الدور وأحبّها إلى الله', 'tahajjud');
+    }
   }
 
   // Spaced-repetition reviews are scheduled from the quiz's next due instant.
@@ -841,9 +1082,9 @@ async function rebuildNotifications(): Promise<void> {
     });
   });
 
-  // 3. The daily content notifications, armed for the next several days:
-  //    the hadith of the day (09:00), the Qur'an message (10:00), a Sunnah about the
-  //    Prophet ﷺ (14:00) and a fact about him ﷺ (16:00).
+  // 3. The daily content notifications, armed for the next several days: the hadith of
+  //    the day (09:00), the Qur'an message (10:00), three Sunnahs about the Prophet ﷺ
+  //    from 14:00 and three of his facts and miracles from 16:00.
   //
   //    The queue is rebuilt when the app opens, so a *today only* horizon made all of
   //    these stop the moment the app stayed closed for a day — which is exactly what a
@@ -851,7 +1092,7 @@ async function rebuildNotifications(): Promise<void> {
   //    the same reason; these keep a few days, bounded below by what still has to fit.
   //
   //    The bound is spent on the buckets ranked above them (tasks, spaced reviews,
-  //    pre-prayer reminders) first, and only *today's* four join the hadith block:
+  //    pre-prayer reminders) first, and only *today's* content joins the hadith block:
   //    the days still to come travel in their own bucket, ranked just ahead of the
   //    dhikr filler, so a queue that fills up gives up its farthest day long before
   //    it gives up the جماعة or tomorrow's task.
@@ -859,14 +1100,43 @@ async function rebuildNotifications(): Promise<void> {
     0,
     MAX_SCHEDULED_NOTIFICATIONS
       - taskReminders.length
+      - naflReminders.length
       - hifzReviewReminders.length
       - prePrayerReminders.length
       - iqamahAlerts.length,
   );
-  /** The next days' four-per-day content; see {@link NotificationQueueParts}. */
+  /** The next days' content; see {@link NotificationQueueParts}. */
   const futureContentReminders: LocalNotificationSchema[] = [];
-  const sunnahItems: SunnahItem[] = SUNNAH_CATEGORIES.flatMap((category) => category.items);
-  const prophetEntries: ProphetEntry[] = PROPHET_SECTIONS.flatMap((section) => section.entries);
+  // Each entry keeps the section it came from: the notification's tap target is the
+  // card inside that section, not the screen's front page.
+  const sunnahItems: { item: SunnahItem; categoryId: string }[] = SUNNAH_CATEGORIES.flatMap(
+    (category) => category.items.map((item) => ({ item, categoryId: category.id })),
+  );
+  const prophetEntries: { entry: ProphetEntry; sectionId: string }[] = PROPHET_SECTIONS
+    .filter((section) => !PROPHET_NOTIFICATION_EXCLUDED_SECTIONS.has(section.id))
+    .flatMap((section) => section.entries.map((entry) => ({ entry, sectionId: section.id })));
+  /**
+   * The Prophet's miracles, threaded through the rest of his facts.
+   *
+   * «ومنهم معجزات عن الرسول» asked for the miracles specifically, and a pool that is
+   * simply the sections in page order buries them: a nine-entry miracles section behind
+   * twenty-odd cards of شمائل وسيرة arrives about one day in four, and then three days
+   * running. Deal them evenly instead — every third slot is a miracle wherever one is
+   * left, so they surface regularly instead of in a clump.
+   */
+  const prophetPool: { entry: ProphetEntry; sectionId: string }[] = (() => {
+    const miracles = prophetEntries.filter((item) => item.sectionId === 'miracles');
+    const rest = prophetEntries.filter((item) => item.sectionId !== 'miracles');
+    if (miracles.length === 0) return prophetEntries;
+    const dealt: { entry: ProphetEntry; sectionId: string }[] = [];
+    let nextMiracle = 0;
+    let nextRest = 0;
+    while (nextMiracle < miracles.length || nextRest < rest.length) {
+      if (nextMiracle < miracles.length) dealt.push(miracles[nextMiracle++]);
+      for (let gap = 0; gap < 2 && nextRest < rest.length; gap += 1) dealt.push(rest[nextRest++]);
+    }
+    return dealt;
+  })();
   /** Seeded so re-arming the queue never swaps the verse of the day under the user. */
   const seededRandom = (seed: number): (() => number) => {
     let state = seed >>> 0;
@@ -889,9 +1159,12 @@ async function rebuildNotifications(): Promise<void> {
   let contentSlot = 0;
 
   /**
-   * The hour each of the four arrives, as set in Settings — with the hour it had
-   * before the setting existed as its default, so an install whose rows are still
-   * empty keeps waking to the same clock it always did.
+   * The hour each of the daily anchors arrives, as set in Settings — with the hour it
+   * had before the setting existed as its default, so an install whose rows are still
+   * empty keeps waking to the same clock it always did. The extra Sunnah and Prophet
+   * ﷺ slots hang off these two clocks rather than getting clocks of their own: the
+   * reader chose when the Sunnah and the Prophet's card should reach them, and a
+   * second setting per bucket would be four more numbers to get wrong.
    */
   const contentTimes = {
     hadith: configuredClockTime(settings.hadithNotificationTime, 9),
@@ -907,6 +1180,20 @@ async function rebuildNotifications(): Promise<void> {
     (dayOffset === 0 ? hadithReminders : futureContentReminders).push(notification);
   };
 
+  // One cycle through each pool: walking them in *lockstep* rather than by
+  // `(day, offset)` index is what lets a day carry more than one item without ever
+  // repeating one — the two schemes collide after `pool / perDay` days, which is how
+  // a one-per-day rotation quietly turns into the same cards every week.
+  let sunnahCursor = 0;
+  let prophetCursor = 0;
+  /**
+   * Which pool entry `index` lands on. Once the cycle is longer than the pool, the
+   * pool simply repeats — the first tropes come round again rather than the week
+   * going silent.
+   */
+  const poolAt = <T,>(pool: readonly T[], index: number): T | null =>
+    pool.length === 0 ? null : pool[((index % pool.length) + pool.length) % pool.length];
+
   for (
     let dayOffset = 0;
     dayOffset < CONTENT_NOTIFICATION_DAYS && contentCount() < contentBudget;
@@ -920,98 +1207,173 @@ async function rebuildNotifications(): Promise<void> {
       return at;
     };
     const claim = () => contentCount() < contentBudget;
+    /**
+     * Arm one item on one of the day's minutes.
+     *
+     * The first item sits exactly on the clock the reader set; each further item of the
+     * same bucket is a fixed step later, so three Sunnahs become a morning, an afternoon
+     * and an evening reading rather than three alerts inside the same minute. The times
+     * are clamped to the waking day — nothing before 06:00 or after 22:30 — and a step
+     * that would fall past the clamp rides back to the last free minute instead of
+     * dropping that Sunnah entirely.
+     */
+    const armContent = (
+      clock: { hour: number; minute: number },
+      stepMinutes: number,
+      offsetInDay: number,
+    ): Date => {
+      const anchor = clock.hour * 60 + clock.minute;
+      const WAKING_START = 6 * 60;
+      const WAKING_END = 22 * 60 + 30;
+      let target = anchor + offsetInDay * stepMinutes;
+      if (offsetInDay > 0) {
+        // Keep the steps inside the day without collapsing them onto the anchor: a late
+        // anchor (21:00) with two extra slots would otherwise stack all three at 22:30.
+        while (target > WAKING_END) target -= stepMinutes;
+        target = Math.max(WAKING_START, target);
+      }
+      return armedAt(atTime({ hour: Math.floor(target / 60), minute: target % 60 }));
+    };
+
+    /**
+     * How many of each arrive per day. «حديث اليوم» shot once a day is the point of it,
+     * while the Sunnah and the Prophet ﷺ pools are deep enough that three a day still
+     * shows a new one every day for a fortnight — so the two that were explicitly asked
+     * for more of carry three, and the two daily anchors carry one.
+     */
+    const sunnahPerDay = 3;
+    const prophetPerDay = 3;
+    /** The gap between two same-bucket items — three Sunnahs across the day, not a burst. */
+    const CONTENT_STEP_MINUTES = 180;
 
     // Hadith of the day. Its clock is a *true* instant derived from trustedNow():
     // Android fires when the *device* clock reaches the target, so it carries the
     // drift like every other entry here — without it the hadith sounded drift-shifted
     // while every prayer alarm around it was corrected.
-    const hadithTime = atTime(contentTimes.hadith);
-    if (hadithTime > queueNow && claim()) {
-      pushContent({
-        id: notificationId.hadith(contentSlot++),
-        title: 'حديث اليوم',
-        body: 'حديثٌ مختار لك اليوم — اقرأه في دقيقة',
-        schedule: { at: armedAt(hadithTime), allowWhileIdle: true },
-        channelId: 'hadith',
-        sound: reminderSound,
-        ...NOTIFICATION_BRAND,
-        extra: { type: 'hadith', dayOffset },
-      });
-    }
-
-    // The Qur'an message of the day — one verse, read where it belongs.
-    const quranTime = atTime(contentTimes.quran);
-    if (quranTime > queueNow && claim()) {
-      try {
-        const message = getDailyQuranMessage(
-          dayDate,
-          dayOffset === 0 ? undefined : ephemeralStorage,
-          seededRandom(dayNumber + dayOffset),
-        );
-        const text = message.text.length > 120 ? `${message.text.slice(0, 117)}…` : message.text;
+    {
+      const hadithTime = armContent(contentTimes.hadith, CONTENT_STEP_MINUTES, 0);
+      if (hadithTime > queueNow && claim()) {
         pushContent({
           id: notificationId.hadith(contentSlot++),
-          title: 'رسالة اليوم من القرآن',
-          body: `${text} — سورة ${message.surahName}`,
-          schedule: { at: armedAt(quranTime), allowWhileIdle: true },
-          channelId: 'quran',
+          title: 'حديث اليوم',
+          body: 'حديثٌ مختار لك اليوم — اقرأه في دقيقة',
+          schedule: { at: hadithTime, allowWhileIdle: true },
+          channelId: 'hadith',
           sound: reminderSound,
           ...NOTIFICATION_BRAND,
-          extra: {
-            type: 'quran-message',
-            surahId: message.surahId,
-            ayahNumber: message.ayahNumber,
-            dayOffset,
-          },
+          extra: { type: 'hadith', dayOffset },
         });
-      } catch (err) {
-        console.warn('Could not schedule the daily Quran message notification:', err);
       }
     }
 
-    // A Sunnah of the day, rotated through the narration library.
-    const sunnahTime = atTime(contentTimes.sunnah);
-    if (sunnahTime > queueNow && sunnahItems.length > 0 && claim()) {
-      const item = sunnahItems[(dayNumber + dayOffset) % sunnahItems.length];
+    // The Qur'an message of the day — one verse, read where it belongs.
+    {
+      const quranTime = armContent(contentTimes.quran, CONTENT_STEP_MINUTES, 0);
+      if (quranTime > queueNow && claim()) {
+        try {
+          const message = getDailyQuranMessage(
+            dayDate,
+            dayOffset === 0 ? undefined : ephemeralStorage,
+            seededRandom(dayNumber + dayOffset),
+          );
+          const text = message.text.length > 120 ? `${message.text.slice(0, 117)}…` : message.text;
+          pushContent({
+            id: notificationId.hadith(contentSlot++),
+            title: 'رسالة اليوم من القرآن',
+            body: `${text} — سورة ${message.surahName}`,
+            schedule: { at: quranTime, allowWhileIdle: true },
+            channelId: 'quran',
+            sound: reminderSound,
+            ...NOTIFICATION_BRAND,
+            extra: {
+              type: 'quran-message',
+              surahId: message.surahId,
+              ayahNumber: message.ayahNumber,
+              dayOffset,
+            },
+          });
+        } catch (err) {
+          console.warn('Could not schedule the daily Quran message notification:', err);
+        }
+      }
+    }
+
+    // Sunnahs of the day — several, rotated through the narration library.
+    for (let index = 0; index < sunnahPerDay; index += 1) {
+      if (!claim()) break;
+      const sunnahTime = armContent(contentTimes.sunnah, CONTENT_STEP_MINUTES, index);
+      if (sunnahTime <= queueNow) continue;
+      const picked = poolAt(sunnahItems, sunnahCursor);
+      if (!picked) break;
+      sunnahCursor += 1;
+      const { item, categoryId } = picked;
       pushContent({
         id: notificationId.hadith(contentSlot++),
         title: item.title || 'سنّة عن النبي ﷺ',
         body: item.text || item.benefit || '',
-        schedule: { at: armedAt(sunnahTime), allowWhileIdle: true },
+        schedule: { at: sunnahTime, allowWhileIdle: true },
         channelId: 'sunnah',
         sound: reminderSound,
         ...NOTIFICATION_BRAND,
-        extra: { type: 'sunnah', dayOffset },
+        extra: { type: 'sunnah', dayOffset, categoryId, itemTitle: item.title },
       });
     }
 
-    // A fact about the Prophet ﷺ from the Prophet page.
-    const prophetTime = atTime(contentTimes.prophet);
-    if (prophetTime > queueNow && prophetEntries.length > 0 && claim()) {
-      const entry = prophetEntries[(dayNumber + dayOffset) % prophetEntries.length];
+    // Facts and miracles of the Prophet ﷺ — several, walked through the pool.
+    for (let index = 0; index < prophetPerDay; index += 1) {
+      if (!claim()) break;
+      const prophetTime = armContent(contentTimes.prophet, CONTENT_STEP_MINUTES, index);
+      if (prophetTime <= queueNow) continue;
+      const picked = poolAt(prophetPool, prophetCursor);
+      if (!picked) break;
+      prophetCursor += 1;
+      const { entry, sectionId } = picked;
       pushContent({
         id: notificationId.hadith(contentSlot++),
         title: entry.title || 'النبي محمد ﷺ',
         body: entry.text || entry.hint || '',
-        schedule: { at: armedAt(prophetTime), allowWhileIdle: true },
+        schedule: { at: prophetTime, allowWhileIdle: true },
         channelId: 'prophet',
         sound: reminderSound,
         ...NOTIFICATION_BRAND,
-        extra: { type: 'prophet', dayOffset },
+        extra: { type: 'prophet', dayOffset, sectionId, entryTitle: entry.title },
       });
     }
   }
 
+  // 3b. أذكار يوم الجمعة — بطاقات لها مواعيدها على مدار يوم الجمعة.
+  //
+  // ليست جزءاً من العجلة أدناه: الاختيار هنا يعتمد على الساعة واليوم، فقارئ ثبّت
+  // «أذكار الصباح» لن يرى ذكر جمعة أبداً، وطابور بُني يوم الثلاثاء لا يحمل شيئاً
+  // ليوم الجمعة. فلأذكار الجمعة بطاقاتها، تُدار بدورانها الخاص، وتصل يوم الجمعة.
+  if (settings.randomDhikrEnabled) {
+    const nextFridayDhikr = createDhikrRotation();
+    for (const { at, dayOffset, slot } of fridayDhikrSlots(trustedNow())) {
+      const { dhikr, categoryId } = nextFridayDhikr('friday', at);
+      const notif = buildDhikrNotification(
+        dhikr,
+        'friday',
+        FRIDAY_DHIKR_ID_SLOT_BASE + dayOffset * 100 + slot,
+        dayOffset,
+        reminderSound,
+        categoryId,
+      );
+      notif.schedule = { at: armedAt(at), allowWhileIdle: true };
+      fridayReminders.push(notif);
+    }
+  }
+
   // 4. Random text-only dhikr reminders for today and tomorrow — the queue's
-  //    filler. They are generated only for as many slots as the certainly-armed
-  //    buckets leave free, so a full queue drops tomorrow's dhikr rather than a
-  //    prayer or a task. The fallbacks claim nothing here: they are conditional
-  //    on the takeover failing, and assembly ranks them first when it does —
-  //    see dhikrFillerBudget.
+  //    filler. Each day carries up to `randomDhikrMaxPerDay` of them, and they are
+  //    generated only for as many slots as the certainly-armed buckets leave free,
+  //    so a full queue drops tomorrow's dhikr rather than a prayer or a task. The
+  //    fallbacks claim nothing here: they are conditional on the takeover failing,
+  //    and assembly ranks them first when it does — see dhikrFillerBudget.
   if (settings.randomDhikrEnabled) {
     const startMinute = timeToMinutes(settings.randomDhikrStartTime);
     const endMinute = timeToMinutes(settings.randomDhikrEndTime);
     const interval = settings.randomDhikrIntervalMinutes;
+    const perDayLimit = dhikrPerDayLimit(settings.randomDhikrMaxPerDay);
     if (
       startMinute === null ||
       endMinute === null ||
@@ -1025,11 +1387,13 @@ async function rebuildNotifications(): Promise<void> {
       const budget = dhikrFillerBudget(
         {
           taskReminders,
+          naflReminders,
           hadithReminders,
           iqamahAlerts,
           hifzReviewReminders,
           prePrayerReminders,
           futureContentReminders,
+          fridayReminders,
         },
         MAX_SCHEDULED_NOTIFICATIONS,
       );
@@ -1044,8 +1408,8 @@ async function rebuildNotifications(): Promise<void> {
           const windowEnd = new Date(windowStart.getTime() + duration * 60000);
 
           for (
-            let at = new Date(windowStart.getTime()), slot = 0;
-            at < windowEnd && armed < budget;
+            let at = new Date(windowStart.getTime()), slot = 0, dayArmed = 0;
+            at < windowEnd && armed < budget && dayArmed < perDayLimit;
             at = new Date(at.getTime() + interval * 60000), slot += 1
           ) {
             if (at <= now) continue;
@@ -1055,6 +1419,7 @@ async function rebuildNotifications(): Promise<void> {
             notif.schedule = { at: armedAt(at), allowWhileIdle: true };
             dhikrFiller.push(notif);
             armed += 1;
+            dayArmed += 1;
           }
         }
       }
@@ -1071,12 +1436,14 @@ async function rebuildNotifications(): Promise<void> {
       iqamah: iqamahAlerts.length,
       overlay: overlayAlarms.length,
       tasks: taskReminders.length,
+      nafl: naflReminders.length,
       reviews: hifzReviewReminders.length,
       content: hadithReminders.map(
         (notification) => `${notification.title}@${(notification.schedule?.at as Date | undefined)?.toISOString?.() ?? '?'}`,
       ),
       prePrayer: prePrayerReminders.length,
       futureContent: futureContentReminders.length,
+      friday: fridayReminders.length,
       dhikr: dhikrFiller.length,
     }),
   );
@@ -1132,11 +1499,13 @@ async function rebuildNotifications(): Promise<void> {
     {
       prayerFallbacks: overlayArmed ? [] : prayerFallbacks,
       taskReminders,
+      naflReminders,
       hadithReminders,
       iqamahAlerts: overlayArmed ? [] : iqamahAlerts,
       hifzReviewReminders,
       prePrayerReminders,
       futureContentReminders,
+      fridayReminders,
       dhikrFiller,
     },
     MAX_SCHEDULED_NOTIFICATIONS,

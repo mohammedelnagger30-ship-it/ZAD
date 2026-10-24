@@ -3,8 +3,8 @@
     "courses": 17,
     "series": 69,
     "lectures": 840,
-    "seconds": 2694469,
-    "bytes": 22283224431
+    "seconds": 2892199,
+    "bytes": 22048619025
   },
   "courses": [
     {
@@ -31,8 +31,8 @@
     {
       "id": "sifat-alsalah",
       "title": "شرح كتاب صفة الصلاة للألباني",
-      "item": "sefa_salah_howainy",
-      "kbps": 128,
+      "item": "howaini-sifat-salat",
+      "kbps": 31,
       "lessons": 7
     },
     {
@@ -80,7 +80,7 @@
     {
       "id": "walaa-baraa",
       "title": "إتحاف النبلاء بمسائل الولاء والبراء",
-      "item": "Howainy_walaa_baraa",
+      "item": "howaini3-Up-By-mUSLEm",
       "kbps": 23,
       "lessons": 4
     },
@@ -95,35 +95,35 @@
       "id": "salam-alsuud",
       "title": "سلسلة سلم الصعود",
       "item": "Solem-Saud_Howaini_uP_bY_mUSLEm",
-      "kbps": 0,
+      "kbps": 128,
       "lessons": 9
     },
     {
       "id": "alghawwas",
       "title": "الغواص في استنباط الأحكام من الحديث",
-      "item": "AlGhawas",
-      "kbps": 0,
+      "item": "howaini-gawaas",
+      "kbps": 68,
       "lessons": 23
     },
     {
       "id": "sharh-bukhari",
       "title": "شرح صحيح البخاري",
       "item": "ansarel7abib_235",
-      "kbps": 0,
+      "kbps": 26,
       "lessons": 13
     },
     {
       "id": "albaqooniyah",
       "title": "شرح المنظومة البيقونية",
       "item": "xboxgamer-4642",
-      "kbps": 0,
+      "kbps": 42,
       "lessons": 10
     },
     {
       "id": "tark-alhawa",
       "title": "ترك الهوى عز الدنيا وشرف الآخرة",
       "item": "Al_Houwaini_Tark_Al-hawa_uP_bY_mUSLEm",
-      "kbps": 0,
+      "kbps": 64,
       "lessons": 5
     }
   ]

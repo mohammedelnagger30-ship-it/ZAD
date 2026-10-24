@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   ArrowLeft,
@@ -78,13 +78,28 @@ function useCountUp(target: number, ms = 1400) {
 /* One narration, layered: the practice, its occasion, its proof, its benefit. */
 /* -------------------------------------------------------------------------- */
 
-function SunnahCard({ item, index, navigate }: { item: SunnahItem; index: number; navigate: Nav }) {
+function SunnahCard({
+  item,
+  index,
+  navigate,
+  highlight = false,
+}: {
+  item: SunnahItem;
+  index: number;
+  navigate: Nav;
+  /** The card a notification deep link landed on — ringed so the reader sees it at once. */
+  highlight?: boolean;
+}) {
   const query = hadithSearchQuery(item.evidence);
   const delay = `${Math.min(index, 7) * 60}ms`;
 
   return (
     <article
-      className="animate-stagger-in relative overflow-hidden rounded-2xl border border-primary-100 dark:border-primary-800 bg-white dark:bg-primary-950/40 p-4 transition-smooth hover:-translate-y-0.5 hover:border-primary-300 dark:hover:border-primary-600 hover:shadow-lg hover:shadow-primary-500/10"
+      className={`animate-stagger-in relative overflow-hidden rounded-2xl border bg-white p-4 transition-smooth hover:-translate-y-0.5 hover:border-primary-300 hover:shadow-lg hover:shadow-primary-500/10 dark:bg-primary-950/40 dark:hover:border-primary-600 ${
+        highlight
+          ? 'border-gold-400 ring-2 ring-gold-400/70 dark:border-gold-500'
+          : 'border-primary-100 dark:border-primary-800'
+      }`}
       style={{ animationDelay: delay }}
     >
       {/* The accent rule that draws itself down the card's edge as the card arrives. */}
@@ -338,11 +353,45 @@ function StoryViewer({ cat, onClose, navigate }: { cat: SunnahCategory; onClose:
 
 /* -------------------------------------------------------------------------- */
 
-export default function SunnahScreen({ navigate }: { navigate: Nav }) {
-  const [selected, setSelected] = useState(SUNNAH_CATEGORIES[0].id);
+interface SunnahScreenProps {
+  navigate: Nav;
+  /** Deep links: a notification opens its own section and lands on the narration it announced. */
+  params?: Record<string, unknown>;
+}
+
+export default function SunnahScreen({ navigate, params }: SunnahScreenProps) {
+  const deepLinkCategoryId = typeof params?.categoryId === 'string' ? params.categoryId : null;
+  const deepLinkItemTitle = typeof params?.itemTitle === 'string' ? params.itemTitle : null;
+  const [selected, setSelected] = useState(() =>
+    deepLinkCategoryId && SUNNAH_CATEGORIES.some((category) => category.id === deepLinkCategoryId)
+      ? deepLinkCategoryId
+      : SUNNAH_CATEGORIES[0].id,
+  );
   const [story, setStory] = useState<SunnahCategory | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const railRef = useRef<HTMLDivElement>(null);
+
+  // The narration a notification announced, in the section it belongs to. Titles are
+  // the only stable key a narration has, and they are unique within a section.
+  const deepLinkTarget = useMemo(() => {
+    if (!deepLinkCategoryId || !deepLinkItemTitle) return null;
+    const category = SUNNAH_CATEGORIES.find((candidate) => candidate.id === deepLinkCategoryId);
+    if (!category) return null;
+    const index = category.items.findIndex((item) => item.title === deepLinkItemTitle);
+    return index < 0 ? null : { categoryId: category.id, index };
+  }, [deepLinkCategoryId, deepLinkItemTitle]);
+
+  useEffect(() => {
+    if (!deepLinkTarget) return;
+    // The list is rebuilt when the section renders, so the anchor only exists after
+    // the next paint.
+    const frame = requestAnimationFrame(() => {
+      document
+        .getElementById(`sunnah-item-${deepLinkTarget.categoryId}-${deepLinkTarget.index}`)
+        ?.scrollIntoView?.({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'center' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [deepLinkTarget]);
 
   const total = SUNNAH_CATEGORIES.reduce((sum, c) => sum + c.items.length, 0);
   const shown = useCountUp(total);
@@ -469,7 +518,18 @@ export default function SunnahScreen({ navigate }: { navigate: Nav }) {
 
         <div className="mt-3 space-y-3">
           {cat.items.map((item, idx) => (
-            <SunnahCard key={`${cat.id}-${idx}`} item={item} index={idx} navigate={navigate} />
+            <div
+              key={`${cat.id}-${idx}`}
+              id={`sunnah-item-${cat.id}-${idx}`}
+              className="scroll-mt-24"
+            >
+              <SunnahCard
+                item={item}
+                index={idx}
+                navigate={navigate}
+                highlight={deepLinkTarget?.categoryId === cat.id && deepLinkTarget.index === idx}
+              />
+            </div>
           ))}
         </div>
 

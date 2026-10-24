@@ -6,8 +6,6 @@ import { getAyahs, hasFullText, type AyahText } from '@/data/quranText';
 import { getHizbForPage, SAJDAH_AYAHS } from '@/data/mushafPages';
 import { db, type Bookmark as BookmarkType, type Settings } from '@/db/database';
 import { TafsirBottomSheet } from '@/components/TafsirBottomSheet';
-import { AudioRecitationPlayer } from '@/components/AudioRecitationPlayer';
-import { loadPreferredReciter, savePreferredReciter } from '@/data/audioReciters';
 import { MushafReader } from '@/screens/MushafReader';
 import { MushafFrameDecoration } from '@/components/mushaf/MushafPage';
 import { useViewportStep } from '@/hooks/useViewportStep';
@@ -19,8 +17,15 @@ import { JuzGrid } from '@/components/quran/JuzGrid';
 import { ReaderHeader } from '@/components/quran/ReaderHeader';
 import { HifzControls } from '@/components/quran/HifzControls';
 import { HifzTestModal } from '@/components/quran/HifzTestModal';
-import { ReaderChoiceSheet } from '@/components/quran/ReaderChoiceSheet';
+import { ReaderAyahMarks } from '@/components/quran/ReaderAyahMarks';
 import { ReaderNavigation } from '@/components/quran/ReaderNavigation';
+import { AyahVoiceSheet } from '@/components/mushaf/AyahVoiceSheet';
+import { WordAnalysisSheet, type SelectedQuranWord } from '@/components/mushaf/WordAnalysisSheet';
+import { useAyahVoice } from '@/hooks/useAyahVoice';
+import { useWordMeanings } from '@/hooks/useContent';
+import { loadBundledMeaningIndex, type WordMeaningIndex } from '@/utils/wordMeaningIndex';
+import { getSurahWordMeanings } from '@/utils/wordMeaningsService';
+import type { VoiceScope } from '@/components/mushaf/readerConfig';
 import { splitBasmala } from '@/utils/basmala';
 import { searchAyahs } from '@/utils/ayahSearch';
 import { recordReading, READING_STATE_KEY as QURAN_READER_STORAGE_KEY } from '@/utils/readingHistory';
@@ -108,11 +113,12 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
   /**
    * A recitation that is already running is the live thing.
    *
-   * The reader mounts its own audio panel, and that panel hands the engine *its*
-   * surah — so if the reader opened on a surah the engine is not on, mounting the
-   * panel would stop the recitation and start a different one. When the player has
-   * walked on to a surah other than the one this reader last held, the reader opens
-   * on the recitation instead, at its first ayah.
+   * The player walks on by itself — a surah ending into the next, or «التالي/السابق»
+   * from a notification or headset — and when it lands on a surah this reader is not
+   * showing, the reader opens on that recitation at its first ayah rather than sitting
+   * on a surah nobody is listening to. The reader keeps its own voice for a pressed
+   * ayah; this is only about which surah the screen stands on when the app-wide player
+   * moves.
    */
   const runningRecitation = useMemo(() => {
     const engine = getRecitationState();
@@ -143,12 +149,21 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
   // device when it is rotated under the reader.
   const viewportStep = useViewportStep();
   const [tafsirAyah, setTafsirAyah] = useState<{ surahId: number; ayah: number } | null>(null);
-  /** The ayah that has been pressed and has not yet been answered: meaning, or voice. */
-  const [ayahChoice, setAyahChoice] = useState<number | null>(null);
+  /**
+   * The ayah that has been pressed and has not yet been answered: meaning, or voice.
+   *
+   * It is a pair rather than a number because the same press now opens the window the
+   * mushaf opens — which names its own surah — and because the recitation walks down
+   * the surah on its own, carrying this with it.
+   */
+  const [ayahChoice, setAyahChoice] = useState<{ surahId: number; ayahNumber: number } | null>(null);
   const ayahChoicePanelRef = useRef<HTMLDivElement>(null);
+  /** The word whose meaning is on the word sheet. */
+  const [selectedWord, setSelectedWord] = useState<SelectedQuranWord | null>(null);
+  /** How far a recitation started from an ayah is allowed to run. */
+  const [voiceScope, setVoiceScope] = useState<VoiceScope>('ayah');
   const [mushafPage, setMushafPage] = useState(savedState?.mushafPage ?? 1);
   const [hasMushafPosition, setHasMushafPosition] = useState(savedState?.hasMushafPosition ?? false);
-  const [reciterId, setReciterId] = useState(loadPreferredReciter);
   /** The hifz self-test quiz for the currently selected ayah range. */
   const [showHifzTest, setShowHifzTest] = useState(false);
 
@@ -423,10 +438,182 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
     await loadBookmarks();
   };
 
-  const changeReciter = (id: string) => {
-    setReciterId(id);
-    savePreferredReciter(id);
-  };
+  /**
+   * The only preference this screen keeps for the voice is how far it runs: the reader
+   * has nothing else to remember, and the scope is a choice the reader makes rather
+   * than a page setting.
+   */
+  const patchVoiceScope = useCallback((patch: { scope?: VoiceScope }) => {
+    if (patch.scope) setVoiceScope(patch.scope);
+  }, []);
+
+  /**
+   * Put the reader on the ayah being asked about.
+   *
+   * The reader is one long sheet rather than a stack of pages, so unlike the mushaf
+   * there is no page to turn — the sheet simply follows the voice, and the mark under
+   * the recited ayah moves with it.
+   */
+  const showAyah = useCallback((surahId: number, ayahNumber: number) => {
+    setAyahChoice({ surahId, ayahNumber });
+  }, []);
+
+  const {
+    voiceEngaged,
+    voiceWholeFile,
+    voicePhase,
+    voiceError,
+    voiceTime,
+    playbackRate,
+    repeatCount,
+    voiceAudioRef,
+    setVoicePlaying,
+    reciterId,
+    handleVoiceReciter,
+    openVoice,
+    replayVoice,
+    handleVoiceScope,
+    closeAyahChoice,
+    resetVoice,
+    handleVoiceTime,
+    handleVoiceEnded,
+    handleVoiceRate,
+    handleRepeatCount,
+    seekVoice,
+    voicePrimaryLabel,
+    voicePrimaryDisabled,
+    voiceHint,
+    voicePlaying,
+  } = useAyahVoice({ ayahChoice, setAyahChoice, showAyah, updatePrefs: patchVoiceScope, voiceScope });
+
+  /**
+   * The pressed ayah: set it, and start the question from silence.
+   *
+   * `resetVoice` writes six slots to fixed values, so the second call finds them
+   * already there and React bails out — one instruction, not the five copies that
+   * used to stand here.
+   */
+  const handleAyahPress = useCallback(
+    (surahId: number, ayahNumber: number) => {
+      // One window at a time: a word's meaning and an ayah's options are separate
+      // sheets, and a keyboard can reach a word while the ayah's window is still up.
+      setSelectedWord(null);
+      setAyahChoice({ surahId, ayahNumber });
+      resetVoice();
+    },
+    [resetVoice],
+  );
+
+  /**
+   * Whether this ayah is the one sounding right now.
+   *
+   * Being the open ayah is not enough: a reader who opened an ayah to read its tafsir
+   * has not recited anything, and a medallion that claims otherwise is a lie told in
+   * the margin. It lights only while this very ayah's recitation is engaged and the
+   * element is actually playing — which is what the mark under «تُتلى الآن» means.
+   */
+  const isReciting = useCallback(
+    (surahId: number, ayahNumber: number) =>
+      voiceEngaged &&
+      voicePlaying &&
+      ayahChoice?.surahId === surahId &&
+      ayahChoice?.ayahNumber === ayahNumber,
+    [voiceEngaged, voicePlaying, ayahChoice],
+  );
+
+  /**
+   * A new surah is a new place.
+   *
+   * The ayah window and the word sheet both speak about a specific ayah of a specific
+   * surah — a title naming it, a recitation aimed at it, a mark drawn under it — so
+   * neither survives a move to another surah. What the reader used to do by remounting
+   * its whole audio panel on `key={surah.id}` is said here in one line instead.
+   *
+   * It sits below the voice hook on purpose: the dependency list is read during the
+   * render, and `closeAyahChoice` is not in scope above the hook that makes it.
+   */
+  useEffect(() => {
+    if (!selectedSurah) return;
+    closeAyahChoice();
+    setSelectedWord(null);
+  }, [selectedSurah, closeAyahChoice]);
+
+  // ── Which words of the open surah carry a meaning ────────────────────────────
+  // The bundled index is asked for once and remembered, so opening a surah costs a
+  // lookup rather than a request. The installed dump, if there is one, is folded in
+  // over the top of it: a dump can be newer than this build's copy of the index.
+  const { installed: wordMeaningsInstalled } = useWordMeanings();
+  const [bundledIndex, setBundledIndex] = useState<WordMeaningIndex | null>(null);
+  const [surahMeanings, setSurahMeanings] = useState<Map<number, Set<number>>>(new Map());
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadBundledMeaningIndex().then((index) => {
+      if (!cancelled) setBundledIndex(index);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedSurah || !wordMeaningsInstalled) {
+      setSurahMeanings(new Map());
+      return;
+    }
+    let cancelled = false;
+    void getSurahWordMeanings(selectedSurah.id).then((ayahs) => {
+      if (cancelled) return;
+      const next = new Map<number, Set<number>>();
+      for (const [ayahNumber, hits] of ayahs) {
+        const indexes = new Set(hits.map((hit) => hit.wordIndex));
+        if (indexes.size > 0) next.set(ayahNumber, indexes);
+      }
+      setSurahMeanings(next);
+    }).catch((cause: unknown) => {
+      console.error('Unable to load word-meaning markers for the reader:', cause);
+      if (!cancelled) setSurahMeanings(new Map());
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSurah, wordMeaningsInstalled]);
+
+  const meaningWords = useMemo(() => {
+    const merged = new Map<string, ReadonlySet<number>>();
+    if (!selectedSurah) return merged;
+    if (bundledIndex) {
+      for (const ayah of getAyahs(selectedSurah.id, 1, selectedSurah.ayahCount)) {
+        const hits = bundledIndex[`${ayah.surahId}:${ayah.ayahNumber}`];
+        if (hits && hits.length > 0) merged.set(`${ayah.surahId}:${ayah.ayahNumber}`, new Set(hits));
+      }
+    }
+    for (const [ayahNumber, indexes] of surahMeanings) {
+      merged.set(`${selectedSurah.id}:${ayahNumber}`, indexes);
+    }
+    return merged;
+  }, [bundledIndex, surahMeanings, selectedSurah]);
+
+  /**
+   * A word has been pressed.
+   *
+   * The mark came from the index, so the reader is told at once that this word is
+   * worth pressing — and the sheet is where the meaning lives, whether or not the
+   * books that write it out have been downloaded yet. It says what it is waiting
+   * for, and offers the one tap that fetches them.
+   */
+  const handleWordPress = useCallback(
+    (surahId: number, ayahNumber: number, word: string, wordPosition: number) => {
+      const surahName = getSurah(surahId)?.name;
+      if (!surahName) return;
+      // …and the ayah's window goes down for the same reason: its recitation is aimed
+      // at the ayah the word belongs to, and two sheets stacked on one press is not a
+      // screen anyone asked for.
+      closeAyahChoice();
+      setSelectedWord({ surahId, surahName, ayahNumber, word, wordPosition });
+    },
+    [closeAyahChoice],
+  );
 
   // ---- LIST VIEW ----
   if (viewMode === 'list') {
@@ -580,8 +767,12 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
                   <SurahListItem
                     key={surah.id}
                     surah={surah}
-                    onOpen={() => openSurah(surah)}
-                    onHifz={() => openHifzMode(surah)}
+                    // The whole card is the way in: pressing a surah opens its
+                    // memorisation page — the one the list exists to lead to. It used
+                    // to open the reader instead, with a small «حفظ» chip beside it
+                    // for the memorisation page: the bigger, more obvious target went
+                    // to the lesser of the two destinations. One card, one way in.
+                    onOpen={() => openHifzMode(surah)}
                   />
                 ))}
               </div>
@@ -699,127 +890,140 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
           onStartTest={() => setShowHifzTest(true)}
         />
 
-        <AudioRecitationPlayer
-          key={selectedSurah.id}
-          surah={selectedSurah}
-          reciterId={reciterId}
-          onReciterChange={changeReciter}
-          onShowTafsir={(ayah) => setTafsirAyah({ surahId: selectedSurah.id, ayah })}
-        >
-          {({ activeAyah, selectedAyah, selectAyah, playAyah }) => {
-            // The printed page this reader is standing on: whichever ayah the recitation
-            // holds, then whichever one is chosen, then where the surah opens. The margin
-            // and the folio both name that one page — as they do on a leaf in the reader.
-            const currentAyah = activeAyah || selectedAyah || 1;
-            const currentPage = getAyahPage(selectedSurah, currentAyah);
-            const sajdahAyahs = new Set(
-              SAJDAH_AYAHS.filter((s) => s.surahId === selectedSurah.id).map((s) => s.ayah),
-            );
+        {/* The printed page this reader is standing on: whichever ayah the recitation
+            holds, then whichever one is chosen, then where the surah opens. The margin
+            and the folio both name that one page — as they do on a leaf in the reader. */}
+        {(() => {
+          const currentAyah = ayahChoice?.ayahNumber ?? 1;
+          const currentPage = getAyahPage(selectedSurah, currentAyah);
+          const sajdahAyahs = new Set(
+            SAJDAH_AYAHS.filter((s) => s.surahId === selectedSurah.id).map((s) => s.ayah),
+          );
 
-            // The reader runs its text as paragraphs and sets the sajdah marker between
-            // them, never inside one — a <p> may not nest. The surah view splits the same
-            // way, at the ayah that carries the prostration.
-            const blocks: { sajdah: boolean; ayahs: AyahText[] }[] = [];
-            for (const ayah of ayahs) {
-              const sajdah = sajdahAyahs.has(ayah.ayahNumber);
-              if (sajdah || blocks.length === 0) blocks.push({ sajdah, ayahs: [ayah] });
-              else blocks[blocks.length - 1].ayahs.push(ayah);
-            }
+          // The reader runs its text as paragraphs and sets the sajdah marker between
+          // them, never inside one — a <p> may not nest. The surah view splits the same
+          // way, at the ayah that carries the prostration.
+          const blocks: { sajdah: boolean; ayahs: AyahText[] }[] = [];
+          for (const ayah of ayahs) {
+            const sajdah = sajdahAyahs.has(ayah.ayahNumber);
+            if (sajdah || blocks.length === 0) blocks.push({ sajdah, ayahs: [ayah] });
+            else blocks[blocks.length - 1].ayahs.push(ayah);
+          }
 
-            const renderAyah = (ayah: AyahText) => (
-              <AyahSpan
-                key={`${ayah.surahId}:${ayah.ayahNumber}`}
-                ayah={ayah.ayahNumber === 1 && separateBasmala ? { ...ayah, text: opening!.rest } : ayah}
-                isHifz={isHifz}
-                bookmarked={bookmarkedKeys.has(`${ayah.surahId}:${ayah.ayahNumber}`)}
-                color={bookmarkByKey.get(`${ayah.surahId}:${ayah.ayahNumber}`)?.color}
-                hideText={hideText}
-                hideWordByWord={hideWordByWord}
-                selected={selectedAyah === ayah.ayahNumber}
-                activeAudio={activeAyah === ayah.ayahNumber}
-                onSelect={() => selectAyah(ayah.ayahNumber)}
-                onToggleBookmark={() => toggleBookmark(ayah.surahId, ayah.ayahNumber)}
-                onShowTafsir={() => setTafsirAyah({ surahId: ayah.surahId, ayah: ayah.ayahNumber })}
-                onShowChoice={() => setAyahChoice(ayah.ayahNumber)}
-              />
-            );
+          const renderAyah = (ayah: AyahText) => (
+            <AyahSpan
+              key={`${ayah.surahId}:${ayah.ayahNumber}`}
+              ayah={ayah.ayahNumber === 1 && separateBasmala ? { ...ayah, text: opening!.rest } : ayah}
+              isHifz={isHifz}
+              bookmarked={bookmarkedKeys.has(`${ayah.surahId}:${ayah.ayahNumber}`)}
+              color={bookmarkByKey.get(`${ayah.surahId}:${ayah.ayahNumber}`)?.color}
+              hideText={hideText}
+              hideWordByWord={hideWordByWord}
+              selected={ayahChoice?.surahId === ayah.surahId && ayahChoice?.ayahNumber === ayah.ayahNumber}
+              activeAudio={isReciting(ayah.surahId, ayah.ayahNumber)}
+              meaningWords={meaningWords}
+              onToggleBookmark={() => toggleBookmark(ayah.surahId, ayah.ayahNumber)}
+              onShowTafsir={() => setTafsirAyah({ surahId: ayah.surahId, ayah: ayah.ayahNumber })}
+              onShowChoice={() => handleAyahPress(ayah.surahId, ayah.ayahNumber)}
+              onWordPress={handleWordPress}
+            />
+          );
 
-            return (
-              /* The reader caps the sheet at 42rem and centres it in its scroll; this leaf
-                 takes the very same wrapper, so both screens set type on one sheet of one
-                 measure — same words per line, same page proportions. */
-              <>
-                <div className="mushaf-leaf mushaf-leaf--column">
-                  <div
-                    className="mushaf-page"
-                    style={{ '--fs': `${Math.round(fontSize * viewportStep)}px` } as CSSProperties}
-                  >
-                    <MushafFrameDecoration />
-                    <div className="mushaf-margin" aria-hidden="true">
-                      <span>الجزء {toArabicNumber(getJuzForPage(currentPage))}</span>
-                      <span>الحزب {toArabicNumber(getHizbForPage(currentPage))}</span>
-                    </div>
-
-                    <header className="mushaf-banner">
-                      <div className="mushaf-banner__name">سورة {selectedSurah.name}</div>
-                      <div className="mushaf-banner__meta">
-                        {selectedSurah.revelationType === 'meccan' ? 'مكية' : 'مدنية'} · {toArabicNumber(selectedSurah.ayahCount)} آية
-                      </div>
-                    </header>
-
-                    {separateBasmala && (
-                      <p className="mushaf-basmala">
-                        <span className="mushaf-basmala__rule" aria-hidden="true" />
-                        {separateBasmala}
-                        <span className="mushaf-basmala__rule" aria-hidden="true" />
-                      </p>
-                    )}
-
-                    {blocks.map((block, index) => (
-                      <Fragment key={`block-${index}`}>
-                        {block.sajdah && <p className="mushaf-sajdah">۩ سجدة</p>}
-                        <p className="mushaf-body">{block.ayahs.map(renderAyah)}</p>
-                      </Fragment>
-                    ))}
-
-                    <div className="mushaf-folio">{toArabicNumber(currentPage)}</div>
+          return (
+            /* The reader caps the sheet at 42rem and centres it in its scroll; this leaf
+               takes the very same wrapper, so both screens set type on one sheet of one
+               measure — same words per line, same page proportions. */
+            <>
+              <div className="mushaf-leaf mushaf-leaf--column">
+                <div
+                  className="mushaf-page"
+                  style={{ '--fs': `${Math.round(fontSize * viewportStep)}px` } as CSSProperties}
+                >
+                  <MushafFrameDecoration />
+                  <div className="mushaf-margin" aria-hidden="true">
+                    <span>الجزء {toArabicNumber(getJuzForPage(currentPage))}</span>
+                    <span>الحزب {toArabicNumber(getHizbForPage(currentPage))}</span>
                   </div>
-                </div>
 
-                <ReaderChoiceSheet
-                  ayahChoice={ayahChoice}
-                  setAyahChoice={setAyahChoice}
-                  selectedSurah={selectedSurah}
-                  setTafsirAyah={setTafsirAyah}
-                  playAyah={playAyah}
-                  bookmarked={
-                    ayahChoice !== null && bookmarkedKeys.has(`${selectedSurah.id}:${ayahChoice}`)
-                  }
-                  onToggleBookmark={() => {
-                    if (ayahChoice !== null) toggleBookmark(selectedSurah.id, ayahChoice);
-                  }}
-                  highlightColor={
-                    ayahChoice !== null
-                      ? bookmarkByKey.get(`${selectedSurah.id}:${ayahChoice}`)?.color
-                      : undefined
-                  }
-                  onPickColor={(colorId) => {
-                    if (ayahChoice !== null) saveBookmark(selectedSurah.id, ayahChoice, { color: colorId });
-                  }}
-                  note={
-                    ayahChoice !== null
-                      ? bookmarkByKey.get(`${selectedSurah.id}:${ayahChoice}`)?.note
-                      : undefined
-                  }
-                  onSaveNote={(note) => {
-                    if (ayahChoice !== null) saveBookmark(selectedSurah.id, ayahChoice, { note });
-                  }}
-                  ayahChoicePanelRef={ayahChoicePanelRef}
-                />
-              </>
-            );
-          }}
-        </AudioRecitationPlayer>
+                  <header className="mushaf-banner">
+                    <div className="mushaf-banner__name">سورة {selectedSurah.name}</div>
+                    <div className="mushaf-banner__meta">
+                      {selectedSurah.revelationType === 'meccan' ? 'مكية' : 'مدنية'} · {toArabicNumber(selectedSurah.ayahCount)} آية
+                    </div>
+                  </header>
+
+                  {separateBasmala && (
+                    <p className="mushaf-basmala">
+                      <span className="mushaf-basmala__rule" aria-hidden="true" />
+                      {separateBasmala}
+                      <span className="mushaf-basmala__rule" aria-hidden="true" />
+                    </p>
+                  )}
+
+                  {blocks.map((block, index) => (
+                    <Fragment key={`block-${index}`}>
+                      {block.sajdah && <p className="mushaf-sajdah">۩ سجدة</p>}
+                      <p className="mushaf-body">{block.ayahs.map(renderAyah)}</p>
+                    </Fragment>
+                  ))}
+
+                  <div className="mushaf-folio">{toArabicNumber(currentPage)}</div>
+                </div>
+              </div>
+
+              {/* The same window the mushaf opens on a pressed ayah — تفسير, تلاوة with
+                  the reciter and the speed and the repeat — plus what this screen keeps
+                  of its own: the mark, its colour and its note. */}
+              <AyahVoiceSheet
+                ayahChoice={ayahChoice}
+                closeAyahChoice={closeAyahChoice}
+                ayahPanelRef={ayahChoicePanelRef}
+                setTafsirAyah={(choice) =>
+                  setTafsirAyah(choice ? { surahId: choice.surahId, ayah: choice.ayahNumber } : null)
+                }
+                openVoice={openVoice}
+                voiceEngaged={voiceEngaged}
+                voiceWholeFile={voiceWholeFile}
+                voiceHint={voiceHint}
+                voiceScope={voiceScope}
+                handleVoiceScope={handleVoiceScope}
+                reciterId={reciterId}
+                handleVoiceReciter={handleVoiceReciter}
+                replayVoice={replayVoice}
+                voicePhase={voicePhase}
+                voiceTime={voiceTime}
+                playbackRate={playbackRate}
+                repeatCount={repeatCount}
+                handleVoiceRate={handleVoiceRate}
+                handleRepeatCount={handleRepeatCount}
+                seekVoice={seekVoice}
+                voicePrimaryDisabled={voicePrimaryDisabled}
+                voicePrimaryLabel={voicePrimaryLabel}
+                voiceError={voiceError}
+                voiceAudioRef={voiceAudioRef}
+                setVoicePlaying={setVoicePlaying}
+                handleVoiceTime={handleVoiceTime}
+                handleVoiceEnded={handleVoiceEnded}
+                extra={
+                  ayahChoice !== null ? (
+                    <ReaderAyahMarks
+                      bookmarked={bookmarkedKeys.has(`${ayahChoice.surahId}:${ayahChoice.ayahNumber}`)}
+                      onToggleBookmark={() => toggleBookmark(ayahChoice.surahId, ayahChoice.ayahNumber)}
+                      highlightColor={bookmarkByKey.get(`${ayahChoice.surahId}:${ayahChoice.ayahNumber}`)?.color}
+                      onPickColor={(colorId) =>
+                        saveBookmark(ayahChoice.surahId, ayahChoice.ayahNumber, { color: colorId })
+                      }
+                      note={bookmarkByKey.get(`${ayahChoice.surahId}:${ayahChoice.ayahNumber}`)?.note}
+                      onSaveNote={(note) =>
+                        saveBookmark(ayahChoice.surahId, ayahChoice.ayahNumber, { note })
+                      }
+                    />
+                  ) : null
+                }
+              />
+            </>
+          );
+        })()}
 
         <ReaderNavigation selectedSurah={selectedSurah} openSurah={openSurah} />
 
@@ -832,8 +1036,8 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
 
         <p className="text-xs text-center text-gray-400 dark:text-gray-500">
           {isHifz
-            ? 'اضغط على الآية لتحديدها أو تعليمها، ثم اضغط علامة التشغيل بجوارها لتكرارها ومراجعة النطق'
-            : 'اضغط على آية لتختار تفسيرها أو تلاوتها، أو حدّدها من البطاقة للاستماع والتكرار'}
+            ? 'اضغط على الآية لتعليمها وفتح نافذتها: التلاوة بالقارئ الذي تختاره، والتفسير، ولون التمييز'
+            : 'اضغط على أي آية لفتح نافذتها: التفسير والتلاوة، أو على كلمة ملوّنة لمعرفة معناها'}
         </p>
       </div>
 
@@ -845,6 +1049,10 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
           onNavigateAyah={stepTafsirAyah}
         />
       )}
+
+      {/* A pressed word's meaning — the same sheet the mushaf opens, so a reader who
+          knows a word from one screen meets it again on the other. */}
+      <WordAnalysisSheet selectedWord={selectedWord} onClose={() => setSelectedWord(null)} />
 
       {showHifzTest && selectedSurah && (
         <HifzTestModal

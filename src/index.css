@@ -663,11 +663,21 @@ html.dark {
   --panel: rgb(var(--surface-light));
   --line: rgb(var(--primary-100));
   --fg: rgb(var(--primary-900));
-  --fg-muted: rgb(120 108 88);
+  /* Muted text is the theme's own text, softened toward its own panel — never a
+     fixed grey, so a palette change reaches the hint and the field labels too. */
+  --fg-muted: color-mix(in srgb, var(--fg) 70%, var(--panel) 30%);
   --chip: rgb(var(--primary-50));
   --chip-fg: rgb(var(--primary-700));
-  --accent: rgb(var(--accent-500));
+  /* The one loud colour in the window — the active segment, the play button, the
+     seek fill — is the chosen palette's own primary, exactly as the reading shell
+     answers it, rather than the palette's unrelated secondary accent. */
+  --accent: rgb(var(--primary-600));
+  --accent-soft: rgb(var(--primary-50));
   --on-accent: #ffffff;
+  /* The fill of a field inside a sheet — the note box, a resting button. A step of
+     the palette rather than the app's warm paper white, so those controls are
+     dressed by the chosen theme like everything around them. */
+  --field: var(--surface-panel);
 }
 
 /* The app's dark theme, so a sheet raised outside the shell answers to it. */
@@ -675,10 +685,12 @@ html.dark {
   --panel: rgb(var(--surface-dark));
   --line: rgb(var(--primary-800));
   --fg: rgb(var(--primary-100));
-  --fg-muted: rgb(190 183 167);
+  --fg-muted: color-mix(in srgb, var(--fg) 70%, var(--panel) 30%);
   --chip: rgb(var(--primary-900));
   --chip-fg: rgb(var(--primary-200));
-  --accent: rgb(var(--accent-500));
+  --accent: rgb(var(--primary-500));
+  --accent-soft: rgb(var(--primary-900));
+  --field: rgb(var(--primary-900) / 0.55);
 }
 
 * {
@@ -807,8 +819,22 @@ html.dark body {
      only to restate them for the whole page to agree with itself. */
   --selected-wash: rgba(15, 23, 42, 0.12);
   --bookmark-wash: rgba(15, 23, 42, 0.07);
+  /* The five «تمييز بلون» washes, declared under the ids `ayahHighlights.ts` names.
+     They have to exist here or nowhere: `highlightWash` hands back `var(--hl-<id>)`
+     with no fallback, and a custom property nobody declares makes the whole
+     `background` declaration invalid at computed-value time — so pressing a colour
+     used to strip the ayah of its wash entirely instead of painting it. Each sits
+     clear of both the plain bookmark (0.07) and the selection (0.12), so what the
+     reader pressed is what the reader sees, and clear of the ink (0.86 opacity of
+     #141414 stays legible over any of them).
+     Night restates them below the way it restates the other three. */
+  --hl-gold: rgba(207, 169, 92, 0.45);
+  --hl-green: rgba(52, 168, 115, 0.34);
+  --hl-blue: rgba(59, 130, 246, 0.3);
+  --hl-rose: rgba(244, 63, 94, 0.28);
+  --hl-violet: rgba(139, 92, 246, 0.3);
   --meaning-word: #946200;
-  --meaning-underline: rgba(148, 98, 0, 0.72);
+  --meaning-underline: rgba(148, 98, 0, 0.9);
   --frame-on: #ffffff;
   --spine: rgba(87, 83, 78, 0.11);
   --fs: 26px;
@@ -864,8 +890,17 @@ html.dark body {
   --wash: rgba(207, 169, 92, 0.1);
   --selected-wash: rgba(207, 169, 92, 0.3);
   --bookmark-wash: rgba(207, 169, 92, 0.16);
+  /* The same five ids on the night sheet. They are a notch stronger than the day's
+     because the paper is darker and a wash that reads as colour on white reads as
+     smudge on #191510 — but each stops short of taking the light ink (#ede3cd)
+     under with it. */
+  --hl-gold: rgba(207, 169, 92, 0.38);
+  --hl-green: rgba(52, 168, 115, 0.34);
+  --hl-blue: rgba(96, 165, 250, 0.34);
+  --hl-rose: rgba(251, 113, 133, 0.32);
+  --hl-violet: rgba(167, 139, 250, 0.34);
   --meaning-word: #f2c66d;
-  --meaning-underline: rgba(242, 198, 109, 0.82);
+  --meaning-underline: rgba(242, 198, 109, 0.95);
   --frame-on: #171008;
   --spine: rgba(207, 169, 92, 0.12);
 
@@ -1144,9 +1179,14 @@ html.dark body {
 }
 .mushaf-word--has-meaning {
   color: var(--meaning-word);
+  /* At mushaf sizes (26px and up) a 1px dotted rule falls below what a phone screen
+     resolves as dots and reads as a smudge under the word — the one clue that a gloss
+     sits behind this word. 2px at this offset keeps the row unmistakable without
+     crowding the line above it, and the underline colour is raised with it so the dots
+     are a definite colour rather than a hint of one. */
   text-decoration: underline dotted var(--meaning-underline);
-  text-underline-offset: 0.12em;
-  text-decoration-thickness: 1px;
+  text-underline-offset: 0.16em;
+  text-decoration-thickness: 2px;
 }
 .mushaf-word:focus-visible,
 button.mushaf-ayah-mark:focus-visible {
@@ -1390,6 +1430,7 @@ button.mushaf-ayah-mark:focus-visible {
   --on-accent: #ffffff;
   --chip: rgb(var(--primary-50));
   --chip-fg: rgb(var(--primary-700));
+  --field: rgb(var(--primary-50));
   /* The marked star and the dot it leaves in the jump grid are a step of the page's
      own frame rather than a colour of their own: graphite in day, gold after dark. */
   --gold: #57534e;
@@ -1426,6 +1467,7 @@ button.mushaf-ayah-mark:focus-visible {
   --accent-soft: rgb(var(--primary-900));
   --chip: rgb(var(--primary-900));
   --chip-fg: rgb(var(--primary-200));
+  --field: rgb(var(--primary-900) / 0.55);
   --hover: rgb(255 255 255 / 0.06);
 }
 
@@ -1449,6 +1491,7 @@ button.mushaf-ayah-mark:focus-visible {
   --on-accent: #171008;
   --chip: #1f1b14;
   --chip-fg: #e5d9b8;
+  --field: #282218;
   --gold: #d9b56a;
   --on-gold: #171008;
   --raised: #282218;

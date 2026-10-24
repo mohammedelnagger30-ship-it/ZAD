@@ -227,12 +227,35 @@ function loadCatalog(): Promise<CatalogModule> {
 }
 
 /**
+ * The same file, asked for in a way archive.org's redirector must resolve again.
+ *
+ * `/download/` is not the file but a redirect onto one of several data nodes, and that
+ * redirect is *cached per URL* — sticky. While the node behind it is broken, every
+ * request for that exact URL lands on the same dead node, so asking again under the same
+ * URL only asks the same node the same question. Measured on سلسلة أخلاق النبي ﷺ — the
+ * series this store exists for — the plain URL answered twice in twenty, and once went
+ * nought in twelve; the same file asked for under a query string answered nineteen in
+ * twenty, because a different URL is a different cache entry and is resolved afresh onto
+ * another node. The parameter is stable per attempt, so what arrives still caches.
+ */
+function variedUrl(url: string, attempt: number): string {
+  return attempt === 0 ? url : `${url}${url.includes('?') ? '&' : '?'}retry=${attempt}`;
+}
+
+/**
  * URL the WebView should play: the stored file when it has been kept, the archive.org
  * stream otherwise. Callers never have to know which case they are in.
+ *
+ * The remote branch is not the plain archive.org URL — see {@link variedUrl}. `attempt`
+ * lets a caller ask again for a different node when the first still fails.
  */
-export async function resolveLecturePlayUrl(lecture: HuwainiLecture, item: string): Promise<string> {
+export async function resolveLecturePlayUrl(
+  lecture: HuwainiLecture,
+  item: string,
+  attempt = 0,
+): Promise<string> {
   const { huwayniLectureUrl } = await loadCatalog();
-  const remote = huwayniLectureUrl(item, lecture.file);
+  const remote = variedUrl(huwayniLectureUrl(item, lecture.file), attempt);
   // On the web the filesystem is an IndexedDB shim with no URL an <audio> can open, so a
   // kept lecture still has to be streamed there. On a device the stored file is the point.
   if (!downloadedIds.has(lecture.id) || !Capacitor.isNativePlatform()) return remote;
@@ -326,23 +349,84 @@ async function discardPartial(id: string): Promise<void> {
   }
 }
 
+/**
+ * Attempts at opening the stream, including the first.
+ *
+ * Three retries are what it takes for the sticky redirect to be asked under enough
+ * different URLs that one of them resolves onto a node that answers. See
+ * {@link variedUrl} for why the same URL asked again is not a retry.
+ */
+const FETCH_ATTEMPTS = 4;
+/** Delay before the second attempt; it doubles from there. */
+const RETRY_BASE_DELAY_MS = 400;
+
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException('Aborted', 'AbortError'));
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/**
+ * Open the stream, retrying only what asking again could change.
+ *
+ * A missing file stays fatal — 404 means the recording genuinely is not there, and three
+ * more rounds would only delay the truth — while a dropped connection, a 5xx or a 429
+ * each get another attempt against another node.
+ */
+async function openLectureStream(url: string, signal: AbortSignal): Promise<Response> {
+  let lastError: unknown;
+  let lastStatus = 0;
+  for (let attempt = 0; attempt < FETCH_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) {
+      // Jitter, so a listener who taps several downloads at once does not have every
+      // retry land back on the same struggling node at the same instant.
+      await sleep(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1) + Math.random() * 250, signal);
+    }
+    if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+
+    let response: Response;
+    try {
+      response = await fetch(variedUrl(url, attempt), { signal, mode: 'cors', redirect: 'follow' });
+    } catch (err) {
+      // An abort is the listener leaving, not the source refusing: stop at once.
+      if ((err as Error).name === 'AbortError') throw err;
+      lastError = err;
+      continue;
+    }
+    if (response.ok) return response;
+    if (response.status === 404) {
+      throw new LectureDownloadError('هذه المحاضرة غير متاحة في المصدر');
+    }
+    if (response.status !== 408 && response.status !== 425 && response.status !== 429 && response.status < 500) {
+      throw new LectureDownloadError(`فشل التنزيل (${response.status})`);
+    }
+    lastStatus = response.status;
+    lastError = undefined;
+  }
+  throw new LectureDownloadError(
+    lastStatus > 0 ? `فشل التنزيل (${lastStatus})` : 'تعذّر الاتصال بمصدر المحاضرة',
+    lastError,
+  );
+}
+
 async function downloadLecture(source: LectureSource, signal: AbortSignal): Promise<void> {
   const { lecture, item } = source;
   const { huwayniLectureUrl } = await loadCatalog();
   const url = huwayniLectureUrl(item, lecture.file);
 
-  let response: Response;
-  try {
-    response = await fetch(url, { signal, mode: 'cors', redirect: 'follow' });
-  } catch (err) {
-    if ((err as Error).name === 'AbortError') throw err;
-    throw new LectureDownloadError('تعذّر الاتصال بمصدر المحاضرة', err);
-  }
-  if (!response.ok) {
-    throw new LectureDownloadError(
-      response.status === 404 ? 'هذه المحاضرة غير متاحة في المصدر' : `فشل التنزيل (${response.status})`,
-    );
-  }
+  const response = await openLectureStream(url, signal);
 
   const contentType = response.headers.get('content-type');
   const declared = Number(response.headers.get('content-length') ?? 0) || lecture.bytes || 0;

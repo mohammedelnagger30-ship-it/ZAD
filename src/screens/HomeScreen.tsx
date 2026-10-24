@@ -12,7 +12,7 @@ import {
   getTimeUntil,
 } from '@/utils/prayerTimes';
 import { useCountdownClock, usePrayerSchedule } from '@/hooks/usePrayerSchedule';
-import { trustedNow } from '@/utils/clock';
+import { trustedNow, trustedNowMs } from '@/utils/clock';
 import { prayerProgressFraction } from '@/utils/prayerProgress';
 import {
   getDayPrayerRecords,
@@ -74,17 +74,23 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
   const today = trustedNow();
 
   const load = useCallback(async () => {
-    const t = await getTodayTasks();
+    // Four independent reads — run them together so a refresh is one round-trip
+    // wide instead of four deep. The streak scan is the slowest and used to hold
+    // up the task list behind it.
+    const [t, s, records, sunnahRecords] = await Promise.all([
+      getTodayTasks(),
+      getStreakCount(),
+      getDayPrayerRecords(todayKey()),
+      getDaySunnahRecords(todayKey()),
+    ]);
     setTasks(t);
-    const s = await getStreakCount();
     setStreak(s);
-    const records = await getDayPrayerRecords(todayKey());
     const map: Record<string, PrayerStatus | null> = {};
     records.forEach((r) => {
       map[r.prayer] = r.status;
     });
     setPrayerRecords(map);
-    setSunnahRecords(sunnahDoneMap(await getDaySunnahRecords(todayKey())));
+    setSunnahRecords(sunnahDoneMap(sunnahRecords));
   }, []);
 
   useEffect(() => {
@@ -329,44 +335,93 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
     }
   };
 
+  // Task actions paint the new state immediately and let the database, the
+  // notification queue, and the streak refresh catch up in the background.
+  // Waiting on all three made a single tap feel like a page load; the task row
+  // is the only thing the user is looking at, so it moves first.
   const handleConfirm = async (taskId: number, status: 'done' | 'missed', strength?: 'weak' | 'medium' | 'strong') => {
-    await confirmTask(taskId, status, strength);
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId
+          ? { ...t, status, confirmedAt: trustedNowMs(), ...(strength ? { strength } : {}) }
+          : t,
+      ),
+    );
     try {
-      await rescheduleAllNotifications();
-    } finally {
-      await load();
+      await confirmTask(taskId, status, strength);
+    } catch (error) {
+      console.error('Confirming task failed:', error);
     }
+    void load();
+    void rescheduleAllNotifications().catch((error) => {
+      console.error('Rescheduling notifications failed:', error);
+    });
   };
 
   const handleSnooze = async (taskId: number, minutes: number) => {
-    await snoozeTask(taskId, minutes);
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId
+          ? {
+              ...t,
+              status: 'snoozed',
+              snoozedUntil: trustedNowMs() + minutes * 60_000,
+            }
+          : t,
+      ),
+    );
     try {
-      await rescheduleAllNotifications();
-    } finally {
-      await load();
+      await snoozeTask(taskId, minutes);
+    } catch (error) {
+      console.error('Snoozing task failed:', error);
     }
+    void load();
+    void rescheduleAllNotifications().catch((error) => {
+      console.error('Rescheduling notifications failed:', error);
+    });
   };
 
   const handleUnsnooze = async (taskId: number) => {
-    await unsnoozeTask(taskId);
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId ? { ...t, status: 'pending', snoozedUntil: undefined } : t,
+      ),
+    );
     try {
-      await rescheduleAllNotifications();
-    } finally {
-      await load();
+      await unsnoozeTask(taskId);
+    } catch (error) {
+      console.error('Unsnoozing task failed:', error);
     }
+    void load();
+    void rescheduleAllNotifications().catch((error) => {
+      console.error('Rescheduling notifications failed:', error);
+    });
   };
 
   const handlePrayerPick = async (status: PrayerStatus) => {
     if (!sheetPrayer) return;
-    await confirmPrayer(todayKey(), sheetPrayer, status);
-    await load();
+    const prayer = sheetPrayer;
+    setPrayerRecords((prev) => ({ ...prev, [prayer]: status }));
+    setSheetPrayer(null);
+    try {
+      await confirmPrayer(todayKey(), prayer, status);
+    } catch (error) {
+      console.error('Recording prayer failed:', error);
+    }
+    void load();
   };
 
   /** Records one rawatib slot attached to the prayer the sheet is open for. */
   const handleSunnahToggle = async (type: string) => {
     if (!sheetPrayer) return;
-    await setSunnah(todayKey(), type, !sunnahRecords[type]);
-    await load();
+    const next = !sunnahRecords[type];
+    setSunnahRecords((prev) => ({ ...prev, [type]: next }));
+    try {
+      await setSunnah(todayKey(), type, next);
+    } catch (error) {
+      console.error('Recording sunnah failed:', error);
+    }
+    void load();
   };
 
   // The bar is filled to a tenth of a percent so it glides, and the figure beside it is

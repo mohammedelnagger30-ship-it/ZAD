@@ -6,6 +6,7 @@ import {
   CircleDashed,
   Copy,
   BookOpen,
+  CalendarHeart,
   Droplets,
   Flower2,
   Heart,
@@ -44,6 +45,7 @@ const ICONS: Record<string, typeof Sunrise> = {
   moon: Moon,
   sun: Sun,
   'book-open': BookOpen,
+  'calendar-heart': CalendarHeart,
   droplets: Droplets,
   landmark: Landmark,
   utensils: Utensils,
@@ -187,6 +189,13 @@ const CATEGORY_STYLES: Record<string, CategoryStyle> = {
     bar: 'bg-gold-500',
     ring: 'stroke-gold-500',
     hero: 'from-gold-600 to-primary-950',
+  },
+  friday: {
+    chip: 'bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300',
+    icon: 'from-teal-500 to-emerald-700',
+    bar: 'bg-teal-500',
+    ring: 'stroke-teal-500',
+    hero: 'from-teal-600 to-emerald-800',
   },
 };
 
@@ -450,6 +459,21 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
+  // The dhikr a reminder carried. The category that holds it is already open — the
+  // deep link seeds `activeCategory` — so this only has to find its card and bring it
+  // into view, rather than leaving the reader at the top of a long list.
+  const deepLinkDhikrId = typeof params?.dhikrId === 'string' ? params.dhikrId : null;
+  useEffect(() => {
+    if (!deepLinkDhikrId) return;
+    // The cards mount with the category view, so the anchor exists after the next paint.
+    const frame = requestAnimationFrame(() => {
+      document
+        .getElementById(`dhikr-${deepLinkDhikrId}`)
+        ?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [deepLinkDhikrId]);
+
   const allItems = useMemo(
     () => ADHKAR_CATEGORIES.filter((category) => category.daily !== false).flatMap((category) => category.items),
     [],
@@ -618,7 +642,10 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
           {activeItems.map((dhikr, index) => (
               <div
                 key={dhikr.id}
-                className="animate-stagger-in"
+                id={`dhikr-${dhikr.id}`}
+                className={`animate-stagger-in scroll-mt-24 rounded-2xl ${
+                  dhikr.id === deepLinkDhikrId ? 'ring-2 ring-gold-400/80 dark:ring-gold-500/70' : ''
+                }`}
                 style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}
               >
                 <DhikrCard
@@ -742,7 +769,10 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
               {items.map((dhikr, index) => (
                 <div
                   key={dhikr.id}
-                  className="animate-stagger-in"
+                  id={`dhikr-${dhikr.id}`}
+                  className={`animate-stagger-in scroll-mt-24 rounded-2xl ${
+                    dhikr.id === deepLinkDhikrId ? 'ring-2 ring-gold-400/80 dark:ring-gold-500/70' : ''
+                  }`}
                   style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}
                 >
                   <DhikrCard

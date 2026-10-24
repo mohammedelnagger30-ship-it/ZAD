@@ -138,10 +138,10 @@ export function TafsirBottomSheet({ surahId, ayahNumber, onClose, onNavigateAyah
         aria-modal="true"
         aria-labelledby={sheetLabelId}
         tabIndex={-1}
-        className="relative bg-white dark:bg-primary-900 rounded-t-3xl max-h-[85vh] flex flex-col animate-slide-up md:max-w-2xl md:max-h-[80vh] md:rounded-3xl md:border md:shadow-2xl outline-none"
+        className="relative bg-[var(--panel)] rounded-t-3xl max-h-[85vh] flex flex-col animate-slide-up md:max-w-2xl md:max-h-[80vh] md:rounded-3xl md:border md:border-[var(--line)] md:shadow-2xl outline-none"
       >
         <div className="flex justify-center pt-3 pb-1">
-          <div className="w-12 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full" />
+          <div className="w-12 h-1.5 bg-[var(--line)] rounded-full" />
         </div>
 
         {/* Header */}

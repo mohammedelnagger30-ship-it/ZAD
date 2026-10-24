@@ -38,6 +38,17 @@ interface CourseRecipe {
   title: string;
   blurb: string;
   item: string;
+  /**
+   * The files that make up this course, in listening order, for the rare item that is a
+   * grab-bag of several uploads rather than one clean item. Without it every mp3 in the
+   * item would be swept in as a lesson.
+   */
+  files?: string[];
+  /**
+   * Lesson titles, in order, when the source's own titles are useless stubs («wala2 (1)»).
+   * Must be the same length as `files` when `files` is given.
+   */
+  titles?: string[];
 }
 
 /**
@@ -68,7 +79,7 @@ const COURSES: CourseRecipe[] = [
     id: 'sifat-alsalah',
     title: 'شرح كتاب صفة الصلاة للألباني',
     blurb: 'شرح الشيخ لكتاب شيخه الألباني في صفة صلاة النبي ﷺ.',
-    item: 'sefa_salah_howainy',
+    item: 'howaini-sifat-salat',
   },
   {
     id: 'sharh-alreqaq',
@@ -110,7 +121,13 @@ const COURSES: CourseRecipe[] = [
     id: 'walaa-baraa',
     title: 'إتحاف النبلاء بمسائل الولاء والبراء',
     blurb: 'مسائل الولاء والبراء محرَّرةً بأدلتها.',
-    item: 'Howainy_walaa_baraa',
+    // This recording survives only inside a grab-bag upload of 233 lectures, so the four
+    // sittings are named outright — otherwise every lecture in it would become a lesson
+    // here. Its own track titles are stubs («wala2 (1)»), so the lesson numbers the
+    // archive gives nothing better for are used, as for any untitled file.
+    item: 'howaini3-Up-By-mUSLEm',
+    files: ['Wala21.mp3', 'Wala22.mp3', 'Wala23.mp3', 'Wala24.mp3'],
+    titles: ['الدرس 1', 'الدرس 2', 'الدرس 3', 'الدرس 4'],
   },
   {
     id: 'ibrahim-ummah',
@@ -128,7 +145,7 @@ const COURSES: CourseRecipe[] = [
     id: 'alghawwas',
     title: 'الغواص في استنباط الأحكام من الحديث',
     blurb: 'كيف تُستخرج الأحكام الفقهية من نصوص السنة.',
-    item: 'AlGhawas',
+    item: 'howaini-gawaas',
   },
   {
     id: 'sharh-bukhari',
@@ -164,7 +181,13 @@ interface ArchiveFile {
 }
 
 interface ArchiveItem {
-  metadata?: { title?: string; mediatype?: string; identifier?: string };
+  metadata?: {
+    title?: string;
+    mediatype?: string;
+    identifier?: string;
+    /** `"true"` when archive.org refuses anonymous access to the item. */
+    'access-restricted-item'?: string;
+  };
   files?: ArchiveFile[];
 }
 
@@ -227,9 +250,21 @@ function audioFilesOf(item: ArchiveItem): ArchiveFile[] {
   return originals.length > 0 ? originals : files.filter(isMp3);
 }
 
+/**
+ * Duration, in seconds.
+ *
+ * archive.org is inconsistent about the shape of `length`: some items report plain
+ * seconds (`"3392.49"`), others a clock reading (`"56:32"`, or `"1:02:03"` for the
+ * longer sittings). Reading it as a plain number turns every clock reading into `0`,
+ * which is how a course ends up on the page advertising a duration of nothing and a
+ * bitrate of nothing — so both shapes are parsed here.
+ */
 function secondsOf(file: ArchiveFile): number {
-  const value = Number(file.length ?? 0);
-  return Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
+  const raw = String(file.length ?? '').trim();
+  const seconds = raw.includes(':')
+    ? raw.split(':').reduce((total, part) => total * 60 + Number(part), 0)
+    : Number(raw);
+  return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds) : 0;
 }
 
 function bytesOf(file: ArchiveFile): number {
@@ -252,15 +287,21 @@ function decodeName(raw: string): string {
 }
 
 /**
- * A readable label for one file. Real titles win; otherwise the file name is cleaned
- * up, and when that too is just a number («01.mp3») the lesson number is used, which is
- * what a دورة is referred to by anyway.
- */
-/**
  * Titles some uploads carry on every track instead of a real name — «tmp», «track 1».
  * They are treated as if the file had no title at all.
  */
 const NON_TITLE = /^(?:tmp|temp|untitled|audio|new|file|out|final|track\s*\d*|test|\d{1,3})$/i;
+
+/**
+ * Uploads also stub out the title field with punctuation — «_», or «5 _» for the fifth
+ * track. Neither names anything, so they fall through like `NON_TITLE` does. A real
+ * title that merely *contains* a separator («الحلقة الأولى 1_2») still passes, because
+ * it has letters left once the punctuation goes.
+ */
+function isBareTitle(value: string): boolean {
+  const bare = value.replace(/[\p{P}\p{S}\s]/gu, '');
+  return bare === '' || /^\d+$/.test(bare);
+}
 
 /**
  * A readable label for one file. Real titles win; otherwise the file name is cleaned
@@ -269,7 +310,7 @@ const NON_TITLE = /^(?:tmp|temp|untitled|audio|new|file|out|final|track\s*\d*|te
  */
 function lectureTitle(file: ArchiveFile, index: number): string {
   const fromMeta = normalizeTitle(String(file.title ?? '')).replace(MEDIA_EXT, '');
-  if (fromMeta && !NON_TITLE.test(fromMeta)) return fromMeta;
+  if (fromMeta && !NON_TITLE.test(fromMeta) && !isBareTitle(fromMeta)) return fromMeta;
   const fromName = normalizeTitle(
     decodeName(file.name)
       .replace(MEDIA_EXT, '')
@@ -481,18 +522,47 @@ function buildLibrary(item: ArchiveItem): { series: BuiltSeries[]; singles: Buil
 // Courses
 // ---------------------------------------------------------------------------
 
+/**
+ * The lessons of one course, in the order they should be offered.
+ *
+ * A course normally takes the item whole. The exception is an item that is really a
+ * grab-bag of several uploads at once — there the recipe names its own files, and every
+ * one of them has to be present, or the course is refused rather than shipped incomplete.
+ */
+function courseFiles(recipe: CourseRecipe, item: ArchiveItem): ArchiveFile[] | null {
+  const available = audioFilesOf(item);
+  if (!recipe.files) return available.sort(byFileName);
+
+  const byName = new Map(available.map((file) => [file.name, file]));
+  const chosen = recipe.files.map((name) => byName.get(name) ?? null);
+  if (chosen.some((file) => file === null)) {
+    const missing = recipe.files.filter((name) => !byName.has(name));
+    console.warn(`  ! ${recipe.item} — missing ${missing.join(', ')}, skipped`);
+    return null;
+  }
+  // The recipe's order is the listening order; the file names are not necessarily it.
+  return chosen as ArchiveFile[];
+}
+
 function buildCourse(recipe: CourseRecipe, item: ArchiveItem): (Omit<BuiltCourse, 'lectures'> & { lectures: BuiltLecture[] }) | null {
-  const files = audioFilesOf(item).sort(byFileName);
-  if (files.length < 2) return null;
+  const files = courseFiles(recipe, item);
+  if (!files || files.length < 2) return null;
+  if (recipe.titles && recipe.titles.length !== files.length) {
+    console.warn(
+      `  ! ${recipe.item} — ${recipe.titles.length} titles for ${files.length} files, skipped`,
+    );
+    return null;
+  }
 
   const lectures = files.map((file, index) => ({
     id: `${recipe.id}-${index + 1}`,
-    title: lectureTitle(file, index),
+    title: recipe.titles?.[index] ?? lectureTitle(file, index),
     file: file.name,
     seconds: secondsOf(file),
     bytes: bytesOf(file),
   }));
-  tidyCourseTitles(lectures);
+  // Titles the recipe wrote by hand are the answer; only derived ones are tidied.
+  if (!recipe.titles) tidyCourseTitles(lectures);
 
   const bytes = lectures.reduce((total, lecture) => total + lecture.bytes, 0);
   const seconds = lectures.reduce((total, lecture) => total + lecture.seconds, 0);
@@ -643,12 +713,23 @@ async function main(): Promise<void> {
   );
 
   const courses: BuiltCourse[] = [];
+  // Anything skipped is reported twice: once as it happens, and again as a summary at
+  // the end of the run, so a card silently vanishing from the page cannot go unnoticed.
+  const refused: string[] = [];
   for (const recipe of COURSES) {
     try {
       const item = await fetchItem(recipe.item);
+      if (item.metadata?.['access-restricted-item'] === 'true') {
+        refused.push(`${recipe.item} — access-restricted (archive.org demands a login)`);
+        continue;
+      }
       const course = buildCourse(recipe, item);
       if (!course) {
-        console.warn(`  ! ${recipe.item} — no mp3 files, skipped`);
+        refused.push(`${recipe.item} — no usable mp3 files`);
+        continue;
+      }
+      if (course.lectures.some((lecture) => lecture.seconds === 0)) {
+        refused.push(`${recipe.item} — some lessons have no duration`);
         continue;
       }
       courses.push(course);
@@ -656,8 +737,12 @@ async function main(): Promise<void> {
         `  + ${course.title} — ${course.lectures.length} lessons, ${course.kbps}kbps`,
       );
     } catch (err) {
-      console.warn(`  ! ${recipe.item} — ${(err as Error).message}, skipped`);
+      refused.push(`${recipe.item} — ${(err as Error).message}`);
     }
+  }
+  if (refused.length > 0) {
+    console.warn(`\n  REFUSED — these courses were left out of the page:`);
+    refused.forEach((reason) => console.warn(`    ! ${reason}`));
   }
 
   const totalSeconds =

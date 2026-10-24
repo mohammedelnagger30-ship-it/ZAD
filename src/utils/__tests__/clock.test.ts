@@ -79,10 +79,23 @@ describe('trusted clock against a moved device clock', () => {
   });
 
   it('continues a stored anchor across a session, trusting the clock over the gap', () => {
-    localStorage.setItem(ANCHOR_KEY, JSON.stringify({ t: 1_000_000, d: 2_000_000 }));
+    // Only an anchor the network vouched for may be carried forward; an
+    // unvouched one is just an earlier reading of the device clock and is
+    // reset to it (see ensureAnchor). Add `v: true` to simulate a synced anchor.
+    localStorage.setItem(ANCHOR_KEY, JSON.stringify({ t: 1_000_000, d: 2_000_000, v: true }));
     fakeDeviceMs = 2_000_000 + 60_000;
     fakePerfMs = 10;
     expect(trustedNowMs()).toBe(1_060_000);
+  });
+
+  it('an unvouched stored anchor is not carried forward — the app follows the device clock', () => {
+    // No `v` flag: the network never vouched for this anchor. Projecting it
+    // would bake a stale offset into every alarm this session.
+    localStorage.setItem(ANCHOR_KEY, JSON.stringify({ t: 1_000_000, d: 2_000_000 }));
+    fakeDeviceMs = 2_000_000 + 60_000;
+    fakePerfMs = 10;
+    expect(trustedNowMs()).toBe(2_060_000);
+    expect(deviceClockDriftMs()).toBe(0);
   });
 
   it('keeps trusted time still while the device clock is moved mid-session', () => {

@@ -132,6 +132,7 @@ export function isValidBackupRow(table: BackupTable, value: unknown): value is R
             'randomDhikrIntervalMinutes',
             'randomDhikrStartTime',
             'randomDhikrEndTime',
+            'randomDhikrMaxPerDay',
             'snoozeMinutes',
             'prePrayerReminder',
             'calcMethod',
@@ -154,6 +155,7 @@ export function isValidBackupRow(table: BackupTable, value: unknown): value is R
         (value.randomDhikrIntervalMinutes === undefined || isFiniteNumber(value.randomDhikrIntervalMinutes)) &&
         (value.randomDhikrStartTime === undefined || isValidTime(value.randomDhikrStartTime)) &&
         (value.randomDhikrEndTime === undefined || isValidTime(value.randomDhikrEndTime)) &&
+        (value.randomDhikrMaxPerDay === undefined || isFiniteNumber(value.randomDhikrMaxPerDay)) &&
         (value.snoozeMinutes === undefined || isFiniteNumber(value.snoozeMinutes)) &&
         (value.prePrayerReminder === undefined || isFiniteNumber(value.prePrayerReminder)) &&
         (value.calcMethod === undefined || typeof value.calcMethod === 'string') &&

@@ -300,6 +300,48 @@ test('a missing file is refused before anything is written', async () => {
 
   expect(writeFile).not.toHaveBeenCalled();
   expect(getLectureStoreSnapshot().downloads.get(lecture.id)?.error).toBeTruthy();
+  // A file that is not there will not appear by asking three more times.
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test('a dead data node is asked again under a different URL, and the lecture still lands', async () => {
+  // archive.org's /download/ is a redirect onto one of several data nodes, and while one
+  // of them is broken the redirect is sticky: the same URL keeps landing on the same dead
+  // node. That is what «تعذّر الاتصال بمصدر المحاضرة» was on سلسلة أخلاق النبي ﷺ — the
+  // first attempt asked a node that answered 500, and there was no second attempt. Asking
+  // again under the *same* URL would ask the same node; the retry has to be a different
+  // URL, which the redirector resolves afresh onto another node.
+  const attempted: string[] = [];
+  fetchMock.mockImplementation(async (url: string) => {
+    attempted.push(url);
+    if (attempted.length === 1) throw new TypeError('Failed to fetch');
+    if (attempted.length === 2) return { ok: false, status: 500 } as Response;
+    return streamedResponse([audioHead(1_000)]);
+  });
+
+  enqueueLectureDownloads([{ lecture, item: ITEM }]);
+  await waitUntil(() => downloadedLectureIds().has(lecture.id));
+
+  expect(attempted).toHaveLength(3);
+  // The first attempt is the plain, canonical URL — the one worth caching.
+  expect(attempted[0]).toBe(huwayniLectureUrl(ITEM, lecture.file));
+  // Every retry after it is a different address for the same file, so the redirector
+  // cannot hand back the node that just failed.
+  expect(attempted[1]).toContain('retry=1');
+  expect(attempted[2]).toContain('retry=2');
+  for (const url of attempted) expect(url).toContain(encodeURIComponent(lecture.file));
+});
+
+test('a server that never recovers still says so, rather than pretending to be offline', async () => {
+  fetchMock.mockResolvedValue({ ok: false, status: 503 } as Response);
+
+  enqueueLectureDownloads([{ lecture, item: ITEM }]);
+  // Four attempts, doubling backoff: longer than the default patience of `waitUntil`.
+  await waitUntil(() => getLectureStoreSnapshot().downloads.get(lecture.id)?.status === 'error', 10_000);
+
+  expect(getLectureStoreSnapshot().downloads.get(lecture.id)?.error).toContain('503');
+  expect(fetchMock).toHaveBeenCalledTimes(4);
+  expect(downloadedLectureIds().has(lecture.id)).toBe(false);
 });
 
 test('a lecture that is not on disk falls back to the archive.org stream', async () => {

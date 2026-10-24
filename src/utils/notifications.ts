@@ -37,6 +37,8 @@ export const NOTIFICATION_ID_BASE = {
   iqamah: 6_000_000,
   /** Spaced-repetition reminders for memorised ayah ranges. */
   hifzReview: 7_000_000,
+  /** Today's nafl windows — الضحى، الوتر، الثلث الأخير. */
+  nafl: 10_000_000,
   /** Adhan-overlay snoozes — the only ids that survive a rebuild. */
   snooze: 9_000_000,
 } as const;
@@ -68,6 +70,7 @@ export const notificationId = {
   dhikr: (slot: number) => idFor(NOTIFICATION_ID_BASE.dhikr, slot),
   iqamah: (slot: number) => idFor(NOTIFICATION_ID_BASE.iqamah, slot),
   hifzReview: (slot: number) => idFor(NOTIFICATION_ID_BASE.hifzReview, slot),
+  nafl: (slot: number) => idFor(NOTIFICATION_ID_BASE.nafl, slot),
   /**
    * Snooze ids embed the second within the reserved range instead of the wall clock:
    * two snoozes rarely collide, a collision merely replaces the older reminder, and the

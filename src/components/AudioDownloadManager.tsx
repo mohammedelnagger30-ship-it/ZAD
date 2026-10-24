@@ -221,7 +221,9 @@ export function AudioDownloadManager() {
       await reloadStatus();
     } catch (cause) {
       // The queue collects its own failures, so anything that reaches here is
-      // the store or the status refresh, not one surah.
+      // the store or the status refresh, not one surah. An abort (the reader
+      // cancelled the batch) is not a failure.
+      if (cause instanceof Error && cause.name === 'AbortError') return;
       setError(cause instanceof Error ? cause.message : 'تعذّر تنزيل التلاوات');
     } finally {
       if (batchControllerRef.current === controller) batchControllerRef.current = null;

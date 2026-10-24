@@ -187,6 +187,16 @@ export interface Settings {
   randomDhikrIntervalMinutes: number;
   randomDhikrStartTime: string;
   randomDhikrEndTime: string;
+  /**
+   * How many random dhikr reminders a single day may carry.
+   *
+   * The window and the interval alone could not express «كثيرة»: a 09:00–21:00 window
+   * on a 60-minute interval is twelve reminders, and the queue's share for them is
+   * spent on the prayers and tasks first, so a busy day quietly dropped most of what
+   * the switch promised. The count is the reader's own number, honoured day by day —
+   * the window only says *when* they may arrive, this says how many.
+   */
+  randomDhikrMaxPerDay: number;
   snoozeMinutes: number;
   prePrayerReminder: number; // minutes before, 0 = off
   /**
@@ -464,11 +474,19 @@ export const DEFAULT_SETTINGS: Settings = {
   notificationVoiceId: DEFAULT_NOTIFICATION_VOICE_ID,
   adhanSound: true,
   adhanVoiceId: 'sayyid_naqshbandi',
-  randomDhikrEnabled: false,
+  /**
+   * On out of the box. «الأذكار في الإشعارات تبق كثيرة» is the whole point of the
+   * feature, and a switch that ships off gives the reader an empty inbox and a page of
+   * settings to discover before the app does what it says on the tin. The window and the
+   * daily cap keep it gentle: sixteen reminders at most, between 08:00 and 22:00, and
+   * the reader can turn it down or off at any time.
+   */
+  randomDhikrEnabled: true,
   randomDhikrCategory: 'varied',
-  randomDhikrIntervalMinutes: 60,
-  randomDhikrStartTime: '09:00',
-  randomDhikrEndTime: '21:00',
+  randomDhikrIntervalMinutes: 30,
+  randomDhikrStartTime: '08:00',
+  randomDhikrEndTime: '22:00',
+  randomDhikrMaxPerDay: 16,
   snoozeMinutes: 15,
   prePrayerReminder: 10,
   hadithNotificationTime: '09:00',
@@ -502,6 +520,18 @@ export async function getSettings(): Promise<Settings> {
   // untouched defaults — a deliberately chosen voice is any other value and is preserved.
   const isLegacyDefaultAdhan =
     first.adhanVoiceId === 'asim_javed' || first.adhanVoiceId === 'makkah_masjid';
+  /**
+   * The dhikr reminders shipped off, on an hourly beat from 09:00 to 21:00. They now
+   * ship on, every half hour from 08:00 to 22:00, because «الأذكار في الإشعارات تبق
+   * كثيرة» is what the feature is for. Migrate only the *whole* untouched default set —
+   * any one of these away from the old shipped value means the reader was in the panel
+   * and chose what they chose, and is left alone.
+   */
+  const isLegacyDefaultDhikr =
+    first.randomDhikrEnabled === false &&
+    first.randomDhikrIntervalMinutes === 60 &&
+    first.randomDhikrStartTime === '09:00' &&
+    first.randomDhikrEndTime === '21:00';
   const settings = normalizeEgyptPrayerSettings({ ...DEFAULT_SETTINGS, ...first });
   if (
     first.calcMethod !== settings.calcMethod ||
@@ -523,6 +553,17 @@ export async function getSettings(): Promise<Settings> {
   if (isLegacyDefaultAdhan) {
     settings.adhanVoiceId = DEFAULT_SETTINGS.adhanVoiceId;
     await db.settings.update(first.id!, { adhanVoiceId: DEFAULT_SETTINGS.adhanVoiceId });
+  }
+  if (isLegacyDefaultDhikr) {
+    const migrated = {
+      randomDhikrEnabled: DEFAULT_SETTINGS.randomDhikrEnabled,
+      randomDhikrIntervalMinutes: DEFAULT_SETTINGS.randomDhikrIntervalMinutes,
+      randomDhikrStartTime: DEFAULT_SETTINGS.randomDhikrStartTime,
+      randomDhikrEndTime: DEFAULT_SETTINGS.randomDhikrEndTime,
+      randomDhikrMaxPerDay: DEFAULT_SETTINGS.randomDhikrMaxPerDay,
+    };
+    Object.assign(settings, migrated);
+    await db.settings.update(first.id!, migrated);
   }
   return settings;
 }

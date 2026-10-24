@@ -222,20 +222,58 @@ export function PrayerScreen({ settings, onSaveSettings, navigate, params }: Pra
     return () => window.clearTimeout(timer);
   }, [prayerResult, load]);
 
+  // Recording a prayer or a rawatib slot repaints the cell first and writes to
+  // the database second. Recomputing the week grid (seven days of prayer times,
+  // a sunnah query, and the stats that read it) before the tap shows anything
+  // was the reason a checkmark used to arrive a beat late.
   const handlePick = async (status: PrayerStatus) => {
     if (!sheet) return;
-    await confirmPrayer(sheet.date, sheet.prayer, status);
-    await load();
+    const { date, prayer } = sheet;
+    const nextGrid = grid.map((day) =>
+      day.date === date
+        ? { ...day, status: { ...day.status, [prayer]: status } }
+        : day,
+    );
+    setGrid(nextGrid);
+    setStats(summariseGrid(nextGrid));
+    setSheet(null);
+    try {
+      await confirmPrayer(date, prayer, status);
+    } catch (error) {
+      console.error('Recording prayer failed:', error);
+    }
+    void load();
   };
 
   /** Records one rawatib slot for whichever day the status sheet is editing. */
   const handleSheetSunnahToggle = async (type: string) => {
     if (!sheet) return;
+    const { date, prayer } = sheet;
     const slot = grid
-      .find((g) => g.date === sheet.date)
-      ?.sunnah[sheet.prayer].find((s) => s.type === type);
-    await setSunnah(sheet.date, type, !slot?.done);
-    await load();
+      .find((g) => g.date === date)
+      ?.sunnah[prayer].find((s) => s.type === type);
+    const done = !slot?.done;
+    setGrid((prev) =>
+      prev.map((day) =>
+        day.date === date
+          ? {
+              ...day,
+              sunnah: {
+                ...day.sunnah,
+                [prayer]: day.sunnah[prayer].map((s) =>
+                  s.type === type ? { ...s, done } : s,
+                ),
+              },
+            }
+          : day,
+      ),
+    );
+    try {
+      await setSunnah(date, type, done);
+    } catch (error) {
+      console.error('Recording sunnah failed:', error);
+    }
+    void load();
   };
 
   const handleLocationPick = async (lat: number, lng: number, name: string) => {
