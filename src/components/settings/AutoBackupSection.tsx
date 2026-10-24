@@ -9,6 +9,7 @@ import {
   getAutoBackups,
   restoreFromBackup,
   getLastBackupDate,
+  getLastBackupFailure,
   type AutoBackupConfig,
 } from '@/utils/autoBackup';
 
@@ -16,9 +17,14 @@ export function AutoBackupSection() {
   const { confirm, dialog } = useConfirm();
   const [autoBackupConfig, setAutoBackupConfig] = useState<AutoBackupConfig>(getAutoBackupConfig());
   const [autoBackups, setAutoBackups] = useState<Array<{ date: string; key: string }>>([]);
+  // Kept in state rather than read during render: the schedule sets it from outside
+  // this component, and a failure the reader has not been told about is the whole
+  // reason this line exists.
+  const [backupFailure, setBackupFailure] = useState<string | null>(getLastBackupFailure());
 
   useEffect(() => {
     setAutoBackups(getAutoBackups());
+    setBackupFailure(getLastBackupFailure());
   }, []);
 
   const handleAutoBackupConfigChange = (patch: Partial<AutoBackupConfig>) => {
@@ -29,6 +35,9 @@ export function AutoBackupSection() {
 
   const handleManualAutoBackup = async () => {
     const success = await performAutoBackup();
+    // The attempt itself is the freshest evidence either way: it clears a stale
+    // complaint when it lands, and raises a new one when it does not.
+    setBackupFailure(getLastBackupFailure());
     if (success) {
       setAutoBackups(getAutoBackups());
       alert('تم إنشاء النسخة الاحتياطية التلقائية بنجاح');
@@ -144,6 +153,17 @@ export function AutoBackupSection() {
             {getLastBackupDate() && (
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 آخر نسخة: {new Date(getLastBackupDate()!).toLocaleDateString('ar-EG')}
+              </p>
+            )}
+
+            {/* A schedule that is quietly failing has to say so where «آخر نسخة» lives,
+                otherwise the reader counts on backups that were never written. */}
+            {backupFailure && (
+              <p
+                role="alert"
+                className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+              >
+                {backupFailure}
               </p>
             )}
 

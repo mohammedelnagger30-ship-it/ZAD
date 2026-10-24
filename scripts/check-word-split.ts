@@ -46,3 +46,13 @@ console.log(`with double-space anywhere : ${withDoubleSpace}`);
 console.log(`with leading/trailing space: ${withEdgeSpace}`);
 console.log(`WORD COUNT DISAGREEMENTS    : ${disagree}`);
 for (const s of samples) console.log('  ' + s);
+
+// None of the three counts is cosmetic: a stray space or a splitter disagreement shifts
+// every word index after it, so a tap resolves to the wrong gloss. The script used to
+// print the numbers and exit 0 whatever they were — a gate `verify` chains but that could
+// not fail. All three were zero when this was made fatal, so an honest tree stays green.
+if (disagree > 0 || withDoubleSpace > 0 || withEdgeSpace > 0) {
+  console.error('FAIL: the two splitters disagree — word indices would shift.');
+  process.exit(1);
+}
+console.log('ok: the two splitters agree on every ayah');

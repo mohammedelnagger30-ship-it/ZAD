@@ -23,6 +23,143 @@ export function canEditPrayerDate(date: string, now = trustedNow()): boolean {
   return date === today || date === yesterday;
 }
 
+export interface PrayerRecordingWindow {
+  /** The prayer's adhan — the window opens at this instant (inclusive). */
+  start: number;
+  /** The next prayer's adhan — the window shuts at this instant (exclusive). */
+  end: number;
+}
+
+/**
+ * The time half of the recording rule: every فريضة is confirmable from its own
+ * adhan until the next prayer's adhan — and nothing outside that stretch.
+ *
+ * Entries must be in chronological order (the day's فرائض in prayer order).
+ * Each prayer ends where the next begins; the last one of the day runs to
+ * `Number.POSITIVE_INFINITY`, because its closing adhan (tomorrow's Fajr) is
+ * never inside the day this is asked about — at that point the date key has
+ * turned and {@link canEditPrayerDate}'s wider yesterday rule takes over.
+ *
+ * Deliberately pure and separate from `assertPrayerRecordable`: the DB guard
+ * stays a date rule so `check:content` keeps testing it without a location,
+ * while the *time* rule is enforced by every surface that offers a recording —
+ * the day list, the status sheet and the week grid all ask these windows, so
+ * none of them can open a prayer outside its time.
+ */
+export function computeRecordingWindows(
+  adhans: readonly { name: string; time: Date }[],
+): Record<string, PrayerRecordingWindow> {
+  const windows: Record<string, PrayerRecordingWindow> = {};
+  for (let i = 0; i < adhans.length; i++) {
+    windows[adhans[i].name] = {
+      start: adhans[i].time.getTime(),
+      end: adhans[i + 1]?.time.getTime() ?? Number.POSITIVE_INFINITY,
+    };
+  }
+  return windows;
+}
+
+/** Whether `prayer`'s window contains `nowMs`; a prayer with no known window stays shut. */
+export function isWindowOpen(
+  windows: Record<string, PrayerRecordingWindow>,
+  prayer: string,
+  nowMs: number,
+): boolean {
+  const bound = windows[prayer];
+  return bound !== undefined && nowMs >= bound.start && nowMs < bound.end;
+}
+
+/** Every rawatib slot type that exists, as row keys in `sunnahRecords`. */
+export const RAWATIB_TYPES = [
+  'rawatib_fajr',
+  'rawatib_dhuhr_before',
+  'rawatib_dhuhr_after',
+  'rawatib_maghrib',
+  'rawatib_isha',
+] as const;
+
+/**
+ * How many of the `keys` rows are marked done — the single tally behind the
+ * Nawafil screen's hero ring, its week dots and its streak.
+ *
+ * Pure, so the numbers on the screen and the ones in the test agree by
+ * construction. A row that is not `done` (or absent entirely) simply does not
+ * count: silence is never rewarded.
+ */
+export function countDoneSunnahs(rows: SunnahRecord[], keys: readonly string[]): number {
+  const wanted = new Set(keys);
+  return rows.reduce((total, row) => (wanted.has(row.type) && row.done ? total + 1 : total), 0);
+}
+
+/**
+ * The sunnah rows of many days in one query — the same single-`anyOf` pattern
+ * `getPrayerGrid` uses for its week. One IndexedDB round-trip instead of one
+ * per day, because the Nawafil screen reads a whole week of history to draw
+ * its dots and streak.
+ */
+export function getSunnahRecordsForDates(dates: readonly string[]): Promise<SunnahRecord[]> {
+  return db.sunnahRecords.where('date').anyOf([...dates]).toArray();
+}
+
+/**
+ * Consecutive perfect days, counting back from today.
+ *
+ * `flags` is newest-first (`[today, yesterday, ...]`), each entry either
+ * "every tracked item was done that day" or not. Today itself is optional: a
+ * still-unanswered today does not burn a streak the reader is mid-way through
+ * building — it is skipped, and the count starts from yesterday. Any earlier
+ * gap ends the run.
+ */
+export function nawafilStreak(flags: readonly boolean[]): number {
+  let streak = 0;
+  for (let i = 0; i < flags.length; i++) {
+    if (!flags[i]) {
+      // Only today (index 0) may be skipped — a gap on any earlier day ends the run.
+      if (i === 0) continue;
+      break;
+    }
+    streak += 1;
+  }
+  return streak;
+}
+
+/** The times the Nawafil screen needs to know which نافلة is "on" right now. */
+export interface NawafilWindowTimes {
+  fajr: Date;
+  sunrise: Date;
+  dhuhr: Date;
+  maghrib: Date;
+  isha: Date;
+}
+
+export type NawafilOpportunity = 'qiyam' | 'witr' | 'duha' | 'none';
+
+/**
+ * The voluntary prayer whose time is open right now — the "النافلة المناسبة
+ * الآن" card.
+ *
+ *  - قيام الليل: the night's last third, from `maghrib + 2/3` of the night
+ *    (Fajr minus one night-third) until Fajr.
+ *  - الوتر: from Isha's adhan until Fajr — the whole night, so it is the
+ *    fallback whenever nothing more specific is open.
+ *  - الضحى: from sunrise until Dhuhr.
+ *
+ * Pure over already-computed times so the card is testable without a location
+ * or a clock; the caller passes today's timetable. Empty/invalid windows can
+ * never open anything, so a polar day without a computed Fajr simply shows
+ * «none» rather than a wrong hint.
+ */
+export function nawafilOpportunity(now: Date, times: NawafilWindowTimes): NawafilOpportunity {
+  const nowMs = now.getTime();
+  const fajrMs = times.fajr.getTime();
+  const ishaMs = times.isha.getTime();
+  const thirdStartMs = fajrMs - (fajrMs - times.maghrib.getTime()) / 3;
+  if (thirdStartMs <= nowMs && nowMs < fajrMs) return 'qiyam';
+  if (ishaMs <= nowMs && nowMs < fajrMs) return 'witr';
+  if (times.sunrise.getTime() <= nowMs && nowMs < times.dhuhr.getTime()) return 'duha';
+  return 'none';
+}
+
 /**
  * The whole confirmation rule in one pure function so `check:content` can
  * assert it without IndexedDB: the slot must be writable (today or yesterday).
@@ -280,6 +417,17 @@ export interface DayPrayerGrid {
    * at 9am.
    */
   due: Record<PrayerKey, boolean>;
+  /**
+   * Whether the prayer may be *recorded* on that day right now.
+   *
+   * Today: from its own adhan until the next prayer's adhan (see
+   * {@link computeRecordingWindows}) — a cell can therefore be `due` yet shut,
+   * which is what stops a tap from landing outside the prayer's time. Yesterday:
+   * open all day for corrections; older days: shut — the same date rule as
+   * {@link canEditPrayerDate}, packed in here so the grid asks one field instead
+   * of re-deriving it.
+   */
+  open: Record<PrayerKey, boolean>;
   status: Record<PrayerKey, PrayerStatus | null>;
   /**
    * The rawatib slots tied to each prayer that day, with their records.
@@ -341,8 +489,10 @@ export async function getPrayerGrid(location?: PrayerGridLocation): Promise<DayP
     day.push(r);
   }
 
-  // Today's `due` needs the actual prayer times, so compute them once outside the loop.
+  // Today's `due` and its recording windows both need the actual prayer times,
+  // so compute them once outside the loop.
   let todayDue: Record<PrayerKey, boolean> | null = null;
+  let todayOpen: Record<PrayerKey, boolean> | null = null;
   if (location) {
     const times = calculatePrayerTimes(
       location.latitude,
@@ -354,9 +504,19 @@ export async function getPrayerGrid(location?: PrayerGridLocation): Promise<DayP
       location.prayerTimeAdjustments,
     );
     todayDue = noDue();
+    todayOpen = noOpen();
+    // The day list and this grid must answer "may this be recorded now?"
+    // identically: from the prayer's own adhan until the next prayer's adhan.
+    const windows = computeRecordingWindows(
+      times.prayers
+        .filter((p) => (FIVE_PRAYERS as readonly string[]).includes(p.name))
+        .map((p) => ({ name: p.name, time: p.time })),
+    );
+    const nowMs = now.getTime();
     for (const p of times.prayers) {
       if ((FIVE_PRAYERS as readonly string[]).includes(p.name)) {
         todayDue[p.name as PrayerKey] = p.passed;
+        todayOpen[p.name as PrayerKey] = isWindowOpen(windows, p.name, nowMs);
       }
     }
   }
@@ -389,6 +549,17 @@ export async function getPrayerGrid(location?: PrayerGridLocation): Promise<DayP
     else if (isToday && todayDue) due = todayDue;
     else due = allDue();
 
+    // "Had its time come" and "may be recorded now" are different questions.
+    // Today follows the live windows (its adhan → the next adhan); past days
+    // follow the date rule — yesterday open all day for corrections, older days
+    // shut. Without a location the window is unknown, so `due` stands in, as it
+    // always has.
+    const open: Record<PrayerKey, boolean> = isToday
+      ? todayOpen ?? due
+      : canEditPrayerDate(date, now)
+        ? allOpen()
+        : noOpen();
+
     grid.push({
       date,
       dayName: getDayNameShort(d.getDay()),
@@ -396,6 +567,7 @@ export async function getPrayerGrid(location?: PrayerGridLocation): Promise<DayP
       isToday,
       isPast,
       due,
+      open,
       status,
       sunnah,
     });
@@ -404,6 +576,14 @@ export async function getPrayerGrid(location?: PrayerGridLocation): Promise<DayP
 }
 
 function noDue(): Record<PrayerKey, boolean> {
+  return { fajr: false, dhuhr: false, asr: false, maghrib: false, isha: false };
+}
+
+function allOpen(): Record<PrayerKey, boolean> {
+  return { fajr: true, dhuhr: true, asr: true, maghrib: true, isha: true };
+}
+
+function noOpen(): Record<PrayerKey, boolean> {
   return { fajr: false, dhuhr: false, asr: false, maghrib: false, isha: false };
 }
 

@@ -23,10 +23,17 @@ export interface ArchiveSurahReciterSource {
   item: string;
 }
 
+export interface EveryAyahReciterSource {
+  kind: 'everyayah';
+  /** Folder name on everyayah.com. */
+  folder: string;
+}
+
 export type AudioReciterSource =
   | QuranComReciterSource
   | PerAyahArchiveReciterSource
-  | ArchiveSurahReciterSource;
+  | ArchiveSurahReciterSource
+  | EveryAyahReciterSource;
 
 export interface AudioReciter {
   id: string;
@@ -36,6 +43,10 @@ export interface AudioReciter {
 
 function qurancom(recitationId: string): AudioReciterSource {
   return { kind: 'qurancom', recitationId };
+}
+
+function everyayah(folder: string): AudioReciterSource {
+  return { kind: 'everyayah', folder };
 }
 
 /** Arabic recitations and narration styles available from Quran.com. */
@@ -67,6 +78,27 @@ export const AUDIO_RECITERS: AudioReciter[] = [
     name: 'المنشاوي — معلم (ترديد الأطفال)',
     source: { kind: 'archive-surah', item: 'quran-minshawi-child-repeat' },
   },
+  // --- EveryAyah: قراء إضافيون (128kbps+) ---
+  { id: 'ea-abdullah-basfar', name: 'عبدالله بصفر', source: everyayah('Abdullah_Basfar_192kbps') },
+  { id: 'ea-ahmed-ajamy', name: 'أحمد بن علي العجمي', source: everyayah('Ahmed_ibn_Ali_al-Ajamy_128kbps_ketaballah.net') },
+  { id: 'ea-hudhaify', name: 'علي الحذيفي', source: everyayah('Hudhaify_128kbps') },
+  { id: 'ea-maher', name: 'ماهر المعيقلي', source: everyayah('MaherAlMuaiqly128kbps') },
+  { id: 'ea-ayyoub', name: 'محمد أيوب', source: everyayah('Muhammad_Ayyoub_128kbps') },
+  { id: 'ea-jibreel', name: 'محمد جبريل', source: everyayah('Muhammad_Jibreel_128kbps') },
+  { id: 'ea-abdulkareem', name: 'محمد عبدالكريم', source: everyayah('Muhammad_AbdulKareem_128kbps') },
+  { id: 'ea-qatami', name: 'خالد القحطاني', source: everyayah('Khaalid_Abdullaah_al-Qahtaanee_192kbps') },
+  { id: 'ea-nasser-alqatami', name: 'ناصر القطامي', source: everyayah('Nasser_Alqatami_128kbps') },
+  { id: 'ea-alisuesy', name: 'علي حجاج السويسي', source: everyayah('Ali_Hajjaj_AlSuesy_128kbps') },
+  { id: 'ea-sahl-yassin', name: 'سهل ياسين', source: everyayah('Sahl_Yassin_128kbps') },
+  { id: 'ea-salah-budair', name: 'صلاح البدير', source: everyayah('Salah_Al_Budair_128kbps') },
+  { id: 'ea-abdullah-matroud', name: 'عبدالله مطرود', source: everyayah('Abdullah_Matroud_128kbps') },
+  { id: 'ea-ahmed-neana', name: 'أحمد نعينع', source: everyayah('Ahmed_Neana_128kbps') },
+  { id: 'ea-salaah-bukhatir', name: 'صلاح بوخاطر', source: everyayah('Salaah_AbdulRahman_Bukhatir_128kbps') },
+  { id: 'ea-muhsin-qasim', name: 'محسن القاسم', source: everyayah('Muhsin_Al_Qasim_192kbps') },
+  { id: 'ea-aziz-alili', name: 'عزيز عليلي', source: everyayah('aziz_alili_128kbps') },
+  { id: 'ea-yaser-salamah', name: 'ياسر سلامة', source: everyayah('Yaser_Salamah_128kbps') },
+  { id: 'ea-akram-alaqimy', name: 'أكرم العلقمي', source: everyayah('Akram_AlAlaqimy_128kbps') },
+
 ];
 
 export function getAudioReciter(id: string): AudioReciter | undefined {

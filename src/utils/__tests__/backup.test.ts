@@ -1,5 +1,6 @@
 import { describe, it, expect } from '@jest/globals';
-import { BACKUP_TABLES, isValidBackupRow } from '@/utils/backup';
+import { BACKUP_TABLES, isValidBackupRow, pickSettingsRow } from '@/utils/backup';
+import { DEFAULT_SETTINGS } from '@/db/database';
 import { TOTAL_QURAN_PAGES } from '@/data/surahs';
 
 /**
@@ -40,5 +41,31 @@ describe('isValidBackupRow', () => {
     // of the exporter once dropped: an export that omitted it left the import
     // reporting success over a database still holding the old intervals.
     expect(BACKUP_TABLES).toContain('hifzReviews');
+  });
+});
+
+describe('pickSettingsRow', () => {
+  it('returns the canonical row when the table holds only it', () => {
+    const row = { ...DEFAULT_SETTINGS, id: 1 };
+    expect(pickSettingsRow([row])).toBe(row);
+  });
+
+  // The regression this rule exists for: the exporter used to ask for id 1 by name, so
+  // an install still carrying a legacy row id exported `[null]`, and the validator on
+  // the restoring device then threw the entire file away.
+  it('finds a legacy row the old exporter missed, and the validator still accepts it', () => {
+    const legacy = { ...DEFAULT_SETTINGS, id: 7 };
+    const picked = pickSettingsRow([{ ...DEFAULT_SETTINGS, id: 12 }, legacy]);
+    expect(picked).toBe(legacy);
+    expect(isValidBackupRow('settings', picked)).toBe(true);
+  });
+
+  it('prefers the lowest id, matching what getSettings() reads back', () => {
+    const lowest = { ...DEFAULT_SETTINGS, id: 2 };
+    expect(pickSettingsRow([{ ...DEFAULT_SETTINGS, id: 5 }, lowest])).toBe(lowest);
+  });
+
+  it('reports an empty table rather than inventing a row', () => {
+    expect(pickSettingsRow([])).toBeUndefined();
   });
 });

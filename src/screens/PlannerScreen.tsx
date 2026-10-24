@@ -122,33 +122,57 @@ export function PlannerScreen({ navigate }: {
 
   useEffect(() => { load(); }, [load]);
 
-  const refreshTodayTasks = async () => {
-    await generateDailyTasks();
-    await rescheduleAllNotifications();
+  // Regenerating today's tasks and rebuilding the notification queue are both
+  // slow, and neither one changes what is already on screen. Kick them off and
+  // refresh the visible lists immediately so a toggle or a delete feels instant.
+  const refreshTodayTasks = () => {
+    void (async () => {
+      try {
+        await generateDailyTasks();
+        await rescheduleAllNotifications();
+      } catch (error) {
+        console.error('Refreshing tasks failed:', error);
+      }
+    })();
   };
 
   const deletePlan = async (id: number) => {
-    await db.plans.delete(id);
-    await rescheduleAllNotifications();
-    load();
+    setPlans((prev) => prev.filter((plan) => plan.id !== id));
+    try {
+      await db.plans.delete(id);
+    } catch (error) {
+      console.error('Deleting plan failed:', error);
+    }
+    refreshTodayTasks();
+    void load();
   };
 
   const toggleActive = async (plan: HifzPlan) => {
-    await db.plans.update(plan.id!, { active: !plan.active });
-    await refreshTodayTasks();
-    load();
+    const next = !plan.active;
+    setPlans((prev) => prev.map((p) => (p.id === plan.id ? { ...p, active: next } : p)));
+    try {
+      await db.plans.update(plan.id!, { active: next });
+    } catch (error) {
+      console.error('Toggling plan failed:', error);
+    }
+    refreshTodayTasks();
+    void load();
   };
 
   const handleSuggest = async () => {
     const suggestion = suggestPlan(goalText);
     const progressionId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    await Promise.all(suggestion.plans.map((plan) =>
-      db.plans.add({ ...plan, progressionId, createdAt: Date.now() }),
-    ));
-    await refreshTodayTasks();
+    try {
+      await Promise.all(suggestion.plans.map((plan) =>
+        db.plans.add({ ...plan, progressionId, createdAt: Date.now() }),
+      ));
+    } catch (error) {
+      console.error('Adding suggested plans failed:', error);
+    }
+    refreshTodayTasks();
     setGoalText('');
     setShowSuggest(false);
-    await load();
+    void load();
   };
 
   const surahSummaries = useMemo(() => SURAHS.map((surah) => {
@@ -201,14 +225,26 @@ export function PlannerScreen({ navigate }: {
   const markSurahProgress = async (surahId: number, status: 'memorized' | 'reviewing') => {
     const surah = getSurah(surahId);
     if (!surah) return;
-    await db.hifzProgress.add({
+    const optimistic: HifzProgress = {
       surahId,
       ayahStart: 1,
       ayahEnd: surah.ayahCount,
       status,
       ratedAt: Date.now(),
-    });
-    await load();
+    };
+    setProgress((prev) => [...prev, optimistic]);
+    try {
+      await db.hifzProgress.add({
+        surahId,
+        ayahStart: 1,
+        ayahEnd: surah.ayahCount,
+        status,
+        ratedAt: Date.now(),
+      });
+    } catch (error) {
+      console.error('Recording surah progress failed:', error);
+    }
+    void load();
   };
 
   return (

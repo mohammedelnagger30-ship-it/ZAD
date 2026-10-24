@@ -97,7 +97,7 @@ export function normalizeAdminStats(value: unknown): AdminStats {
  * left the signed-in user parked on «جارٍ فتح الحساب...» forever, on a build
  * that rendered instantly before the gate existed. The abort turns the hang
  * into the failure the comment already promised. */
-const ADMIN_CHECK_TIMEOUT_MS = 5_000;
+const ADMIN_CHECK_TIMEOUT_MS = 2_000;
 
 /** Is the signed-in account on `admin_emails`? False on any failure, so a
  * missing migration or a dead network leaves the app in its normal state

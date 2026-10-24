@@ -27,8 +27,15 @@ export function adhanDownloadUrl(sound: AdhanSound): string | null {
 
 export const ADHAN_SOUNDS: AdhanSound[] = [
   {
-    // The Makkah adhan (المسجد الحرام) is the app's out-of-the-box voice: first in the
-    // picker, the fallback for unknown ids, and the default a fresh install starts with.
+    // أذان السيد النقشبندي is the app's out-of-the-box voice: first in the picker, the
+    // fallback for unknown ids, and the default a fresh install starts with.
+    id: 'sayyid_naqshbandi',
+    name: 'السيد النقشبندي — أذان',
+    file: 'adhan_sayyid_naqshbandi.mp3',
+    source: 'Archive.org',
+    bundled: true,
+  },
+  {
     id: 'makkah_masjid',
     name: 'المسجد الحرام مكة — أذان',
     file: 'adhan_makkah_masjid.mp3',
@@ -72,14 +79,6 @@ export const ADHAN_SOUNDS: AdhanSound[] = [
     remote: { path: 'adhan_alafasy_general.mp3', sizeBytes: 3094324 },
   },
   {
-    id: 'sayyid_naqshbandi',
-    name: 'السيد النقشبندي — أذان',
-    file: 'adhan_sayyid_naqshbandi.mp3',
-    source: 'Archive.org',
-    bundled: false,
-    remote: { path: 'adhan_sayyid_naqshbandi.mp3', sizeBytes: 1728828 },
-  },
-  {
     id: 'tablawi',
     name: 'محمود الطبلاوي — أذان',
     file: 'adhan_tablawi.mp3',
@@ -121,8 +120,8 @@ export const ADHAN_SOUNDS: AdhanSound[] = [
   },
 ];
 
-/** The out-of-the-box adhan: أذان المسجد الحرام بمكة, on every fresh install. */
-export const DEFAULT_ADHAN_SOUND_ID = 'makkah_masjid';
+/** The out-of-the-box adhan: أذان السيد النقشبندي, on every fresh install. */
+export const DEFAULT_ADHAN_SOUND_ID = 'sayyid_naqshbandi';
 
 export function getAdhanSound(id: string): AdhanSound {
   return ADHAN_SOUNDS.find((sound) => sound.id === id) ?? ADHAN_SOUNDS[0];

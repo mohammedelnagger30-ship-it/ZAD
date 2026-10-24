@@ -1,19 +1,22 @@
-﻿# Regenerates the Qurra icon set from the prepared artwork so the binary
+﻿# Regenerates the Qurra icon set from the artwork so the binary
 # assets stay reproducible.
 #
-#   python scripts\prep-icon.py      # artwork -> scripts\assets\icon-prepared.png
+#   scripts\assets\icon-source-v2.png   # source artwork (uploaded, 1254px)
+#       -- extracted + re-laid on the brand field -->
+#   python scripts\prep-icon-v2.py       # -> icon-prepared.png (mark 48%)
+#                                           icon-prepared-adaptive.png (32%)
 #   powershell -File scripts\make-icons.ps1
 #
-# The mark is the Qurra artwork: a pointed mihrab arch in gold, a
-# small crescent in its upper opening, and an open Mushaf fanning
-# out at the arch's base, on a deep-green radial field. The
-# border is the program's rounded square cut as a true squircle
+# The mark is the open Mushaf in warm ivory on a deep-green field
+# with a soft glow (the small status-bar icon's exact silhouette).
+# The border is the program's rounded square cut as a true squircle
 # (superellipse n=5, continuous curvature like iOS/WhatsApp)
 # rather than a plain rounded rect, so the corners read as one
 # continuous curve at every size.
 #
-# prep-icon.py is dev-only (numpy/Pillow); icon-prepared.png is committed, so
-# this script needs nothing but .NET.
+# prep-icon.py is the retired mockup pipeline (icon-source.jpg ->
+# icon-prepared.png); icon-prepared.png now comes straight from
+# icon-source-v2.png, so this script needs nothing but .NET.
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Windows.Forms
@@ -21,14 +24,17 @@ Add-Type -AssemblyName System.Windows.Forms
 $root = Split-Path -Parent $PSScriptRoot
 $outDir = Join-Path $root 'public\icons'
 $srcPath = Join-Path $root 'scripts\assets\icon-prepared.png'
+$srcAdaptivePath = Join-Path $root 'scripts\assets\icon-prepared-adaptive.png'
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-if (-not (Test-Path $srcPath)) {
-    throw "missing $srcPath - run: python scripts\prep-icon.py"
+foreach ($p in @($srcPath, $srcAdaptivePath)) {
+    if (-not (Test-Path $p)) {
+        throw "missing $p - run: python scripts\prep-icon-v2.py"
+    }
 }
 
 # Geometry / palette (kept in sync with the app theme).
 $SquircleN   = 5.0                              # superellipse exponent = the border curve
-$CornerGreen = [System.Drawing.Color]::FromArgb(255, 13, 45, 37)    # #0D2D25
+$CornerGreen = [System.Drawing.Color]::FromArgb(255, 9, 33, 28)      # #09211C (the artwork's field at the squircle rim)
 $DeepGreen   = [System.Drawing.Color]::FromArgb(255, 14, 51, 44)    # #0E332C
 $Ivory       = [System.Drawing.Color]::FromArgb(255, 253, 247, 229) # #FDF7E5
 $Gold        = [System.Drawing.Color]::FromArgb(255, 201, 174, 116) # #C9AE74
@@ -40,6 +46,17 @@ function Get-SourceImage {
         $script:SourceImage = [System.Drawing.Image]::FromFile($srcPath)
     }
     return $script:SourceImage
+}
+
+# Adaptive foreground (108dp): the launcher crops it to the inner 72dp, i.e.
+# zooms 1.5x, so it uses the artwork whose mark is already scaled to 32% --
+# that way the mark measures the same 48% of the icon the user sees.
+$script:SourceImageAdaptive = $null
+function Get-AdaptiveSourceImage {
+    if ($null -eq $script:SourceImageAdaptive) {
+        $script:SourceImageAdaptive = [System.Drawing.Image]::FromFile($srcAdaptivePath)
+    }
+    return $script:SourceImageAdaptive
 }
 
 # Adds the squircle (superellipse |x|^n + |y|^n = 1) as a dense polygon.
@@ -78,7 +95,8 @@ function New-Mark {
     param(
         [int]$Size,
         [string]$Shape = 'squircle',
-        [string]$Fill = 'opaque'
+        [string]$Fill = 'opaque',
+        [switch]$Adaptive
     )
     $ss = 4                                   # supersample then downscale = clean edge
     $H = $Size * $ss
@@ -102,7 +120,7 @@ function New-Mark {
         default  { Add-Squircle -Path $path -Cx $half -Cy $half -Half $half }
     }
     $g.SetClip($path)
-    $src = Get-SourceImage
+    $src = if ($Adaptive) { Get-AdaptiveSourceImage } else { Get-SourceImage }
     $g.DrawImage($src,
         [System.Drawing.Rectangle]::new(0, 0, $H, $H),
         [System.Drawing.Rectangle]::new(0, 0, $src.Width, $src.Height),
@@ -241,7 +259,7 @@ function Save-AndroidAdaptiveLayers {
 
     $fgDir = Join-Path $androidResDir 'drawable-nodpi'
     New-Item -ItemType Directory -Force -Path $fgDir | Out-Null
-    Save-Png -Bmp (New-Mark -Size 432 -Shape 'square' -Fill 'opaque') `
+    Save-Png -Bmp (New-Mark -Size 432 -Shape 'square' -Fill 'opaque' -Adaptive) `
              -Path (Join-Path $fgDir 'ic_launcher_foreground.png')
 
     foreach ($rel in @('drawable\ic_launcher_foreground.xml', 'drawable-v24\ic_launcher_foreground.xml')) {
@@ -255,12 +273,12 @@ function Save-AndroidAdaptiveLayers {
     $bgXml = @"
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#0E332C</color>
+    <color name="ic_launcher_background">#09211C</color>
 </resources>
 "@
     $bgPath = Join-Path $androidResDir 'values\ic_launcher_background.xml'
     [System.IO.File]::WriteAllText($bgPath, $bgXml, [System.Text.UTF8Encoding]::new($false))
-    "  android\values\ic_launcher_background.xml (#0E332C)"
+    "  android\values\ic_launcher_background.xml (#09211C)"
 }
 
 # Favicon + in-app logo, pixel-identical to the launcher icon.

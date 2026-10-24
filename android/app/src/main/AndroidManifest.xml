@@ -44,6 +44,23 @@
             android:enabled="true"
             android:exported="false" />
 
+        <!-- The recitation player card. `foregroundServiceType="mediaPlayback"` is what
+             lets the process keep running (and the WebView's audio with it) while the
+             app is in the background; `exported="false"` keeps every entry point —
+             publishes, its own transport buttons — inside this app. -->
+        <service
+            android:name=".RecitationMediaService"
+            android:enabled="true"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="mediaPlayback" />
+
+        <!-- The card's three transport buttons. Nothing outside this app can reach it. -->
+        <receiver
+            android:name=".RecitationMediaReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
@@ -87,11 +104,16 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- No WRITE/READ_EXTERNAL_STORAGE and no MANAGE_EXTERNAL_STORAGE: every file
-         the app writes (adhan voices, update APK, PDF export) lands in its private
-         data/cache dirs or goes through the DownloadManager/FileProvider, none of
-         which need shared-storage access. Dropping MANAGE_EXTERNAL_STORAGE also
-         keeps the app clear of Play's restricted-permission review. -->
+    <!-- No MANAGE_EXTERNAL_STORAGE ("all files access"): every file the app writes (adhan
+         voices, update APK, PDF export) lands in its private data/cache dirs or goes
+         through the DownloadManager/FileProvider, none of which need shared-storage
+         access. Dropping MANAGE_EXTERNAL_STORAGE also keeps the app clear of Play's
+         restricted-permission review. The one exception is «حفظ على الهاتف», which copies
+         a lecture into the public Download/قُرّة folder: on Android 10+ that goes through
+         MediaStore and needs no permission at all, and below 10 it needs the legacy pair —
+         hence maxSdkVersion="28" and nothing above it (scoped storage replaced them). -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- The WebView's own geolocation prompt (PrayerScreen «موقعي الحالي») resolves
          through these host permissions; without them the callback always errors. -->
@@ -112,4 +134,14 @@
     <!-- The tasbih/adhkar counters call navigator.vibrate(); without this
          permission the WebView silently drops every vibration request. -->
     <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- The recitation's background player card. `FOREGROUND_SERVICE` is the
+         pre-34 umbrella permission; `FOREGROUND_SERVICE_MEDIA_PLAYBACK` is the
+         per-type one Android 14+ requires to declare a mediaPlayback service. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- Keeps the CPU awake while a surah is sounding: the audio lives in the
+         WebView, which does not hold a wake lock of its own, and without one a
+         recitation left playing with the screen off would simply stop. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 </manifest>

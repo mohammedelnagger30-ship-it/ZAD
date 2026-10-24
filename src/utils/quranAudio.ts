@@ -42,23 +42,17 @@ async function fetchSurahAudioMetadata(
   surahId: number,
   signal?: AbortSignal,
 ): Promise<{ url: string; verseTimings: VerseTiming[] }> {
-  let response: Response;
-  try {
-    response = await fetch(
-      `https://api.quran.com/api/v4/chapter_recitations/${recitationId}/${surahId}?segments=true`,
-      { signal },
-    );
-  } catch (cause) {
-    if ((cause as Error).name === 'AbortError') throw cause;
-    throw new Error('تعذّر الاتصال بمصدر التلاوة');
-  }
-  if (!response.ok) {
-    throw new Error(
-      response.status === 404
+  // The metadata call is one request per surah, so a single blip here fails the
+  // surah outright — the same retry that carries the per-ayah sources carries
+  // this one too, which is what makes the Quran.com recitations as forgiving.
+  const response = await fetchWithRetry(
+    `https://api.quran.com/api/v4/chapter_recitations/${recitationId}/${surahId}?segments=true`,
+    signal,
+    (reason) =>
+      reason === '404'
         ? 'تلاوة هذه السورة غير متاحة لهذا القارئ'
-        : `تعذّر تحميل بيانات التلاوة (${response.status})`,
-    );
-  }
+        : `تعذّر تحميل بيانات التلاوة — ${reason}`,
+  );
 
   const data = (await response.json()) as ChapterAudioResponse;
   const audioFile = data.audio_file;
@@ -113,6 +107,13 @@ export function perAyahFileUrl(item: string, surahId: number, ayah: number): str
 /** `001.mp3` = surah 1 (whole-surah file, no published verse timings). */
 export function archiveSurahFileUrl(item: string, surahId: number): string {
   return `https://archive.org/download/${item}/${String(surahId).padStart(3, '0')}.mp3`;
+}
+
+/** EveryAyah.com per-ayah file: `{surah:03d}{ayah:03d}.mp3` inside a reciter folder. */
+export function everyayahFileUrl(folder: string, surahId: number, ayah: number): string {
+  const surah = String(surahId).padStart(3, '0');
+  const ayahPart = String(ayah).padStart(3, '0');
+  return `https://everyayah.com/data/${folder}/${surah}${ayahPart}.mp3`;
 }
 
 /**
@@ -186,6 +187,91 @@ async function mapPool<T, R>(
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// Retrying the network.
+//
+// A per-ayah source is stitched from one request per ayah — Al-Baqarah is 286
+// of them — and a single transient failure used to abort the whole surah with
+// «تعذّر الاتصال بمصدر التلاوة». On a phone that is not an edge case: a mobile
+// radio drops a connection, a CDN times out once, and the reader is told the
+// reciter is unavailable. The Quran.com recitations never showed this because
+// they are one request per surah, which is exactly why the breakage looked
+// reciter-specific when it was really source-specific.
+//
+// So a missing file stays fatal — a 404 means the reciter genuinely has no
+// recording for that ayah, and retrying only delays the truth — while every
+// other failure is retried a few times before being given up on.
+// ---------------------------------------------------------------------------
+
+/** Attempts per file, including the first. */
+const FETCH_ATTEMPTS = 4;
+/** Delay before the second attempt; it doubles from there. */
+const RETRY_BASE_DELAY_MS = 400;
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('Aborted', 'AbortError'));
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/**
+ * Whether asking again could plausibly get a different answer. A dropped
+ * connection, a timeout, a 5xx or a 429 all can; a 404 cannot, so the caller
+ * stops at once instead of burning three more rounds on the same truth.
+ */
+function isRetryableStatus(status: number): boolean {
+  return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+/**
+ * Fetch one file, retrying the failures that are worth retrying.
+ *
+ * Jitter is added to the backoff so a pool of six workers that all hit a
+ * throttled server at once do not then all come back at once.
+ */
+async function fetchWithRetry(
+  url: string,
+  signal: AbortSignal | undefined,
+  describe: (reason: string) => string,
+): Promise<Response> {
+  let lastReason = 'الشبكة';
+  for (let attempt = 0; attempt < FETCH_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) {
+      const backoff = RETRY_BASE_DELAY_MS * 2 ** (attempt - 1);
+      await sleep(backoff + Math.random() * 250, signal);
+    }
+    throwIfAborted(signal);
+    let response: Response;
+    try {
+      response = await fetch(url, { signal, mode: 'cors', redirect: 'follow' });
+    } catch (cause) {
+      // An abort is the reader leaving, not the server refusing: stop at once.
+      if ((cause as Error).name === 'AbortError') throw cause;
+      lastReason = 'الشبكة';
+      continue;
+    }
+    if (response.ok) return response;
+    if (!isRetryableStatus(response.status)) {
+      // 404 and the other permanent answers: retrying cannot make it appear.
+      throw new Error(describe(String(response.status)));
+    }
+    lastReason = String(response.status);
+  }
+  throw new Error(describe(lastReason));
+}
+
 let decodeContext: AudioContext | null = null;
 
 function sharedDecodeContext(): AudioContext {
@@ -206,7 +292,7 @@ interface PerAyahSurah {
 }
 
 async function buildPerAyahSurah(
-  item: string,
+  urlForAyah: (surahId: number, ayah: number) => string,
   surahId: number,
   signal?: AbortSignal,
   onProgress?: (progress: DownloadProgress) => void,
@@ -219,24 +305,14 @@ async function buildPerAyahSurah(
   let total = 0;
   const buffers = await mapPool(ayahs, 6, async (ayah) => {
     throwIfAborted(signal);
-    let response: Response;
-    try {
-      response = await fetch(perAyahFileUrl(item, surahId, ayah), {
-        signal,
-        mode: 'cors',
-        redirect: 'follow',
-      });
-    } catch (cause) {
-      if ((cause as Error).name === 'AbortError') throw cause;
-      throw new Error('تعذّر الاتصال بمصدر التلاوة');
-    }
-    if (!response.ok) {
-      throw new Error(
-        response.status === 404
-          ? 'تلاوة هذه السورة غير متاحة لهذا القارئ'
-          : `تعذّر تحميل تلاوة الآية ${ayah} (${response.status})`,
-      );
-    }
+    // One dropped request among these hundreds no longer costs the whole surah:
+    // the fetch retries the failures that can change, and only a file the
+    // reciter genuinely does not have ends the run at once.
+    const response = await fetchWithRetry(urlForAyah(surahId, ayah), signal, (reason) =>
+      reason === '404'
+        ? 'تلاوة هذه السورة غير متاحة لهذا القارئ'
+        : `تعذّر تحميل تلاوة الآية ${ayah} — ${reason}`,
+    );
     const raw = new Uint8Array(await response.arrayBuffer());
     throwIfAborted(signal);
     total += Number(response.headers.get('content-length') ?? 0);
@@ -301,10 +377,25 @@ export async function loadSurahAudio(
   }
 
   if (reciter.source.kind === 'per-ayah') {
-    // One file per ayah, stitched into a single surah blob with measured
-    // timings — downstream players see the same shape as a Quran.com file.
-    // The blob is owned by the caller through `url` (revoked on change).
-    const stitched = await buildPerAyahSurah(reciter.source.item, surahId, signal);
+    const src = reciter.source;
+    const stitched = await buildPerAyahSurah(
+      (s, a) => perAyahFileUrl(src.item, s, a),
+      surahId,
+      signal,
+    );
+    return {
+      url: URL.createObjectURL(stitched.blob),
+      blob: stitched.blob,
+      verseTimings: stitched.verseTimings,
+    };
+  }
+  if (reciter.source.kind === 'everyayah') {
+    const src = reciter.source;
+    const stitched = await buildPerAyahSurah(
+      (s, a) => everyayahFileUrl(src.folder, s, a),
+      surahId,
+      signal,
+    );
     return {
       url: URL.createObjectURL(stitched.blob),
       blob: stitched.blob,
@@ -339,7 +430,24 @@ export async function downloadSurahAudio(
     const reciter = getAudioReciter(reciterId);
     if (!reciter) throw new Error('القارئ المطلوب غير معروف');
     if (reciter.source.kind === 'per-ayah') {
-      const stitched = await buildPerAyahSurah(reciter.source.item, surahId, signal, onProgress);
+      const src = reciter.source;
+      const stitched = await buildPerAyahSurah(
+        (s, a) => perAyahFileUrl(src.item, s, a),
+        surahId,
+        signal,
+        onProgress,
+      );
+      await writeAudioTrack(reciterId, surahId, stitched.blob, stitched.verseTimings);
+      return;
+    }
+    if (reciter.source.kind === 'everyayah') {
+      const src = reciter.source;
+      const stitched = await buildPerAyahSurah(
+        (s, a) => everyayahFileUrl(src.folder, s, a),
+        surahId,
+        signal,
+        onProgress,
+      );
       await writeAudioTrack(reciterId, surahId, stitched.blob, stitched.verseTimings);
       return;
     }

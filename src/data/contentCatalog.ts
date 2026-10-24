@@ -22,6 +22,13 @@ export interface TafsirEdition {
   totalBytes: number;
   /** Per-surah download size in bytes, index 1..114. 0 means "not available". */
   surahBytes: number[];
+  /**
+   * Per-surah SHA-256 (hex) of the exact payload the size was measured from,
+   * index 1..114, '' where nothing was cached. The app checks it at download so
+   * a silent edit upstream is caught instead of stored. Absent when the
+   * catalogue was built without a tafsir cache.
+   */
+  surahSha256?: string[];
   /** Rough guidance shown before a heavy download. */
   weight: 'light' | 'medium' | 'heavy';
 }
@@ -34,6 +41,8 @@ export interface HadithBook {
   slug: string;
   count: number;
   downloadBytes: number;
+  /** SHA-256 (hex) of the collection payload, checked at download. */
+  sha256?: string;
   /**
    * True when the collection is bundled inside the app itself
    * (public/hadith/<slug>.json) and is copied onto the device on
@@ -63,6 +72,8 @@ export interface WordMeaningsSource {
   url: string;
   /** Upstream version stamp, so a stored copy can be recognised after an update. */
   version: string;
+  /** SHA-256 (hex) of the gzip dump as the server sends it, checked at download. */
+  sha256?: string;
   /** Bytes over the wire — the gzip file as the server sends it. */
   downloadBytes: number;
   /** Bytes once decompressed and split per surah: what the device actually stores. */
@@ -194,6 +205,7 @@ export const HADITH_BOOKS: HadithBook[] = [
     slug: 'ara-nawawi',
     count: 42,
     downloadBytes: 49340,
+    sha256: '91f559b90422005b768bb449426d87d2e6fabbb43ac3a31e5c24c50ca77465e6',
     bundled: false,
   },
   {
@@ -203,6 +215,7 @@ export const HADITH_BOOKS: HadithBook[] = [
     slug: 'ara-qudsi',
     count: 40,
     downloadBytes: 55258,
+    sha256: '8645482e46b9ab145b3a8b740ffc7dc6902cc1cc0a1845da35b2057ec23bb55a',
     bundled: false,
   },
   {
@@ -212,6 +225,7 @@ export const HADITH_BOOKS: HadithBook[] = [
     slug: 'ara-malik',
     count: 1829,
     downloadBytes: 2150337,
+    sha256: '088b1f354e110211da006d47e37dd8f8837368f318ed683271f0fdb0f09a3ab5',
     bundled: false,
   },
   {
@@ -221,6 +235,7 @@ export const HADITH_BOOKS: HadithBook[] = [
     slug: 'ara-ibnmajah',
     count: 4338,
     downloadBytes: 5583102,
+    sha256: 'b406e6be81588ab0ec1ddbed32f5fd95bbcdda242c460d88331e82eb5c2bc0aa',
     bundled: false,
   },
   {
@@ -230,6 +245,7 @@ export const HADITH_BOOKS: HadithBook[] = [
     slug: 'ara-tirmidhi',
     count: 3924,
     downloadBytes: 7120806,
+    sha256: '408028cd56329ed78edbe3ad443beb96b58e16c3e5bd49f9bc7b0eac77c8820f',
     bundled: false,
   },
   {
@@ -239,6 +255,7 @@ export const HADITH_BOOKS: HadithBook[] = [
     slug: 'ara-nasai',
     count: 5679,
     downloadBytes: 7152291,
+    sha256: 'c705983c19bb089c87cd6531aff609bd94d862183ed0859115b0ff991826a956',
     bundled: false,
   },
   {
@@ -248,6 +265,7 @@ export const HADITH_BOOKS: HadithBook[] = [
     slug: 'ara-abudawud',
     count: 5272,
     downloadBytes: 7345422,
+    sha256: '216139c5f40a8147e700d62ffa3b5b2fe45d0e034f86941a193c598c10056189',
     bundled: false,
   },
   {
@@ -257,6 +275,7 @@ export const HADITH_BOOKS: HadithBook[] = [
     slug: 'ara-muslim',
     count: 7360,
     downloadBytes: 8685140,
+    sha256: '194073b24090c5368e4d14a3f55c9e0ef144c7437bd7e5aa83aa4d2bc54a8ea0',
     bundled: true,
   },
   {
@@ -266,6 +285,7 @@ export const HADITH_BOOKS: HadithBook[] = [
     slug: 'ara-bukhari',
     count: 7580,
     downloadBytes: 9770083,
+    sha256: 'e34a3402889ca378871da3c5984b7875c680920e93f1c8738ac7afe502179562',
     bundled: false,
   },
 ];

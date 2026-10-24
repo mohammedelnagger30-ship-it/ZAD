@@ -1,9 +1,9 @@
 ﻿import { useEffect, useState } from 'react';
-import { Bell, MapPin, BookOpen, Check, ChevronLeft, Heart, Search, Palette, Sparkles } from 'lucide-react';
+import { Bell, MapPin, BookOpen, Check, ChevronLeft, Heart, Search, Palette } from 'lucide-react';
 import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { Button } from '@/components/ui';
-import { requestNotificationPermission, hasNotificationPermission } from '@/utils/notifications';
+import { requestNotificationPermission } from '@/utils/notifications';
 import { getProtectionStatus, openProtectionSettings } from '@/utils/adhanOverlay';
 import { CITY_PRESETS } from '@/utils/prayerTimes';
 import { COLOR_PALETTES } from '@/utils/colorThemes';
@@ -16,7 +16,7 @@ interface OnboardingProps {
 }
 
 export function Onboarding({ onComplete }: OnboardingProps) {
-  const { colorPalette, changeColorPalette } = useTheme();
+  const { colorPalette, changeColorPalette, themeMode, changeTheme } = useTheme();
   const [step, setStep] = useState(0);
   const [selectedCity, setSelectedCity] = useState<string>('القاهرة');
   const [citySearch, setCitySearch] = useState('');
@@ -27,8 +27,6 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   // native once the notification step is reached; on web it stays false and no prompt
   // is ever shown.
   const [batteryRestricted, setBatteryRestricted] = useState(false);
-  const [dhikrEnabled, setDhikrEnabled] = useState(false);
-  const [dhikrRequesting, setDhikrRequesting] = useState(false);
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -70,7 +68,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   }> = [
     // Welcome
     {
-      icon: <Heart size={64} style={{ color: 'var(--brand-from, #1f734e)' }} />,
+      icon: <Heart size={64} style={{ color: 'var(--brand-from)' }} />,
       title: 'مرحباً بك في قُرّة',
       description: 'تطبيقك الشامل لحفظ القرآن الكريم وتتبع العبادات اليومية. يعمل بالكامل بدون إنترنت.',
       tips: [
@@ -81,40 +79,12 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         '🤲 أذكار ومسبحة إلكترونية',
         '📊 تتبع التقدم والإحصائيات',
       ],
-      action: () => setStep(1),
+      action: () => setStep((current) => current + 1),
       actionLabel: 'ابدأ',
-    },
-    // Random Dhikr Reminders
-    {
-      icon: <Sparkles size={64} style={{ color: 'var(--brand-from, #1f734e)' }} />,
-      title: 'تذكير عشوائي بالأذكار',
-      description: 'هل تريد أن نذكرك بأذكار عشوائية على مدار اليوم؟ تُرسل تذكيرات جميلة تساعدك على ذكر الله في كل وقت.',
-      tips: [
-        '⏰ تذكيرات عشوائية متفرقة',
-        '🤲 أذكار متنوعة من مكتبة التطبيق',
-        '🔔 يمكنك إيقافها من الإعدادات',
-        '✨ تذكيرات لطيفة ومفيدة',
-      ],
-      action: async () => {
-        setDhikrRequesting(true);
-        try {
-          const granted = await requestNotificationPermission();
-          if (granted) {
-            setDhikrEnabled(true);
-          }
-          setStep(2);
-        } catch {
-          // The request must never trap the flow: move on and let Settings retry.
-          setStep(2);
-        } finally {
-          setDhikrRequesting(false);
-        }
-      },
-      actionLabel: dhikrRequesting ? 'جارٍ التفعيل...' : dhikrEnabled ? 'تم التفعيل - متابعة' : 'تفعيل التذكيرات',
     },
     // Notifications
     {
-      icon: <Bell size={64} style={{ color: 'var(--brand-from, #1f734e)' }} />,
+      icon: <Bell size={64} style={{ color: 'var(--brand-from)' }} />,
       title: 'تفعيل التنبيهات',
       description: 'تنبيهات لمواعيد الحفظ والمراجعة وأوقات الصلاة. نحتاج إذنك لإرسالها في الوقت المحدد حتى لو كان التطبيق مغلقاً.',
       tips: [
@@ -149,10 +119,10 @@ export function Onboarding({ onComplete }: OnboardingProps) {
               // Protection probe is best-effort; never block onboarding on it.
             }
           }
-          setStep(3);
+          setStep((current) => current + 1);
         } catch (error) {
           setNotificationError(error instanceof Error ? error.message : 'تعذّر طلب إذن الإشعارات.');
-          setStep(3);
+          setStep((current) => current + 1);
         } finally {
           setRequesting(false);
         }
@@ -161,10 +131,10 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     },
     // Color Palette
     {
-      icon: <Palette size={64} style={{ color: 'var(--brand-from, #1f734e)' }} />,
+      icon: <Palette size={64} style={{ color: 'var(--brand-from)' }} />,
       title: 'اختر لونك المفضل',
       description: 'اختر نغمة ألوان تناسب ذوقك. يمكنك تغييرها لاحقاً من الإعدادات.',
-      action: () => setStep(4),
+      action: () => setStep((current) => current + 1),
       actionLabel: 'متابعة',
       extra: (
         <div className="w-full mb-4">
@@ -178,7 +148,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
                   onClick={() => changeColorPalette(palette.id)}
                   className="group relative flex flex-col items-center gap-2 rounded-2xl p-3 transition-all duration-300 hover:scale-105 active:scale-95"
                   style={{
-                    background: selected ? palette.gradient : '#ffffff',
+                    background: selected ? palette.gradient : 'var(--surface-panel)',
                     boxShadow: selected
                       ? `0 8px 24px ${palette.glow}, 0 0 0 2px ${palette.color}40`
                       : '0 2px 8px rgba(0,0,0,0.08)',
@@ -203,19 +173,44 @@ export function Onboarding({ onComplete }: OnboardingProps) {
                     </span>
                     <span
                       className="text-[8px] font-medium tracking-wide"
-                      style={{ color: selected ? 'rgba(255,255,255,0.8)' : '#9ca3af' }}
+                      style={{ color: selected ? 'rgba(255,255,255,0.8)' : 'var(--text-muted)' }}
                     >
                       {palette.latin}
                     </span>
                   </div>
                   {selected && (
-                    <div className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center rounded-full bg-white shadow-md">
-                      <Check size={12} style={{ color: palette.color }} strokeWidth={3} />
+                    <div className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center rounded-full shadow-md" style={{ backgroundColor: 'var(--func-primary)' }}>
+                      <Check size={12} style={{ color: '#ffffff' }} strokeWidth={3} />
                     </div>
                   )}
                 </button>
               );
             })}
+          </div>
+          {/* Day / night mode toggle */}
+          <div className="mt-4 p-3 rounded-xl border" style={{
+            background: 'var(--surface-panel)',
+            borderColor: 'var(--line)'
+          }}>
+            <div className="flex items-center justify-between text-xs">
+              <span style={{ color: 'var(--fg)' }}>الوضع الليلي</span>
+              <button
+                type="button"
+                onClick={() => changeTheme(themeMode === 'dark' ? 'light' : 'dark')}
+                className="relative w-10 h-5 rounded-full p-0.5 focus:outline-none"
+                style={{
+                  background: themeMode === 'dark' ? 'var(--func-primary)' : 'var(--gray-400)'
+                }}
+                aria-pressed={themeMode === 'dark'}
+              >
+                <div className="h-4 w-4 rounded-full bg-white shadow-sm transition-transform" style={{
+                  transform: themeMode === 'dark' ? 'translateX(4px)' : 'translateX(0)'
+                }} />
+              </button>
+            </div>
+            <p className="text-[10px] mt-1 text-center" style={{ color: 'var(--fg-muted)' }}>
+              {themeMode === 'dark' ? 'الوضع الليلي مفعل' : 'الوضع النهاري مفعل'}
+            </p>
           </div>
         </div>
       ),
@@ -225,15 +220,15 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     // whole flow the moment a city was picked — making the "أنت جاهز!" step and its
     // progress dot unreachable. The chosen city is applied on the final step instead.
     {
-      icon: <MapPin size={64} style={{ color: 'var(--brand-from, #1f734e)' }} />,
+      icon: <MapPin size={64} style={{ color: 'var(--brand-from)' }} />,
       title: 'حدد موقعك',
       description: 'اختر مدينتك لضبط مواقيت الصلاة بدقة. القاهرة محددة افتراضياً، ويمكنك البحث بين مدن ومحافظات مصر.',
-      action: () => setStep(5),
+      action: () => setStep((current) => current + 1),
       actionLabel: 'متابعة',
       extra: (
         <div className="w-full mb-4">
           <label className="relative mb-2 block">
-            <Search size={17} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--brand-from, #1f734e)' }} />
+            <Search size={17} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--brand-from)' }} />
             <input
               type="search"
               value={citySearch}
@@ -242,9 +237,9 @@ export function Onboarding({ onComplete }: OnboardingProps) {
               aria-label="ابحث عن مدينة"
               className="w-full rounded-xl border py-2.5 pr-10 pl-3 text-sm outline-none focus:ring-2 bg-white dark:bg-primary-950 transition-all"
               style={{
-                borderColor: 'var(--brand-from, #1f734e)',
-                color: 'var(--brand-from, #1f734e)',
-                '--tw-ring-color': 'var(--brand-from, #1f734e)'
+                borderColor: 'var(--brand-from)',
+                color: 'var(--brand-from)',
+                '--tw-ring-color': 'var(--brand-from)'
               } as React.CSSProperties}
             />
           </label>
@@ -258,9 +253,9 @@ export function Onboarding({ onComplete }: OnboardingProps) {
               className="w-full text-right p-3 rounded-xl flex items-center justify-between transition-smooth"
               style={{
                 background: selectedCity === city.name
-                  ? 'var(--brand-gradient, linear-gradient(135deg, #1f734e 0%, #2f8f64 45%, #b84414 100%))'
-                  : '#f9fafb',
-                color: selectedCity === city.name ? 'white' : '#374151'
+                  ? 'var(--brand-gradient)'
+                  : 'var(--surface-panel)',
+                color: selectedCity === city.name ? 'white' : 'var(--text-primary)'
               }}
             >
               <span className="text-sm">{city.name}</span>
@@ -276,35 +271,28 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     },
     // Ready
     {
-      icon: <BookOpen size={64} style={{ color: 'var(--brand-from, #1f734e)' }} />,
+      icon: <BookOpen size={64} style={{ color: 'var(--brand-from)' }} />,
       title: 'أنت جاهز!',
       description: 'كل شيء جاهز. ابدأ بإنشاء خطة حفظ، تصفح القرآن، أو تتبع صلواتك.',
       action: () => {
         // Applied here rather than on the location step, so picking a city does not skip
         // this screen. Cairo is preselected; the user can choose another city.
         const city = selectedCity ? CITY_PRESETS.find((c) => c.name === selectedCity) : undefined;
-        // The dhikr step's request gives up after a timeout on devices whose system never
-        // answers it, and the grant can still land a moment later. Ask the system itself
-        // one more time here so a late grant still switches the reminders on.
-        //
-        // `randomDhikrEnabled` is the switch the scheduler actually reads — writing a
-        // private flag here armed nothing, which is why the reminders never fired.
-        void (async () => {
-          const granted = dhikrEnabled || (await hasNotificationPermission().catch(() => false));
-          onComplete(
-            city
-              ? {
-                  latitude: city.latitude,
-                  longitude: city.longitude,
-                  cityName: city.name,
-                  timeZone: city.timeZone,
-                  locationMethod: 'manual',
-                  colorPalette: colorPalette,
-                  randomDhikrEnabled: granted,
-                }
-              : { colorPalette: colorPalette, randomDhikrEnabled: granted },
-          );
-        })();
+        // `randomDhikrEnabled` is deliberately left untouched: onboarding no longer asks for
+        // the random dhikr reminders, so they stay off until the reader opts in from the
+        // in-app notice or from Settings.
+        onComplete(
+          city
+            ? {
+                latitude: city.latitude,
+                longitude: city.longitude,
+                cityName: city.name,
+                timeZone: city.timeZone,
+                locationMethod: 'manual',
+                colorPalette: colorPalette,
+              }
+            : { colorPalette: colorPalette },
+        );
       },
       actionLabel: 'ابدأ التطبيق',
     },
@@ -324,7 +312,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     <div
       className="min-h-screen flex items-center justify-center p-6"
       style={{
-        background: 'var(--brand-gradient, linear-gradient(135deg, #1f734e 0%, #2f8f64 45%, #b84414 100%))'
+        background: 'var(--brand-gradient)'
       }}
     >
       <div className="max-w-md sm:max-w-lg md:max-w-xl w-full">
@@ -333,35 +321,35 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             <div className="mb-6 mt-2 relative">
               <div
                 className="absolute inset-0 blur-3xl opacity-30 rounded-full"
-                style={{ background: 'var(--brand-from, #1f734e)' }}
+                style={{ background: 'var(--brand-from)' }}
               />
               <div className="relative">{current.icon}</div>
             </div>
             <h1
               className="text-2xl md:text-3xl font-bold mb-3"
-              style={{ color: 'var(--brand-from, #1f734e)' }}
+              style={{ color: 'var(--brand-from)' }}
             >
               {current.title}
             </h1>
             <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed mb-6">{current.description}</p>
             {current.tips && (
               <div
-                className="w-full text-right rounded-xl p-4 mb-6"
+                className="w-full text-right rounded-xl p-4 mb-6 border"
                 style={{
-                  background: 'var(--brand-soft, #eef7f1)',
-                  border: '1px solid var(--brand-from, #1f734e)',
+                  background: 'color-mix(in srgb, var(--brand-from) 10%, var(--surface-panel))',
+                  borderColor: 'var(--brand-from)',
                   borderWidth: '0.5px'
                 }}
               >
                 <p
                   className="text-xs font-semibold mb-2"
-                  style={{ color: 'var(--brand-from, #1f734e)' }}
+                  style={{ color: 'var(--brand-from)' }}
                 >
                   الميزات الرئيسية:
                 </p>
                 <ul className="space-y-1">
                   {current.tips.map((tip, i) => (
-                    <li key={i} className="text-xs text-gray-600 dark:text-gray-300">{tip}</li>
+                    <li key={i} className="text-xs" style={{ color: 'var(--fg-muted)' }}>{tip}</li>
                   ))}
                 </ul>
               </div>
@@ -378,14 +366,14 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             size="lg"
             variant="primary"
             onClick={current.action}
-            disabled={requesting || dhikrRequesting}
+            disabled={requesting}
             className="shadow-lg"
             style={{
-              background: 'var(--brand-gradient, linear-gradient(135deg, #1f734e 0%, #2f8f64 45%, #b84414 100%))'
+              background: 'var(--brand-gradient)'
             }}
           >
             {current.actionLabel}
-            {step < 5 && <ChevronLeft size={20} />}
+            {step < steps.length - 1 && <ChevronLeft size={20} />}
           </Button>
           {/* Progress dots */}
           <div className="flex justify-center gap-2 mt-6">
@@ -397,10 +385,10 @@ export function Onboarding({ onComplete }: OnboardingProps) {
                 }`}
                 style={{
                   background: i === step
-                    ? 'var(--brand-to, #b84414)'
+                    ? 'var(--brand-to)'
                     : i < step
-                    ? 'var(--brand-from, #1f734e)'
-                    : '#e5e7eb'
+                    ? 'var(--brand-from)'
+                    : 'var(--gray-200)'
                 }}
               />
             ))}

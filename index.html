@@ -9,7 +9,7 @@
       so the notch is handled via env(safe-area-inset-*).
     -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#1f734e" />
+    <meta name="theme-color" content="#0369a1" id="theme-color-meta" />
     <meta name="description" content="قُررة — القرآن والصلاة والعبادة اليومية" />
     <!--
       Pre-paint theme: `useTheme` can only read the real values from IndexedDB
@@ -24,12 +24,19 @@
       (function () {
         try {
           /* No mirror yet = a first-ever launch, whose settings row defaults to dark. */
-          var mode = localStorage.getItem('zad:theme') || 'dark';
+          var mode = localStorage.getItem('zad:theme') || 'light';
           var dark =
             mode === 'dark' ||
-            (mode !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-          if (dark) document.documentElement.classList.add('dark');
-          var palette = localStorage.getItem('zad:palette');
+            (mode !== 'light' && mode !== 'system' && false);
+          if (mode === 'dark') document.documentElement.classList.add('dark');
+          else if (mode === 'system') {
+            if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+              document.documentElement.classList.add('dark');
+            }
+          } else {
+            // light
+          }
+          var palette = localStorage.getItem('zad:palette') || 'ocean';
           if (palette) document.documentElement.dataset.palette = palette;
         } catch (e) {
           /* private mode / storage blocked: the light default renders, React fixes it up */
@@ -50,12 +57,13 @@
         api.github.com           — update checks (the APK itself opens in the browser)
         raw.githubusercontent.com— adhan audio files
         quranpedia.net           — the word-meanings dump (meanings.json.gz, gunzipped in-app)
+        hadeethenc.com           — hadith explanations: the title index, then one entry per hadith
         worldtimeapi.org/timeapi.io — clock verification fallbacks
       media-src is separate from connect-src: <audio> playback of both the live
       CDNs and the locally-stored blobs (blob:) falls back to default-src and
       would otherwise be blocked even after the download succeeds.
     -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; media-src 'self' blob: https://download.quranicaudio.com https://verses.quran.com https://archive.org https://*.archive.org https://raw.githubusercontent.com; connect-src 'self' https://*.supabase.co https://api.github.com https://raw.githubusercontent.com https://quranpedia.net https://worldtimeapi.org https://timeapi.io https://api.quran.com https://download.quranicaudio.com https://verses.quran.com https://cdn.jsdelivr.net https://archive.org https://*.archive.org;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; media-src 'self' blob: https://download.quranicaudio.com https://verses.quran.com https://archive.org https://*.archive.org https://raw.githubusercontent.com; connect-src 'self' https://*.supabase.co https://api.github.com https://raw.githubusercontent.com https://quranpedia.net https://hadeethenc.com https://worldtimeapi.org https://timeapi.io https://api.quran.com https://download.quranicaudio.com https://verses.quran.com https://cdn.jsdelivr.net https://archive.org https://*.archive.org;">
 
     <!-- Icons: real PNGs, because Android/iOS install prompts reject SVG-only manifests. -->
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />

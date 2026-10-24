@@ -6,6 +6,7 @@ import { getAyah } from '@/data/quranText';
 import { Card, EmptyState, Badge } from '@/components/ui';
 import { useSnackbar } from '@/hooks/useSnackbar';
 import { buildBookmarksExport } from '@/utils/bookmarkExport';
+import { getHighlightColor } from '@/utils/ayahHighlights';
 import { shareAyahCard, shareTextOrCopy } from '@/utils/shareCard';
 import type { ScreenName, NavParams } from '@/hooks/useApp';
 
@@ -171,6 +172,7 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
       surahId: bm.surahId,
       ayahNumber: bm.ayahNumber,
       note: bm.note,
+      color: bm.color,
       createdAt: bm.createdAt,
     };
     await db.bookmarks.delete(bm.id);
@@ -294,9 +296,16 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
                       <button
                         type="button"
                         onClick={() => openAyah(bm)}
-                        className="block w-full text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:focus-visible:ring-gold-400 rounded-xl"
+                        className="flex w-full items-start gap-2 text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:focus-visible:ring-gold-400 rounded-xl"
                         aria-label={`فتح ${surah?.name} الآية ${toArabicNumber(bm.ayahNumber)} في القارئ`}
                       >
+                        {bm.color && (
+                          <span
+                            className="mt-2.5 inline-block h-3 w-3 shrink-0 rounded-full border border-black/10 dark:border-white/20"
+                            style={{ background: getHighlightColor(bm.color)?.swatch }}
+                            aria-hidden="true"
+                          />
+                        )}
                         <p className="font-['Amiri_Quran',_serif] text-lg leading-loose text-primary-900 dark:text-primary-50">
                           {bm.text ?? '—'}
                           <span className="mushaf-ayah-mark mr-1.5 align-middle" aria-hidden="true">
@@ -304,6 +313,11 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
                           </span>
                         </p>
                       </button>
+                      {bm.note && (
+                        <p className="whitespace-pre-wrap rounded-xl bg-primary-50/80 px-3 py-2 text-sm leading-relaxed text-primary-800 dark:bg-primary-900/40 dark:text-primary-100">
+                          {bm.note}
+                        </p>
+                      )}
                       <div className="flex flex-wrap items-center gap-2">
                         {bm.page !== undefined && (
                           <Badge variant="gold">صفحة {toArabicNumber(bm.page)}</Badge>

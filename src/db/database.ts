@@ -1,4 +1,5 @@
 import Dexie, { type Table } from 'dexie';
+import { DEFAULT_NOTIFICATION_VOICE_ID } from '@/data/notificationSounds';
 import { type ColorPalette } from '@/utils/colorThemes';
 import {
   CITY_PRESETS,
@@ -53,7 +54,15 @@ export interface Bookmark {
   syncModifiedAt?: number;
   surahId: number;
   ayahNumber: number;
+  /** Free-text note kept with the ayah. */
   note?: string;
+  /**
+   * Highlight colour id from `utils/ayahHighlights` — an ayah washed in a colour
+   * rather than the plain bookmark wash. A colour *id*, not a CSS value, so the
+   * record stays stable across themes and palette retunes. Not an index, so
+   * adding it needs no schema migration — Dexie stores the value as-is.
+   */
+  color?: string;
   createdAt: number;
 }
 
@@ -102,6 +111,17 @@ export interface HifzProgress {
   ratedAt: number;
 }
 
+/** A user-marked ayah where they stopped their hifz session. */
+export interface HifzStop {
+  id?: number;
+  syncId?: string;
+  syncModifiedAt?: number;
+  surahId: number;
+  ayahNumber: number;
+  page: number;
+  createdAt: number;
+}
+
 export type HifzGrade = 'again' | 'hard' | 'good' | 'easy';
 
 /**
@@ -110,11 +130,14 @@ export type HifzGrade = 'again' | 'hard' | 'good' | 'easy';
  * Deliberately keyed by the *range* the way a hifz portion is (`surahId` +
  * `fromAyah..toAyah`), not per ayah: a memoriser thinks in portions, the quiz
  * tests a portion, and one state per portion keeps the schedule honest without
- * 6000 rows of bookkeeping. Kept out of cloud sync like `khatmah` — a personal
- * study schedule, backed up with everything else but not merged across devices.
+ * 6000 rows of bookkeeping. Synced across devices keyed by `key` (see v9), so a
+ * grade given on one device reschedules the range on the other instead of the
+ * two schedules quietly diverging.
  */
 export interface HifzReview {
   id?: number;
+  syncId?: string;
+  syncModifiedAt?: number;
   /** `${surahId}:${from}-${to}` — the range this state belongs to. */
   key: string;
   surahId: number;
@@ -151,6 +174,12 @@ export interface Settings {
   colorPalette: ColorPalette;
   fontSize: number; // Quran font size in px
   notificationSound: boolean;
+  /**
+   * Which voice the reminder notifications ring (hifz/review/hadith/azkar) — an id
+   * from `NOTIFICATION_VOICES`, which offers the app's own chime, every adhan voice,
+   * and «بدون صوت». `notificationSound` stays the master switch above it.
+   */
+  notificationVoiceId: string;
   adhanSound: boolean;
   adhanVoiceId: string;
   randomDhikrEnabled: boolean;
@@ -158,8 +187,30 @@ export interface Settings {
   randomDhikrIntervalMinutes: number;
   randomDhikrStartTime: string;
   randomDhikrEndTime: string;
+  /**
+   * How many random dhikr reminders a single day may carry.
+   *
+   * The window and the interval alone could not express «كثيرة»: a 09:00–21:00 window
+   * on a 60-minute interval is twelve reminders, and the queue's share for them is
+   * spent on the prayers and tasks first, so a busy day quietly dropped most of what
+   * the switch promised. The count is the reader's own number, honoured day by day —
+   * the window only says *when* they may arrive, this says how many.
+   */
+  randomDhikrMaxPerDay: number;
   snoozeMinutes: number;
   prePrayerReminder: number; // minutes before, 0 = off
+  /**
+   * What time each day the four daily content notifications arrive ? the hadith of
+   * the day, the Qur'an message, a Sunnah about the Prophet ﷺ and a fact about him ﷺ.
+   *
+   * `'HH:MM'` in the phone's own clock. Stored as strings so the rows read like the
+   * dhikr window's, and spread from DEFAULT_SETTINGS by `getSettings`, so an install
+   * that predates them simply gets the old fixed hours.
+   */
+  hadithNotificationTime: string;
+  quranMessageTime: string;
+  sunnahNotificationTime: string;
+  prophetNotificationTime: string;
   calcMethod: string; // adhan calculation method
   asrMadhab: 'standard' | 'hanafi';
   latitude?: number;
@@ -176,6 +227,16 @@ export interface Settings {
    * `App` as `data-icon-style` on <html>; index.css owns the actual stroke widths.
    */
   iconStyle?: 'lucide' | 'feather' | 'heroicons';
+  /**
+   * Pin the app's text scale and ignore the system's (Android's «الوضع البسيط», the font
+   * size slider, the display size setting).
+   *
+   * The WebView multiplies every font by the system font scale, while the layout boxes are
+   * laid out in px and do not move — so a larger scale makes text overflow and the whole
+   * app look turned inside out. Turning this on sets `textZoom` to 100 natively and pins
+   * the root font size on the web, so the app renders at its own scale regardless.
+   */
+  ignoreSystemFontScale?: boolean;
   /** Enable custom badge emojis */
   customBadgesEnabled?: boolean;
   /**
@@ -203,6 +264,8 @@ export interface DayStreak {
 /** One Quran-completion (khatmah) plan: a start, an optional target date, and page progress. */
 export interface KhatmahPlan {
   id?: number;
+  syncId?: string;
+  syncModifiedAt?: number;
   /** ISO date (YYYY-MM-DD) the plan started. */
   startDate: string;
   /** ISO date the user aims to finish by — null for an open-ended plan. */
@@ -224,6 +287,7 @@ export class HifziDB extends Dexie {
   sunnahRecords!: Table<SunnahRecord, number>;
   hifzProgress!: Table<HifzProgress, number>;
   hifzReviews!: Table<HifzReview, number>;
+  hifzStops!: Table<HifzStop, number>;
   hadithFavorites!: Table<HadithFavorite, number>;
   settings!: Table<Settings, number>;
   khatmah!: Table<KhatmahPlan, number>;
@@ -281,7 +345,7 @@ export class HifziDB extends Dexie {
       .upgrade(async (tx) => {
         const syncableTables = [
           'settings', 'plans', 'tasks', 'bookmarks', 'pageBookmarks',
-          'prayerRecords', 'sunnahRecords', 'hifzProgress', 'hadithFavorites',
+          'prayerRecords', 'sunnahRecords', 'hifzProgress', 'hifzStops', 'hadithFavorites',
         ];
         const plans = await tx.table('plans').toArray();
         const planSyncIds = new Map<number, string>();
@@ -308,6 +372,7 @@ export class HifziDB extends Dexie {
     // v5: khatmah — a Quran-completion plan tracked by page progress. Kept
     // deliberately out of the v4 syncable set: it is a local reading plan, not
     // a cross-device record (syncing it later can reuse the same upgrade path).
+    // It joined the synced set in v9.
     this.version(5).stores({
       khatmah: '++id, updatedAt',
     });
@@ -357,7 +422,24 @@ export class HifziDB extends Dexie {
       prayerRecords: '++id, date, prayer, [date+prayer], confirmedAt, syncId',
       sunnahRecords: '++id, date, type, [date+type], done, syncId',
       hifzProgress: '++id, surahId, status, [surahId+status], ratedAt, syncId',
+      hifzStops: '++id, surahId, ayahNumber, page, createdAt, [surahId+ayahNumber], syncId',
       hadithFavorites: '++id, hadithId, collection, [collection+hadithId], createdAt, syncId',
+    });
+
+    // v9: khatmah and hifzReviews join the synced set, so `syncId` must be an
+    // index on them too — every incoming record is looked up by its record id
+    // (see v8), and a merge of N records would otherwise cost N full table scans.
+    // Index-only change, so Dexie rebuilds the indexes without touching row data.
+    this.version(9).stores({
+      khatmah: '++id, updatedAt, startDate, syncId',
+      hifzReviews: '++id, key, dueAt, surahId, syncId',
+    });
+
+    // v10: memorization stops — a user-marked ayah where they stopped their
+    // hifz session. Different from a page bookmark: this is per-ayah and
+    // explicitly means "this is where I stopped memorizing".
+    this.version(10).stores({
+      hifzStops: '++id, surahId, ayahNumber, page, createdAt, [surahId+ayahNumber]',
     });
   }
 }
@@ -374,29 +456,43 @@ function legacySyncId(table: string, row: Record<string, unknown>, index: number
     case 'plans': return `plan:${row.createdAt}:${row.type}:${row.portion}:${row.time}`;
     case 'bookmarks': return `bookmark:${row.surahId}:${row.ayahNumber}`;
     case 'hifzProgress': return `progress:${row.surahId}:${row.ayahStart}:${row.ayahEnd}:${row.ratedAt}`;
+    case 'hifzStops': return `hifzstop:${row.surahId}:${row.ayahNumber}`;
     default: return `legacy:${table}:${row.id ?? index}`;
   }
 }
 
 /** The settings table must hold exactly one row; this is its primary key. */
-const SETTINGS_ROW_ID = 1;
+export const SETTINGS_ROW_ID = 1;
 
 // ---- Default settings ----
 
 export const DEFAULT_SETTINGS: Settings = {
-  theme: 'dark',
+  theme: 'light',
   colorPalette: 'ocean',
   fontSize: 28,
   notificationSound: true,
+  notificationVoiceId: DEFAULT_NOTIFICATION_VOICE_ID,
   adhanSound: true,
-  adhanVoiceId: 'makkah_masjid',
-  randomDhikrEnabled: false,
+  adhanVoiceId: 'sayyid_naqshbandi',
+  /**
+   * On out of the box. «الأذكار في الإشعارات تبق كثيرة» is the whole point of the
+   * feature, and a switch that ships off gives the reader an empty inbox and a page of
+   * settings to discover before the app does what it says on the tin. The window and the
+   * daily cap keep it gentle: sixteen reminders at most, between 08:00 and 22:00, and
+   * the reader can turn it down or off at any time.
+   */
+  randomDhikrEnabled: true,
   randomDhikrCategory: 'varied',
-  randomDhikrIntervalMinutes: 60,
-  randomDhikrStartTime: '09:00',
-  randomDhikrEndTime: '21:00',
+  randomDhikrIntervalMinutes: 30,
+  randomDhikrStartTime: '08:00',
+  randomDhikrEndTime: '22:00',
+  randomDhikrMaxPerDay: 16,
   snoozeMinutes: 15,
   prePrayerReminder: 10,
+  hadithNotificationTime: '09:00',
+  quranMessageTime: '10:00',
+  sunnahNotificationTime: '14:00',
+  prophetNotificationTime: '16:00',
   calcMethod: 'Egyptian',
   asrMadhab: 'standard',
   locationMethod: 'manual',
@@ -404,6 +500,7 @@ export const DEFAULT_SETTINGS: Settings = {
   latitude: 30.0444,
   longitude: 31.2357,
   iconStyle: 'lucide',
+  ignoreSystemFontScale: false,
   customBadgesEnabled: true,
   showOnboardingTips: true,
   iqamahOffsets: { ...DEFAULT_IQAMAH_OFFSETS },
@@ -418,10 +515,23 @@ export async function getSettings(): Promise<Settings> {
   }
   // Rows are kept sorted by id so the read result is deterministic.
   const first = existing.reduce((min, row) => (row.id! < min.id! ? row : min));
-  // Earlier versions defaulted the adhan voice to عاصم جاويد; the Makkah adhan is now the
-  // out-of-the-box voice. Migrate only that exact untouched default — a deliberately
-  // chosen voice is any other value and is preserved.
-  const isLegacyDefaultAdhan = first.adhanVoiceId === 'asim_javed';
+  // Earlier versions defaulted the adhan voice to عاصم جاويد, then to أذان المسجد الحرام;
+  // أذان السيد النقشبندي is now the out-of-the-box voice. Migrate only those exact
+  // untouched defaults — a deliberately chosen voice is any other value and is preserved.
+  const isLegacyDefaultAdhan =
+    first.adhanVoiceId === 'asim_javed' || first.adhanVoiceId === 'makkah_masjid';
+  /**
+   * The dhikr reminders shipped off, on an hourly beat from 09:00 to 21:00. They now
+   * ship on, every half hour from 08:00 to 22:00, because «الأذكار في الإشعارات تبق
+   * كثيرة» is what the feature is for. Migrate only the *whole* untouched default set —
+   * any one of these away from the old shipped value means the reader was in the panel
+   * and chose what they chose, and is left alone.
+   */
+  const isLegacyDefaultDhikr =
+    first.randomDhikrEnabled === false &&
+    first.randomDhikrIntervalMinutes === 60 &&
+    first.randomDhikrStartTime === '09:00' &&
+    first.randomDhikrEndTime === '21:00';
   const settings = normalizeEgyptPrayerSettings({ ...DEFAULT_SETTINGS, ...first });
   if (
     first.calcMethod !== settings.calcMethod ||
@@ -443,6 +553,17 @@ export async function getSettings(): Promise<Settings> {
   if (isLegacyDefaultAdhan) {
     settings.adhanVoiceId = DEFAULT_SETTINGS.adhanVoiceId;
     await db.settings.update(first.id!, { adhanVoiceId: DEFAULT_SETTINGS.adhanVoiceId });
+  }
+  if (isLegacyDefaultDhikr) {
+    const migrated = {
+      randomDhikrEnabled: DEFAULT_SETTINGS.randomDhikrEnabled,
+      randomDhikrIntervalMinutes: DEFAULT_SETTINGS.randomDhikrIntervalMinutes,
+      randomDhikrStartTime: DEFAULT_SETTINGS.randomDhikrStartTime,
+      randomDhikrEndTime: DEFAULT_SETTINGS.randomDhikrEndTime,
+      randomDhikrMaxPerDay: DEFAULT_SETTINGS.randomDhikrMaxPerDay,
+    };
+    Object.assign(settings, migrated);
+    await db.settings.update(first.id!, migrated);
   }
   return settings;
 }

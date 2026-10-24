@@ -1,6 +1,6 @@
 import { ADHKAR_CATEGORIES } from '@/data/adhkar';
 import { TOTAL_QURAN_PAGES } from '@/data/surahs';
-import { db } from '@/db/database';
+import { db, DEFAULT_SETTINGS, SETTINGS_ROW_ID, type Settings } from '@/db/database';
 
 /**
  * Backup export/import validation.
@@ -33,6 +33,19 @@ export const IGNORED_BACKUP_KEYS = ['_exportDate', 'streaks'];
 export const ADHKAR_STATE_KEY = 'hifzi-adhkar-state';
 
 /**
+ * The single settings row a backup carries, or nothing if the table is somehow empty.
+ *
+ * Found by the same rule `getSettings()` reads by — the lowest id — and not by assuming
+ * the canonical id 1: an install still carrying a legacy row id would export `[null]`
+ * that way, the strict validator on the restoring device would then reject the **whole
+ * file**, and the one recovery path the app promises would be worth nothing.
+ */
+export function pickSettingsRow(rows: Settings[]): Settings | undefined {
+  if (rows.length === 0) return undefined;
+  return rows.reduce((min, row) => (row.id! < min.id! ? row : min));
+}
+
+/**
  * Builds the whole backup payload: every table, plus the adhkar counters that live in
  * localStorage, stamped with the moment it was taken. This is the shape the export
  * button downloads, the shape the import validator accepts, and the shape the automatic
@@ -43,7 +56,7 @@ export async function backupData(): Promise<Record<string, unknown>> {
     _exportDate: new Date().toISOString(),
   };
   // Settings are one record, not rows — every other table is taken whole.
-  data.settings = [await db.settings.get(1)];
+  data.settings = [pickSettingsRow(await db.settings.toArray()) ?? { ...DEFAULT_SETTINGS, id: SETTINGS_ROW_ID }];
   data.plans = await db.plans.toArray();
   data.tasks = await db.tasks.toArray();
   data.bookmarks = await db.bookmarks.toArray();
@@ -111,6 +124,7 @@ export function isValidBackupRow(table: BackupTable, value: unknown): value is R
             'colorPalette',
             'fontSize',
             'notificationSound',
+            'notificationVoiceId',
             'adhanSound',
             'adhanVoiceId',
             'randomDhikrEnabled',
@@ -118,6 +132,7 @@ export function isValidBackupRow(table: BackupTable, value: unknown): value is R
             'randomDhikrIntervalMinutes',
             'randomDhikrStartTime',
             'randomDhikrEndTime',
+            'randomDhikrMaxPerDay',
             'snoozeMinutes',
             'prePrayerReminder',
             'calcMethod',
@@ -131,6 +146,7 @@ export function isValidBackupRow(table: BackupTable, value: unknown): value is R
         (value.colorPalette === undefined || ['emerald', 'ocean', 'plum', 'sand', 'olive', 'rose'].includes(value.colorPalette as string)) &&
         (value.fontSize === undefined || isFiniteNumber(value.fontSize)) &&
         (value.notificationSound === undefined || typeof value.notificationSound === 'boolean') &&
+        (value.notificationVoiceId === undefined || typeof value.notificationVoiceId === 'string') &&
         (value.adhanSound === undefined || typeof value.adhanSound === 'boolean') &&
         (value.adhanVoiceId === undefined || typeof value.adhanVoiceId === 'string') &&
         (value.randomDhikrEnabled === undefined || typeof value.randomDhikrEnabled === 'boolean') &&
@@ -139,6 +155,7 @@ export function isValidBackupRow(table: BackupTable, value: unknown): value is R
         (value.randomDhikrIntervalMinutes === undefined || isFiniteNumber(value.randomDhikrIntervalMinutes)) &&
         (value.randomDhikrStartTime === undefined || isValidTime(value.randomDhikrStartTime)) &&
         (value.randomDhikrEndTime === undefined || isValidTime(value.randomDhikrEndTime)) &&
+        (value.randomDhikrMaxPerDay === undefined || isFiniteNumber(value.randomDhikrMaxPerDay)) &&
         (value.snoozeMinutes === undefined || isFiniteNumber(value.snoozeMinutes)) &&
         (value.prePrayerReminder === undefined || isFiniteNumber(value.prePrayerReminder)) &&
         (value.calcMethod === undefined || typeof value.calcMethod === 'string') &&

@@ -19,6 +19,15 @@ public class MainActivity extends BridgeActivity {
         // Home-screen widget: takes the day's snapshot out of the WebView and hands it
         // to the launcher. Registered with the rest before the bridge is built.
         registerPlugin(WirdWidget.class);
+        // Recitation player card: mirrors the in-app <audio> playback onto an Android
+        // notification + MediaSession, because a WebView has no navigator.mediaSession.
+        registerPlugin(RecitationMedia.class);
+        // Text-scale hold: keeps «الوضع البسيط» and the system font-size slider from
+        // reflowing the app's layout, when the reader asks for that in Settings.
+        registerPlugin(DisplayScale.class);
+        // «حفظ على الهاتف»: copies a lecture out of the app's private store and into the
+        // public Download/قُرّة folder, where the file manager and the music apps find it.
+        registerPlugin(PhoneStorage.class);
         super.onCreate(savedInstanceState);
 
         applyAdhanWindowFlags(getIntent());

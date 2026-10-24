@@ -3,6 +3,7 @@ import { Directory, Filesystem } from '@capacitor/filesystem';
 import {
   ADHAN_SOUNDS,
   adhanDownloadUrl,
+  DEFAULT_ADHAN_SOUND_ID,
   getAdhanSound,
   type AdhanSound,
 } from '@/data/adhanSounds';
@@ -223,7 +224,9 @@ export async function resolveAdhanPlayUrl(sound: AdhanSound): Promise<string> {
  * null when there is nothing to point a channel at (web build, or not downloaded).
  */
 export async function resolveAdhanSoundPath(sound: AdhanSound): Promise<string | null> {
-  if (!Capacitor.isNativePlatform()) return null;
+  // A bundled voice lives in the package (res/raw), never in the app's data
+  // directory — stat-ing it there can only ever reject, so bail out up front.
+  if (!Capacitor.isNativePlatform() || sound.bundled) return null;
   const uri = await fileUriOf(sound);
   return uri ? uri.replace(/^file:\/\//, '') : null;
 }
@@ -238,5 +241,5 @@ export function usableAdhanSound(
   downloaded: ReadonlySet<string> = downloadedIds,
 ): AdhanSound {
   const sound = getAdhanSound(requestedId);
-  return sound.bundled || downloaded.has(sound.id) ? sound : getAdhanSound('makkah_masjid');
+  return sound.bundled || downloaded.has(sound.id) ? sound : getAdhanSound(DEFAULT_ADHAN_SOUND_ID);
 }

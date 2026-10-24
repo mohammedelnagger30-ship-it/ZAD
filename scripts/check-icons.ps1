@@ -3,10 +3,10 @@ Add-Type -AssemblyName System.Drawing
 # Verifies the generated icons: real PNGs, correct dimensions, and a genuine
 # two-tone image rather than a blank or all-black square. The icon is the Qurra
 # mark full-bleed on a deep-green field cut to the program's squircle, so it is
-# mostly green with a small but real ivory/gold mark; the og-image is that same
+# mostly green with a small but real ivory mark; the og-image is that same
 # mark on the left of a deep-green field with the name on the right, so it runs
-# even greener. The floors below are set near the measured values (77%/4.4% and
-# 92%/1.8%) so a washed-out or missing mark fails loudly.
+# even greener. The floors below are set near the measured values so a
+# washed-out or missing mark fails loudly.
 $root = Split-Path -Parent $PSScriptRoot
 $outDir = Join-Path $root 'public\icons'
 
@@ -32,9 +32,9 @@ function Test-Icon {
         for ($x = 0; $x -lt $bmpNew.Width; $x += 2) {
             $c = $bmpNew.GetPixel($x, $y)
             if ($c.R -lt 70 -and $c.G -lt 120 -and $c.B -lt 100) { $green++ }
-            # Warm ivory accent: the arch, crescent and pages. Warm because R
-            # clearly leads B; the cream background stays out by its high blue.
-            elseif ($c.R -gt 230 -and $c.G -gt 210 -and $c.B -lt 230 -and ($c.R - $c.B) -ge 18) { $gold++ }
+            # Warm ivory accent: the Mushaf's pages. Warm because R clearly
+            # leads B; the dark green field stays out by its low brightness.
+            elseif ($c.R -gt 205 -and $c.G -gt 190 -and $c.B -gt 140 -and ($c.R - $c.B) -ge 12) { $gold++ }
             else { $other++ }
         }
     }

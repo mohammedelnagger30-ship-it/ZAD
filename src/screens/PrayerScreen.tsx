@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Moon, Sunrise, MapPin, BarChart3, Sun, Sunset, Check, X, Clock, Sparkles, BookOpen, ChevronLeft, Minus, Plus } from 'lucide-react';
 import { Card, Button, Badge, SectionHeader, EmptyState } from '@/components/ui';
 import { PrayerStatusSheet } from '@/components/PrayerStatusSheet';
@@ -24,15 +24,16 @@ import { trustedNow } from '@/utils/clock';
 import {
   getDayPrayerRecords,
   confirmPrayer,
-  getDaySunnahRecords,
   setSunnah,
   getPrayerGrid,
   summariseGrid,
+  FIVE_PRAYERS,
   PRAYER_LABELS_AR,
-  RAWATIB_BY_PRAYER,
-  sunnahDoneMap,
+  computeRecordingWindows,
+  isWindowOpen,
   type PrayerKey,
   type PrayerStatus,
+  type PrayerRecordingWindow,
   canEditPrayerDate,
   type PrayerStats,
   type DayPrayerGrid,
@@ -83,34 +84,14 @@ const PRAYER_ICONS: Record<string, typeof Moon> = {
 const NOTIFIABLE_PRAYER_KEYS = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
 
 /**
- * Every sunnah this screen offers.
- *
- * The rawatib are built from the single definition in `prayerTracker`, so the
- * day list, the week grid and the status sheet can never disagree about which
- * slot belongs to which prayer. The two independent voluntary prayers are
- * appended because they are attached to no fard prayer.
+ * Voluntary prayers moved to their own screen: `NawafilScreen` holds every
+ * نافلة (rawatib, witr, duha, qiyam) with its time, virtue and daily tracker.
+ * This screen keeps the five فرائض only, plus the status sheet's rawatib slots
+ * (those come straight from `prayerTracker`'s grid, not from a local list).
  */
-const SUNNAH_TYPES: {
-  key: string;
-  label: string;
-  prayer?: PrayerKey;
-  note?: string;
-}[] = [
-  ...Object.entries(RAWATIB_BY_PRAYER).flatMap(([prayer, slots]) =>
-    slots.map((slot) => ({
-      key: slot.type,
-      prayer: prayer as PrayerKey,
-      label: slot.label,
-      note: prayer === 'fajr' ? 'من السنن الرواتب المؤكدة' : 'سنة راتبة',
-    })),
-  ),
-  { key: 'witr', prayer: 'isha', label: 'صلاة الوتر', note: 'نافلة بعد العشاء' },
-  { key: 'duha', label: 'صلاة الضحى', note: 'نافلة مستقلة' },
-];
 
 export function PrayerScreen({ settings, onSaveSettings, navigate, params }: PrayerScreenProps) {
   const [records, setRecords] = useState<Record<string, string | null>>({});
-  const [sunnahRecords, setSunnahRecords] = useState<Record<string, boolean>>({});
   const [grid, setGrid] = useState<DayPrayerGrid[]>([]);
   const [stats, setStats] = useState<PrayerStats | null>(null);
   const [showLocation, setShowLocation] = useState(false);
@@ -152,11 +133,6 @@ export function PrayerScreen({ settings, onSaveSettings, navigate, params }: Pra
       map[r.prayer] = r.status;
     });
     setRecords(map);
-
-    // `sunnahDoneMap` folds the legacy combined Dhuhr row, so today's list and
-    // the week grid read older records identically.
-    const sunnahMap = sunnahDoneMap(await getDaySunnahRecords(todayKey()));
-    setSunnahRecords(sunnahMap);
 
     // The grid doubles as the weekly stats source, so the two can never disagree.
     const g = await getPrayerGrid(location);
@@ -212,25 +188,92 @@ export function PrayerScreen({ settings, onSaveSettings, navigate, params }: Pra
     nextPrayerTargetRef.current = nextPrayer?.time.getTime() ?? null;
   });
 
+  // Each فريضة opens for recording at its own adhan and shuts when the next
+  // prayer's adhan comes: the day list, the status sheet and the week grid all
+  // ask these windows, so none of them can offer a tap outside the prayer's
+  // time. Yesterday keeps the wider correction rule through `canEditPrayerDate`
+  // instead — a mistake stays fixable all the following day.
+  const recordingWindows = useMemo(
+    (): Record<string, PrayerRecordingWindow> =>
+      computeRecordingWindows(
+        (prayerResult?.prayers ?? [])
+          .filter((prayer) => (FIVE_PRAYERS as readonly string[]).includes(prayer.name))
+          .map((prayer) => ({ name: prayer.name, time: prayer.time })),
+      ),
+    [prayerResult],
+  );
+  const recordingOpen = (prayer: string) =>
+    isWindowOpen(recordingWindows, prayer, now.getTime());
+
+  // The day list changes itself at every adhan through the countdown clock, but
+  // the week grid is a snapshot `load()` took: without this timer the grid would
+  // go on offering a prayer whose window had shut (and never offer one whose
+  // window had just opened) until midnight's reload. The +1s lands the reload
+  // just past the boundary, so `trustedNow` inside it reads the crossed state.
+  useEffect(() => {
+    if (!prayerResult) return;
+    const referenceNow = trustedNow().getTime();
+    const nextBoundary = prayerResult.prayers
+      .map((prayer) => prayer.time.getTime())
+      .filter((time) => time > referenceNow)
+      .sort((a, b) => a - b)[0];
+    if (nextBoundary === undefined) return;
+    const timer = window.setTimeout(() => void load(), nextBoundary - referenceNow + 1_000);
+    return () => window.clearTimeout(timer);
+  }, [prayerResult, load]);
+
+  // Recording a prayer or a rawatib slot repaints the cell first and writes to
+  // the database second. Recomputing the week grid (seven days of prayer times,
+  // a sunnah query, and the stats that read it) before the tap shows anything
+  // was the reason a checkmark used to arrive a beat late.
   const handlePick = async (status: PrayerStatus) => {
     if (!sheet) return;
-    await confirmPrayer(sheet.date, sheet.prayer, status);
-    await load();
-  };
-
-  const handleSunnahToggle = async (type: string) => {
-    await setSunnah(todayKey(), type, !sunnahRecords[type]);
-    await load();
+    const { date, prayer } = sheet;
+    const nextGrid = grid.map((day) =>
+      day.date === date
+        ? { ...day, status: { ...day.status, [prayer]: status } }
+        : day,
+    );
+    setGrid(nextGrid);
+    setStats(summariseGrid(nextGrid));
+    setSheet(null);
+    try {
+      await confirmPrayer(date, prayer, status);
+    } catch (error) {
+      console.error('Recording prayer failed:', error);
+    }
+    void load();
   };
 
   /** Records one rawatib slot for whichever day the status sheet is editing. */
   const handleSheetSunnahToggle = async (type: string) => {
     if (!sheet) return;
+    const { date, prayer } = sheet;
     const slot = grid
-      .find((g) => g.date === sheet.date)
-      ?.sunnah[sheet.prayer].find((s) => s.type === type);
-    await setSunnah(sheet.date, type, !slot?.done);
-    await load();
+      .find((g) => g.date === date)
+      ?.sunnah[prayer].find((s) => s.type === type);
+    const done = !slot?.done;
+    setGrid((prev) =>
+      prev.map((day) =>
+        day.date === date
+          ? {
+              ...day,
+              sunnah: {
+                ...day.sunnah,
+                [prayer]: day.sunnah[prayer].map((s) =>
+                  s.type === type ? { ...s, done } : s,
+                ),
+              },
+            }
+          : day,
+      ),
+    );
+    try {
+      await setSunnah(date, type, done);
+    } catch (error) {
+      console.error('Recording sunnah failed:', error);
+    }
+    void load();
   };
 
   const handleLocationPick = async (lat: number, lng: number, name: string) => {
@@ -347,7 +390,7 @@ export function PrayerScreen({ settings, onSaveSettings, navigate, params }: Pra
                 <p className="text-xs font-semibold text-white">الصلاة القادمة</p>
               </div>
               <h2 className="text-4xl font-bold leading-tight sm:text-5xl text-white">{nextPrayer.arabicName}</h2>
-              <p className="mt-3 text-xl font-semibold text-[var(--func-accent)]">
+              <p className="mt-3 text-xl font-semibold text-gold-300 drop-shadow-[0_2px_6px_rgba(0,0,0,0.55)]">
                 {getTimeUntil(nextPrayer.time, now)}
               </p>
               <button
@@ -358,6 +401,10 @@ export function PrayerScreen({ settings, onSaveSettings, navigate, params }: Pra
                       detail: {
                         prayerKey: (nextPrayer?.name as PrayerKey) || 'fajr',
                         prayerName: nextPrayer?.arabicName || 'الفجر',
+                        // Without it the page has no instant to show: it would open
+                        // claiming «الآن» with no time, no إقامة beside it, and no
+                        // stale-close guard — a preview that looked broken.
+                        prayerTime: nextPrayer?.time,
                         isPreview: true,
                       },
                     })
@@ -397,8 +444,9 @@ export function PrayerScreen({ settings, onSaveSettings, navigate, params }: Pra
         />
         <div className="mb-4 rounded-2xl bg-primary-50 dark:bg-primary-900/30 p-4 border border-primary-100 dark:border-primary-800">
           <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
-            تظهر السنة الراتبة بجوار فرضها: ركعتان قبل الفجر، وست للظهر (أربع قبلًا واثنتان بعدًا)، وركعتان بعد المغرب وركعتان بعد العشاء.
-            وكلها مقفولة حتى ميعاد صلاتها — تُسجَّل مع الصلاة لا قبلها.
+            هذه مواقيت الفرائض الخمس: الأذان والإقامة لكل صلاة. تُفتح كل صلاة للتسجيل من ميعاد
+            أذانها وتُغلق بتأذين التي بعدها — فلا يقبل التسجيل خارج وقتها. تصحيح صلوات الأمس
+            متاح طوال اليوم التالي. وأما السنن الرواتب والنوافل فمكانها صفحة «النوافل».
           </p>
         </div>
         <div className="space-y-4">
@@ -406,9 +454,11 @@ export function PrayerScreen({ settings, onSaveSettings, navigate, params }: Pra
             const isSunrise = prayer.name === 'sunrise';
             const Icon = PRAYER_ICONS[prayer.name] || Moon;
             const confirmed = (records[prayer.name] as PrayerStatus | null | undefined) ?? null;
-            const answerable = !isSunrise && prayer.passed;
-            const attachedSunnahs = SUNNAH_TYPES.filter((sunnah) => sunnah.prayer === prayer.name);
-            const isAsr = prayer.name === 'asr';
+            // Recordable only inside its own window: from this prayer's adhan
+            // until the next prayer's adhan. Before it there is nothing to
+            // record; after it the day's list shuts and tomorrow's correction
+            // rule (أمس) opens instead.
+            const answerable = !isSunrise && recordingOpen(prayer.name);
 
             const row = (
               <div className="flex items-center gap-4">
@@ -454,7 +504,11 @@ export function PrayerScreen({ settings, onSaveSettings, navigate, params }: Pra
                     {confirmed === 'missed' && <Badge variant="error"><X size={12} /> لم صلَّ</Badge>}
                     {!confirmed && <Badge variant="neutral">لم تسجّلها</Badge>}
                     <span className="text-xs text-primary-600 dark:text-gold-400 font-medium">
-                      {confirmed ? 'اضغط للعرض' : 'اضغط للتأكيد'}
+                      {!answerable
+                        ? 'انتهى وقت التسجيل'
+                        : confirmed
+                          ? 'اضغط للعرض'
+                          : 'اضغط للتأكيد'}
                     </span>
                   </span>
                 )}
@@ -487,74 +541,8 @@ export function PrayerScreen({ settings, onSaveSettings, navigate, params }: Pra
             );
 
             return (
-              <div className="space-y-3" id={`prayer-time-${prayer.name}`} key={prayer.name}>
+              <div id={`prayer-time-${prayer.name}`} key={prayer.name}>
                 {prayerCard}
-                {(attachedSunnahs.length > 0 || isAsr) && (
-                  <div className="mr-4 space-y-2 border-r-2 border-primary-200 pr-4 dark:border-primary-800">
-                    <p className="text-sm font-bold text-primary-700 dark:text-gold-400 mb-2">
-                      سنن ونوافل مرتبطة بصلاة {prayer.arabicName}
-                    </p>
-                    {/* A sunnah belongs to its prayer's time: before the adhan there is
-                        nothing to record yet, so the toggles stay shut with the reason
-                        shown rather than silently swallowing a tap. */}
-                    {!prayer.passed && (
-                      <p className="flex items-start gap-1.5 rounded-xl bg-gray-50 dark:bg-primary-800/30 px-3 py-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                        <Clock size={13} className="mt-0.5 shrink-0" />
-                        مقفولة لحد ميعاد صلاة {prayer.arabicName} — تُسجَّل مع صلاتها لا قبلها.
-                      </p>
-                    )}
-                    {isAsr && (
-                      <div className="rounded-2xl bg-primary-50 dark:bg-primary-900/30 px-4 py-3 border border-primary-100 dark:border-primary-800">
-                        <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
-                          لا تُدرج هنا راتبة مؤكدة مخصوصة للعصر؛ وتختلف النوافل قبله باختلاف المذاهب.
-                        </p>
-                      </div>
-                    )}
-                    {attachedSunnahs.map((sunnah) => {
-                      const done = !!sunnahRecords[sunnah.key];
-                      const locked = !prayer.passed;
-                      return (
-                        <button
-                          key={sunnah.key}
-                          type="button"
-                          aria-pressed={done}
-                          disabled={locked}
-                          title={locked ? `تفتح بعد ميعاد صلاة ${prayer.arabicName}` : undefined}
-                          onClick={() => void handleSunnahToggle(sunnah.key)}
-                          className={`flex w-full items-center justify-between gap-4 rounded-2xl px-4 py-3 text-right transition-all duration-300 disabled:cursor-not-allowed ${
-                            done
-                              ? 'bg-success-50 text-success-700 dark:bg-success-900/20 dark:text-success-300 border-2 border-success-200 dark:border-success-800 shadow-sm'
-                              : locked
-                                ? 'bg-gray-50/70 text-gray-500 dark:bg-primary-900/20 dark:text-gray-400 border-2 border-dashed border-gray-200 dark:border-gray-700'
-                                : 'bg-white text-gray-700 dark:bg-primary-900/40 dark:text-gray-200 border-2 border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600'
-                          }`}
-                        >
-                          <span className="flex-1">
-                            <span className="block text-sm font-bold">{sunnah.label}</span>
-                            {sunnah.note && (
-                              <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">
-                                {sunnah.note}
-                              </span>
-                            )}
-                          </span>
-                          <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
-                            done
-                              ? 'border-success-500 bg-success-500 shadow-md'
-                              : locked
-                                ? 'border-dashed border-gray-300 dark:border-gray-600'
-                                : 'border-gray-300 dark:border-gray-600'
-                          }`}>
-                            {done ? (
-                              <Check size={14} className="text-white" />
-                            ) : locked ? (
-                              <Clock size={12} className="text-gray-400 dark:text-gray-500" />
-                            ) : null}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
               </div>
             );
           })}
@@ -568,32 +556,28 @@ export function PrayerScreen({ settings, onSaveSettings, navigate, params }: Pra
         contextLabel={settings.cityName ? `حسب موقعك: ${settings.cityName}` : undefined}
       />
 
-      {/* Enhanced Independent Voluntary Prayers */}
-      <div>
-        <SectionHeader title="نوافل مستقلة" icon={<Sun size={20} />} />
-        <Card noPadding className="p-4!">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {SUNNAH_TYPES.filter((sunnah) => !sunnah.prayer).map((sunnah) => (
-              <button
-                key={sunnah.key}
-                onClick={() => handleSunnahToggle(sunnah.key)}
-                className={`flex items-center justify-between p-4 rounded-2xl transition-all duration-300 ${
-                  sunnahRecords[sunnah.key]
-                    ? 'bg-success-50 dark:bg-success-900/20 text-success-700 dark:text-success-300 border-2 border-success-200 dark:border-success-800 shadow-sm'
-                    : 'bg-gray-50 dark:bg-gray-800/30 text-gray-600 dark:text-gray-300 border-2 border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600'
-                }`}
-              >
-                <span className="text-sm font-bold">{sunnah.label}</span>
-                <div className={`h-6 w-6 rounded-full border-2 flex items-center justify-center transition-all ${
-                  sunnahRecords[sunnah.key] ? 'border-success-500 bg-success-500 shadow-md' : 'border-gray-300 dark:border-gray-600'
-                }`}>
-                  {sunnahRecords[sunnah.key] && <Check size={14} className="text-white" />}
-                </div>
-              </button>
-            ))}
-          </div>
-        </Card>
-      </div>
+      {/* Voluntary prayers moved to their own screen — this is the doorway. */}
+      <button
+        type="button"
+        onClick={() => navigate('nawafil')}
+        className="group flex w-full items-center gap-3 rounded-2xl border border-violet-300/70 bg-violet-50/50 px-4 py-3.5 text-right shadow-xs transition-all hover:border-violet-400 hover:shadow-md dark:border-violet-500/40 dark:bg-violet-500/10 dark:hover:border-violet-400/70"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-500/15 text-violet-700 dark:bg-violet-400/15 dark:text-violet-300">
+          <Sparkles size={19} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-bold text-primary-900 dark:text-primary-50">
+            صفحة النوافل
+          </span>
+          <span className="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400">
+            السنن الرواتب والوتر والضحى وقيام الليل — مع أوقاتها وأفضلها ومتتبع يومي
+          </span>
+        </span>
+        <ChevronLeft
+          size={18}
+          className="shrink-0 text-gray-400 transition-transform group-hover:-translate-x-1 dark:text-gray-500"
+        />
+      </button>
 
       {/* Enhanced Weekly Grid */}
       {grid.length > 0 && (
@@ -661,7 +645,7 @@ export function PrayerScreen({ settings, onSaveSettings, navigate, params }: Pra
               <div className="mt-4 rounded-2xl bg-primary-50 dark:bg-primary-900/30 p-4 border border-primary-100 dark:border-primary-800">
                 <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
                   «لم تسجّلها» يعني إن الوقت عدّى والتسجيل مش موجود — مش إنك ما صليتهاش.
-                  اضغط على أي خانة في الشبكة فوق تسجّلها.
+                  اضغط على أي خانة متاحة في الشبكة فوق لتسجيلها، وخانات الأمس تُصحَّح طوال اليوم.
                 </p>
               </div>
             )}
@@ -720,7 +704,14 @@ export function PrayerScreen({ settings, onSaveSettings, navigate, params }: Pra
               ? ((records[sheet.prayer] as PrayerStatus | null) ?? null)
               : null;
           })()}
-          editable={canEditPrayerDate(sheet.date)}
+          editable={
+            canEditPrayerDate(sheet.date) &&
+            // Today is additionally bound to the prayer's own window (adhan →
+            // the next adhan); an idle sheet that outlives its window turns
+            // read-only instead of letting a tap land outside the prayer's time.
+            // Yesterday needs no window — the whole day is its correction time.
+            (sheet.date !== todayKey() || recordingOpen(sheet.prayer))
+          }
           isHistorical={sheet.isHistorical}
           dateLabel={sheet.label}
           sunnahs={grid.find((g) => g.date === sheet.date)?.sunnah[sheet.prayer]}

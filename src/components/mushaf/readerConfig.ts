@@ -143,7 +143,7 @@ export function loadPrefs(): MushafPrefs {
       zoom: clampNumber(parsed.zoom, ZOOM_MIN, ZOOM_MAX, DEFAULT_PREFS.zoom),
       readingScale: clampNumber(parsed.readingScale, 0.85, 1.35, DEFAULT_PREFS.readingScale),
       lineSpacing: clampNumber(parsed.lineSpacing, 0.9, 1.35, DEFAULT_PREFS.lineSpacing),
-      wordSpacing: clampNumber(parsed.wordSpacing, 0, 0.3, DEFAULT_PREFS.wordSpacing),
+      wordSpacing: clampNumber(parsed.wordSpacing, -0.08, 0.2, DEFAULT_PREFS.wordSpacing),
       autoScrollSpeed: clampNumber(
         parsed.autoScrollSpeed,
         AUTO_SCROLL_MIN,

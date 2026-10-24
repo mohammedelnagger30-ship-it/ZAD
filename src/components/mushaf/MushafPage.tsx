@@ -5,6 +5,7 @@ import { getPageMeta, getHizbForPage } from '@/data/mushafPages';
 import { getAyahs } from '@/data/quranText';
 import { splitBasmala } from '@/utils/basmala';
 import { getSurahWordMeanings } from '@/utils/wordMeaningsService';
+import { loadBundledMeaningIndex, type WordMeaningIndex } from '@/utils/wordMeaningIndex';
 
 interface PageAyah {
   surahId: number;
@@ -12,8 +13,6 @@ interface PageAyah {
   ayahNumber: number;
   text: string;
 }
-
-const EMPTY_WORD_MEANINGS = new Map<string, Set<number>>();
 
 interface MushafWordButtonProps {
   ayah: PageAyah;
@@ -23,8 +22,17 @@ interface MushafWordButtonProps {
   onWordPress?: MushafPageProps['onWordPress'];
 }
 
+/**
+ * One word of the page.
+ *
+ * A word that carries a gloss is marked, and that is all this component does about it.
+ * The gloss itself is never printed here: a mushaf with a sentence set under every
+ * unusual word is a glossary, and there are hundreds of such words on a page — the text
+ * stops being readable at all. The mark says the meaning exists; the press opens it.
+ */
 function MushafWordButton({ ayah, word, wordIndex, meaningWords, onWordPress }: MushafWordButtonProps) {
-  const hasMeaning = meaningWords.get(`${ayah.surahId}:${ayah.ayahNumber}`)?.has(wordIndex) ?? false;
+  const key = `${ayah.surahId}:${ayah.ayahNumber}`;
+  const hasMeaning = meaningWords.get(key)?.has(wordIndex) ?? false;
   const action = hasMeaning ? 'اضغط لمعرفة معنى الكلمة' : 'اضغط لخيارات الآية';
   return (
     <button
@@ -32,7 +40,7 @@ function MushafWordButton({ ayah, word, wordIndex, meaningWords, onWordPress }: 
       className={`mushaf-word${hasMeaning ? ' mushaf-word--has-meaning' : ''}`}
       aria-label={`${action}: ${word} في سورة ${ayah.surahName}، الآية ${toArabicNumber(ayah.ayahNumber)}`}
       title={action}
-      onClick={() => onWordPress?.(ayah.surahId, ayah.ayahNumber, word, wordIndex + 1)}
+      onClick={() => onWordPress?.(ayah.surahId, ayah.ayahNumber, word, wordIndex + 1, hasMeaning)}
     >
       {word}
     </button>
@@ -62,7 +70,20 @@ export interface MushafPageProps {
   wordSpacing?: number;
   wordMeaningsInstalled?: boolean;
   onAyahPress?: (surahId: number, ayahNumber: number) => void;
-  onWordPress?: (surahId: number, ayahNumber: number, word: string, wordPosition: number) => void;
+  /**
+   * A word has been pressed. `hasMeaning` is the page's own answer — it comes from the
+   * index that ships with the app, so the reader is told at once that this word was
+   * worth pressing rather than having to query the downloaded dump before it can decide
+   * what the tap was for. That query is what used to turn a press on a marked word into
+   * the ayah's options sheet for any reader who had never been to the content library.
+   */
+  onWordPress?: (
+    surahId: number,
+    ayahNumber: number,
+    word: string,
+    wordPosition: number,
+    hasMeaning: boolean,
+  ) => void;
   /** The ayah currently selected in the reader, so the page can highlight it. */
   activeAyah?: { surahId: number; ayahNumber: number } | null;
 }
@@ -163,6 +184,24 @@ export function MushafPage({
     page: number;
     words: Map<string, Set<number>>;
   }>({ page: 0, words: new Map() });
+
+  // The bundled index is the marker source that does not depend on `wordMeaningsInstalled`,
+  // so it is asked for on every mount regardless of what the reader has downloaded. Later
+  // mounts join the same request, and a mount after it lands starts with the answer
+  // already in hand.
+  const [bundledIndex, setBundledIndex] = useState<WordMeaningIndex | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadBundledMeaningIndex().then((index) => {
+      if (cancelled) return;
+      setBundledIndex(index);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const surahIds = useMemo(
     () => [
       ...new Set(
@@ -199,16 +238,35 @@ export function MushafPage({
     };
   }, [page, surahIds, wordMeaningsInstalled]);
 
-  const meaningWords =
-    wordMeaningsInstalled && loadedMeaningData.page === page
-      ? loadedMeaningData.words
-      : EMPTY_WORD_MEANINGS;
+  // Best available answer, unioned: the bundled index for every reader, widened with
+  // whatever the installed dump knows that this build's copy does not. The gate on
+  // `wordMeaningsInstalled` is gone from here — a reader who has never opened the
+  // Content Library still gets every marker, which is the whole reason the index ships
+  // with the app. The dump stays in the merge only because it can be newer than the
+  // build, and because it is still what supplies the gloss the sheet reads out.
+  const meaningWords = useMemo(() => {
+    const merged = new Map<string, Set<number>>();
+    if (bundledIndex) {
+      for (const segment of segments) {
+        if (segment.kind !== 'text') continue;
+        for (const ayah of segment.ayahs) {
+          const key = `${ayah.surahId}:${ayah.ayahNumber}`;
+          const hits = bundledIndex[key];
+          if (hits && hits.length > 0) merged.set(key, new Set(hits));
+        }
+      }
+    }
+    if (wordMeaningsInstalled && loadedMeaningData.page === page) {
+      for (const [key, wordIndexes] of loadedMeaningData.words) merged.set(key, wordIndexes);
+    }
+    return merged;
+  }, [bundledIndex, segments, page, loadedMeaningData, wordMeaningsInstalled]);
 
   const pageStyle = {
     '--fs': `${fontSize}px`,
     '--lh': `${lineHeight}`,
     '--letter-gap': `${letterSpacing}em`,
-    '--word-gap': wordSpacing === 0 ? 'normal' : `${wordSpacing}em`,
+    '--word-gap': wordSpacing === 0 ? '-0.025em' : `${(wordSpacing - 0.025).toFixed(3)}em`,
   } as CSSProperties;
 
   return (

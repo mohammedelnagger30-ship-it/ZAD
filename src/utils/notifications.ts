@@ -37,9 +37,23 @@ export const NOTIFICATION_ID_BASE = {
   iqamah: 6_000_000,
   /** Spaced-repetition reminders for memorised ayah ranges. */
   hifzReview: 7_000_000,
+  /** Today's nafl windows — الضحى، الوتر، الثلث الأخير. */
+  nafl: 10_000_000,
   /** Adhan-overlay snoozes — the only ids that survive a rebuild. */
   snooze: 9_000_000,
 } as const;
+
+/**
+ * The million reserved for the native side's own two cards.
+ *
+ * Neither is scheduled by the JS queue, so nothing here may claim it: the receiver's
+ * «تأخّر التنبيه» notice and the self-test alarm (see `AdhanOverlay.TEST_ALARM_ID` on the
+ * native side) both post from outside the WebView, and an id colliding with a queued
+ * prayer would let one replace the other. The native side lays the block out in three
+ * parts — the prayer notices at the bottom, the iqamah notices in the middle, and the
+ * self-test card alone at the very top.
+ */
+export const NATIVE_RESERVED_ID_BASE = 8_000_000;
 
 const MAX_SLOT = 999_999;
 
@@ -56,6 +70,7 @@ export const notificationId = {
   dhikr: (slot: number) => idFor(NOTIFICATION_ID_BASE.dhikr, slot),
   iqamah: (slot: number) => idFor(NOTIFICATION_ID_BASE.iqamah, slot),
   hifzReview: (slot: number) => idFor(NOTIFICATION_ID_BASE.hifzReview, slot),
+  nafl: (slot: number) => idFor(NOTIFICATION_ID_BASE.nafl, slot),
   /**
    * Snooze ids embed the second within the reserved range instead of the wall clock:
    * two snoozes rarely collide, a collision merely replaces the older reminder, and the
@@ -203,6 +218,12 @@ export type NotificationWarning =
   | 'exact-alarm-denied'
   /** Prayer channels could not be prepared; the existing alarm queue was left intact. */
   | 'channel-failed'
+  /**
+   * The prayer channel existed but carried no sound, so every alert on it would have
+   * arrived silent. It was deleted and rebuilt under the same id — the only route
+   * Android allows for changing a channel's sound — and rings again from now on.
+   */
+  | 'channel-silent'
   /** The queue was rebuilt successfully after a prior warning. */
   | 'schedule-ready'
   /** The platform scheduled the queue inexact (late firing in sleep mode). */

@@ -110,7 +110,7 @@ function MovementCard({ item }: { item: PrayerGuideStep }) {
         <div className="-m-1 flex shrink-0 items-center justify-center">
           <PrayerPosture
             posture={item.posture}
-            className="h-24 w-24 text-primary-800/75 dark:text-[#cfa95c]/85 md:h-32 md:w-32"
+            className="h-20 w-20 text-primary-800/75 dark:text-[#cfa95c]/85 md:h-28 md:w-28"
             accentClassName="text-gold-600 dark:text-[#cfa95c]"
           />
         </div>

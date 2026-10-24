@@ -19,7 +19,7 @@ jest.unstable_mockModule('@capacitor/filesystem', () => ({
 }));
 
 const { Directory, Filesystem } = await import('@capacitor/filesystem');
-const { ADHAN_SOUNDS } = await import('@/data/adhanSounds');
+const { ADHAN_SOUNDS, DEFAULT_ADHAN_SOUND_ID } = await import('@/data/adhanSounds');
 const {
   AdhanDownloadError,
   downloadedAdhanVoiceIds,
@@ -37,6 +37,7 @@ const fetchMock = jest.fn<(input: string, init?: RequestInit) => Promise<Respons
 
 const stored = ADHAN_SOUNDS.find((sound) => sound.id === 'alafasy_general')!;
 const bundled = ADHAN_SOUNDS.find((sound) => sound.id === 'makkah_masjid')!;
+const outOfTheBox = ADHAN_SOUNDS.find((sound) => sound.id === DEFAULT_ADHAN_SOUND_ID)!;
 
 /** An "audio" payload big enough to pass the size floor. */
 function audioBytes(): Uint8Array {
@@ -135,9 +136,10 @@ test('the streamed path reports progress and validates the first bytes', async (
   expect(writeFile).toHaveBeenCalled();
 });
 
-test('a missing voice falls back to the bundled Makkah adhan', () => {
-  expect(usableAdhanSound(stored.id, new Set())).toBe(bundled);
-  expect(usableAdhanSound('unknown-voice', new Set())).toBe(bundled);
+test('a missing voice falls back to the out-of-the-box adhan', () => {
+  expect(outOfTheBox.bundled).toBe(true);
+  expect(usableAdhanSound(stored.id, new Set())).toBe(outOfTheBox);
+  expect(usableAdhanSound('unknown-voice', new Set())).toBe(outOfTheBox);
   expect(usableAdhanSound(bundled.id, new Set())).toBe(bundled);
 });
 

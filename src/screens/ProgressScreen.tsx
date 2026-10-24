@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Flame, TrendingUp, Award, BookOpen, Check, Target, Share2, Download, Lock } from 'lucide-react';
+import { Flame, TrendingUp, Award, BookOpen, Check, Target, Share2, Download, Lock, Trophy } from 'lucide-react';
 import { Card, SectionHeader, Button } from '@/components/ui';
 import { db, type Settings } from '@/db/database';
 import { getStreakCount } from '@/utils/taskManager';
@@ -8,6 +8,7 @@ import { todayKey } from '@/utils/dateUtils';
 import { TOTAL_QURAN_AYAHS, toArabicNumber } from '@/data/surahs';
 import { shareBadge } from '@/data/customBadges';
 import { evaluateBadges, type BadgeMetrics, type BadgeProgress } from '@/utils/badgeProgress';
+import { computeXp, describeLevel, xpBreakdown, type LevelState, type XpLine } from '@/utils/gamification';
 import { describeKhatmah } from '@/utils/khatmah';
 import { ADHKAR_STATE_KEY } from '@/utils/backup';
 import { normalizeCompletedDays } from '@/utils/adhkarDays';
@@ -50,6 +51,8 @@ export function ProgressScreen({ settings }: ProgressScreenProps) {
   const [totalTasks, setTotalTasks] = useState(0);
   const [doneTasks, setDoneTasks] = useState(0);
   const [badgeProgress, setBadgeProgress] = useState<BadgeProgress[]>([]);
+  const [levelState, setLevelState] = useState<LevelState | null>(null);
+  const [xpLines, setXpLines] = useState<XpLine[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   const { show, snackbar } = useSnackbar();
 
@@ -111,6 +114,10 @@ export function ProgressScreen({ settings }: ProgressScreenProps) {
       adhkarDays: readAdhkarDays(),
     };
     setBadgeProgress(evaluateBadges(metrics));
+    // The level card reads the same snapshot as the badges: XP is derived, not
+    // stored, so the two can never disagree about what has been achieved.
+    setLevelState(describeLevel(computeXp(metrics)));
+    setXpLines(xpBreakdown(metrics));
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -147,6 +154,54 @@ export function ProgressScreen({ settings }: ProgressScreenProps) {
           </div>
         </div>
       </div>
+
+      {/* Level & XP — derived from the same record the badges read (utils/gamification) */}
+      {levelState && (
+        <Card className="border-gold-300/70 bg-linear-to-bl from-gold-50/70 via-white to-primary-50/30 dark:border-gold-800/50 dark:from-gold-950/20 dark:via-primary-950/40 dark:to-primary-900/40">
+          <SectionHeader title="مستواي" icon={<Trophy size={20} />} />
+          <div className="flex items-center gap-4">
+            <div className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-2xl bg-linear-to-br from-primary-500 to-gold-500 text-white shadow-md">
+              <span className="text-2xl font-bold leading-none">{toArabicNumber(levelState.level)}</span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="font-bold text-primary-900 dark:text-primary-100">{levelState.name}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {toArabicNumber(levelState.totalXp)} نقطة خبرة
+                </p>
+              </div>
+              <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-primary-100 dark:bg-primary-900/60">
+                <div
+                  className="h-full rounded-full bg-linear-to-l from-primary-500 to-gold-400"
+                  style={{ width: `${Math.round(levelState.fraction * 100)}%` }}
+                />
+              </div>
+              <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                باقي {toArabicNumber(levelState.toNextLevel)} نقطة للمستوى {toArabicNumber(levelState.level + 1)}
+              </p>
+            </div>
+          </div>
+          {/* Where the score came from — a breakdown that earns its rows by
+              showing what is worth repeating, and none at ×٠. */}
+          {xpLines.length > 0 && (
+            <div className="mt-3 border-t border-primary-100 pt-3 dark:border-primary-800/70">
+              <p className="mb-2 text-xs font-semibold text-gray-600 dark:text-gray-300">مصادر النقاط</p>
+              <ul className="space-y-1.5">
+                {xpLines.map((line) => (
+                  <li key={line.source} className="flex items-center justify-between text-xs">
+                    <span className="text-gray-600 dark:text-gray-300">
+                      {line.label} × {toArabicNumber(line.count)}
+                    </span>
+                    <span className="font-bold text-primary-700 dark:text-gold-400">
+                      {toArabicNumber(line.xp)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Memorization progress */}
       <Card>

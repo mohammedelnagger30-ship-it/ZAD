@@ -1,16 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Check, X, Clock, Flame, BookOpen, Moon, Sunrise, BookText, ChevronLeft, Sparkles, Calendar, Heart, Repeat, Share2, LoaderCircle } from 'lucide-react';
+import { Check, X, Clock, Flame, BookOpen, Moon, Sunrise, BookText, ChevronLeft, Sparkles, Calendar, Heart, Repeat, Share2, LoaderCircle, Play, Pause } from 'lucide-react';
 import { Card, Button, Badge, SectionHeader, EmptyState, type BadgeProps } from '@/components/ui';
 import { PrayerStatusSheet } from '@/components/PrayerStatusSheet';
+import { DeviceProtectionBanner } from '@/components/DeviceProtectionBanner';
 import { type DailyTask, type Settings, type StrengthRating, type TaskStatus } from '@/db/database';
 import { getTodayTasks, confirmTask, snoozeTask, unsnoozeTask, describePortion, getStreakCount } from '@/utils/taskManager';
+import { resumeReading, readingParams, describeReading, describeReadingAge, listReading } from '@/utils/readingHistory';
 import { rescheduleAllNotifications } from '@/utils/notificationScheduler';
 import {
   formatTime12h,
   getTimeUntil,
 } from '@/utils/prayerTimes';
 import { useCountdownClock, usePrayerSchedule } from '@/hooks/usePrayerSchedule';
-import { trustedNow } from '@/utils/clock';
+import { trustedNow, trustedNowMs } from '@/utils/clock';
+import { prayerProgressFraction } from '@/utils/prayerProgress';
 import {
   getDayPrayerRecords,
   confirmPrayer,
@@ -27,8 +30,11 @@ import { todayKey, formatArabicDate, getHijriDate, getDayName } from '@/utils/da
 // put the full text chunk on the app's very first screen.
 import type { DailyQuranMessage } from '@/utils/dailyQuranMessage';
 import { prepareAyahShare, shareAyahCard, shareTextOrCopy, type PreparedAyahShare } from '@/utils/shareCard';
+import { loadPreferredReciter } from '@/data/audioReciters';
+import { ensureSource, playAyah, stop as stopRecitation, getRecitationState, subscribeRecitation, setTrack } from '@/utils/recitationEngine';
 import { getHadithCollection, hadithOfDay, installedCollections, HADITH_OF_DAY_BOOK } from '@/data/hadiths';
 import { toArabicNumber } from '@/data/surahs';
+import { getSurah } from '@/data/surahs';
 import type { ScreenName, NavParams } from '@/hooks/useApp';
 
 interface HomeScreenProps {
@@ -43,6 +49,8 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
   const [sunnahRecords, setSunnahRecords] = useState<Record<string, boolean>>({});
   const [dailyQuranMessage, setDailyQuranMessage] = useState<DailyQuranMessage | null>(null);
   const [dailyQuranMessageError, setDailyQuranMessageError] = useState('');
+  const [isPlayingDailyAyah, setIsPlayingDailyAyah] = useState(false);
+  const [isLoadingDailyAyah, setIsLoadingDailyAyah] = useState(false);
   const [shareNotice, setShareNotice] = useState<string | null>(null);
   const [preparedAyahCard, setPreparedAyahCard] = useState<PreparedAyahShare | null>(null);
   const [isSharingAyah, setIsSharingAyah] = useState(false);
@@ -55,22 +63,34 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
   // re-rendering this screen every second of the day.
   const nextPrayerTargetRef = useRef<number | null>(null);
   const now = useCountdownClock(nextPrayerTargetRef);
+  // The bar draws a whole percent and a prayer window is hours long, so a per-second
+  // state update re-rendered this screen ~60 times a minute to move a number that could
+  // not change for a minute or more. The clock is still read every second; React is only
+  // told when the percent on screen actually moves.
+  const [progressNow, setProgressNow] = useState(trustedNow());
+  const progressStepRef = useRef<number | null>(null);
   // Which prayer the confirmation sheet is open for, if any.
   const [sheetPrayer, setSheetPrayer] = useState<PrayerKey | null>(null);
   const today = trustedNow();
 
   const load = useCallback(async () => {
-    const t = await getTodayTasks();
+    // Four independent reads — run them together so a refresh is one round-trip
+    // wide instead of four deep. The streak scan is the slowest and used to hold
+    // up the task list behind it.
+    const [t, s, records, sunnahRecords] = await Promise.all([
+      getTodayTasks(),
+      getStreakCount(),
+      getDayPrayerRecords(todayKey()),
+      getDaySunnahRecords(todayKey()),
+    ]);
     setTasks(t);
-    const s = await getStreakCount();
     setStreak(s);
-    const records = await getDayPrayerRecords(todayKey());
     const map: Record<string, PrayerStatus | null> = {};
     records.forEach((r) => {
       map[r.prayer] = r.status;
     });
     setPrayerRecords(map);
-    setSunnahRecords(sunnahDoneMap(await getDaySunnahRecords(todayKey())));
+    setSunnahRecords(sunnahDoneMap(sunnahRecords));
   }, []);
 
   useEffect(() => {
@@ -154,6 +174,48 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
     }
   };
 
+  const playDailyAyah = async () => {
+    if (!dailyQuranMessage) return;
+    if (isPlayingDailyAyah) {
+      stopRecitation();
+      setIsPlayingDailyAyah(false);
+      return;
+    }
+    setIsLoadingDailyAyah(true);
+    try {
+      const reciterId = loadPreferredReciter();
+      const surah = getSurah(dailyQuranMessage.surahId);
+      setTrack({
+        surahId: dailyQuranMessage.surahId,
+        surahName: surah?.name ?? dailyQuranMessage.surahName,
+        reciterId,
+      });
+      const source = await ensureSource();
+      if (source) {
+        playAyah(dailyQuranMessage.ayahNumber, false);
+        setIsPlayingDailyAyah(true);
+      }
+    } catch (error) {
+      console.error('Daily Quran ayah playback failed:', error);
+    } finally {
+      setIsLoadingDailyAyah(false);
+    }
+  };
+
+  // Keep the play button in sync with the engine's actual playback state.
+  useEffect(() => {
+    const unsubscribe = subscribeRecitation(() => {
+      const state = getRecitationState();
+      if (!dailyQuranMessage) return;
+      const stillPlayingThis =
+        state.isPlaying &&
+        state.activeAyah === dailyQuranMessage.ayahNumber &&
+        state.surahId === dailyQuranMessage.surahId;
+      setIsPlayingDailyAyah(stillPlayingThis);
+    });
+    return unsubscribe;
+  }, [dailyQuranMessage]);
+
   // Prayer times for a calendar day never change while the day lasts; the shared
   // hook pins the calculation to the city's day (see usePrayerSchedule), and the
   // countdown clock above keeps re-renders to a minute outside the last minute.
@@ -174,6 +236,32 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
   useEffect(() => {
     nextPrayerTargetRef.current = nextPrayer?.time.getTime() ?? null;
   });
+
+  // The bar is a window hours long, so a whole percent can take a minute or more to
+  // change and the fill then sits visibly still. It is stepped at a tenth of a percent
+  // instead: fine enough that the width glides, coarse enough that the screen still
+  // renders a few times an hour rather than sixty times a minute. The figure beside it
+  // is rounded to a whole number at draw time, so it changes no more often than before.
+  //
+  // The early return compares against the last value *pushed*, not the last rendered
+  // one. Sitting after the schedule on purpose: it reads the prayers the hook above has
+  // just computed.
+  useEffect(() => {
+    // Drop the remembered step whenever the window itself changes — a new next prayer,
+    // a new day — so the first tick after the move is not swallowed as a repeat.
+    progressStepRef.current = null;
+
+    const id = setInterval(() => {
+      const next = trustedNow();
+      const fraction = prayerProgressFraction(prayerResult?.prayers, nextPrayer, next);
+      // A tenth of a percent: the same resolution the bar is filled to.
+      const step = Math.round(fraction * 1000);
+      if (step === progressStepRef.current) return;
+      progressStepRef.current = step;
+      setProgressNow(next);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [prayerResult, nextPrayer]);
 
   const [hadith, setHadith] = useState(() => hadithOfDay());
   // True while the default collection is being put on the device on a fresh
@@ -247,60 +335,111 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
     }
   };
 
+  // Task actions paint the new state immediately and let the database, the
+  // notification queue, and the streak refresh catch up in the background.
+  // Waiting on all three made a single tap feel like a page load; the task row
+  // is the only thing the user is looking at, so it moves first.
   const handleConfirm = async (taskId: number, status: 'done' | 'missed', strength?: 'weak' | 'medium' | 'strong') => {
-    await confirmTask(taskId, status, strength);
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId
+          ? { ...t, status, confirmedAt: trustedNowMs(), ...(strength ? { strength } : {}) }
+          : t,
+      ),
+    );
     try {
-      await rescheduleAllNotifications();
-    } finally {
-      await load();
+      await confirmTask(taskId, status, strength);
+    } catch (error) {
+      console.error('Confirming task failed:', error);
     }
+    void load();
+    void rescheduleAllNotifications().catch((error) => {
+      console.error('Rescheduling notifications failed:', error);
+    });
   };
 
   const handleSnooze = async (taskId: number, minutes: number) => {
-    await snoozeTask(taskId, minutes);
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId
+          ? {
+              ...t,
+              status: 'snoozed',
+              snoozedUntil: trustedNowMs() + minutes * 60_000,
+            }
+          : t,
+      ),
+    );
     try {
-      await rescheduleAllNotifications();
-    } finally {
-      await load();
+      await snoozeTask(taskId, minutes);
+    } catch (error) {
+      console.error('Snoozing task failed:', error);
     }
+    void load();
+    void rescheduleAllNotifications().catch((error) => {
+      console.error('Rescheduling notifications failed:', error);
+    });
   };
 
   const handleUnsnooze = async (taskId: number) => {
-    await unsnoozeTask(taskId);
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId ? { ...t, status: 'pending', snoozedUntil: undefined } : t,
+      ),
+    );
     try {
-      await rescheduleAllNotifications();
-    } finally {
-      await load();
+      await unsnoozeTask(taskId);
+    } catch (error) {
+      console.error('Unsnoozing task failed:', error);
     }
+    void load();
+    void rescheduleAllNotifications().catch((error) => {
+      console.error('Rescheduling notifications failed:', error);
+    });
   };
 
   const handlePrayerPick = async (status: PrayerStatus) => {
     if (!sheetPrayer) return;
-    await confirmPrayer(todayKey(), sheetPrayer, status);
-    await load();
+    const prayer = sheetPrayer;
+    setPrayerRecords((prev) => ({ ...prev, [prayer]: status }));
+    setSheetPrayer(null);
+    try {
+      await confirmPrayer(todayKey(), prayer, status);
+    } catch (error) {
+      console.error('Recording prayer failed:', error);
+    }
+    void load();
   };
 
   /** Records one rawatib slot attached to the prayer the sheet is open for. */
   const handleSunnahToggle = async (type: string) => {
     if (!sheetPrayer) return;
-    await setSunnah(todayKey(), type, !sunnahRecords[type]);
-    await load();
+    const next = !sunnahRecords[type];
+    setSunnahRecords((prev) => ({ ...prev, [type]: next }));
+    try {
+      await setSunnah(todayKey(), type, next);
+    } catch (error) {
+      console.error('Recording sunnah failed:', error);
+    }
+    void load();
   };
 
-  // Calculate prayer progress towards next prayer
-  const prayerProgress = (() => {
-    if (!nextPrayer || !prayerResult?.prayers.length) return 0;
-    const nextIdx = prayerResult.prayers.findIndex((p) => p.name === nextPrayer.name);
-    const prevPrayer = nextIdx > 0 ? prayerResult.prayers[nextIdx - 1] : prayerResult.prayers[prayerResult.prayers.length - 1];
-    if (!prevPrayer) return 0;
-    const totalSpan = nextPrayer.time.getTime() - prevPrayer.time.getTime();
-    const elapsed = now.getTime() - prevPrayer.time.getTime();
-    if (totalSpan <= 0 || elapsed < 0) return 0;
-    return Math.min(100, Math.max(0, Math.round((elapsed / totalSpan) * 100)));
-  })();
+  // The bar is filled to a tenth of a percent so it glides, and the figure beside it is
+  // the same number rounded to a whole one. Both come from the same fraction, so they
+  // can never disagree. The fill is clamped short of 100 so the bar never reads as
+  // finished while the prayer is still ahead.
+  const prayerProgressFill = prayerProgressFraction(prayerResult?.prayers, nextPrayer, progressNow) * 100;
 
   const pendingTasks = tasks.filter((t) => t.status === 'pending' || t.status === 'snoozed');
   const doneTasks = tasks.filter((t) => t.status === 'done');
+
+  // Resume target and recent reads, read once per visit — screens unmount on
+  // tab change, so this is a fresh read every time Home appears, and it is
+  // synchronous localStorage (not Dexie) precisely so the card can render on
+  // the first paint without a loading state. Separate states, so the resume
+  // target is a const the click handler's narrowing can rely on.
+  const [readingResume] = useState(() => resumeReading());
+  const [readingRecent] = useState(() => listReading(4));
 
   return (
     <div className="space-y-5 pb-4">
@@ -358,20 +497,35 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
                 </div>
               </div>
 
-              {/* Live Prayer Elapsed Progress Bar */}
+              {/* Prayer-window progress. The fill is the exact fraction of the window
+                  that has elapsed, so it glides; the figure beside it is that same
+                  fraction rounded, so the two never disagree. */}
               <div className="mt-3 pt-2.5 border-t border-white/15 flex items-center gap-2.5">
-                <div className="flex-1 h-1.5 rounded-full bg-black/20 overflow-hidden p-0.5 backdrop-blur-xs">
+                <div
+                  className="flex-1 h-1.5 rounded-full bg-black/20 overflow-hidden p-0.5 backdrop-blur-xs"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(prayerProgressFill)}
+                  aria-label={`ما مضى من الوقت حتى ${nextPrayer.arabicName}`}
+                >
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-white via-white/90 to-white/60 transition-all duration-1000 ease-out shadow-xs"
-                    style={{ width: `${prayerProgress}%` }}
+                    className="h-full rounded-full bg-gradient-to-r from-white via-white/90 to-white/60 transition-[width] duration-1000 ease-linear shadow-xs"
+                    style={{ width: `${prayerProgressFill.toFixed(2)}%` }}
                   />
                 </div>
-                <span className="text-[10px] text-white/90 font-bold tabular-nums">{prayerProgress}%</span>
+                <span className="text-[10px] text-white/90 font-bold tabular-nums">
+                  {Math.round(prayerProgressFill)}%
+                </span>
               </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* A phone that can silence the adhan says so here, on the first screen — the
+          fix lives in the system settings, and nobody opens those on a hint alone. */}
+      <DeviceProtectionBanner />
 
       {/* Quick Shortcuts */}
       <div className="grid grid-cols-4 gap-2.5 md:gap-3">
@@ -380,7 +534,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
           onClick={() => navigate('quran')}
           className="group flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
         >
-          <div className="h-11 w-11 md:h-12 md:w-12 rounded-xl bg-gradient-to-br from-primary-600 to-primary-800 text-white flex items-center justify-center mb-1.5 shadow-md shadow-primary-700/25 transition-transform duration-200 group-hover:scale-110">
+          <div className="h-11 w-11 md:h-12 md:w-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center mb-1.5 shadow-md shadow-emerald-600/25 transition-transform duration-200 group-hover:scale-110">
             <BookOpen size={21} />
           </div>
           <span className="text-xs md:text-sm font-bold text-primary-900 dark:text-primary-100">المصحف</span>
@@ -391,7 +545,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
           onClick={() => navigate('prayer')}
           className="group flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
         >
-          <div className="h-11 w-11 md:h-12 md:w-12 rounded-xl bg-gradient-to-br from-primary-700 to-primary-900 text-white flex items-center justify-center mb-1.5 shadow-md shadow-primary-800/25 transition-transform duration-200 group-hover:scale-110">
+          <div className="h-11 w-11 md:h-12 md:w-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center mb-1.5 shadow-md shadow-blue-600/25 transition-transform duration-200 group-hover:scale-110">
             <Moon size={21} />
           </div>
           <span className="text-xs md:text-sm font-bold text-primary-900 dark:text-primary-100">الصلاة</span>
@@ -402,7 +556,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
           onClick={() => navigate('adhkar')}
           className="group flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
         >
-          <div className="h-11 w-11 md:h-12 md:w-12 rounded-xl bg-gradient-to-br from-primary-600 to-accent-700 text-white flex items-center justify-center mb-1.5 shadow-md shadow-accent-700/25 transition-transform duration-200 group-hover:scale-110">
+          <div className="h-11 w-11 md:h-12 md:w-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center mb-1.5 shadow-md shadow-amber-600/25 transition-transform duration-200 group-hover:scale-110">
             <Heart size={21} />
           </div>
           <span className="text-xs md:text-sm font-bold text-primary-900 dark:text-primary-100">الأذكار</span>
@@ -413,34 +567,102 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
           onClick={() => navigate('tasbih')}
           className="group flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
         >
-          <div className="h-11 w-11 md:h-12 md:w-12 rounded-xl bg-gradient-to-br from-accent-600 to-primary-700 text-white flex items-center justify-center mb-1.5 shadow-md shadow-primary-700/25 transition-transform duration-200 group-hover:scale-110">
+          <div className="h-11 w-11 md:h-12 md:w-12 rounded-xl bg-gradient-to-br from-fuchsia-500 to-pink-600 text-white flex items-center justify-center mb-1.5 shadow-md shadow-pink-600/25 transition-transform duration-200 group-hover:scale-110">
             <Repeat size={21} />
           </div>
           <span className="text-xs md:text-sm font-bold text-primary-900 dark:text-primary-100">المسبحة</span>
         </button>
       </div>
 
+      {/* Resume reading + recent reads (utils/readingHistory) — the gap the
+          surah list's own «متابعة» button could not cover: the position has to
+          be visible from the first screen, before the Quran tab is opened. */}
+      {readingResume && (
+        <Card className="border-primary-200/70 bg-linear-to-bl from-primary-50/60 via-white to-white dark:border-primary-800/60 dark:from-primary-950/30 dark:via-primary-950/10 dark:to-primary-950/10">
+          <div className="flex items-center gap-2 text-primary-700 dark:text-primary-300">
+            <BookText size={18} className="shrink-0" />
+            <h2 className="flex-1 font-bold">متابعة القراءة</h2>
+            {readingRecent[0] && (
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                {describeReadingAge(readingRecent[0].at, trustedNow().getTime())}
+              </span>
+            )}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-lg font-extrabold text-primary-900 dark:text-primary-100">
+                {readingRecent[0] ? describeReading(readingRecent[0]) : describeReading(readingResume)}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">آخر قراءة على هذا الجهاز</p>
+            </div>
+            <Button
+              onClick={() => navigate('quran', readingParams(readingResume))}
+              variant="primary"
+              size="sm"
+            >
+              متابعة
+            </Button>
+          </div>
+          {/* The rest of the recent reads, each a tap away. The first entry is
+              already the «متابعة» button above, so the chips start at one. */}
+          {readingRecent.length > 1 && (
+            <div className="mt-3 flex flex-wrap gap-2 border-t border-primary-100 pt-3 dark:border-primary-800/70">
+              {readingRecent.slice(1).map((entry, index) => (
+                <button
+                  key={`${entry.kind}-${'page' in entry ? entry.page : `${entry.surahId}:${entry.ayah}`}-${index}`}
+                  type="button"
+                  onClick={() => navigate('quran', readingParams(entry))}
+                  className="rounded-xl bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 transition hover:bg-primary-100 hover:text-primary-900 focus-visible:ring-2 focus-visible:ring-primary-500 dark:bg-primary-900/40 dark:text-primary-200 dark:hover:bg-primary-900/70"
+                >
+                  {describeReading(entry)}
+                </button>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
       <Card className="border-gold-300/70 bg-gradient-to-bl from-gold-50/70 via-white to-primary-50/30 dark:border-gold-800/50 dark:from-gold-950/20 dark:via-primary-950/40 dark:to-primary-900/40 shadow-[0_8px_24px_-10px_var(--brand-glow)] transition-all duration-300 hover:shadow-lg">
         <div className="flex items-center gap-2 text-primary-700 dark:text-gold-300">
           <Sparkles size={18} className="animate-pulse-soft text-accent-500 shrink-0" />
           <h2 className="flex-1 font-bold">رسالة اليوم من القرآن</h2>
           {dailyQuranMessage && (
-            <button
-              type="button"
-              onClick={() => void shareDailyAyah()}
-              disabled={isSharingAyah}
-              aria-label="مشاركة آية اليوم"
-              aria-busy={isSharingAyah}
-              title={isSharingAyah ? 'جارٍ تجهيز بطاقة الآية للمشاركة' : 'مشاركة آية اليوم كبطاقة'}
-              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-primary-700 px-3 text-xs font-bold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:shadow-sm motion-reduce:transition-none dark:bg-gold-400 dark:text-primary-950 dark:hover:bg-gold-300"
-            >
-              {isSharingAyah ? (
-                <LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
-              ) : (
-                <Share2 size={15} aria-hidden="true" />
-              )}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void playDailyAyah()}
+                disabled={isLoadingDailyAyah}
+                aria-label={isPlayingDailyAyah ? 'إيقاف الاستماع' : 'استماع إلى الآية'}
+                aria-pressed={isPlayingDailyAyah}
+                title={isPlayingDailyAyah ? 'إيقاف الاستماع' : 'استماع إلى آية اليوم'}
+                className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-primary-100 px-3 text-xs font-bold text-primary-800 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-200 hover:shadow-md active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:shadow-sm motion-reduce:transition-none dark:bg-primary-800 dark:text-primary-100 dark:hover:bg-primary-700"
+              >
+                {isLoadingDailyAyah ? (
+                  <LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                ) : isPlayingDailyAyah ? (
+                  <Pause size={15} aria-hidden="true" />
+                ) : (
+                  <Play size={15} aria-hidden="true" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => void shareDailyAyah()}
+                disabled={isSharingAyah}
+                aria-label="مشاركة آية اليوم"
+                aria-busy={isSharingAyah}
+                title={isSharingAyah ? 'جارٍ تجهيز بطاقة الآية للمشاركة' : 'مشاركة آية اليوم كبطاقة'}
+                className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-primary-700 px-3 text-xs font-bold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:shadow-sm motion-reduce:transition-none dark:bg-gold-400 dark:text-primary-950 dark:hover:bg-gold-300"
+              >
+                {isSharingAyah ? (
+                  <LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                ) : (
+                  <Share2 size={15} aria-hidden="true" />
+                )}
+              </button>
+            </div>
           )}
+
         </div>
         {dailyQuranMessage ? (
           <>
@@ -657,10 +879,10 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
                   aria-label="مشاركة حديث اليوم"
                   aria-busy={isSharingHadith}
                   title="مشاركة حديث اليوم"
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-primary-600 transition-colors hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-gold-400 dark:hover:bg-primary-800/50"
+                  className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-primary-700 px-3 text-xs font-bold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:shadow-sm motion-reduce:transition-none dark:bg-gold-400 dark:text-primary-950 dark:hover:bg-gold-300"
                 >
                   {isSharingHadith ? (
-                    <LoaderCircle size={18} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                    <LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
                   ) : (
                     <Share2 size={18} aria-hidden="true" />
                   )}
@@ -826,13 +1048,13 @@ function TaskCard({
         <div className="mt-3 animate-slide-down">
           <p className="text-xs text-gray-600 dark:text-gray-300 mb-2">كيف كان حفظك؟</p>
           <div className="flex gap-2">
-            <Button size="sm" variant="success" onClick={() => onConfirm(task.id!, 'done', 'strong')} className="flex-1">
+            <Button size="sm" variant="success" onClick={() => { onConfirm(task.id!, 'done', 'strong'); setShowStrength(false); }} className="flex-1">
               قوي
             </Button>
-            <Button size="sm" variant="warning" onClick={() => onConfirm(task.id!, 'done', 'medium')} className="flex-1">
+            <Button size="sm" variant="warning" onClick={() => { onConfirm(task.id!, 'done', 'medium'); setShowStrength(false); }} className="flex-1">
               متوسط
             </Button>
-            <Button size="sm" variant="error" onClick={() => onConfirm(task.id!, 'done', 'weak')} className="flex-1">
+            <Button size="sm" variant="error" onClick={() => { onConfirm(task.id!, 'done', 'weak'); setShowStrength(false); }} className="flex-1">
               ضعيف
             </Button>
           </div>

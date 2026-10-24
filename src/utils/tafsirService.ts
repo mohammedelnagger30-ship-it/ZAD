@@ -311,7 +311,7 @@ export async function ensureSurahTafsir(
     kind: 'tafsir',
     group: editionId,
     surah,
-  }, onProgress, signal);
+  }, onProgress, signal, edition.surahSha256?.[surah]);
 
   const raw = await readText(key);
   const parsed = parseUpstream(raw ?? '', surah);
@@ -362,7 +362,7 @@ export async function downloadTafsirEdition(
         kind: 'tafsir',
         group: editionId,
         surah,
-      }, undefined, signal);
+      }, undefined, signal, edition.surahSha256?.[surah]);
     } catch (err) {
       // Out of space mid-run should stop cleanly with a message the UI can show,
       // not a bare DOMException.
