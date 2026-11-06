@@ -3,8 +3,8 @@ import { Download, Upload, Database } from 'lucide-react';
 import { Card, Button } from '@/components/ui';
 import { SectionTitle } from '@/components/settings/SectionTitle';
 import { db } from '@/db/database';
-import { withSyncSuppressed } from '@/utils/syncSuppression';
-import { isStoragePersisted } from '@/utils/storagePersistence';
+import { withSyncSuppressed } from '@/utils/sync/syncSuppression';
+import { isStoragePersisted } from '@/utils/sync/storagePersistence';
 import {
   ADHKAR_STATE_KEY,
   BACKUP_TABLES,
@@ -13,13 +13,13 @@ import {
   isValidAdhkarBackup,
   isValidBackupRow,
   type BackupTable,
-} from '@/utils/backup';
+} from '@/utils/sync/backup';
 
 /**
  * The Backup & Restore section, whole: its file handlers, its validation and
  * its status line used to live inside SettingsScreen, which made the screen's
  * body the only place any of it could run. As its own component the section
- * mounts, reads and writes the database entirely through `@/utils/backup` and
+ * mounts, reads and writes the database entirely through `@/utils/sync/backup` and
  * needs nothing from the screen around it.
  */
 export function BackupSection() {

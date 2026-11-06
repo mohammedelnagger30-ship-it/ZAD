@@ -1,16 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Flame, TrendingUp, Award, BookOpen, Check, Target, Share2, Download, Lock, Trophy } from 'lucide-react';
+import { Flame, Award, BookOpen, Check, Target, Share2, Download, Lock, Trophy } from 'lucide-react';
 import { Card, SectionHeader, Button, PageHeader } from '@/components/ui';
+import { SCREEN_METADATA } from '@/navigation/screenMetadata';
 import { db, type Settings } from '@/db/database';
 import { getStreakCount } from '@/utils/taskManager';
-import { getWeeklyPrayerStats, getMonthlyPrayerStats } from '@/utils/prayerTracker';
+import { getWeeklyPrayerStats, getMonthlyPrayerStats } from '@/utils/prayer/prayerTracker';
 import { todayKey } from '@/utils/dateUtils';
 import { TOTAL_QURAN_AYAHS, toArabicNumber } from '@/data/surahs';
 import { shareBadge } from '@/data/customBadges';
 import { evaluateBadges, type BadgeMetrics, type BadgeProgress } from '@/utils/badgeProgress';
 import { computeXp, describeLevel, xpBreakdown, type LevelState, type XpLine } from '@/utils/gamification';
-import { describeKhatmah } from '@/utils/khatmah';
-import { ADHKAR_STATE_KEY } from '@/utils/backup';
+import { describeKhatmah } from '@/utils/quran/khatmah';
+import { ADHKAR_STATE_KEY } from '@/utils/sync/backup';
 import { normalizeCompletedDays } from '@/utils/adhkarDays';
 import { exportProgressReport } from '@/utils/exportPDF';
 import { useSnackbar } from '@/hooks/useSnackbar';
@@ -128,8 +129,8 @@ export function ProgressScreen({ settings }: ProgressScreenProps) {
     <div className="space-y-5 pb-4">
       <PageHeader
         title="تقدّمي"
-        icon={<TrendingUp size={22} />}
-        action={
+        icon={<SCREEN_METADATA.progress.icon size={20} />}
+        actions={
           <Button
             size="sm"
             variant="secondary"

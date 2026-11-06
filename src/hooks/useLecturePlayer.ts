@@ -6,14 +6,14 @@ import {
   subscribeLectureProgress,
   type LecturePlayerState,
   type LectureProgress,
-} from '@/utils/lecturePlayer';
-import { getLectureStoreSnapshot, subscribeToLectureStore } from '@/utils/lectureStore';
+} from '@/utils/audio/lecturePlayer';
+import { getLectureStoreSnapshot, subscribeToLectureStore } from '@/utils/audio/lectureStore';
 import {
   lectureProgressRevision,
   lectureProgressStats,
   readLectureProgress,
   subscribeLectureProgress as subscribeLectureProgressRecords,
-} from '@/utils/lectureProgress';
+} from '@/utils/audio/lectureProgress';
 
 /**
  * The lecture engine's whole state: what is loaded, what is queued, whether it is running.

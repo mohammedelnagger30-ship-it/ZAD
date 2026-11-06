@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BookOpen, BookText, ChevronLeft, Heart, Loader2, ScrollText, Search, X } from 'lucide-react';
 import { toArabicNumber } from '@/data/surahs';
-import type { ScreenName } from '@/hooks/useApp';
 import { PageHeader } from '@/components/ui';
+import { SCREEN_METADATA } from '@/navigation/screenMetadata';
+import type { ScreenName } from '@/hooks/useApp';
 import {
   PER_SOURCE_LIMIT,
   UNIFIED_SOURCE_LABELS,
@@ -115,8 +116,7 @@ export function SearchScreen({ navigate }: SearchScreenProps) {
       <PageHeader
         title="البحث الشامل"
         description="آيةٌ أو حديثٌ أو ذكرٌ أو تفسير — في نتيجة واحدة."
-        icon={<Search size={22} />}
-        className="pb-3"
+        icon={<SCREEN_METADATA.search.icon size={20} />}
       />
 
       <div className="relative group">

@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Capacitor } from '@capacitor/core';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { ensurePersistentStorage } from '@/utils/storagePersistence';
+import { ensurePersistentStorage } from '@/utils/sync/storagePersistence';
 import App from './App.tsx';
 import './index.css';
 

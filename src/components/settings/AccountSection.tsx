@@ -3,7 +3,7 @@ import { Cloud, CloudUpload, LogIn, LogOut, RefreshCw, ShieldCheck } from 'lucid
 import { Card, Button } from '@/components/ui';
 import { SectionTitle } from '@/components/settings/SectionTitle';
 import { useConfirm } from '@/hooks/useConfirm';
-import type { CloudSyncState, SignOutOptions, SignOutResult } from '@/utils/cloudSync';
+import type { CloudSyncState, SignOutOptions, SignOutResult } from '@/utils/sync/cloudSync';
 
 interface AccountSectionProps {
   accountEmail?: string;
@@ -12,24 +12,14 @@ interface AccountSectionProps {
   onSignOut?: (options?: SignOutOptions) => Promise<SignOutResult>;
   /** Present only for an allow-listed account — opens the admin dashboard. */
   onOpenAdmin?: () => void;
-  onRefreshAdmin?: () => Promise<boolean>;
   /** Present only for a guest — opens the sign-up form. */
   onCreateAccount?: () => void;
 }
 
-export function AccountSection({
-  accountEmail,
-  syncState,
-  onSyncNow,
-  onSignOut,
-  onOpenAdmin,
-  onRefreshAdmin,
-  onCreateAccount,
-}: AccountSectionProps) {
+export function AccountSection({ accountEmail, syncState, onSyncNow, onSignOut, onOpenAdmin, onCreateAccount }: AccountSectionProps) {
   const { confirm, dialog } = useConfirm();
   const [accountActionStatus, setAccountActionStatus] = useState('');
   const [accountActionBusy, setAccountActionBusy] = useState(false);
-  const [verifyingAdmin, setVerifyingAdmin] = useState(false);
 
   return (
     <>
@@ -139,7 +129,7 @@ export function AccountSection({
                 <LogOut size={15} /> تسجيل الخروج
               </Button>
             </div>
-            {onOpenAdmin ? (
+            {onOpenAdmin && (
               <Button
                 variant="secondary"
                 size="sm"
@@ -148,30 +138,7 @@ export function AccountSection({
               >
                 <ShieldCheck size={15} /> لوحة الإدارة
               </Button>
-            ) : onRefreshAdmin ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={verifyingAdmin}
-                onClick={async () => {
-                  setVerifyingAdmin(true);
-                  setAccountActionStatus('');
-                  try {
-                    const isAdmin = await onRefreshAdmin();
-                    if (!isAdmin) {
-                      setAccountActionStatus('هذا الحساب ليس مسجلاً في قائمة المسؤولين.');
-                    }
-                  } catch {
-                    setAccountActionStatus('تعذّر التحقق من الصلاحية، يرجى فحص الاتصال بالإنترنت.');
-                  } finally {
-                    setVerifyingAdmin(false);
-                  }
-                }}
-                className="col-span-2 flex items-center justify-center gap-1.5 font-semibold text-xs"
-              >
-                <ShieldCheck size={15} /> {verifyingAdmin ? 'جارٍ التحقق من صلاحية الإدارة…' : 'التحقق من صلاحية الإدارة'}
-              </Button>
-            ) : null}
+            )}
             {accountActionStatus && (
               <p role="alert" className="mt-2 text-xs text-red-600 dark:text-red-300 font-semibold">
                 {accountActionStatus}

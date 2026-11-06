@@ -43,10 +43,10 @@ import {
   type DayPrayerGrid,
   type PrayerKey,
   type PrayerStatus,
-} from '../src/utils/prayerTracker';
+} from '../src/utils/prayer/prayerTracker';
 import { formatDateKey, addDays } from '../src/utils/dateUtils';
-import { canEditPrayerDate, assertPrayerRecordable } from '../src/utils/prayerTracker';
-import { getDailyQuranMessage, type DailyMessageStorage } from '../src/utils/dailyQuranMessage';
+import { canEditPrayerDate, assertPrayerRecordable } from '../src/utils/prayer/prayerTracker';
+import { getDailyQuranMessage, type DailyMessageStorage } from '../src/utils/quran/dailyQuranMessage';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(ROOT, 'src');

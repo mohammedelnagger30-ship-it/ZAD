@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { RotateCcw, Vibrate, Volume2, VolumeX, Sparkles, Check, Flame, Trophy, Layers } from 'lucide-react';
+import { RotateCcw, Vibrate, Volume2, VolumeX, Check, Flame, Trophy, Layers, Target } from 'lucide-react';
 import { Button, Card, PageHeader } from '@/components/ui';
 import { todayKey } from '@/utils/dateUtils';
+import { SCREEN_METADATA } from '@/navigation/screenMetadata';
 
 const TASBIH_PRESETS = [
   { label: 'سبحان الله', text: 'سُبْحَانَ اللَّهِ', target: 33 },
@@ -231,9 +232,8 @@ export function TasbihScreen({ params }: { params?: Record<string, unknown> } = 
       <PageHeader
         title="المسبحة الإلكترونية"
         description="تسبيح تفاعلي واهتزاز عالي الدقة بدون إنترنت"
-        icon={<RotateCcw size={22} />}
-        className="pb-3"
-        action={
+        icon={<SCREEN_METADATA.tasbih.icon size={20} />}
+        actions={
           <div className="flex items-center gap-1.5 rounded-2xl border border-primary-200/60 bg-primary-50 p-1 dark:border-primary-800/60 dark:bg-primary-900/60">
           <button
             type="button"
@@ -431,7 +431,7 @@ export function TasbihScreen({ params }: { params?: Record<string, unknown> } = 
 
           <div className="px-2">
             <div className="flex items-center justify-center gap-1 text-primary-600 dark:text-gold-400 mb-1">
-              <Sparkles size={16} />
+              <Target size={16} />
             </div>
             <p className="text-xl font-extrabold text-primary-900 dark:text-primary-50">{Math.round(progress * 100)}%</p>
             <p className="text-[0.6875rem] font-semibold text-gray-500 dark:text-gray-400">التقدم بالدورة</p>

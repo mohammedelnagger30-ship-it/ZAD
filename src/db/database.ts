@@ -1,13 +1,13 @@
 import Dexie, { type Table } from 'dexie';
 import { DEFAULT_NOTIFICATION_VOICE_ID } from '@/data/notificationSounds';
-import { DEFAULT_COLOR_PALETTE, type ColorPalette } from '@/utils/colorThemes';
+import { type ColorPalette } from '@/utils/colorThemes';
 import {
   CITY_PRESETS,
   DEFAULT_IQAMAH_OFFSETS,
   isEgyptianLocation,
   type IqamahPrayerKey,
   type PrayerTimeAdjustments,
-} from '@/utils/prayerTimes';
+} from '@/utils/prayer/prayerTimes';
 
 // ---- Types ----
 
@@ -468,7 +468,7 @@ export const SETTINGS_ROW_ID = 1;
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'light',
-  colorPalette: DEFAULT_COLOR_PALETTE,
+  colorPalette: 'qurra',
   fontSize: 28,
   notificationSound: true,
   notificationVoiceId: DEFAULT_NOTIFICATION_VOICE_ID,

@@ -57,9 +57,9 @@ import {
   requestLecturePhoneSave,
   shareLecture,
   type LectureSource,
-} from '@/utils/lectureStore';
-import { playLecture, togglePlay, type LectureQueueItem } from '@/utils/lecturePlayer';
-import { collectionProgress, lectureProgressRevision, subscribeLectureProgress } from '@/utils/lectureProgress';
+} from '@/utils/audio/lectureStore';
+import { playLecture, togglePlay, type LectureQueueItem } from '@/utils/audio/lecturePlayer';
+import { collectionProgress, lectureProgressRevision, subscribeLectureProgress } from '@/utils/audio/lectureProgress';
 
 interface HuwainiScreenProps {
   navigate: (screen: ScreenName) => void;

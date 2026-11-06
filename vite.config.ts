@@ -13,6 +13,12 @@ export default defineConfig(({ mode }) => {
     define: {
       'import.meta.env.VITE_APP_VERSION': JSON.stringify(env.VITE_APP_VERSION || pkg.version || '1.0.0'),
     },
+    server: {
+      // The desktop app's browser reaches the dev server through a proxy whose Host
+      // header is not literally "localhost", so Vite's host check would otherwise
+      // reject every request with 400. Allow all hosts in dev only.
+      allowedHosts: true,
+    },
     plugins: [
       react(),
       tailwindcss(),
@@ -33,8 +39,8 @@ export default defineConfig(({ mode }) => {
         description: 'قُرّة — القرآن والصلاة والعبادة اليومية',
         dir: 'rtl',
         lang: 'ar',
-        theme_color: '#165b39',
-        background_color: '#f7f5ec',
+        theme_color: '#0369a1',
+        background_color: '#0f1a14',
         display: 'standalone',
         orientation: 'portrait',
         icons: [

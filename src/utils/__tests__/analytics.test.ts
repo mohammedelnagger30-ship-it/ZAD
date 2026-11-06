@@ -17,7 +17,7 @@ let rpcResult: { data: unknown; error: { message: string } | null } = { data: nu
 let rpcImpl: (name: string, args: Record<string, unknown>) => Promise<unknown> = () =>
   Promise.resolve(rpcResult);
 
-jest.unstable_mockModule('@/utils/supabaseClient', () => ({
+jest.unstable_mockModule('@/utils/sync/supabaseClient', () => ({
   supabase: {
     rpc: (name: string, args: Record<string, unknown> = {}) => {
       rpcCalls.push({ name, args });

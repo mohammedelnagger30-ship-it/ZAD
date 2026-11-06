@@ -17,7 +17,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { useEffect } from 'react';
 import { jest } from '@jest/globals';
 
-import type { PrayerKey } from '@/utils/prayerTracker';
+import type { PrayerKey } from '@/utils/prayer/prayerTracker';
 
 /** The listeners the hook registered, so a test can fire a notification at it. */
 const notificationHandlers: Record<string, (payload: unknown) => void> = {};

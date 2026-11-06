@@ -36,8 +36,8 @@ import {
   mostListened,
   type LectureRecord,
   type LectureStatus,
-} from '@/utils/lectureProgress';
-import { playLecture, type LectureQueueItem } from '@/utils/lecturePlayer';
+} from '@/utils/audio/lectureProgress';
+import { playLecture, type LectureQueueItem } from '@/utils/audio/lecturePlayer';
 
 /**
  * متابعة التقدم — where the listener stands in the الشيخ's library.

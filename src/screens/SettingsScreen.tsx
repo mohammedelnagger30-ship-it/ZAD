@@ -15,7 +15,7 @@ import { UISettingsSection } from '@/components/settings/UISettingsSection';
 import { type Settings } from '@/db/database';
 import { type ColorPalette } from '@/utils/colorThemes';
 import { type NavParams } from '@/hooks/useApp';
-import type { CloudSyncState, SignOutOptions, SignOutResult } from '@/utils/cloudSync';
+import type { CloudSyncState, SignOutOptions, SignOutResult } from '@/utils/sync/cloudSync';
 
 /** Section ids a caller may ask to be scrolled into view. */
 const SCROLLABLE_SECTIONS = new Set(['notifications']);
@@ -39,7 +39,6 @@ interface SettingsScreenProps {
   onSignOut?: (options?: SignOutOptions) => Promise<SignOutResult>;
   /** Supplied only to an allow-listed account: the way back to the dashboard. */
   onOpenAdmin?: () => void;
-  onRefreshAdmin?: () => Promise<boolean>;
   /** Supplied only to a guest — the way from here to the sign-up form. */
   onCreateAccount?: () => void;
 }
@@ -57,7 +56,6 @@ export function SettingsScreen({
   onSyncNow,
   onSignOut,
   onOpenAdmin,
-  onRefreshAdmin,
   onCreateAccount,
 }: SettingsScreenProps) {
   // Reached from the dhikr reminder notice on the home screen. Settings is a single page, so
@@ -101,7 +99,7 @@ export function SettingsScreen({
       <PageHeader
         title="إعدادات التطبيق"
         description="تخصيص المظهر، التنبيهات، مواقيت الصلاة والنسخ الاحتياطي"
-        icon={<SettingsIcon size={22} />}
+        icon={<SettingsIcon size={20} />}
       />
 
       {/* Two balanced columns on tablets/desktop. Flex, not a grid: section heights differ
@@ -116,7 +114,6 @@ export function SettingsScreen({
             onSyncNow={onSyncNow}
             onSignOut={onSignOut}
             onOpenAdmin={onOpenAdmin}
-            onRefreshAdmin={onRefreshAdmin}
             onCreateAccount={onCreateAccount}
           />
           <AppUpdatesSection />

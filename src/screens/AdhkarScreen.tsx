@@ -28,8 +28,8 @@ import {
   Vibrate,
   X,
 } from 'lucide-react';
-import { PageHeader } from '@/components/ui';
-import { Card } from '@/components/ui';
+import { Card, PageHeader } from '@/components/ui';
+import { SCREEN_METADATA } from '@/navigation/screenMetadata';
 import { toArabicNumber } from '@/data/surahs';
 import { ADHKAR_CATEGORIES, type AdhkarCategory, type Dhikr } from '@/data/adhkar';
 import { todayKey, getDayNameShort, getLast7Days } from '@/utils/dateUtils';
@@ -605,20 +605,22 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
       <PageHeader
         title="الأذكار"
         description="أذكارك وأدعيتك، مع حفظ تقدمك على الجهاز"
-        icon={<Heart size={22} />}
-        className="pb-3"
-        action={<button
-          onClick={() => setState((previous) => ({ ...previous, haptics: !previous.haptics }))}
-          aria-pressed={state.haptics}
-          aria-label={state.haptics ? 'إيقاف الاهتزاز عند العد' : 'تفعيل الاهتزاز عند العد'}
-          className={`flex h-11 w-11 items-center justify-center rounded-xl transition-smooth ${
-            state.haptics
-              ? 'bg-primary-600 text-white'
-              : 'bg-primary-100 text-primary-600 dark:bg-primary-800 dark:text-primary-200'
-          }`}
-        >
-          <Vibrate size={19} />
-        </button>}
+        icon={<SCREEN_METADATA.adhkar.icon size={20} />}
+        actions={
+          <button
+            type="button"
+            onClick={() => setState((previous) => ({ ...previous, haptics: !previous.haptics }))}
+            aria-pressed={state.haptics}
+            aria-label={state.haptics ? 'إيقاف الاهتزاز عند العد' : 'تفعيل الاهتزاز عند العد'}
+            className={`flex h-11 w-11 items-center justify-center rounded-xl transition-smooth ${
+              state.haptics
+                ? 'bg-primary-600 text-white'
+                : 'bg-primary-100 text-primary-600 dark:bg-primary-800 dark:text-primary-200'
+            }`}
+          >
+            <Vibrate size={19} />
+          </button>
+        }
       />
 
       {storageError && (

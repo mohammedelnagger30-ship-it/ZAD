@@ -13,9 +13,11 @@ interface RpcAnswer {
 }
 
 let answer: RpcAnswer = { data: null, error: null };
+let usersAnswer: RpcAnswer = { data: null, error: null };
 let shouldThrow = false;
 /** A request that never answers — the captive-portal case the gate must not wait on. */
 let neverSettles = false;
+const rpcCalls: Array<{ name: string; args: unknown }> = [];
 
 /**
  * The real client returns a query builder, not a bare promise: `isAdminAccount`
@@ -24,9 +26,11 @@ let neverSettles = false;
  * promise has no `abortSignal`, and awaiting the builder's own `then` is what
  * `fetchAdminStats` does.
  */
-function rpcStub() {
+function rpcStub(name: string, args: unknown) {
+  rpcCalls.push({ name, args });
+  const response = name === 'admin_user_directory' ? usersAnswer : answer;
   const settle = (): Promise<RpcAnswer> =>
-    shouldThrow ? Promise.reject(new Error('offline')) : Promise.resolve(answer);
+    shouldThrow ? Promise.reject(new Error('offline')) : Promise.resolve(response);
   return {
     abortSignal(signal: AbortSignal): Promise<RpcAnswer> {
       if (!neverSettles) return settle();
@@ -44,7 +48,7 @@ function rpcStub() {
   };
 }
 
-jest.unstable_mockModule('@/utils/supabaseClient', () => ({
+jest.unstable_mockModule('@/utils/sync/supabaseClient', () => ({
   supabase: {
     rpc: rpcStub,
   },
@@ -57,8 +61,10 @@ const { AdminStatsError, fetchAdminStats, isAdminAccount, normalizeAdminStats } 
 
 beforeEach(() => {
   answer = { data: null, error: null };
+  usersAnswer = { data: null, error: null };
   shouldThrow = false;
   neverSettles = false;
+  rpcCalls.length = 0;
 });
 
 describe('normalizeAdminStats', () => {
@@ -166,6 +172,85 @@ describe('fetchAdminStats', () => {
     await expect(fetchAdminStats()).rejects.toMatchObject({
       notAuthorized: true,
       missingRpc: false,
+    });
+  });
+
+  describe('admin user directory', () => {
+    it('normalizes account email and activity fields and ignores malformed rows', async () => {
+      const { normalizeAdminUserPage } = await import('@/utils/adminStats');
+      expect(normalizeAdminUserPage({
+        total: '2',
+        users: [
+          {
+            id: 'user-1',
+            email: 'reader@example.com',
+            created_at: '2026-11-01T10:00:00Z',
+            last_sign_in_at: null,
+            email_confirmed_at: '2026-11-01T10:05:00Z',
+          },
+          { id: 'user-2', email: null },
+          { email: 'invalid@example.com' },
+        ],
+      })).toEqual({
+        total: 2,
+        users: [
+          {
+            id: 'user-1',
+            email: 'reader@example.com',
+            createdAt: '2026-11-01T10:00:00Z',
+            lastSignInAt: null,
+            emailConfirmedAt: '2026-11-01T10:05:00Z',
+          },
+          {
+            id: 'user-2',
+            email: null,
+            createdAt: null,
+            lastSignInAt: null,
+            emailConfirmedAt: null,
+          },
+        ],
+      });
+    });
+
+    it('sends bounded search, filtering, sorting, and pagination to the protected RPC', async () => {
+      const { fetchAdminUsers } = await import('@/utils/adminStats');
+      usersAnswer = {
+        data: { total: 1, users: [{ id: 'user-1', email: 'reader@example.com' }] },
+        error: null,
+      };
+
+      await expect(fetchAdminUsers({
+        search: '  reader@example.com  ',
+        confirmed: true,
+        sort: 'last_sign_in',
+        offset: 75,
+        limit: 500,
+      })).resolves.toMatchObject({
+        total: 1,
+        users: [{ id: 'user-1', email: 'reader@example.com' }],
+      });
+      expect(rpcCalls[rpcCalls.length - 1]).toEqual({
+        name: 'admin_user_directory',
+        args: {
+          p_search: 'reader@example.com',
+          p_confirmed: true,
+          p_sort: 'last_sign_in',
+          p_offset: 75,
+          p_limit: 50,
+        },
+      });
+    });
+
+    it('fails closed when the protected RPC rejects a non-admin', async () => {
+      const { fetchAdminUsers } = await import('@/utils/adminStats');
+      usersAnswer = { data: null, error: { code: '42501', message: 'Not authorized' } };
+      await expect(fetchAdminUsers({
+        search: '',
+        confirmed: null,
+        sort: 'created',
+        offset: 0,
+        limit: 25,
+      })).rejects.toMatchObject({ notAuthorized: true });
     });
   });
 

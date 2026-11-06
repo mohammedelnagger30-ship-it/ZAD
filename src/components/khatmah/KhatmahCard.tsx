@@ -3,7 +3,7 @@ import { Card, Button } from '@/components/ui';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { toArabicNumber, TOTAL_QURAN_PAGES } from '@/data/surahs';
 import { todayKey } from '@/utils/dateUtils';
-import { clearKhatmah, createKhatmahPlan, describeKhatmah, loadKhatmah, saveKhatmah } from '@/utils/khatmah';
+import { clearKhatmah, createKhatmahPlan, describeKhatmah, loadKhatmah, saveKhatmah } from '@/utils/quran/khatmah';
 import type { KhatmahPlan } from '@/db/database';
 
 /**

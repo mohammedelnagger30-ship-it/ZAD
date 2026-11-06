@@ -9,7 +9,7 @@ import {
   getWordMeanings,
   type WordMeaningHit,
   type WordMeaningsProgress,
-} from '@/utils/wordMeaningsService';
+} from '@/utils/quran/wordMeaningsService';
 import { useWordMeanings } from '@/hooks/useContent';
 
 export interface SelectedQuranWord {

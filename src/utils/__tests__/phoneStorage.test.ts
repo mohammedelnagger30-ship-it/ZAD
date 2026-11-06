@@ -9,7 +9,7 @@ jest.unstable_mockModule('@capacitor/core', () => ({
   registerPlugin: () => ({ list: jest.fn(), save: jest.fn(), remove: jest.fn() }),
 }));
 
-const { phoneFileName, readPhoneManifest, writePhoneManifest } = await import('@/utils/phoneStorage');
+const { phoneFileName, readPhoneManifest, writePhoneManifest } = await import('@/utils/sync/phoneStorage');
 
 beforeEach(() => {
   window.localStorage.clear();

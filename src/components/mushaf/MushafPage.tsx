@@ -4,8 +4,12 @@ import { getSurah, getSurahsForPage, getJuzForPage, toArabicNumber } from '@/dat
 import { getHizbForPage, SAJDAH_AYAHS } from '@/data/mushafPages';
 import { getAyahs } from '@/data/quranText';
 import { splitBasmala } from '@/utils/basmala';
-import { getSurahWordMeanings } from '@/utils/wordMeaningsService';
-import { loadBundledMeaningIndex, type WordMeaningIndex } from '@/utils/wordMeaningIndex';
+import { getSurahWordMeanings } from '@/utils/quran/wordMeaningsService';
+import { loadBundledMeaningIndex, type WordMeaningIndex } from '@/utils/quran/wordMeaningIndex';
+import { isDarkPaper, type MushafPaper } from '@/components/mushaf/readerConfig';
+
+/** `${surahId}:${ayah}` for every ayah a printed mushaf sets the prostration sign after. */
+const SAJDAH_AYAHS_KEYS = new Set(SAJDAH_AYAHS.map(({ surahId, ayah }) => `${surahId}:${ayah}`));
 
 interface PageAyah {
   surahId: number;
@@ -63,7 +67,13 @@ export interface MushafPageProps {
   bookmarked?: boolean;
   /** Resolved Quran font size in px; the reader's zoom is folded in before this point. */
   fontSize: number;
-  night: boolean;
+  /** Which sheet to print on. Defaults to white. */
+  paper?: MushafPaper;
+  /**
+   * The legacy light/dark switch, kept for the callers that predate the paper
+   * picker. When `paper` is given it wins; otherwise night prints the black sheet.
+   */
+  night?: boolean;
   /** Reader default: its spacing formula at 100%. */
   lineHeight?: number;
   letterSpacing?: number;
@@ -120,7 +130,8 @@ export function MushafPage({
   readingPosition = false,
   bookmarked = false,
   fontSize,
-  night,
+  paper,
+  night = false,
   lineHeight = 1.9,
   letterSpacing = 0.01,
   wordSpacing = 0,
@@ -268,8 +279,13 @@ export function MushafPage({
     '--word-gap': wordSpacing === 0 ? '-0.025em' : `${(wordSpacing - 0.025).toFixed(3)}em`,
   } as CSSProperties;
 
+  const resolvedPaper: MushafPaper = paper ?? (night ? 'black' : 'white');
+  const paperClass = ` mushaf-page--${resolvedPaper}${
+    isDarkPaper(resolvedPaper) ? ' mushaf-page--night' : ''
+  }`;
+
   return (
-    <div className={`mushaf-page${night ? ' mushaf-page--night' : ''}`} style={pageStyle}>
+    <div className={`mushaf-page${paperClass}`} style={pageStyle}>
       {/* Ornamental frame. Decorative only, so it is hidden from assistive tech. */}
       <MushafFrameDecoration />
       {readingPosition && (
@@ -326,9 +342,6 @@ export function MushafPage({
               // The last word carries the medallion inside one unbreakable tail, so the
               // two are always cut from the line together.
               const words = ayah.text.split(' ');
-              const isSajdah = SAJDAH_AYAHS.some(
-                (sajdah) => sajdah.surahId === ayah.surahId && sajdah.ayah === ayah.ayahNumber,
-              );
               return (
                 <span key={`${ayah.surahId}:${ayah.ayahNumber}`}>
                   <span
@@ -364,8 +377,8 @@ export function MushafPage({
                           {'\u06DD'}{toArabicNumber(ayah.ayahNumber)}
                         </span>
                       </button>
-                      {isSajdah && (
-                        <span className="mushaf-sajdah" role="img" aria-label="آية سجدة">
+                      {SAJDAH_AYAHS_KEYS.has(`${ayah.surahId}:${ayah.ayahNumber}`) && (
+                        <span className="mushaf-sajdah" role="img" aria-label="آية السجدة">
                           ۩
                         </span>
                       )}

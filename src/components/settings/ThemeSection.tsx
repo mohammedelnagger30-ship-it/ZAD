@@ -1,5 +1,5 @@
-import { Fragment, useMemo, useState } from 'react';
-import { Check, Monitor, Moon, Sun, Palette } from 'lucide-react';
+import { Fragment, useState } from 'react';
+import { Check, ChevronDown, ChevronUp, Monitor, Moon, Sun, Palette } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { SectionTitle } from '@/components/settings/SectionTitle';
 import { COLOR_PALETTES, FEATURED_COLOR_PALETTE_IDS, type ColorPalette } from '@/utils/colorThemes';
@@ -13,13 +13,12 @@ interface ThemeSectionProps {
 
 export function ThemeSection({ themeMode, onChangeTheme, colorPalette, onChangeColorPalette }: ThemeSectionProps) {
   const [showAllPalettes, setShowAllPalettes] = useState(false);
-
-  const visiblePalettes = useMemo(() => {
-    if (showAllPalettes) return COLOR_PALETTES;
-    return FEATURED_COLOR_PALETTE_IDS
-      .map((id) => COLOR_PALETTES.find((palette) => palette.id === id))
-      .filter((palette): palette is (typeof COLOR_PALETTES)[number] => Boolean(palette));
-  }, [showAllPalettes]);
+  const visiblePalettes = COLOR_PALETTES.filter(
+    (palette) =>
+      showAllPalettes ||
+      palette.id === colorPalette ||
+      FEATURED_COLOR_PALETTE_IDS.includes(palette.id),
+  );
 
   return (
     <>
@@ -43,10 +42,12 @@ export function ThemeSection({ themeMode, onChangeTheme, colorPalette, onChangeC
                     onClick={() => onChangeTheme(opt.mode)}
                     className="flex flex-col items-center justify-center gap-1.5 py-3 md:py-4 rounded-2xl border transition-all duration-300"
                     style={{
-                      borderColor: active ? 'var(--brand-from, #09251a)' : 'var(--brand-from, #09251a)26',
-                      background: active ? 'var(--brand-gradient, linear-gradient(135deg, #09251a 0%, #165b39 44%, #34764f 72%, #76560e 100%))' : 'var(--surface-panel, #f7f5ec)',
-                      color: active ? 'white' : '#374151',
-                      boxShadow: active ? '0 8px 24px var(--brand-glow, rgba(21,128,61,0.30))' : 'none',
+                      borderColor: active
+                        ? 'var(--brand-from)'
+                        : 'color-mix(in srgb, var(--brand-from) 26%, transparent)',
+                      background: active ? 'var(--brand-gradient)' : 'var(--surface-panel)',
+                      color: active ? 'white' : 'rgb(var(--primary-800))',
+                      boxShadow: active ? '0 8px 24px var(--brand-glow)' : 'none',
                     }}
                   >
                     <Icon size={20} />
@@ -57,25 +58,20 @@ export function ThemeSection({ themeMode, onChangeTheme, colorPalette, onChangeC
             </div>
           </div>
 
-          <div className="border-t pt-5" style={{ borderColor: 'var(--brand-from, #09251a)26' }}>
+          <div className="border-t border-primary-200 pt-5 dark:border-primary-800">
             <div className="flex items-center gap-2 mb-3">
-              <Palette size={16} style={{ color: 'var(--brand-from, #09251a)' }} />
+              <Palette size={16} className="text-primary-600 dark:text-gold-300" />
               <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">نغمة ألوان الواجهة</p>
-              <button
-                type="button"
-                onClick={() => setShowAllPalettes((value) => !value)}
-                className="mr-auto text-[10px] font-bold text-primary-700 transition hover:text-primary-900 dark:text-gold-300 dark:hover:text-gold-200"
-              >
-                {showAllPalettes ? 'إظهار المختارة' : 'عرض المزيد'}
-              </button>
+              <span className="mr-auto text-[10px] text-primary-500 dark:text-primary-300">
+                {visiblePalettes.length} من {COLOR_PALETTES.length} سمة
+              </span>
             </div>
             <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-4 lg:grid-cols-6">
               {visiblePalettes.map((palette) => {
                 const selected = colorPalette === palette.id;
-                const qurraSelected = selected && palette.id === 'qurra';
                 return (
                   <Fragment key={palette.id}>
-                    {showAllPalettes && palette.id === 'obsidian' && (
+                    {palette.id === 'obsidian' && (
                       <p className="col-span-full pt-1 text-[11px] font-bold text-gray-500 dark:text-gray-400">
                         تدرجات داكنة مميزة
                       </p>
@@ -88,12 +84,10 @@ export function ThemeSection({ themeMode, onChangeTheme, colorPalette, onChangeC
                       onClick={() => onChangeColorPalette(palette.id)}
                       className="group relative flex flex-col items-center gap-2 rounded-2xl p-3 transition-all duration-300 hover:scale-105 active:scale-95"
                       style={{
-                        background: selected
-                          ? `linear-gradient(180deg, rgba(4,18,12,0.18), rgba(4,18,12,0.76)), ${qurraSelected ? 'linear-gradient(120deg, rgba(255,255,255,0.16), transparent 42%, rgba(236,210,137,0.2)), ' : ''}${palette.gradient}`
-                          : '#ffffff',
+                        background: selected ? palette.color : 'var(--surface-panel)',
                         boxShadow: selected
-                          ? `0 12px 32px ${palette.glow}, 0 0 0 3px ${qurraSelected ? '#d9bc68aa' : `${palette.color}66`}`
-                          : '0 4px 16px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)',
+                          ? `0 12px 32px ${palette.glow}, 0 0 0 3px ${palette.color}66`
+                          : '0 2px 8px var(--brand-glow), 0 0 0 1px rgb(var(--primary-200) / 0.6)',
                       }}
                     >
                       {/* Color preview circles with glow */}
@@ -112,22 +106,13 @@ export function ThemeSection({ themeMode, onChangeTheme, colorPalette, onChangeC
                       <div className="flex flex-col items-center text-center leading-tight">
                         <span
                           className="text-[11px] font-bold tracking-tight"
-                          style={qurraSelected
-                            ? {
-                                backgroundImage: 'linear-gradient(90deg, #f0d784 0%, #fffdf4 48%, #e5bf5a 100%)',
-                                backgroundClip: 'text',
-                                color: 'transparent',
-                                WebkitBackgroundClip: 'text',
-                                WebkitTextFillColor: 'transparent',
-                                filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.35))',
-                              }
-                            : { color: selected ? '#ffffff' : palette.color }}
+                          style={{ color: selected ? 'white' : palette.color }}
                         >
                           {palette.name}
                         </span>
                         <span
                           className="text-[8px] font-medium tracking-wider opacity-80"
-                          style={{ color: selected ? 'rgba(255,255,255,0.85)' : '#9ca3af' }}
+                          style={{ color: selected ? 'rgba(255,255,255,0.85)' : 'rgb(var(--primary-500))' }}
                         >
                           {palette.latin}
                         </span>
@@ -136,7 +121,7 @@ export function ThemeSection({ themeMode, onChangeTheme, colorPalette, onChangeC
                       {/* Checkmark for selected */}
                       {selected && (
                         <div className="absolute -top-1.5 -right-1.5 h-6 w-6 flex items-center justify-center rounded-full bg-white shadow-lg border border-white/60">
-                          <Check size={14} className="text-[var(--brand-from, #09251a)]" strokeWidth={3} />
+                          <Check size={14} className="text-primary-700 dark:text-primary-200" strokeWidth={3} />
                         </div>
                       )}
                     </button>
@@ -144,6 +129,15 @@ export function ThemeSection({ themeMode, onChangeTheme, colorPalette, onChangeC
                 );
               })}
             </div>
+            <button
+              type="button"
+              onClick={() => setShowAllPalettes((expanded) => !expanded)}
+              aria-expanded={showAllPalettes}
+              className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-primary-700 transition-colors hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-primary-200 dark:hover:bg-primary-900/50"
+            >
+              {showAllPalettes ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              {showAllPalettes ? 'عرض السمات الأساسية فقط' : `عرض بقية السمات (${COLOR_PALETTES.length - visiblePalettes.length})`}
+            </button>
 
             {/* Selected palette info strip */}
             {(() => {
@@ -153,15 +147,15 @@ export function ThemeSection({ themeMode, onChangeTheme, colorPalette, onChangeC
                 <div
                   className="mt-4 flex items-center gap-3 rounded-2xl p-4 border transition-all duration-500"
                   style={{
-                    background: `linear-gradient(115deg, rgba(3,18,12,0.82), rgba(3,18,12,0.56)), ${current.gradient}`,
+                    background: current.gradient,
                     borderColor: current.color,
                     boxShadow: `0 16px 40px ${current.glow}, inset 0 0 0 1px ${current.color}33`,
-                    borderImage: `linear-gradient(135deg, ${current.color}, ${current.accent}) 1`,
                   }}
                 >
                   <div className="flex items-center gap-2.5 flex-shrink-0">
                     <span
-                      className="h-7 w-7 rounded-full ring-3 ring-white/50 drop-shadow-lg"                      style={{ backgroundColor: current.color }}
+                      className="h-7 w-7 rounded-full ring-3 ring-white/50 drop-shadow-lg"
+                      style={{ backgroundColor: current.color }}
                     />
                     <span
                       className="h-7 w-7 rounded-full ring-3 ring-white/50 drop-shadow-lg"

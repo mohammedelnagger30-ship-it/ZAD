@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Moon, Sunrise, MapPin, BarChart3, Sun, Sunset, Check, X, Clock, Sparkles, BookOpen, ChevronLeft, Minus, Plus } from 'lucide-react';
 import { Card, Button, Badge, SectionHeader, EmptyState, PageHeader } from '@/components/ui';
+import { SCREEN_METADATA } from '@/navigation/screenMetadata';
 import { PrayerStatusSheet } from '@/components/PrayerStatusSheet';
 import { PrayerWeekGrid } from '@/components/PrayerWeekGrid';
 import { QiblaCompass } from '@/components/QiblaCompass';
@@ -17,7 +18,7 @@ import {
   type IqamahPrayerKey,
   CITY_PRESETS,
   isEgyptianLocation,
-} from '@/utils/prayerTimes';
+} from '@/utils/prayer/prayerTimes';
 import { useCountdownClock, usePrayerSchedule } from '@/hooks/usePrayerSchedule';
 import { useDialogBehavior } from '@/hooks/useDialogBehavior';
 import { trustedNow } from '@/utils/clock';
@@ -37,7 +38,7 @@ import {
   canEditPrayerDate,
   type PrayerStats,
   type DayPrayerGrid,
-} from '@/utils/prayerTracker';
+} from '@/utils/prayer/prayerTracker';
 import { todayKey, formatArabicDate, getHijriDate } from '@/utils/dateUtils';
 
 interface PrayerScreenProps {
@@ -319,7 +320,7 @@ export function PrayerScreen({ settings, onSaveSettings, navigate, params }: Pra
   if (!prayerResult) {
     return (
       <div className="space-y-4 pb-4">
-        <PageHeader title="مواقيت الصلاة" icon={<Clock size={22} />} className="pb-3" />
+        <PageHeader title="مواقيت الصلاة" icon={<SCREEN_METADATA.prayer.icon size={20} />} />
         <GuideBanner navigate={navigate} />
         <EmptyState
           icon={<MapPin size={48} />}
@@ -351,14 +352,17 @@ export function PrayerScreen({ settings, onSaveSettings, navigate, params }: Pra
       <PageHeader
         title="مواقيت الصلاة"
         description={`${formatArabicDate(today)} — ${getHijriDate(today, settings.hijriAdjustment)}`}
-        icon={<Clock size={22} />}
-        action={<button
-          onClick={() => setShowLocation(true)}
-          className="flex max-w-[45vw] items-center gap-2 truncate rounded-2xl border-2 border-primary-200 bg-white px-4 py-2.5 text-sm font-semibold text-primary-700 shadow-md transition-all hover:border-primary-400 hover:shadow-lg dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-200 dark:hover:border-primary-600"
-        >
-          <MapPin size={18} />
-          {settings.cityName || 'الموقع'}
-        </button>}
+        icon={<SCREEN_METADATA.prayer.icon size={20} />}
+        actions={
+          <button
+            type="button"
+            onClick={() => setShowLocation(true)}
+            className="flex min-h-11 max-w-[45vw] items-center gap-2 truncate rounded-2xl border border-primary-200 bg-panel px-4 text-sm font-semibold text-primary-700 shadow-sm transition-all hover:border-primary-400 hover:shadow-md dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-200 dark:hover:border-primary-600"
+          >
+            <MapPin size={18} />
+            {settings.cityName || 'الموقع'}
+          </button>
+        }
       />
 
       <GuideBanner navigate={navigate} />

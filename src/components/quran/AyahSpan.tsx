@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { toArabicNumber } from '@/data/surahs';
-import { highlightWash } from '@/utils/ayahHighlights';
+import { highlightWash } from '@/utils/quran/ayahHighlights';
 import type { AyahText } from '@/data/quranText';
 
 interface AyahSpanProps {
@@ -13,6 +13,12 @@ interface AyahSpanProps {
   hideWordByWord: boolean;
   selected: boolean;
   activeAudio: boolean;
+  /**
+   * The ayah carries the prostration. The sign is the one a printed mushaf sets — the
+   * rosette in the mushaf's own face, no word beside it — and it is placed inside the
+   * ayah's unbreakable tail so it is cut from the line with the medallion instead of
+   * being left standing at the head of the next one.
+   */
   sajdah?: boolean;
   /**
    * Which words of this ayah carry a gloss, keyed `${surahId}:${ayahNumber}`.
@@ -131,8 +137,8 @@ export function AyahSpan({
       {toArabicNumber(ayah.ayahNumber)}
     </span>
   );
-  const sajdahMark = sajdah ? (
-    <span className="mushaf-sajdah" role="img" aria-label="آية سجدة">
+  const sajdahSign = sajdah ? (
+    <span className="mushaf-sajdah" role="img" aria-label="آية السجدة">
       ۩
     </span>
   ) : null;
@@ -225,7 +231,7 @@ export function AyahSpan({
                 {tailWord}
               </span>
               {mark}
-              {sajdahMark}
+              {sajdahSign}
             </span>
           </>
         ) : hideWordByWord ? (
@@ -234,7 +240,7 @@ export function AyahSpan({
             <span className="mushaf-ayah-tail">
               {word(tailWord, words.length - 1)}
               {mark}
-              {sajdahMark}
+              {sajdahSign}
             </span>
           </>
         ) : (
@@ -243,7 +249,7 @@ export function AyahSpan({
             <span className="mushaf-ayah-tail">
               {readingWord(tailWord, words.length - 1)}
               {mark}
-              {sajdahMark}
+              {sajdahSign}
             </span>
           </>
         )}

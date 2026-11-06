@@ -148,67 +148,9 @@ export async function generateDailyTasks(date: Date = trustedNow()): Promise<voi
 }
 
 export async function getTodayTasks(): Promise<DailyTask[]> {
-  const now = trustedNow();
-  const dateKey = formatDateKey(now);
+  const dateKey = todayKey();
   const tasks = await db.tasks.where('date').equals(dateKey).toArray();
-  const planIds = [...new Set(tasks.map((task) => task.planId))];
-  const plans = await db.plans.bulkGet(planIds);
-  const plansById = new Map(
-    plans.flatMap((plan) => plan?.id === undefined ? [] : [[plan.id, plan] as const]),
-  );
-  const orphanedTaskIds = tasks
-    .filter((task) => {
-      const plan = plansById.get(task.planId);
-      return !plan ||
-        plan.syncPlaceholder ||
-        plan.type !== task.type ||
-        (!!task.planSyncId && !!plan.syncId && task.planSyncId !== plan.syncId);
-    })
-    .flatMap((task) => task.id === undefined ? [] : [task.id]);
-  if (orphanedTaskIds.length > 0) {
-    await db.tasks.bulkDelete(orphanedTaskIds);
-  }
-  return filterTasksForVisiblePlans(tasks, plans, now).sort((a, b) =>
-    a.scheduledTime.localeCompare(b.scheduledTime),
-  );
-}
-
-export function filterTasksForVisiblePlans(
-  tasks: DailyTask[],
-  plans: Array<HifzPlan | undefined>,
-  date: Date,
-): DailyTask[] {
-  const visiblePlans = new Map(
-    plans.flatMap((plan) =>
-      plan &&
-      plan.id !== undefined &&
-      plan.active &&
-      !plan.syncPlaceholder &&
-      plan.daysOfWeek.includes(date.getDay())
-        ? [[plan.id, plan] as const]
-        : [],
-    ),
-  );
-  return tasks.filter((task) => {
-    const plan = visiblePlans.get(task.planId);
-    return !!plan &&
-      task.type === plan.type &&
-      (!task.planSyncId || !plan.syncId || task.planSyncId === plan.syncId);
-  });
-}
-
-export async function deletePlanAndUnfinishedTasks(planId: number): Promise<void> {
-  if (!Number.isInteger(planId) || planId < 1) {
-    throw new RangeError('معرّف الخطة غير صالح للحذف.');
-  }
-
-  await db.transaction('rw', db.plans, db.tasks, async () => {
-    const plan = await db.plans.get(planId);
-    if (!plan) return;
-
-    await db.tasks.where('planId').equals(planId).delete();
-    await db.plans.delete(planId);
-  });
+  return tasks.sort((a, b) => a.scheduledTime.localeCompare(b.scheduledTime));
 }
 
 export async function getRecentTasks(days = 30): Promise<DailyTask[]> {
@@ -267,6 +209,53 @@ export async function unsnoozeTask(taskId: number): Promise<void> {
     status: 'pending',
     snoozedUntil: undefined,
   });
+}
+
+export function taskNavigationParams(task: DailyTask): Record<string, unknown> | null {
+  if (task.portion.startsWith('surah:')) {
+    const [, idText, range] = task.portion.split(':');
+    const surahId = Number(idText);
+    if (!Number.isFinite(surahId)) return null;
+    const surah = getSurah(surahId);
+    if (!surah) return null;
+    let ayah = 1;
+    if (range) {
+      const [from] = range.split('-');
+      const parsed = Number(from);
+      if (Number.isFinite(parsed) && parsed >= 1) ayah = Math.min(surah.ayahCount, parsed);
+    }
+    return { openSurahId: surahId, openAyah: ayah };
+  }
+  if (task.portion.startsWith('juz:')) {
+    const juz = JUZ_INFO.find((item) => item.id === Number(task.portion.slice('juz:'.length)));
+    if (!juz) return null;
+    return { openPage: juz.startPage };
+  }
+  if (task.portion.startsWith('page:')) {
+    const page = Number(task.portion.slice('page:'.length));
+    if (!Number.isFinite(page)) return null;
+    return { openPage: page };
+  }
+  return null;
+}
+
+export function taskTargetLabel(task: DailyTask): string {
+  if (task.portion.startsWith('surah:')) {
+    const [, , range] = task.portion.split(':');
+    if (range) {
+      const [from] = range.split('-');
+      return `آية ${from}`;
+    }
+    return 'من البداية';
+  }
+  if (task.portion.startsWith('juz:')) {
+    const juz = JUZ_INFO.find((item) => item.id === Number(task.portion.slice('juz:'.length)));
+    return juz ? `صفحة ${juz.startPage}` : '';
+  }
+  if (task.portion.startsWith('page:')) {
+    return `صفحة ${task.portion.slice('page:'.length)}`;
+  }
+  return '';
 }
 
 export async function markMissedTasks(): Promise<void> {

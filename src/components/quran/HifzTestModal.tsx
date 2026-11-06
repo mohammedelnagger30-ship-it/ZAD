@@ -4,7 +4,7 @@ import { Card } from '@/components/ui';
 import { useOverlayDismiss } from '@/hooks/useOverlayDismiss';
 import { toArabicNumber, type SurahMeta } from '@/data/surahs';
 import { getAyah } from '@/data/quranText';
-import { ensureSource, playAyah, stop } from '@/utils/recitationEngine';
+import { ensureSource, playAyah, stop } from '@/utils/audio/recitationEngine';
 import {
   buildListenQuestion,
   buildQuizQuestion,

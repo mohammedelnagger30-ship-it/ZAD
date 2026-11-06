@@ -317,6 +317,52 @@ export async function installedCollectionList(): Promise<HadithCollection[]> {
 }
 
 // ---------------------------------------------------------------------------
+// Snapshot for synchronous callers
+// ---------------------------------------------------------------------------
+//
+// The home screen shows a hadith of the day inline and should not have to become a
+// loading state to do it. This snapshot holds the records of whatever has been parsed so
+// far, so that screen can read it synchronously.
+
+const snapshot = new Set<string>();
+const snapshotRecords = new Map<string, HadithRecord>();
+
+function addToSnapshot(collection: HadithCollection): void {
+  snapshot.add(collection.id);
+  for (const hadith of collection.hadiths) {
+    // Delete first: re-opening a collection must move its records to the *newest* end
+    // (Map keeps an existing key's original position), so eviction always sacrifices the
+    // books nobody has touched lately and the default book is refreshed on every open.
+    snapshotRecords.delete(hadith.id);
+    snapshotRecords.set(hadith.id, hadith);
+  }
+  // Bound the snapshot so it cannot grow into every collection the user ever opened —
+  // but keep the bound above the largest single book (صحيح البخاري, 7580 hadiths): the
+  // default collection is 7360 records, and if the cap sliced it in half, "hadith of the
+  // day" would pick from a pool whose size depends on browsing history and the daily
+  // card would change between launches. One whole book always fits, so the pool is
+  // complete whenever the default book has been opened.
+  while (snapshotRecords.size > 8000) {
+    const oldest = snapshotRecords.keys().next();
+    if (oldest.done) break;
+    snapshotRecords.delete(oldest.value);
+  }
+}
+
+/** Every record currently held in memory. Empty until something has been opened. */
+export function loadedHadithRecords(): HadithRecord[] {
+  return [...snapshotRecords.values()];
+}
+
+/**
+ * A hadith for today, chosen from what is on the device so it works offline.
+ * Returns null when nothing has been opened yet.
+ */
+export function hadithOfDay(): HadithRecord | null {
+  return hadithOfDayFrom(loadedHadithRecords());
+}
+
+// ---------------------------------------------------------------------------
 // Downloading
 // ---------------------------------------------------------------------------
 
@@ -354,6 +400,10 @@ export async function getHadithCollection(
   const hit = memoryCache.get(id);
   if (hit) {
     touchCache(id, hit);
+    // Refresh the snapshot too, not just the LRU: the home card reads the snapshot
+    // synchronously, and without this re-opening the default book would leave its records
+    // wherever older browsing had pushed them — half-evicted, so the daily pick drifted.
+    addToSnapshot(hit);
     return hit;
   }
 
@@ -361,6 +411,7 @@ export async function getHadithCollection(
   if (existing !== null) {
     const parsed = parseCollection(id, existing);
     touchCache(id, parsed);
+    addToSnapshot(parsed);
     return parsed;
   }
 
@@ -397,6 +448,7 @@ export async function getHadithCollection(
   const raw = await readText(key);
   const parsed = parseCollection(id, raw ?? '');
   touchCache(id, parsed);
+  addToSnapshot(parsed);
   return parsed;
 }
 
@@ -420,103 +472,21 @@ export function clearHadithMemory(): void {
   memoryCache.clear();
 }
 
-const SHORT_HADITH_MAX_CHARS = 180;
-let dailyHadithCache: { key: string; hadith: HadithRecord | null } | null = null;
-
-interface RankedHadith {
-  hadith: HadithRecord;
-  rank: number;
-}
-
-interface HadithPool {
-  any: RankedHadith | null;
-  sahih: RankedHadith | null;
-}
-
-function dayOfYear(date: Date): number {
-  return Math.floor(
-    (Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) -
-      Date.UTC(date.getFullYear(), 0, 0)) /
-      86400000,
+/**
+ * Picks a hadith for today from a pool, deterministically by day of year.
+ *
+ * The default collection leads whenever it is on the device: the home card is the site's
+ * daily voice, and that voice is صحيح مسلم — not whichever book happened to be parsed
+ * most recently. Within the pool, graded-sahih entries are preferred: a "hadith of the
+ * day" that is weak or fabricated would be misleading, so an ungraded pool is only used
+ * when nothing has been graded.
+ */
+export function hadithOfDayFrom(hadiths: HadithRecord[], date = new Date()): HadithRecord | null {
+  if (hadiths.length === 0) return null;
+  const dayOfYear = Math.floor(
+    (date.getTime() - new Date(date.getFullYear(), 0, 0).getTime()) / 86400000,
   );
-}
-
-function dateKey(date: Date): string {
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${date.getFullYear()}-${month}-${day}`;
-}
-
-function dailyRank(date: Date, id: string): number {
-  let hash = 2166136261;
-  for (const character of `${dateKey(date)}:${id}`) {
-    hash = Math.imul(hash ^ character.charCodeAt(0), 16777619) >>> 0;
-  }
-  return hash;
-}
-
-/**
- * Alternates short and longer narrations by calendar day and prefers sahih
- * reports within each length group. Ranking by the date and record id keeps
- * the choice stable for the whole day without retaining every downloaded book.
- */
-export async function selectDailyHadith(
-  hadiths: Iterable<HadithRecord> | AsyncIterable<HadithRecord>,
-  date: Date,
-): Promise<HadithRecord | null> {
-  const pools: Record<'short' | 'long' | 'all', HadithPool> = {
-    short: { any: null, sahih: null },
-    long: { any: null, sahih: null },
-    all: { any: null, sahih: null },
-  };
-  const shortDay = dayOfYear(date) % 2 === 1;
-
-  for await (const hadith of hadiths) {
-    const bucket = Array.from(hadith.text).length <= SHORT_HADITH_MAX_CHARS ? 'short' : 'long';
-    const rank = dailyRank(date, hadith.id);
-    for (const pool of [pools[bucket], pools.all]) {
-      if (!pool.any || rank < pool.any.rank) pool.any = { hadith, rank };
-      if (hadith.grades.includes('sahih') && (!pool.sahih || rank < pool.sahih.rank)) {
-        pool.sahih = { hadith, rank };
-      }
-    }
-  }
-
-  const preferred = pools[shortDay ? 'short' : 'long'];
-  return preferred.sahih?.hadith
-    ?? preferred.any?.hadith
-    ?? pools.all.sahih?.hadith
-    ?? pools.all.any?.hadith
-    ?? null;
-}
-
-async function* installedHadiths(collectionIds: string[]): AsyncGenerator<HadithRecord> {
-  for (const id of collectionIds) {
-    const collection = await getHadithCollection(id);
-    yield* collection.hadiths;
-  }
-}
-
-/**
- * Chooses from every collection already downloaded to this device. A fresh
- * install seeds the bundled Muslim collection once; additional books are
- * never fetched just to fill the daily card.
- */
-export async function getDailyHadith(date = new Date()): Promise<HadithRecord | null> {
-  const installed = await installedCollections();
-  let collectionIds = HADITH_BOOKS
-    .filter((book) => installed.has(book.id))
-    .map((book) => book.id);
-
-  if (collectionIds.length === 0) {
-    await getHadithCollection(HADITH_OF_DAY_BOOK);
-    collectionIds = [HADITH_OF_DAY_BOOK];
-  }
-
-  const key = `${dateKey(date)}:${collectionIds.join(',')}`;
-  if (dailyHadithCache?.key === key) return dailyHadithCache.hadith;
-
-  const hadith = await selectDailyHadith(installedHadiths(collectionIds), date);
-  dailyHadithCache = { key, hadith };
-  return hadith;
+  const sahih = hadiths.filter((h) => h.grades.includes('sahih'));
+  const pool = sahih.length > 0 ? sahih : hadiths;
+  return pool[dayOfYear % pool.length];
 }

@@ -1,39 +1,7 @@
-import { BookOpen } from 'lucide-react';
 import type { ScreenName } from '@/hooks/useApp';
-import { SCREEN_ICONS } from '@/components/screenIcons';
-import type { LucideIcon } from 'lucide-react';
+import { MAIN_TAB_SCREENS, MORE_TAB_SCREENS, SCREEN_METADATA } from '@/navigation/screenMetadata';
 
-interface NavItem {
-  screen: ScreenName;
-  label: string;
-  icon: LucideIcon;
-}
-
-const navItems: NavItem[] = [
-  { screen: 'home', label: 'الرئيسية', icon: SCREEN_ICONS.home },
-  { screen: 'quran', label: 'القرآن', icon: SCREEN_ICONS.quran },
-  { screen: 'prayer', label: 'الصلاة', icon: SCREEN_ICONS.prayer },
-  { screen: 'hadith', label: 'الأحاديث', icon: SCREEN_ICONS.hadith },
-  { screen: 'more', label: 'المزيد', icon: SCREEN_ICONS.more },
-];
-
-/** Screens reachable from the "المزيد" tab — they all highlight that tab as active. */
-const MORE_TAB_SCREENS: ScreenName[] = [
-  'more',
-  'planner',
-  'progress',
-  'adhkar',
-  'tasbih',
-  'settings',
-  'library',
-  'salah',
-  'bookmarks',
-  'search',
-  'prophet',
-  'huwaini',
-  'sunnah',
-  'nawafil',
-];
+const QuranIcon = SCREEN_METADATA.quran.icon;
 
 interface BottomNavProps {
   current: ScreenName;
@@ -50,13 +18,14 @@ export function BottomNav({ current, onNavigate }: BottomNavProps) {
       className="fixed bottom-2.5 left-1/2 z-50 w-[calc(100%-1.5rem)] max-w-lg -translate-x-1/2 rounded-2xl border border-primary-200/80 bg-panel/92 shadow-[0_12px_36px_-12px_var(--brand-glow)] backdrop-blur-xl dark:border-primary-800/80 dark:bg-raised/92 safe-bottom md:hidden"
     >
       <div className="flex items-center justify-around gap-1 px-2 pt-1.5 pb-1">
-        {navItems.map((item) => {
+        {MAIN_TAB_SCREENS.map((screen) => {
+          const item = SCREEN_METADATA[screen];
           const Icon = item.icon;
-          const isActive = activeScreen === item.screen;
+          const isActive = activeScreen === screen;
           return (
             <button
-              key={item.screen}
-              onClick={() => onNavigate(item.screen)}
+              key={screen}
+              onClick={() => onNavigate(screen)}
               aria-current={isActive ? 'page' : undefined}
               className={`group relative flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-from)] dark:focus-visible:ring-[var(--brand-to)] ${
                 isActive
@@ -100,16 +69,17 @@ export function BottomNav({ current, onNavigate }: BottomNavProps) {
         style={{ background: 'var(--brand-gradient)' }}
         aria-hidden="true"
       >
-        <BookOpen size={23} />
+        <QuranIcon size={23} />
       </div>
       <div className="flex w-full flex-col items-center gap-2 px-2">
-        {navItems.map((item) => {
+        {MAIN_TAB_SCREENS.map((screen) => {
+          const item = SCREEN_METADATA[screen];
           const Icon = item.icon;
-          const isActive = activeScreen === item.screen;
+          const isActive = activeScreen === screen;
           return (
             <button
-              key={item.screen}
-              onClick={() => onNavigate(item.screen)}
+              key={screen}
+              onClick={() => onNavigate(screen)}
               aria-current={isActive ? 'page' : undefined}
               className={`flex min-h-[4.25rem] w-full flex-col items-center justify-center gap-1.5 rounded-2xl text-[0.6875rem] transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-from)] dark:focus-visible:ring-[var(--brand-to)] lg:gap-2 lg:text-xs xl:text-sm ${
                 isActive

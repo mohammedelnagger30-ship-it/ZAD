@@ -8,7 +8,7 @@ import {
   subscribeLectureProgress,
   type LectureInsight,
   type LectureStatus,
-} from '@/utils/lectureProgress';
+} from '@/utils/audio/lectureProgress';
 
 /**
  * كيف يرى المستمع موضعه في محاضرة واحدة، داخل القائمة نفسها.

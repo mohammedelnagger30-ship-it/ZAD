@@ -11,7 +11,7 @@ import {
   getLastBackupDate,
   getLastBackupFailure,
   type AutoBackupConfig,
-} from '@/utils/autoBackup';
+} from '@/utils/sync/autoBackup';
 
 export function AutoBackupSection() {
   const { confirm, dialog } = useConfirm();

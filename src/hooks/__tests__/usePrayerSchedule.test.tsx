@@ -40,7 +40,7 @@ jest.unstable_mockModule('@/utils/clock', () => ({
 }));
 
 const { usePrayerSchedule } = await import('@/hooks/usePrayerSchedule');
-const { calculatePrayerTimesForDay, calendarDayInZone } = await import('@/utils/prayerTimes');
+const { calculatePrayerTimesForDay, calendarDayInZone } = await import('@/utils/prayer/prayerTimes');
 
 type Schedule = ReturnType<typeof usePrayerSchedule>;
 

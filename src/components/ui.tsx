@@ -56,6 +56,49 @@ interface SectionHeaderProps {
   action?: ReactNode;
 }
 
+interface PageHeaderProps {
+  title: string;
+  description?: string;
+  icon?: ReactNode;
+  actions?: ReactNode;
+  eyebrow?: string;
+}
+
+export function PageHeader({ title, description, icon, actions, eyebrow }: PageHeaderProps) {
+  return (
+    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-primary-100 pb-3.5 dark:border-primary-800/80">
+      <div className="flex min-w-0 items-center gap-3">
+        {icon && <IconWell>{icon}</IconWell>}
+        <div className="min-w-0">
+          {eyebrow && (
+            <p className="mb-0.5 text-xs font-semibold tracking-wide text-primary-600 dark:text-gold-300">
+              {eyebrow}
+            </p>
+          )}
+          <h1 className="text-xl font-bold text-primary-900 dark:text-primary-50 sm:text-2xl">{title}</h1>
+          {description && (
+            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-primary-700/75 dark:text-primary-300/80">
+              {description}
+            </p>
+          )}
+        </div>
+      </div>
+      {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+    </header>
+  );
+}
+
+export function IconWell({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-700 dark:bg-primary-900/60 dark:text-gold-300 ${className}`}
+    >
+      {children}
+    </span>
+  );
+}
+
 export function SectionHeader({ title, icon, action }: SectionHeaderProps) {
   return (
     <div className="flex items-center justify-between mb-3">
@@ -68,53 +111,6 @@ export function SectionHeader({ title, icon, action }: SectionHeaderProps) {
           it was — the extra area lands in the gaps that already surround it. */}
       {action && <div className="flex items-center [&>button]:-my-2 [&>button]:py-2.5">{action}</div>}
     </div>
-  );
-}
-
-interface PageHeaderProps {
-  title: string;
-  description?: string;
-  icon?: ReactNode;
-  action?: ReactNode;
-  className?: string;
-}
-
-export function PageHeader({ title, description, icon, action, className = '' }: PageHeaderProps) {
-  return (
-    <header className={`flex flex-wrap items-center justify-between gap-3 border-b border-primary-100 pb-4 dark:border-primary-800 ${className}`}>
-      <div className="flex min-w-0 items-center gap-2.5">
-        {icon && <span className="app-accent-icon shrink-0">{icon}</span>}
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-primary-900 dark:text-primary-50 md:text-3xl">{title}</h1>
-          {description && <p className="mt-1 text-xs text-primary-700/80 dark:text-primary-300">{description}</p>}
-        </div>
-      </div>
-      {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
-    </header>
-  );
-}
-
-interface IconWellProps {
-  children: ReactNode;
-  tone?: 'primary' | 'accent';
-  size?: 'md' | 'lg';
-  className?: string;
-}
-
-export function IconWell({ children, tone = 'primary', size = 'md', className = '' }: IconWellProps) {
-  const tones = {
-    primary: 'bg-primary-100 text-primary-700 dark:bg-primary-900/60 dark:text-primary-200',
-    accent: 'bg-accent-100 text-accent-700 dark:bg-accent-900/50 dark:text-accent-200',
-  };
-  const sizes = {
-    md: 'h-11 w-11 rounded-xl',
-    lg: 'h-12 w-12 rounded-2xl',
-  };
-
-  return (
-    <span className={`inline-flex shrink-0 items-center justify-center ${tones[tone]} ${sizes[size]} ${className}`}>
-      {children}
-    </span>
   );
 }
 

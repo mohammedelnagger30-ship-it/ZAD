@@ -8,9 +8,9 @@ const config: CapacitorConfig = {
     // Console output reaches logcat in release builds too, so a scheduling problem can
     // be read off the device instead of guessed at.
     loggingBehavior: 'production',
-    // TEMPORARY: lets `chrome://inspect` open the WebView for on-device diagnosis of
-    // the notification queue. Revert before shipping.
-    webContentsDebuggingEnabled: true,
+    // Disabled in release: on-device debugging of the WebView is a development aid,
+    // not something to ship to end users.
+    webContentsDebuggingEnabled: false,
   },
   plugins: {
     LocalNotifications: {

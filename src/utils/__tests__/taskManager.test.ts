@@ -6,9 +6,9 @@
  * mocking the database (see jest.config.js for setup).
  */
 import { jest } from '@jest/globals';
-import { describePortion, computeStreak, filterTasksForVisiblePlans } from '../taskManager';
+import { describePortion, computeStreak } from '../taskManager';
 import { formatDateKey } from '../dateUtils';
-import type { DailyTask, HifzPlan } from '@/db/database';
+import type { DailyTask } from '@/db/database';
 
 // Mock the surahs module
 jest.mock('@/data/surahs', () => ({
@@ -35,63 +35,6 @@ jest.mock('@/db/database', () => ({
 }));
 
 describe('taskManager', () => {
-  describe('filterTasksForVisiblePlans', () => {
-    const plan = (id: number, syncPlaceholder = false): HifzPlan => ({
-      id,
-      name: `خطة ${id}`,
-      type: 'hifz',
-      portion: 'surah:1',
-      daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-      time: '06:00',
-      createdAt: 0,
-      active: true,
-      syncPlaceholder,
-    });
-
-    const todayTask = (planId: number): DailyTask => ({
-      planId,
-      date: '2026-03-10',
-      type: 'hifz',
-      portion: 'surah:1',
-      scheduledTime: '06:00',
-      status: 'pending',
-      createdAt: 0,
-    });
-
-    it('hides tasks left behind by a deleted plan and synced placeholder plans', () => {
-      expect(
-        filterTasksForVisiblePlans(
-          [todayTask(1), todayTask(2), todayTask(3)],
-          [plan(1), undefined, plan(3, true)],
-          new Date(2026, 2, 10),
-        ),
-      ).toEqual([todayTask(1)]);
-    });
-
-    it('shows no tasks when none of their plans still exist', () => {
-      expect(filterTasksForVisiblePlans([todayTask(1), todayTask(2)], [], new Date(2026, 2, 10))).toEqual([]);
-    });
-
-    it('hides tasks from plans that are inactive or not scheduled for today', () => {
-      expect(
-        filterTasksForVisiblePlans([todayTask(1)], [{ ...plan(1), active: false }], new Date(2026, 2, 10)),
-      ).toEqual([]);
-      expect(
-        filterTasksForVisiblePlans([todayTask(1)], [{ ...plan(1), daysOfWeek: [1] }], new Date(2026, 2, 10)),
-      ).toEqual([]);
-    });
-
-    it('hides tasks attached to a different synced plan identity', () => {
-      expect(
-        filterTasksForVisiblePlans(
-          [{ ...todayTask(1), planSyncId: 'old-plan' }],
-          [{ ...plan(1), syncId: 'current-plan' }],
-          new Date(2026, 2, 10),
-        ),
-      ).toEqual([]);
-    });
-  });
-
   describe('describePortion', () => {
     it('should describe a full surah', () => {
       expect(describePortion('surah:1')).toBe('سورة الفاتحة كاملة');

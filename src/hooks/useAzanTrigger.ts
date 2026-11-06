@@ -8,12 +8,12 @@ import {
   getNextPrayer,
   getPrayerTimeZone,
   type PrayerTimeInfo,
-} from '@/utils/prayerTimes';
+} from '@/utils/prayer/prayerTimes';
 import { hasNotificationPermission } from '@/utils/notifications';
 import { onAdhanOverlay } from '@/utils/adhanOverlay';
 import { onClockChange, trustedNow, trustedNowMs } from '@/utils/clock';
 import { isNativeOpenFresh } from '@/utils/azanOpenPolicy';
-import type { PrayerKey } from '@/utils/prayerTracker';
+import type { PrayerKey } from '@/utils/prayer/prayerTracker';
 
 export interface AzanTriggerState {
   isOpen: boolean;

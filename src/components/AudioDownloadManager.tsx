@@ -13,16 +13,16 @@ import {
   subscribeToContent,
   type AudioTrackInfo,
 } from '@/utils/contentStore';
-import { exportAudioTrack } from '@/utils/audioFileExport';
+import { exportAudioTrack } from '@/utils/audio/audioFileExport';
 import {
   getRecitationState,
   setTrack,
   stop,
   subscribeRecitation,
   toggleSurah,
-} from '@/utils/recitationEngine';
+} from '@/utils/audio/recitationEngine';
 import { useConfirm } from '@/hooks/useConfirm';
-import { downloadSurahAudio } from '@/utils/quranAudio';
+import { downloadSurahAudio } from '@/utils/audio/quranAudio';
 import {
   allSurahIds,
   countSurahs,

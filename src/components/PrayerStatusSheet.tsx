@@ -6,7 +6,7 @@ import {
   PRAYER_LABELS_AR,
   type PrayerKey,
   type PrayerStatus,
-} from '@/utils/prayerTracker';
+} from '@/utils/prayer/prayerTracker';
 
 interface PrayerStatusSheetProps {
   prayer: PrayerKey;

@@ -5,7 +5,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useDialogBehavior } from '@/hooks/useDialogBehavior';
 import { db, type DailyTask, type HifzPlan, type HifzProgress, type HifzReview, type ProgressType, type TaskStatus } from '@/db/database';
 import { SURAHS, JUZ_INFO, getSurah, toArabicNumber, TOTAL_QURAN_PAGES } from '@/data/surahs';
-import { describePortion, getRecentTasks, markMissedTasks, suggestPlan, generateDailyTasks, deletePlanAndUnfinishedTasks } from '@/utils/taskManager';
+import { describePortion, getRecentTasks, markMissedTasks, suggestPlan, generateDailyTasks } from '@/utils/taskManager';
 import { rescheduleAllNotifications } from '@/utils/notificationScheduler';
 import { formatArabicDate, getDayNameShort } from '@/utils/dateUtils';
 import { trustedNowMs } from '@/utils/clock';
@@ -96,7 +96,6 @@ export function PlannerScreen({ navigate }: {
   const [goalText, setGoalText] = useState('');
   /** The plan awaiting delete confirmation — a trash tap used to remove it instantly. */
   const [planPendingDelete, setPlanPendingDelete] = useState<HifzPlan | null>(null);
-  const [planDeleteError, setPlanDeleteError] = useState('');
   const goalSuggestion = useMemo(
     () => (goalText.trim() ? suggestPlan(goalText) : null),
     [goalText],
@@ -126,26 +125,26 @@ export function PlannerScreen({ navigate }: {
   // Regenerating today's tasks and rebuilding the notification queue are both
   // slow, and neither one changes what is already on screen. Kick them off and
   // refresh the visible lists immediately so a toggle or a delete feels instant.
-  const refreshTodayTasks = async () => {
-    try {
-      await generateDailyTasks();
-      await rescheduleAllNotifications();
-    } catch (error) {
-      console.error('Refreshing tasks failed:', error);
-    }
+  const refreshTodayTasks = () => {
+    void (async () => {
+      try {
+        await generateDailyTasks();
+        await rescheduleAllNotifications();
+      } catch (error) {
+        console.error('Refreshing tasks failed:', error);
+      }
+    })();
   };
 
   const deletePlan = async (id: number) => {
+    setPlans((prev) => prev.filter((plan) => plan.id !== id));
     try {
-      await deletePlanAndUnfinishedTasks(id);
-      await refreshTodayTasks();
-      await load();
-      setPlanPendingDelete(null);
-      setPlanDeleteError('');
+      await db.plans.delete(id);
     } catch (error) {
       console.error('Deleting plan failed:', error);
-      setPlanDeleteError('تعذّر حذف الخطة الآن. تحقّق من الاتصال وحاول مرة أخرى.');
     }
+    refreshTodayTasks();
+    void load();
   };
 
   const toggleActive = async (plan: HifzPlan) => {
@@ -315,10 +314,7 @@ export function PlannerScreen({ navigate }: {
           <PlanCard
             key={plan.id}
             plan={plan}
-            onDelete={() => {
-              setPlanDeleteError('');
-              setPlanPendingDelete(plan);
-            }}
+            onDelete={() => setPlanPendingDelete(plan)}
             onToggle={() => toggleActive(plan)}
           />
         ))}
@@ -439,23 +435,21 @@ export function PlannerScreen({ navigate }: {
         title="حذف الخطة؟"
         description={
           planPendingDelete
-            ? `${planDeleteError ? `${planDeleteError} ` : ''}ستُحذف خطة «${planPendingDelete.name}» وكل مهامها المرتبطة، وستُعاد جدولة التنبيهات.`
+            ? `ستُحذف خطة «${planPendingDelete.name}» ومهامها غير المنجزة، وستُعاد جدولة التنبيهات. لا يمكن التراجع.`
             : undefined
         }
         confirmLabel="حذف الخطة"
         onConfirm={async () => {
-          if (planPendingDelete?.id !== undefined) await deletePlan(planPendingDelete.id);
-        }}
-        onCancel={() => {
+          if (planPendingDelete) await deletePlan(planPendingDelete.id!);
           setPlanPendingDelete(null);
-          setPlanDeleteError('');
         }}
+        onCancel={() => setPlanPendingDelete(null)}
       />
 
       {/* Suggest plan modal */}
       {showSuggest && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-primary-950/60 p-4 backdrop-blur-sm md:pr-24 lg:pr-32 xl:pr-36"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4 md:pr-24 lg:pr-32 xl:pr-36"
           onClick={(e) => e.target === e.currentTarget && setShowSuggest(false)}
         >
           <div
@@ -464,13 +458,10 @@ export function PlannerScreen({ navigate }: {
             aria-modal="true"
             aria-labelledby="suggest-plan-title"
             tabIndex={-1}
-            className="flex max-h-[calc(100dvh-2rem)] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-primary-100/80 bg-white shadow-2xl animate-scale-in outline-none dark:border-primary-800 dark:bg-primary-950"
+            className="flex max-h-full w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-primary-100 bg-white shadow-xs animate-scale-in outline-none dark:border-primary-800 dark:bg-primary-900"
           >
-            <div className="flex items-center justify-between border-b border-primary-100 bg-gradient-to-l from-primary-50 via-white to-gold-50/60 p-4 dark:border-primary-800 dark:from-primary-900 dark:via-primary-950 dark:to-gold-950/20">
-              <h2 id="suggest-plan-title" className="flex items-center gap-2 text-lg font-bold text-primary-800 dark:text-primary-100">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gold-100 text-gold-700 dark:bg-gold-900/40 dark:text-gold-300"><Sparkles size={18} /></span>
-                اقتراح خطة
-              </h2>
+            <div className="flex items-center justify-between p-4 border-b border-primary-100 dark:border-primary-800">
+              <h2 id="suggest-plan-title" className="text-lg font-bold text-primary-800 dark:text-primary-100">اقتراح خطة</h2>
               <button onClick={() => setShowSuggest(false)} aria-label="إغلاق" className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 focus-visible:ring-2 focus-visible:ring-primary-500 dark:hover:bg-primary-800">
                 <X size={20} />
               </button>
@@ -534,7 +525,7 @@ export function PlannerScreen({ navigate }: {
                 </div>
               )}
             </div>
-            <div className="border-t border-primary-100 bg-primary-50/60 p-4 dark:border-primary-800 dark:bg-primary-900/50">
+            <div className="p-4 border-t border-primary-100 dark:border-primary-800">
               <Button fullWidth variant="gold" onClick={handleSuggest} disabled={!goalText.trim()}>
                 <Sparkles size={18} /> إنشاء الخطة المقترحة
               </Button>
@@ -905,7 +896,7 @@ function CreatePlanModal({ onClose, onSave }: { onClose: () => void; onSave: (pl
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-primary-950/60 p-3 backdrop-blur-sm sm:p-4 md:pr-24 lg:pr-32 xl:pr-36"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-3 sm:p-4 md:pr-24 lg:pr-32 xl:pr-36"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
@@ -914,13 +905,10 @@ function CreatePlanModal({ onClose, onSave }: { onClose: () => void; onSave: (pl
         aria-modal="true"
         aria-labelledby="create-plan-title"
         tabIndex={-1}
-        className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-primary-100/80 bg-white shadow-2xl animate-scale-in outline-none dark:border-primary-800 dark:bg-primary-950 md:max-w-2xl sm:max-h-[calc(100dvh-2rem)]"
+        className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-lg md:max-w-2xl flex-col overflow-hidden rounded-2xl border border-primary-100 bg-white shadow-xl animate-scale-in outline-none dark:border-primary-800 dark:bg-primary-900 sm:max-h-[calc(100dvh-2rem)]"
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-primary-100 bg-gradient-to-l from-primary-50 via-white to-gold-50/60 p-4 dark:border-primary-800 dark:from-primary-900 dark:via-primary-950 dark:to-gold-950/20">
-          <h2 id="create-plan-title" className="flex items-center gap-2 text-lg font-bold text-primary-800 dark:text-primary-100">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-100 text-primary-700 dark:bg-primary-800 dark:text-primary-200"><Plus size={18} /></span>
-            خطة جديدة
-          </h2>
+        <div className="flex shrink-0 items-center justify-between border-b border-primary-100 bg-white p-4 dark:border-primary-800 dark:bg-primary-900">
+          <h2 id="create-plan-title" className="text-lg font-bold text-primary-800 dark:text-primary-100">خطة جديدة</h2>
           <button onClick={onClose} aria-label="إغلاق" className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-primary-800">
             <X size={20} />
           </button>

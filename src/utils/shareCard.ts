@@ -352,7 +352,7 @@ async function ensureQuranFont(context: CanvasRenderingContext2D): Promise<void>
     await document.fonts.load(context.font);
     await document.fonts.load(`700 32px ${UI_FONT}`);
   } catch {
-    // The fallback faces are already in the font strings; drawing can continue.
+    // The fallback faces are already in the font strings; drawing continues with them.
   }
 }
 
@@ -541,7 +541,6 @@ function roundedRect(
   context.closePath();
 }
 
-/** A quiet mihrab silhouette gives the verse a focal point without sitting behind its ink. */
 function drawMihrab(context: CanvasRenderingContext2D): void {
   context.save();
   context.strokeStyle = GOLD_LIGHT;
@@ -703,11 +702,7 @@ function bracketedLinesFit(
 }
 
 /** A gold line with a diamond where the verse ends. */
-function drawDivider(
-  context: CanvasRenderingContext2D,
-  centerX: number,
-  dividerY = DIVIDER_Y,
-): void {
+function drawDivider(context: CanvasRenderingContext2D, centerX: number, dividerY = DIVIDER_Y): void {
   context.save();
   context.strokeStyle = GOLD;
   context.globalAlpha = 0.7;
@@ -774,8 +769,7 @@ function drawContentReference(
   context.fillStyle = GOLD_LIGHT;
   context.font = `700 34px ${UI_FONT}`;
   const lines = wrapLines(reference, 820, (line) => context.measureText(line).width);
-  const shownLines = lines.slice(0, 2);
-  shownLines.forEach((line, index) => {
+  lines.slice(0, 2).forEach((line, index) => {
     context.fillText(line, centerX, referenceBaseline + index * 42);
   });
   context.fillStyle = PARCHMENT_DIM;

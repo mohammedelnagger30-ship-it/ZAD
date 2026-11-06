@@ -6,11 +6,11 @@ import {
   subscribeRecitationProgress,
   type RecitationProgress,
   type RecitationState,
-} from '@/utils/recitationEngine';
+} from '@/utils/audio/recitationEngine';
 import {
   isRecitationSheetOpen,
   subscribeRecitationSheet,
-} from '@/utils/recitationPlayerUi';
+} from '@/utils/audio/recitationPlayerUi';
 
 /**
  * The recitation engine's whole state.

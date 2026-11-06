@@ -2,16 +2,14 @@ import {
   BarChart3,
   BookOpen,
   ChevronLeft,
+  HandHeart,
   Info,
-  Mic2,
-  Moon,
   Shield,
-  Layers,
   type LucideIcon,
 } from 'lucide-react';
 import { toArabicNumber } from '@/data/surahs';
 import { Card, PageHeader } from '@/components/ui';
-import { SCREEN_ICONS } from '@/components/screenIcons';
+import { SCREEN_METADATA } from '@/navigation/screenMetadata';
 import type { ScreenName, NavParams } from '@/hooks/useApp';
 
 interface MoreScreenProps {
@@ -43,6 +41,8 @@ const FEATURED: MoreItem = {
   description: 'كل دوراته العلمية وسلاسله ومحاضراته، مرتّبة بأجود الأصوات، مع تنزيل ما تريد للاستماع بلا إنترنت',
   badge: 'جديد',
 };
+const FeaturedIcon = SCREEN_METADATA[FEATURED.screen].icon;
+const MoreIcon = SCREEN_METADATA.more.icon;
 
 /**
  * Everything else, gathered by what the reader is doing rather than by internal
@@ -65,6 +65,7 @@ const GROUPS: MoreGroup[] = [
         screen: 'bookmarks',
         label: 'محفوظاتي',
         description: 'الآيات والصفحات التي علّمتها في المصحف، عود إليها بضغطة واحدة',
+        badge: 'جديد',
       },
       {
         screen: 'library',
@@ -88,7 +89,7 @@ const GROUPS: MoreGroup[] = [
   },
   {
     title: 'العبادة والسيرة',
-    icon: Moon,
+    icon: HandHeart,
     items: [
       {
         screen: 'adhkar',
@@ -112,11 +113,13 @@ const GROUPS: MoreGroup[] = [
         screen: 'nawafil',
         label: 'النوافل',
         description: 'السنن الرواتب والوتر والضحى وقيام الليل ونوافل الصلوات بأوقاتها وأفضلها',
+        badge: 'جديد',
       },
       {
         screen: 'prophet',
         label: 'النبي محمد ﷺ',
         description: 'اسمه ونسبه وشمائل خَلْقه وأخلاقه وأسرته وسيرته ومعجزاته',
+        badge: 'جديد',
       },
       {
         screen: 'sunnah',
@@ -150,7 +153,7 @@ const GROUPS: MoreGroup[] = [
 
 /** One shelf entry: an icon in the theme's tint, the name, and what waits behind it. */
 function MoreCard({ item, onOpen }: { item: MoreItem; onOpen: () => void }) {
-  const Icon = SCREEN_ICONS[item.screen];
+  const Icon = SCREEN_METADATA[item.screen].icon;
 
   return (
     <button
@@ -195,12 +198,13 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
       className="mx-auto w-full max-w-6xl space-y-5 px-2.5 pb-[calc(env(safe-area-inset-bottom,0)+1.75rem)] pt-1 sm:space-y-6 sm:px-3 md:px-4 lg:px-6"
       dir="rtl"
     >
+      {/* Page title — one line of purpose, and how much sits behind it. */}
       <PageHeader
         title="جميع الأقسام والخدمات"
         description="تصفح كافة ميزات وأقسام تطبيق قُرّة"
-        icon={<Layers size={22} aria-hidden="true" />}
-        action={
-          <span className="rounded-full bg-primary-50 px-2.5 py-1 text-[0.625rem] font-bold text-primary-700 dark:bg-primary-900/60 dark:text-primary-200">
+        icon={<MoreIcon size={20} />}
+        actions={
+          <span className="rounded-full bg-primary-50 px-2.5 py-1 text-xs font-bold text-primary-700 dark:bg-primary-900/60 dark:text-primary-200">
             {toArabicNumber(total)} قسمًا
           </span>
         }
@@ -218,7 +222,7 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
         />
         <span className="relative flex items-center gap-2.5 sm:gap-3.5">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/25 backdrop-blur-sm sm:h-12 sm:w-12 md:h-14 md:w-14">
-            <Mic2 size={22} className="sm:h-6 sm:w-6" aria-hidden="true" />
+            <FeaturedIcon size={22} className="sm:h-6 sm:w-6" aria-hidden="true" />
           </span>
           <span className="min-w-0 flex-1">
             <span className="flex flex-wrap items-center gap-2">

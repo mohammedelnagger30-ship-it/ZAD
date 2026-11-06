@@ -1,6 +1,10 @@
-import { Bookmark, Layers, Moon, SlidersHorizontal, Sun, X } from 'lucide-react';
+import { Bookmark, Layers, SlidersHorizontal, X } from 'lucide-react';
 import { toArabicNumber } from '@/data/surahs';
-import { type MushafPrefs, type SheetName } from '@/components/mushaf/readerConfig';
+import {
+  PAPERS,
+  type MushafPrefs,
+  type SheetName,
+} from '@/components/mushaf/readerConfig';
 
 interface MushafHeaderProps {
   onClose: () => void;
@@ -11,7 +15,7 @@ interface MushafHeaderProps {
   openJuzPicker: () => void;
   isBookmarked: boolean;
   toggleBookmark: (page: number) => void;
-  mode: MushafPrefs['mode'];
+  paper: MushafPrefs['paper'];
   updatePrefs: (patch: Partial<MushafPrefs>) => void;
   sheet: SheetName | null;
   setSheet: (sheet: SheetName | null) => void;
@@ -28,11 +32,17 @@ export function MushafHeader({
   openJuzPicker,
   isBookmarked,
   toggleBookmark,
-  mode,
+  paper,
   updatePrefs,
   sheet,
   setSheet,
 }: MushafHeaderProps) {
+  const paperIndex = Math.max(
+    0,
+    PAPERS.findIndex((candidate) => candidate.id === paper),
+  );
+  const currentPaper = PAPERS[paperIndex];
+  const nextPaper = PAPERS[(paperIndex + 1) % PAPERS.length];
   return (
     <>
       {/* ── Above the page: who you are reading ─────────────────────────── */}
@@ -73,11 +83,11 @@ export function MushafHeader({
           </button>
           <button
             className="mushaf-iconbtn"
-            onClick={() => updatePrefs({ mode: mode === 'night' ? 'day' : 'night' })}
-            aria-label={mode === 'night' ? 'الوضع النهاري' : 'الوضع الليلي'}
-            aria-pressed={mode === 'night'}
+            onClick={() => updatePrefs({ paper: nextPaper.id })}
+            aria-label={`تغيير لون الورق — الحالي ${currentPaper.label}`}
+            title={`الورق: ${currentPaper.label}. اضغط للتبديل إلى ${nextPaper.label}`}
           >
-            {mode === 'night' ? <Sun size={17} /> : <Moon size={17} />}
+            <span className={`mushaf-paper-dot mushaf-paper-dot--${currentPaper.id}`} aria-hidden="true" />
           </button>
           <button
             className="mushaf-iconbtn"

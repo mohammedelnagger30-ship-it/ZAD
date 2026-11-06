@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BookMarked } from 'lucide-react';
-import { HIGHLIGHT_COLORS } from '@/utils/ayahHighlights';
+import { HIGHLIGHT_COLORS } from '@/utils/quran/ayahHighlights';
 
 interface ReaderAyahMarksProps {
   /** Whether the pressed ayah already sits in «محفوظاتي». */

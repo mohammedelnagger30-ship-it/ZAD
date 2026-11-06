@@ -50,7 +50,7 @@ describe('useNavigation', () => {
     });
 
     expect(navigation.screen).toBe('quran');
-    expect(navigation.history).toEqual(['home', 'quran']);
+    expect(navigation.history).toEqual(['quran']);
     expect(navigation.params).toEqual({ openPage: 22 });
 
     await act(async () => {
@@ -60,7 +60,7 @@ describe('useNavigation', () => {
     await renderNavigation();
 
     expect(navigation.screen).toBe('quran');
-    expect(navigation.history).toEqual(['home', 'quran']);
+    expect(navigation.history).toEqual(['quran']);
     expect(navigation.params).toEqual({ openPage: 22 });
   });
 

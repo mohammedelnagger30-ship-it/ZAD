@@ -15,7 +15,7 @@ import type { ReactElement } from 'react';
 import { AzanOverlayModal } from '@/components/AzanOverlayModal';
 import { DEFAULT_SETTINGS, type Settings } from '@/db/database';
 import { trustedNow } from '@/utils/clock';
-import type { PrayerKey } from '@/utils/prayerTracker';
+import type { PrayerKey } from '@/utils/prayer/prayerTracker';
 
 /** jsdom ships no media stack, so the page's speaker is stood in for. */
 class FakeAudio {

@@ -7,7 +7,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { db } from '@/db/database';
 import { getStreakCount } from '@/utils/taskManager';
-import { getWeeklyPrayerStats, getMonthlyPrayerStats } from '@/utils/prayerTracker';
+import { getWeeklyPrayerStats, getMonthlyPrayerStats } from '@/utils/prayer/prayerTracker';
 import { TOTAL_QURAN_AYAHS, toArabicNumber } from '@/data/surahs';
 
 export interface ProgressReportData {

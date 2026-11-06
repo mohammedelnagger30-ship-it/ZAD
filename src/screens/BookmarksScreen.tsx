@@ -4,9 +4,10 @@ import { db, type Bookmark as BookmarkType, type PageBookmark } from '@/db/datab
 import { getSurah, toArabicNumber } from '@/data/surahs';
 import { getAyah } from '@/data/quranText';
 import { Card, EmptyState, Badge, PageHeader } from '@/components/ui';
+import { SCREEN_METADATA } from '@/navigation/screenMetadata';
 import { useSnackbar } from '@/hooks/useSnackbar';
 import { buildBookmarksExport } from '@/utils/bookmarkExport';
-import { getHighlightColor } from '@/utils/ayahHighlights';
+import { getHighlightColor } from '@/utils/quran/ayahHighlights';
 import { shareAyahCard, shareTextOrCopy } from '@/utils/shareCard';
 import type { ScreenName, NavParams } from '@/hooks/useApp';
 
@@ -227,21 +228,25 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
     <div className="space-y-5 pb-6">
       <PageHeader
         title="محفوظاتي"
-        description={total > 0
-          ? `${toArabicNumber(total)} علامة محفوظة — عود إليها في أي وقت`
-          : 'الآيات والصفحات التي علّمتها للرجوع إليها لاحقًا'}
-        icon={<Bookmark size={22} />}
-        action={total > 0 && (
-          <button
-            type="button"
-            onClick={() => void exportAll()}
-            aria-live="polite"
-            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary-200 bg-white px-4 text-sm font-bold text-primary-700 transition-colors hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:border-primary-700 dark:bg-primary-900/50 dark:text-gold-300 dark:hover:bg-primary-800"
-          >
-            <FileDown size={16} />
-            {exported ? 'نُسخ كنص' : 'تصدير كنص'}
-          </button>
-        )}
+        description={
+          total > 0
+            ? `${toArabicNumber(total)} علامة محفوظة — عود إليها في أي وقت`
+            : 'الآيات والصفحات التي علّمتها للرجوع إليها لاحقًا'
+        }
+        icon={<SCREEN_METADATA.bookmarks.icon size={20} />}
+        actions={
+          total > 0 ? (
+            <button
+              type="button"
+              onClick={() => void exportAll()}
+              aria-live="polite"
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary-200 bg-panel px-4 text-sm font-bold text-primary-700 transition-colors hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:border-primary-700 dark:bg-primary-900/50 dark:text-gold-300 dark:hover:bg-primary-800"
+            >
+              <FileDown size={16} />
+              {exported ? 'نُسخ كنص' : 'تصدير كنص'}
+            </button>
+          ) : undefined
+        }
       />
 
       {total === 0 && (

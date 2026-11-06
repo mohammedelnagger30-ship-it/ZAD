@@ -2,7 +2,7 @@ import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
-import { alignAyahMeanings } from '../src/utils/wordMeaningsService';
+import { alignAyahMeanings } from '../src/utils/quran/wordMeaningsService';
 import { getAyah } from '../src/data/quranText';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');

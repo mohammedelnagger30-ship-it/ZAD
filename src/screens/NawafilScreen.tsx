@@ -30,7 +30,7 @@ import {
   getDayNameShort,
   getLast7Days,
 } from '@/utils/dateUtils';
-import { calculatePrayerTimes, formatTime12h, getPrayerTimeZone } from '@/utils/prayerTimes';
+import { calculatePrayerTimes, formatTime12h, getPrayerTimeZone } from '@/utils/prayer/prayerTimes';
 import {
   getDaySunnahRecords,
   setSunnah,
@@ -44,7 +44,7 @@ import {
   type PrayerKey,
   type NawafilWindowTimes,
   type NawafilOpportunity,
-} from '@/utils/prayerTracker';
+} from '@/utils/prayer/prayerTracker';
 import { toArabicNumber } from '@/data/surahs';
 
 /**
@@ -528,7 +528,7 @@ export function NawafilScreen({ settings, params }: NawafilScreenProps) {
       {/* ---- Hero: date, ring, stats, week dots ---- */}
       <section
         className="relative overflow-hidden rounded-3xl p-5 text-white shadow-lg"
-        style={{ background: 'var(--brand-gradient, linear-gradient(135deg, #09251a 0%, #165b39 44%, #34764f 72%, #76560e 100%))' }}
+        style={{ background: 'var(--brand-gradient)' }}
       >
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">

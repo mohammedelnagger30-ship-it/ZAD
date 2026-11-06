@@ -25,14 +25,16 @@ import {
   AUTO_SCROLL_MAX,
   clampNumber,
   loadPrefs,
+  isDarkPaper,
   type MushafPrefs,
+  type MushafPaper,
   type Orientation,
   type JumpTarget,
   type SheetName,
 } from '@/components/mushaf/readerConfig';
 import { TafsirBottomSheet } from '@/components/TafsirBottomSheet';
 import { useWordMeanings } from '@/hooks/useContent';
-import { getWordMeanings } from '@/utils/wordMeaningsService';
+import { getWordMeanings } from '@/utils/quran/wordMeaningsService';
 import {
   getSurah,
   getAyahPage,
@@ -41,7 +43,7 @@ import {
 } from '@/data/surahs';
 import { getTotalPages, getHizbForPage } from '@/data/mushafPages';
 import { db, type Settings } from '@/db/database';
-import { creditKhatmahPage } from '@/utils/khatmah';
+import { creditKhatmahPage } from '@/utils/quran/khatmah';
 
 interface MushafReaderProps {
   settings: Settings;
@@ -508,14 +510,17 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
     voiceTime,
     playbackRate,
     repeatCount,
+    voiceAudioRef,
+    setVoicePlaying,
     reciterId,
     handleVoiceReciter,
     openVoice,
-    startVoice,
     replayVoice,
     handleVoiceScope,
     closeAyahChoice,
     resetVoice,
+    handleVoiceTime,
+    handleVoiceEnded,
     handleVoiceRate,
     handleRepeatCount,
     seekVoice,
@@ -786,7 +791,8 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
   const effectiveFontSize = Math.round(
     settings.fontSize * viewportStep * prefs.zoom * prefs.readingScale
   );
-  const mode = prefs.mode;
+  const paper = prefs.paper;
+  const nightPaper = isDarkPaper(paper);
   /** The ayah under discussion, held on the page while either of its sheets is open. */
   const activeReadingAyah = tafsirAyah ?? ayahChoice ?? selectedWord;
 
@@ -818,7 +824,11 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
   }, [leaves]);
 
   return (
-    <div className="mushaf-shell" data-mode={mode}>
+    <div
+      className="mushaf-shell"
+      data-mode={nightPaper ? 'night' : 'day'}
+      data-paper={paper}
+    >
       <MushafHeader
         onClose={onClose}
         surahsOnPage={surahsOnPage}
@@ -828,7 +838,7 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
         openJuzPicker={openJuzPicker}
         isBookmarked={isBookmarked}
         toggleBookmark={toggleBookmark}
-        mode={mode}
+        paper={paper}
         updatePrefs={updatePrefs}
         sheet={sheet}
         setSheet={setSheet} progressInfo={progressInfo}
@@ -859,7 +869,7 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
                 readingPosition={page === currentPage}
                 bookmarked={bookmarkedPages.has(page)}
                 fontSize={effectiveFontSize}
-                night={mode === 'night'}
+                paper={paper}
                 lineHeight={1.9 + (prefs.lineSpacing - 1) * 0.55}
                 letterSpacing={0.01 + Math.max(0, prefs.lineSpacing - 1) * 0.01}
                 wordSpacing={prefs.wordSpacing}
@@ -881,7 +891,7 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
               readingPosition
               bookmarked={bookmarkedPages.has(currentPage)}
               fontSize={effectiveFontSize}
-              night={mode === 'night'}
+              paper={paper}
               lineHeight={1.9 + (prefs.lineSpacing - 1) * 0.55}
               letterSpacing={0.01 + Math.max(0, prefs.lineSpacing - 1) * 0.01}
               wordSpacing={prefs.wordSpacing}
@@ -953,7 +963,6 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
         ayahPanelRef={ayahPanelRef}
         setTafsirAyah={setTafsirAyah}
         openVoice={openVoice}
-        startVoice={startVoice}
         voiceEngaged={voiceEngaged}
         voiceWholeFile={voiceWholeFile}
         voiceHint={voiceHint}
@@ -972,6 +981,10 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
         voicePrimaryDisabled={voicePrimaryDisabled}
         voicePrimaryLabel={voicePrimaryLabel}
         voiceError={voiceError}
+        voiceAudioRef={voiceAudioRef}
+        setVoicePlaying={setVoicePlaying}
+        handleVoiceTime={handleVoiceTime}
+        handleVoiceEnded={handleVoiceEnded}
       />
 
       {/* Rendered last so it stacks over the reader's own sheets. */}
@@ -992,7 +1005,7 @@ interface MushafLeafProps {
   readingPosition: boolean;
   bookmarked: boolean;
   fontSize: number;
-  night: boolean;
+  paper: MushafPaper;
   lineHeight: number;
   letterSpacing: number;
   wordSpacing: number;
@@ -1032,6 +1045,3 @@ const MushafLeaf = memo(function MushafLeaf({
     </div>
   );
 });
-
-
-

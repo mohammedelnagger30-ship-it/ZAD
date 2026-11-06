@@ -23,13 +23,13 @@ import { AyahVoiceSheet } from '@/components/mushaf/AyahVoiceSheet';
 import { WordAnalysisSheet, type SelectedQuranWord } from '@/components/mushaf/WordAnalysisSheet';
 import { useAyahVoice } from '@/hooks/useAyahVoice';
 import { useWordMeanings } from '@/hooks/useContent';
-import { loadBundledMeaningIndex, type WordMeaningIndex } from '@/utils/wordMeaningIndex';
-import { getSurahWordMeanings } from '@/utils/wordMeaningsService';
+import { loadBundledMeaningIndex, type WordMeaningIndex } from '@/utils/quran/wordMeaningIndex';
+import { getSurahWordMeanings } from '@/utils/quran/wordMeaningsService';
 import type { VoiceScope } from '@/components/mushaf/readerConfig';
 import { splitBasmala } from '@/utils/basmala';
-import { searchAyahs } from '@/utils/ayahSearch';
-import { recordReading, READING_STATE_KEY as QURAN_READER_STORAGE_KEY } from '@/utils/readingHistory';
-import { getRecitationState, subscribeSurahChange } from '@/utils/recitationEngine';
+import { searchAyahs } from '@/utils/quran/ayahSearch';
+import { recordReading, READING_STATE_KEY as QURAN_READER_STORAGE_KEY } from '@/utils/quran/readingHistory';
+import { getRecitationState, subscribeSurahChange } from '@/utils/audio/recitationEngine';
 
 interface QuranScreenProps {
   settings: Settings;
@@ -65,6 +65,7 @@ function loadSavedReaderState() {
       toAyah?: unknown;
       mushafPage?: unknown;
       hasMushafPosition?: unknown;
+      resumePage?: unknown;
     };
 
     const isInt = (value: unknown): value is number =>
@@ -93,14 +94,29 @@ function loadSavedReaderState() {
         ? parsed.mushafPage
         : 1;
 
+    const hasMushafPosition =
+      parsed.hasMushafPosition === true || viewMode === 'mushaf' || mushafPage > 1;
+    /**
+     * «متابعة القراءة» has its own pinned page, separate from the page the
+     * reader happens to be showing: a jump from another screen (a bookmark, the
+     * daily wird, a search result) moves the view, never the resume spot. An
+     * install that predates the pin simply resumes from the page it had.
+     */
+    const resumePage =
+      isInt(parsed.resumePage) && parsed.resumePage >= 1 && parsed.resumePage <= TOTAL_QURAN_PAGES
+        ? parsed.resumePage
+        : hasMushafPosition
+          ? mushafPage
+          : null;
+
     return {
       viewMode: resolvedViewMode,
       surah,
       fromAyah,
       toAyah,
       mushafPage,
-      hasMushafPosition:
-        parsed.hasMushafPosition === true || viewMode === 'mushaf' || mushafPage > 1,
+      hasMushafPosition,
+      resumePage,
     };
   } catch {
     return null;
@@ -164,6 +180,14 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
   const [voiceScope, setVoiceScope] = useState<VoiceScope>('ayah');
   const [mushafPage, setMushafPage] = useState(savedState?.mushafPage ?? 1);
   const [hasMushafPosition, setHasMushafPosition] = useState(savedState?.hasMushafPosition ?? false);
+  /**
+   * The page «متابعة القراءة» promises — pinned while the reader jumps around.
+   * It only follows pages the reader turned *to* after standing on a page;
+   * being sent to a page (from a bookmark, the wird card, a search hit, or the
+   * opening settle itself) re-anchors it without counting as reading.
+   */
+  const [resumePage, setResumePage] = useState<number | null>(savedState?.resumePage ?? null);
+  const resumeAnchorRef = useRef<number | null>(savedState?.mushafPage ?? 1);
   /** The hifz self-test quiz for the currently selected ayah range. */
   const [showHifzTest, setShowHifzTest] = useState(false);
 
@@ -176,12 +200,13 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
         toAyah,
         mushafPage,
         hasMushafPosition,
+        resumePage,
       };
       localStorage.setItem(QURAN_READER_STORAGE_KEY, JSON.stringify(payload));
     } catch {
       // LocalStorage is best-effort and must never break the reader.
     }
-  }, [fromAyah, hasMushafPosition, mushafPage, selectedSurah, toAyah, viewMode]);
+  }, [fromAyah, hasMushafPosition, mushafPage, resumePage, selectedSurah, toAyah, viewMode]);
 
   const loadBookmarks = useCallback(async () => {
     const bms = await db.bookmarks.toArray();
@@ -261,6 +286,8 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
       setMushafPage(params.openPage);
       setHasMushafPosition(true);
       setViewMode('mushaf');
+      // Sent here from outside: the view follows, «متابعة القراءة» does not.
+      resumeAnchorRef.current = params.openPage;
       recordReading({ kind: 'page', page: params.openPage });
     }
     // Keyed on the params object identity: navigate() creates a new object per call,
@@ -363,16 +390,24 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
     setMushafPage(page);
     setHasMushafPosition(true);
     setViewMode('mushaf');
+    // A jump to a chosen page is navigation, not reading: the resume spot stays.
+    resumeAnchorRef.current = page;
     recordReading({ kind: 'page', page });
   };
 
   const updateMushafPage = (page: number) => {
     setMushafPage(page);
     setHasMushafPosition(true);
-    // Every settled page — the reader reports it on arrival and on each turn —
-    // so «متابعة القراءة» walks with the reader instead of freezing at the
-    // jump that opened it. The history dedups re-reads of the same position.
+    // Every settled page goes to the history (deduped), so «آخر قرأت» follows
+    // the reader even when the resume spot deliberately does not.
     recordReading({ kind: 'page', page });
+    // The page we were sent to — an opening settle or a jump from anywhere —
+    // re-anchors without counting. Only turning past that page walks
+    // «متابعة القراءة» forward, so opening a surah, an ayah or a page from
+    // another screen never moves the spot the resume button promises.
+    if (page === resumeAnchorRef.current) return;
+    resumeAnchorRef.current = page;
+    setResumePage(page);
   };
 
   /** Step through ayahs while the tafsir sheet is open, rolling over into the next surah. */
@@ -466,14 +501,17 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
     voiceTime,
     playbackRate,
     repeatCount,
+    voiceAudioRef,
+    setVoicePlaying,
     reciterId,
     handleVoiceReciter,
     openVoice,
-    startVoice,
     replayVoice,
     handleVoiceScope,
     closeAyahChoice,
     resetVoice,
+    handleVoiceTime,
+    handleVoiceEnded,
     handleVoiceRate,
     handleRepeatCount,
     seekVoice,
@@ -645,12 +683,21 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
           {/* Quick Stats & Actions */}
           <div className="relative mt-6 flex flex-wrap items-center gap-3">
             <button
-              onClick={() => setViewMode('mushaf')}
+              onClick={() => {
+                // Land on the pinned spot — not on wherever a jump from
+                // another screen left the view.
+                if (resumePage !== null) {
+                  resumeAnchorRef.current = resumePage;
+                  setMushafPage(resumePage);
+                  setHasMushafPosition(true);
+                }
+                setViewMode('mushaf');
+              }}
               className="group inline-flex min-h-12 items-center gap-2.5 rounded-2xl bg-white px-5 py-3 text-base font-bold text-primary-800 shadow-lg transition-all hover:scale-105 hover:bg-primary-50 hover:shadow-xl focus-visible:outline-hidden focus-visible:ring-4 focus-visible:ring-white/50"
             >
               <BookText size={20} className="group-hover:scale-110 transition-transform" />
-              {hasMushafPosition
-                ? `متابعة من موضعك · الصفحة ${toArabicNumber(mushafPage)}`
+              {resumePage !== null
+                ? `متابعة من موضعك · الصفحة ${toArabicNumber(resumePage)}`
                 : 'افتح المصحف'}
             </button>
             <div className="flex items-center gap-2">
@@ -897,9 +944,13 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
             SAJDAH_AYAHS.filter((s) => s.surahId === selectedSurah.id).map((s) => s.ayah),
           );
 
+          // The reader runs its text as one justified paragraph, the way a printed page
+          // does — the prostration sign is set inline at the end of its own ayah, inside
+          // the same unbreakable tail as the medallion, so it never strands alone.
           const renderAyah = (ayah: AyahText) => (
             <AyahSpan
               key={`${ayah.surahId}:${ayah.ayahNumber}`}
+              sajdah={sajdahAyahs.has(ayah.ayahNumber)}
               ayah={ayah.ayahNumber === 1 && separateBasmala ? { ...ayah, text: opening!.rest } : ayah}
               isHifz={isHifz}
               bookmarked={bookmarkedKeys.has(`${ayah.surahId}:${ayah.ayahNumber}`)}
@@ -908,7 +959,6 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
               hideWordByWord={hideWordByWord}
               selected={ayahChoice?.surahId === ayah.surahId && ayahChoice?.ayahNumber === ayah.ayahNumber}
               activeAudio={isReciting(ayah.surahId, ayah.ayahNumber)}
-              sajdah={sajdahAyahs.has(ayah.ayahNumber)}
               meaningWords={meaningWords}
               onToggleBookmark={() => toggleBookmark(ayah.surahId, ayah.ayahNumber)}
               onShowTafsir={() => setTafsirAyah({ surahId: ayah.surahId, ayah: ayah.ayahNumber })}
@@ -965,7 +1015,6 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
                   setTafsirAyah(choice ? { surahId: choice.surahId, ayah: choice.ayahNumber } : null)
                 }
                 openVoice={openVoice}
-                startVoice={startVoice}
                 voiceEngaged={voiceEngaged}
                 voiceWholeFile={voiceWholeFile}
                 voiceHint={voiceHint}
@@ -984,6 +1033,10 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
                 voicePrimaryDisabled={voicePrimaryDisabled}
                 voicePrimaryLabel={voicePrimaryLabel}
                 voiceError={voiceError}
+                voiceAudioRef={voiceAudioRef}
+                setVoicePlaying={setVoicePlaying}
+                handleVoiceTime={handleVoiceTime}
+                handleVoiceEnded={handleVoiceEnded}
                 extra={
                   ayahChoice !== null ? (
                     <ReaderAyahMarks

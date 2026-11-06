@@ -2,7 +2,7 @@ import { JUZ_INFO, getSurah, TOTAL_QURAN_PAGES } from '@/data/surahs';
 import { ADHKAR_CATEGORIES } from '@/data/adhkar';
 import { SUNNAH_CATEGORIES } from '@/data/sunnah';
 import { PROPHET_SECTIONS } from '@/data/prophetData';
-import { RAWATIB_TYPES } from '@/utils/prayerTracker';
+import { RAWATIB_TYPES } from '@/utils/prayer/prayerTracker';
 import type { NavParams, ScreenName } from '@/hooks/useApp';
 
 export interface NotificationDestination {

@@ -11,7 +11,7 @@ import {
   useRecitationVisible,
 } from '@/hooks/useRecitation';
 import { useLecturePlayer, useLectureProgress } from '@/hooks/useLecturePlayer';
-import { hasAudioFocus } from '@/utils/audioFocus';
+import { hasAudioFocus } from '@/utils/audio/audioFocus';
 import {
   canPlayNextSurah,
   canPlayPreviousSurah,
@@ -22,7 +22,7 @@ import {
   toggleSurah,
   updatePlaybackRate,
   updateRepeatCount,
-} from '@/utils/recitationEngine';
+} from '@/utils/audio/recitationEngine';
 import {
   canPlayNext,
   canPlayPrevious,
@@ -32,8 +32,8 @@ import {
   setLectureRate,
   stopLecture,
   togglePlay,
-} from '@/utils/lecturePlayer';
-import { setRecitationSheetOpen } from '@/utils/recitationPlayerUi';
+} from '@/utils/audio/lecturePlayer';
+import { setRecitationSheetOpen } from '@/utils/audio/recitationPlayerUi';
 
 /**
  * The one player.

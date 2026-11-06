@@ -5,7 +5,7 @@ import {
   type DayPrayerGrid,
   type PrayerKey,
   type PrayerStatus,
-} from '@/utils/prayerTracker';
+} from '@/utils/prayer/prayerTracker';
 
 interface PrayerWeekGridProps {
   grid: DayPrayerGrid[];

@@ -14,13 +14,14 @@
  * `colorThemes.test.ts`.
  *
  * The pairings below stay distinct in both light and dark modes:
- * emerald×copper, sea×ember, plum×antique-gold, bronze×oasis,
+ * qurra×gold, emerald×copper, sea×ember, plum×antique-gold, bronze×oasis,
  * olive×brick, rose×emerald, midnight×amber, ruby×teal,
  * honey×indigo, forest×berry, slate×rust, lavender×leaf,
- * obsidian×jade, nocturne×antique-gold, abyss×turquoise, Qurra×gold
+ * obsidian×jade, nocturne×antique-gold, abyss×turquoise
  */
 export const COLOR_PALETTES = [
   {
+    // The app's own identity: forest green, ivory paper, aged gold.
     id: 'qurra',
     name: 'قُرّة',
     latin: 'Qurra',
@@ -215,12 +216,12 @@ export const COLOR_PALETTES = [
 ] as const;
 
 export type ColorPalette = (typeof COLOR_PALETTES)[number]['id'];
-export const DEFAULT_COLOR_PALETTE: ColorPalette = 'qurra';
+
 export const FEATURED_COLOR_PALETTE_IDS: readonly ColorPalette[] = [
   'qurra',
   'emerald',
   'ocean',
   'sand',
-  'forest',
+  'plum',
   'midnight',
-] as const;
+];

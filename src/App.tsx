@@ -1,9 +1,9 @@
-import { lazy, Suspense, type ComponentType, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { CloudOff, X } from 'lucide-react';
 import { useSettings, useTheme, useNavigation } from '@/hooks/useApp';
 import { BottomNav } from '@/components/BottomNav';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { AuthScreen } from '@/components/AuthScreen';
+import { AuthScreen } from '@/screens/AuthScreen';
 import { generateDailyTasks, markMissedTasks } from '@/utils/taskManager';
 import { rescheduleAllNotifications } from '@/utils/notificationScheduler';
 import { dismissTopOverlay } from '@/utils/overlayRegistry';
@@ -15,10 +15,10 @@ import {
   type CloudSyncState,
   type SignOutOptions,
   type SignOutResult,
-} from '@/utils/cloudSync';
-import { isSupabaseConfigured, supabase } from '@/utils/supabaseClient';
+} from '@/utils/sync/cloudSync';
+import { isSupabaseConfigured, supabase } from '@/utils/sync/supabaseClient';
 import { trackAppOpen } from '@/utils/analytics';
-import { getCachedAdminStatus, isAdminAccount } from '@/utils/adminStats';
+import { isAdminAccount } from '@/utils/adminStats';
 import { applySystemFontScale } from '@/utils/displayScale';
 import { useAppUpdate } from '@/hooks/useAppUpdate';
 import { App as CapApp } from '@capacitor/app';
@@ -40,85 +40,36 @@ import {
   readLastDeviceTimeZone,
   writeLastDeviceTimeZone,
   TIME_ZONE_ADOPTION_EVENT,
-} from '@/utils/timeZoneTravel';
-import { initAutoBackup } from '@/utils/autoBackup';
-import { ensurePersistentStorage } from '@/utils/storagePersistence';
-import { isEgyptianLocation } from '@/utils/prayerTimes';
+} from '@/utils/prayer/timeZoneTravel';
+import { initAutoBackup } from '@/utils/sync/autoBackup';
+import { ensurePersistentStorage } from '@/utils/sync/storagePersistence';
+import { isEgyptianLocation } from '@/utils/prayer/prayerTimes';
 import { getNotificationDestination } from '@/utils/notificationRouting';
 import { DhikrReminderNotice } from '@/components/DhikrReminderNotice';
-import { preserveSessionOnEmptyAuthResponse } from '@/utils/authSession';
+import {
+  AdhkarScreen,
+  AdminScreen,
+  BookmarksScreen,
+  ContentLibrary,
+  HadithScreen,
+  HomeScreen,
+  MoreScreen,
+  HuwainiScreen,
+  NawafilScreen,
+  Onboarding,
+  PlannerScreen,
+  PrayerGuideScreen,
+  PrayerScreen,
+  ProphetScreen,
+  ProgressScreen,
+  QuranScreen,
+  SearchScreen,
+  SettingsScreen,
+  SunnahScreen,
+  TasbihScreen,
+} from '@/app/lazyScreens';
 
 const ONBOARDED_KEY = 'hifzi-onboarded';
-// Latch used by lazyWithRetry: after a chunk 404 we reload once; a reloaded page that
-// fails again surfaces the real error instead of reloading in a loop.
-const LAZY_RETRY_KEY = 'hifzi-lazy-reload-tried';
-
-/**
- * Wrap a screen's dynamic import in a single-reload recovery.
- *
- * A route chunk can be served either by the service worker's precache or by the APK's own
- * assets, and for a brief window right after an in-app update those two disagree: the page asks
- * for the new hashed filename while the old worker is still in control, so the dynamic import
- * rejects once with "Failed to fetch dynamically imported module". A rejected import would
- * otherwise propagate up to the top-level ErrorBoundary and blank the whole app.
- *
- * A same-URL retry cannot succeed: Chromium (and the app's WebView) caches the failed import
- * in the module map for the document's lifetime, so re-importing the identical URL fails
- * instantly without even hitting the network. The only recovery is to reload: a fresh document
- * starts with a clean module map, and by then the newly activated service worker serves the
- * chunk. We reload at most once per boot (latch); a reloaded page that still cannot load the
- * chunk lets the true error reach the error boundary instead of reloading forever.
- */
-// The constraint mirrors @types/react's own `lazy()` (T extends ComponentType<any>); a concrete
-// props type cannot name it because function components are contravariant in their props.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type LazyScreenModule = { default: ComponentType<any> };
-
-function lazyWithRetry<M extends LazyScreenModule>(loader: () => Promise<M>) {
-  return lazy(async () => {
-    try {
-      const module = await loader();
-      // A successfully loaded screen re-arms the latch so a later transient failure
-      // (e.g. a future in-app update) can trigger recovery again.
-      sessionStorage.removeItem(LAZY_RETRY_KEY);
-      return module;
-    } catch (error) {
-      if (sessionStorage.getItem(LAZY_RETRY_KEY)) {
-        throw error; // already reloaded once this boot: surface the real failure
-      }
-      sessionStorage.setItem(LAZY_RETRY_KEY, '1');
-      window.location.reload();
-      // The frame is torn down during navigation; keep the lazy promise pending so no error
-      // boundary flashes in the dying frame. If the reload is blocked for some reason, surface
-      // the original error after a grace period.
-      return new Promise<M>((_, reject) => {
-        window.setTimeout(() => reject(error), 15000);
-      });
-    }
-  });
-}
-
-const HomeScreen = lazyWithRetry(() => import('@/screens/HomeScreen').then((module) => ({ default: module.HomeScreen })));
-const Onboarding = lazyWithRetry(() => import('@/components/Onboarding').then((module) => ({ default: module.Onboarding })));
-const QuranScreen = lazyWithRetry(() => import('@/screens/QuranScreen').then((module) => ({ default: module.QuranScreen })));
-const PlannerScreen = lazyWithRetry(() => import('@/screens/PlannerScreen').then((module) => ({ default: module.PlannerScreen })));
-const PrayerScreen = lazyWithRetry(() => import('@/screens/PrayerScreen').then((module) => ({ default: module.PrayerScreen })));
-const PrayerGuideScreen = lazyWithRetry(() => import('@/screens/PrayerGuideScreen').then((module) => ({ default: module.PrayerGuideScreen })));
-const HadithScreen = lazyWithRetry(() => import('@/screens/HadithScreen').then((module) => ({ default: module.HadithScreen })));
-const SunnahScreen = lazyWithRetry(() => import('@/screens/SunnahScreen').then((module) => ({ default: module.SunnahScreen })));
-const ProphetScreen = lazyWithRetry(() => import('@/screens/ProphetScreen').then((module) => ({ default: module.ProphetScreen })));
-const HuwainiScreen = lazyWithRetry(() => import('@/screens/HuwainiScreen').then((module) => ({ default: module.HuwainiScreen })));
-const NawafilScreen = lazyWithRetry(() => import('@/screens/NawafilScreen').then((module) => ({ default: module.NawafilScreen })));
-const ProgressScreen = lazyWithRetry(() => import('@/screens/ProgressScreen').then((module) => ({ default: module.ProgressScreen })));
-const SettingsScreen = lazyWithRetry(() => import('@/screens/SettingsScreen').then((module) => ({ default: module.SettingsScreen })));
-const MoreScreen = lazyWithRetry(() => import('@/screens/MoreScreen').then((module) => ({ default: module.MoreScreen })));
-const ContentLibrary = lazyWithRetry(() => import('@/screens/ContentLibrary').then((module) => ({ default: module.ContentLibrary })));
-const AdhkarScreen = lazyWithRetry(() => import('@/screens/AdhkarScreen').then((module) => ({ default: module.AdhkarScreen })));
-const TasbihScreen = lazyWithRetry(() => import('@/screens/TasbihScreen').then((module) => ({ default: module.TasbihScreen })));
-const BookmarksScreen = lazyWithRetry(() => import('@/screens/BookmarksScreen').then((module) => ({ default: module.BookmarksScreen })));
-const SearchScreen = lazyWithRetry(() => import('@/screens/SearchScreen').then((module) => ({ default: module.SearchScreen })));
-// Only an allow-listed account ever mounts this, so it stays out of the first paint.
-const AdminScreen = lazyWithRetry(() => import('@/components/AdminScreen').then((module) => ({ default: module.AdminScreen })));
 
 function App() {
   return (
@@ -277,30 +228,8 @@ function readOfflineUsage(): boolean {
   }
 }
 
-function readInitialSession(): Session | null {
-  try {
-    const keys = Object.keys(localStorage);
-    for (const key of keys) {
-      if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
-        const raw = localStorage.getItem(key);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          const s = parsed?.currentSession || parsed?.session || parsed;
-          if (s?.access_token && s?.user) {
-            return s as Session;
-          }
-        }
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return null;
-}
-
 function Application() {
-  const [session, setSession] = useState<Session | null>(readInitialSession);
-  const sessionGenerationRef = useRef(0);
+  const [session, setSession] = useState<Session | null>(null);
   // Don't block the UI waiting for Supabase: read cached session in background
   // and let the app open immediately so it works fully offline.
   const [offlineUsage, setOfflineUsage] = useState(readOfflineUsage);
@@ -308,22 +237,14 @@ function Application() {
   // that they want their data on more than one device. Held here rather than in
   // Settings so a session appearing mid-sign-up swaps the whole view over, as at the gate.
   const [showAuthForGuest, setShowAuthForGuest] = useState(false);
-  // Initialize with cached admin status so verified admins see the admin dashboard
-  // option immediately even offline or on slow connections.
-  const [adminState, setAdminState] = useState<'unknown' | 'admin' | 'user'>(() => {
-    const initS = readInitialSession();
-    return initS?.user?.id && getCachedAdminStatus(initS.user.id) ? 'admin' : 'user';
-  });
+  // Default to 'user' so a logged-in account never gets stuck behind a slow/admin
+  // check on poor connections or offline. Upgraded to 'admin' in the background if confirmed.
+  const [adminState, setAdminState] = useState<'unknown' | 'admin' | 'user'>('user');
   // كل مستخدم — أدمن أو لا — يفتح التطبيق العادى، ولوحة الإدارة تُفتح بالطلب من
   // الإعدادات. الحالة هنا لا داخل `AdminApp`: زر «لوحة الإدارة» يصل إلى هذا المكوّن
   // من تحت، فلا بدّ أن يرفع الطلب إلى هذا المستوى ليُبدّل العرض.
   const [showAdminDashboard, setShowAdminDashboard] = useState(false);
   const sessionUserId = session?.user.id ?? null;
-  const handleSignedOut = useCallback(() => {
-    sessionGenerationRef.current += 1;
-    setSession(null);
-    setShowAdminDashboard(false);
-  }, []);
 
   // Report the open while the identity is settled: a guest counts under the
   // device's random id, an account under its own. Signing in mid-boot changes
@@ -344,26 +265,17 @@ function Application() {
       return;
     }
     let alive = true;
-    if (!getCachedAdminStatus(sessionUserId)) {
-      setAdminState('user');
-    }
-    void isAdminAccount(sessionUserId)
+    setAdminState('user');
+    void isAdminAccount()
       .then((isAdmin) => {
-        if (alive) setAdminState(isAdmin ? 'admin' : 'user');
+        if (alive && isAdmin) setAdminState('admin');
       })
       .catch(() => {
-        if (alive && !getCachedAdminStatus(sessionUserId)) setAdminState('user');
+        if (alive) setAdminState('user');
       });
     return () => {
       alive = false;
     };
-  }, [sessionUserId]);
-
-  const handleRefreshAdmin = useCallback(async (): Promise<boolean> => {
-    if (!sessionUserId) return false;
-    const isAdmin = await isAdminAccount(sessionUserId);
-    setAdminState(isAdmin ? 'admin' : 'user');
-    return isAdmin;
   }, [sessionUserId]);
 
   useEffect(() => {
@@ -410,21 +322,18 @@ function Application() {
     }
 
     // Also call getSession() in background to refresh/validate without blocking
-    const generation = sessionGenerationRef.current;
     void supabase.auth
       .getSession()
       .then(({ data }) => {
-        if (alive && generation === sessionGenerationRef.current && data.session) {
-          setSession((current) => preserveSessionOnEmptyAuthResponse(current, data.session));
+        if (alive) {
+          setSession(data.session ?? null);
         }
       })
       .catch(() => {
         // ignore
       });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      if (nextSession) {
-        setSession((current) => preserveSessionOnEmptyAuthResponse(current, nextSession));
-      }
+      setSession(nextSession);
     });
     return () => {
       alive = false;
@@ -439,16 +348,12 @@ function Application() {
     // لوحة الإدارة لا تُفتح تلقائيًا عند تسجيل الدخول: كل الحسابات تدخل التطبيق
     // العادى. الرافع هنا هو هذا المستوى لأن زر «لوحة الإدارة» في الإعدادات يجلس
     // أسفل ثلاث طبقات من المكوّنات ولا يصل إلى هذا المكوّن مباشرة.
-    if (adminState === 'admin' && showAdminDashboard) {
-      return <AdminApp session={session} onSignedOut={handleSignedOut} />;
-    }
+    if (adminState === 'admin' && showAdminDashboard) return <AdminApp session={session} />;
     return (
       <AuthenticatedApp
         key={session.user.id}
         session={session}
-        onSignedOut={handleSignedOut}
         onOpenAdmin={adminState === 'admin' ? () => setShowAdminDashboard(true) : undefined}
-        onRefreshAdmin={handleRefreshAdmin}
       />
     );
   }
@@ -520,7 +425,7 @@ function GateLoading({ message }: { message: string }) {
  * a sign-out that uploads before it clears. Shared by the ordinary app and the
  * admin's "open the app" view — they are the same account either way.
  */
-function useSessionSync(userId: string, onSignedOut: () => void) {
+function useSessionSync(userId: string) {
   const [syncState, setSyncState] = useState<CloudSyncState>({
     status: 'syncing',
     lastSyncedAt: null,
@@ -564,26 +469,15 @@ function useSessionSync(userId: string, onSignedOut: () => void) {
     }
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
-    onSignedOut();
     await clearLocalUserData();
     return 'signed-out';
-  }, [onSignedOut]);
+  }, []);
 
   return { syncState, handleSignOut };
 }
 
-function AuthenticatedApp({
-  session,
-  onSignedOut,
-  onOpenAdmin,
-  onRefreshAdmin,
-}: {
-  session: Session;
-  onSignedOut: () => void;
-  onOpenAdmin?: () => void;
-  onRefreshAdmin?: () => Promise<boolean>;
-}) {
-  const { syncState, handleSignOut } = useSessionSync(session.user.id, onSignedOut);
+function AuthenticatedApp({ session, onOpenAdmin }: { session: Session; onOpenAdmin?: () => void }) {
+  const { syncState, handleSignOut } = useSessionSync(session.user.id);
 
   return (
     <AppContent
@@ -592,7 +486,6 @@ function AuthenticatedApp({
       syncState={syncState}
       onSyncNow={() => synchronizeNow()}
       onOpenAdmin={onOpenAdmin}
-      onRefreshAdmin={onRefreshAdmin}
     />
   );
 }
@@ -602,17 +495,16 @@ function AuthenticatedApp({
  * التطبيق» puts it in the ordinary app — where Settings → الحساب offers a way
  * back, so no sign-out is needed to see the numbers again.
  */
-function AdminApp({ session, onSignedOut }: { session: Session; onSignedOut: () => void }) {
+function AdminApp({ session }: { session: Session }) {
   const [view, setView] = useState<'dashboard' | 'app'>('dashboard');
   // Sync starts here too, so «فتح التطبيق» opens onto an app already at work.
-  const { handleSignOut } = useSessionSync(session.user.id, onSignedOut);
+  const { handleSignOut } = useSessionSync(session.user.id);
 
   if (view === 'app') {
     return (
       <AuthenticatedApp
         key={`admin-app-${session.user.id}`}
         session={session}
-        onSignedOut={onSignedOut}
         onOpenAdmin={() => setView('dashboard')}
       />
     );
@@ -708,7 +600,6 @@ function AppContent({
   syncState,
   onSyncNow,
   onOpenAdmin,
-  onRefreshAdmin,
   onCreateAccount,
 }: {
   accountEmail: string | undefined;
@@ -717,7 +608,6 @@ function AppContent({
   onSyncNow: (() => Promise<void>) | undefined;
   /** Only supplied for an allow-listed account — the way back to the dashboard. */
   onOpenAdmin?: (() => void) | undefined;
-  onRefreshAdmin?: (() => Promise<boolean>) | undefined;
   /** Supplied only to a guest: the way from Settings to creating an account. */
   onCreateAccount?: (() => void) | undefined;
 }) {
@@ -767,13 +657,17 @@ function AppContent({
       // press first; back during the adhan used to exit the app entirely,
       // silencing the call mid-flight.
       if (dismissTopOverlay()) return;
-      if (!goBack()) {
+      if (screen === 'home') {
         void CapApp.exitApp();
+        return;
       }
+      goBack();
     })
       .then((handle) => {
-        // The registration can settle after this effect was torn down. A late
-        // handle must be released so it cannot leave a duplicate back listener.
+        // The registration can settle after this effect was torn down — and this
+        // effect re-runs on every navigation, so that is the common case, not a
+        // rare one. A handle landing late still holds a live `goBack`; releasing
+        // it at once keeps one leaked listener from jumping two screens per press.
         if (disposed) void handle.remove();
         else removeListener = () => void handle.remove();
       })
@@ -785,7 +679,7 @@ function AppContent({
       disposed = true;
       removeListener?.();
     };
-  }, [goBack, onboarded]);
+  }, [goBack, onboarded, screen]);
 
   useEffect(() => {
     const onSyncComplete = () => {
@@ -1112,25 +1006,25 @@ function AppContent({
               hidden={screen === 'settings'}
             />
             <Suspense fallback={<ScreenLoading />}>
-              <div key={`${screen}-${resetNonce}`} className="screen-transition" data-screen={screen}>
               {/* Selecting the active tab again remounts its screen. */}
-              {screen === 'home' && <HomeScreen settings={settings} navigate={navigate} />}
-              {screen === 'quran' && <QuranScreen settings={settings} params={params} />}
-              {screen === 'planner' && <PlannerScreen navigate={navigate} />}
-              {screen === 'prayer' && <PrayerScreen settings={settings} onSaveSettings={save} navigate={navigate} params={params} />}
-              {screen === 'salah' && <PrayerGuideScreen navigate={navigate} />}
-              {screen === 'hadith' && <HadithScreen params={params} />}
-              {screen === 'sunnah' && <SunnahScreen navigate={navigate} params={params} />}
-              {screen === 'prophet' && <ProphetScreen navigate={navigate} params={params} />}
-              {screen === 'huwaini' && <HuwainiScreen navigate={navigate} />}
-              {screen === 'nawafil' && <NawafilScreen settings={settings} params={params} />}
-              {screen === 'progress' && <ProgressScreen settings={settings} />}
+              {screen === 'home' && <HomeScreen key={`home-${resetNonce}`} settings={settings} navigate={navigate} />}
+              {screen === 'quran' && <QuranScreen key={`quran-${resetNonce}`} settings={settings} params={params} />}
+              {screen === 'planner' && <PlannerScreen key={`planner-${resetNonce}`} navigate={navigate} />}
+              {screen === 'prayer' && <PrayerScreen key={`prayer-${resetNonce}`} settings={settings} onSaveSettings={save} navigate={navigate} params={params} />}
+              {screen === 'salah' && <PrayerGuideScreen key={`salah-${resetNonce}`} navigate={navigate} />}
+              {screen === 'hadith' && <HadithScreen key={`hadith-${resetNonce}`} params={params} />}
+              {screen === 'sunnah' && <SunnahScreen key={`sunnah-${resetNonce}`} navigate={navigate} params={params} />}
+              {screen === 'prophet' && <ProphetScreen key={`prophet-${resetNonce}`} navigate={navigate} params={params} />}
+              {screen === 'huwaini' && <HuwainiScreen key={`huwaini-${resetNonce}`} navigate={navigate} />}
+              {screen === 'nawafil' && <NawafilScreen key={`nawafil-${resetNonce}`} settings={settings} params={params} />}
+              {screen === 'progress' && <ProgressScreen key={`progress-${resetNonce}`} settings={settings} />}
               {/* Selecting the active tab again remounts its screen. A cloud
                   sync does not: it reloads settings, which re-render — the
                   key stays put so the person keeps their scroll and their
                   half-typed input. */}
               {screen === 'settings' && (
                 <SettingsScreen
+                  key={`settings-${resetNonce}`}
                   settings={settings}
                   onSaveSettings={save}
                   params={params}
@@ -1143,13 +1037,13 @@ function AppContent({
                   onSyncNow={onSyncNow}
                   onSignOut={onSignOut}
                   onOpenAdmin={onOpenAdmin}
-                  onRefreshAdmin={onRefreshAdmin}
                   onCreateAccount={onCreateAccount}
                 />
               )}
-              {screen === 'more' && <MoreScreen navigate={navigate} />}
+              {screen === 'more' && <MoreScreen key={`more-${resetNonce}`} navigate={navigate} />}
               {screen === 'library' && (
                 <ContentLibrary
+                  key={`library-${resetNonce}`}
                   initialSection={
                     params.section === 'tafsir' ||
                     params.section === 'hadith' ||
@@ -1160,11 +1054,10 @@ function AppContent({
                   }
                 />
               )}
-              {screen === 'adhkar' && <AdhkarScreen params={params} />}
-              {screen === 'tasbih' && <TasbihScreen params={params} />}
-              {screen === 'bookmarks' && <BookmarksScreen navigate={navigate} />}
-              {screen === 'search' && <SearchScreen navigate={navigate} />}
-              </div>
+              {screen === 'adhkar' && <AdhkarScreen key={`adhkar-${resetNonce}`} params={params} />}
+              {screen === 'tasbih' && <TasbihScreen key={`tasbih-${resetNonce}`} params={params} />}
+              {screen === 'bookmarks' && <BookmarksScreen key={`bookmarks-${resetNonce}`} navigate={navigate} />}
+              {screen === 'search' && <SearchScreen key={`search-${resetNonce}`} navigate={navigate} />}
             </Suspense>
           </div>
         </main>

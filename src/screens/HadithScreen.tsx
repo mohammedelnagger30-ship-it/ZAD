@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, Heart, BookText, X, ChevronLeft, ChevronRight, Filter, AlertTriangle, Library, Loader2, Download, Copy, Share2 } from 'lucide-react';
 import { Card, Badge, EmptyState, PageHeader } from '@/components/ui';
+import { SCREEN_METADATA } from '@/navigation/screenMetadata';
 import { HadithSharh } from '@/components/HadithSharh';
 import { ContentLibrary } from '@/screens/ContentLibrary';
 import {
   GRADE_INFO,
   getHadithCollection,
-  getDailyHadith,
+  hadithOfDay,
   installedCollections,
   searchInstalledHadiths,
   type HadithCollection,
@@ -160,15 +161,22 @@ export function HadithScreen({ params }: HadithScreenProps) {
     })();
   }, [deepLinkId]);
 
-  // Resolve the daily notification through the same selector as the home card.
+  // "Hadith of the day" deep link — the notification that quotes a hadith's opening
+  // words. Unlike a bookmark or a search hit it cannot carry an id: the hadith is
+  // derived from the day of the year over whichever collection is on the device, and
+  // the scheduler cannot know that. It resolves the same entry the home card shows,
+  // through the same path, so the tap lands on exactly the hadith that was announced.
   const deepLinkHadithOfDay = params?.hadithOfDay === true;
   useEffect(() => {
     if (!deepLinkHadithOfDay) return;
     let cancelled = false;
     void (async () => {
       try {
-        const record = await getDailyHadith();
+        const installed = await installedCollections();
+        const id = installed.has(HADITH_OF_DAY_BOOK) ? HADITH_OF_DAY_BOOK : [...installed].sort()[0];
+        await getHadithCollection(id ?? HADITH_OF_DAY_BOOK);
         if (cancelled) return;
+        const record = hadithOfDay();
         if (!record) return;
         setSelected(record);
         setDetailReturnView('search');
@@ -672,9 +680,8 @@ export function HadithScreen({ params }: HadithScreenProps) {
     <div className="space-y-4 pb-4">
       <PageHeader
         title="مكتبة الأحاديث"
-        icon={<BookText size={22} />}
-        className="pb-3"
-        action={
+        icon={<SCREEN_METADATA.hadith.icon size={20} />}
+        actions={
           <div className="flex items-center gap-2">
           <button
             onClick={() => setViewMode('browse')}
