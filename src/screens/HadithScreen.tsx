@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, Heart, BookText, X, ChevronLeft, ChevronRight, Filter, AlertTriangle, Library, Loader2, Download, Copy, Share2 } from 'lucide-react';
-import { Card, Badge, EmptyState } from '@/components/ui';
+import { Card, Badge, EmptyState, PageHeader } from '@/components/ui';
 import { HadithSharh } from '@/components/HadithSharh';
 import { ContentLibrary } from '@/screens/ContentLibrary';
 import {
@@ -670,11 +670,12 @@ export function HadithScreen({ params }: HadithScreenProps) {
   // ---- search (default) ----
   return (
     <div className="space-y-4 pb-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-primary-800 dark:text-primary-100">
-          مكتبة الأحاديث
-        </h1>
-        <div className="flex items-center gap-2">
+      <PageHeader
+        title="مكتبة الأحاديث"
+        icon={<BookText size={22} />}
+        className="pb-3"
+        action={
+          <div className="flex items-center gap-2">
           <button
             onClick={() => setViewMode('browse')}
             className="w-10 h-10 rounded-lg bg-primary-100 dark:bg-primary-800 flex items-center justify-center text-primary-600 dark:text-gold-400"
@@ -691,8 +692,9 @@ export function HadithScreen({ params }: HadithScreenProps) {
           >
             <Library size={20} />
           </button>
-        </div>
-      </div>
+          </div>
+        }
+      />
 
       <Card className="border-primary-100 bg-primary-50/70 dark:border-primary-800 dark:bg-primary-900/50">
         <div className="flex items-start gap-3">

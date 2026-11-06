@@ -1,12 +1,7 @@
 Add-Type -AssemblyName System.Drawing
 
-# Verifies the generated icons: real PNGs, correct dimensions, and a genuine
-# two-tone image rather than a blank or all-black square. The icon is the Qurra
-# mark full-bleed on a deep-green field cut to the program's squircle, so it is
-# mostly green with a small but real ivory mark; the og-image is that same
-# mark on the left of a deep-green field with the name on the right, so it runs
-# even greener. The floors below are set near the measured values so a
-# washed-out or missing mark fails loudly.
+# Verifies the generated icons: real PNGs, correct dimensions, and recognizable
+# Qurra artwork on a green background.
 $root = Split-Path -Parent $PSScriptRoot
 $outDir = Join-Path $root 'public\icons'
 
@@ -32,8 +27,7 @@ function Test-Icon {
         for ($x = 0; $x -lt $bmpNew.Width; $x += 2) {
             $c = $bmpNew.GetPixel($x, $y)
             if ($c.R -lt 70 -and $c.G -lt 120 -and $c.B -lt 100) { $green++ }
-            # Warm ivory accent: the Mushaf's pages. Warm because R clearly
-            # leads B; the dark green field stays out by its low brightness.
+            # Warm ivory/gold accents in the supplied Qurra logo.
             elseif ($c.R -gt 205 -and $c.G -gt 190 -and $c.B -gt 140 -and ($c.R - $c.B) -ge 12) { $gold++ }
             else { $other++ }
         }
@@ -51,8 +45,8 @@ function Test-Icon {
     "$ok $Name ${ExpectW}x${ExpectH}  green=$greenPct%  gold=$goldPct%"
 }
 
-Test-Icon 'icon-512.png' 512 512
-Test-Icon 'icon-192.png' 192 192
+Test-Icon 'icon-512.png' 512 512 1.5 25
+Test-Icon 'icon-192.png' 192 192 1.5 25
 Test-Icon 'og-image.png' 1200 630 0.8 60
 
 if ($fail -eq 0) { "`nICON CHECKS PASSED" } else { "`n$fail ICON CHECK(S) FAILED"; exit 1 }

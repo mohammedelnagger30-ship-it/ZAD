@@ -17,9 +17,21 @@
  * emerald×copper, sea×ember, plum×antique-gold, bronze×oasis,
  * olive×brick, rose×emerald, midnight×amber, ruby×teal,
  * honey×indigo, forest×berry, slate×rust, lavender×leaf,
- * obsidian×jade, nocturne×antique-gold, abyss×turquoise
+ * obsidian×jade, nocturne×antique-gold, abyss×turquoise, Qurra×gold
  */
 export const COLOR_PALETTES = [
+  {
+    id: 'qurra',
+    name: 'قُرّة',
+    latin: 'Qurra',
+    vibe: 'أخضر غابي وورق عاجي ولمسة ذهب معتّق',
+    color: '#165b39',
+    accent: '#76560e',
+    gradient:
+      'linear-gradient(135deg, #09251a 0%, #165b39 44%, #34764f 72%, #76560e 100%)',
+    glow: 'rgba(22, 91, 57, 0.3)',
+    soft: '#f4f3e8',
+  },
   {
     id: 'emerald',
     name: 'زمردي',
@@ -203,3 +215,12 @@ export const COLOR_PALETTES = [
 ] as const;
 
 export type ColorPalette = (typeof COLOR_PALETTES)[number]['id'];
+export const DEFAULT_COLOR_PALETTE: ColorPalette = 'qurra';
+export const FEATURED_COLOR_PALETTE_IDS: readonly ColorPalette[] = [
+  'qurra',
+  'emerald',
+  'ocean',
+  'sand',
+  'forest',
+  'midnight',
+] as const;

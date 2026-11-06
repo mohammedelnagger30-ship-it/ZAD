@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Moon, Sunrise, MapPin, BarChart3, Sun, Sunset, Check, X, Clock, Sparkles, BookOpen, ChevronLeft, Minus, Plus } from 'lucide-react';
-import { Card, Button, Badge, SectionHeader, EmptyState } from '@/components/ui';
+import { Card, Button, Badge, SectionHeader, EmptyState, PageHeader } from '@/components/ui';
 import { PrayerStatusSheet } from '@/components/PrayerStatusSheet';
 import { PrayerWeekGrid } from '@/components/PrayerWeekGrid';
 import { QiblaCompass } from '@/components/QiblaCompass';
@@ -319,7 +319,7 @@ export function PrayerScreen({ settings, onSaveSettings, navigate, params }: Pra
   if (!prayerResult) {
     return (
       <div className="space-y-4 pb-4">
-        <h1 className="text-2xl font-bold text-primary-800 dark:text-primary-100">مواقيت الصلاة</h1>
+        <PageHeader title="مواقيت الصلاة" icon={<Clock size={22} />} className="pb-3" />
         <GuideBanner navigate={navigate} />
         <EmptyState
           icon={<MapPin size={48} />}
@@ -348,22 +348,18 @@ export function PrayerScreen({ settings, onSaveSettings, navigate, params }: Pra
 
   return (
     <div className="space-y-6 pb-6">
-      {/* Enhanced Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-bold text-primary-800 dark:text-primary-100">مواقيت الصلاة</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            {formatArabicDate(today)} — {getHijriDate(today, settings.hijriAdjustment)}
-          </p>
-        </div>
-        <button
+      <PageHeader
+        title="مواقيت الصلاة"
+        description={`${formatArabicDate(today)} — ${getHijriDate(today, settings.hijriAdjustment)}`}
+        icon={<Clock size={22} />}
+        action={<button
           onClick={() => setShowLocation(true)}
           className="flex max-w-[45vw] items-center gap-2 truncate rounded-2xl border-2 border-primary-200 bg-white px-4 py-2.5 text-sm font-semibold text-primary-700 shadow-md transition-all hover:border-primary-400 hover:shadow-lg dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-200 dark:hover:border-primary-600"
         >
           <MapPin size={18} />
           {settings.cityName || 'الموقع'}
-        </button>
-      </div>
+        </button>}
+      />
 
       <GuideBanner navigate={navigate} />
 

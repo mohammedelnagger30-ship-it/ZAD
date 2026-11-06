@@ -1,6 +1,10 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { getSettings, updateSettings, type Settings } from '@/db/database';
-import { COLOR_PALETTES, type ColorPalette } from '@/utils/colorThemes';
+import {
+  COLOR_PALETTES,
+  DEFAULT_COLOR_PALETTE,
+  type ColorPalette,
+} from '@/utils/colorThemes';
 
 /**
  * Pre-paint mirror of the theme settings in localStorage.
@@ -64,14 +68,15 @@ export function useSettings() {
 export function useTheme() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>('light');
-  const [colorPalette, setColorPalette] = useState<ColorPalette>('ocean');
+  const [colorPalette, setColorPalette] = useState<ColorPalette>(DEFAULT_COLOR_PALETTE);
 
   useEffect(() => {
     const loadTheme = async () => {
       try {
         const s = await getSettings();
         setThemeMode(s.theme);
-        const palette = COLOR_PALETTES.find((item) => item.id === s.colorPalette)?.id ?? 'ocean';
+        const palette = COLOR_PALETTES.find((item) => item.id === s.colorPalette)?.id ??
+          DEFAULT_COLOR_PALETTE;
         setColorPalette(palette);
         document.documentElement.dataset.palette = palette;
         try {
@@ -81,7 +86,7 @@ export function useTheme() {
         }
         document.querySelector('meta[name="theme-color"]')?.setAttribute(
           'content',
-          COLOR_PALETTES.find((item) => item.id === palette)?.color ?? '#0369a1',
+          COLOR_PALETTES.find((item) => item.id === palette)?.color ?? '#165b39',
         );
         applyTheme(s.theme);
       } catch {
@@ -140,7 +145,7 @@ export function useTheme() {
       // Storage unavailable: only the pre-paint mirror is lost.
     }
     const themeColor = COLOR_PALETTES.find((item) => item.id === palette)?.color;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor ?? '#0369a1');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor ?? '#165b39');
   };
 
   return { theme, themeMode, changeTheme, colorPalette, changeColorPalette };
@@ -175,41 +180,48 @@ const VALID_SCREENS: readonly string[] = SCREEN_NAMES;
 export type NavParams = Record<string, unknown>;
 
 const NAVIGATION_STORAGE_KEY = 'zad:navigation-state';
+const MAX_NAVIGATION_HISTORY = 50;
 
-// Clear legacy persisted navigation state from localStorage so the app doesn't
-// restore an old random screen on cold start.
-try {
-  localStorage.removeItem(NAVIGATION_STORAGE_KEY);
-} catch {
-  // ignore
+function isScreenName(value: unknown): value is ScreenName {
+  return typeof value === 'string' && VALID_SCREENS.includes(value);
 }
 
-function getStoredNavigationState() {
+function isNavParams(value: unknown): value is NavParams {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getStoredNavigationState(): {
+  history: ScreenName[];
+  paramsByScreen: Record<string, NavParams>;
+} | null {
   try {
-    // Use sessionStorage instead of localStorage so cold starts always land
-    // on the home screen cleanly, while warm in-app reload preserves stack.
-    const raw = sessionStorage.getItem(NAVIGATION_STORAGE_KEY);
+    const raw = localStorage.getItem(NAVIGATION_STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as {
-      screen?: ScreenName;
-      params?: NavParams;
-      history?: ScreenName[];
-      paramsByScreen?: Record<string, NavParams>;
-    };
-
-    const screen = parsed.screen && VALID_SCREENS.includes(parsed.screen)
-      ? parsed.screen
-      : 'home';
-
-    const history = Array.isArray(parsed.history) && parsed.history.length > 0
-      ? parsed.history.filter((item): item is ScreenName => VALID_SCREENS.includes(item))
-      : [screen];
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
+    const stored = parsed as Record<string, unknown>;
+    const screen = isScreenName(stored.screen) ? stored.screen : 'home';
+    const storedHistory = Array.isArray(stored.history)
+      ? stored.history.filter(isScreenName)
+      : [];
+    const history = (storedHistory.length > 0 ? storedHistory : [screen])
+      .slice(-MAX_NAVIGATION_HISTORY);
+    const paramsByScreen = Object.fromEntries(
+      Object.entries(
+        typeof stored.paramsByScreen === 'object' &&
+        stored.paramsByScreen !== null &&
+        !Array.isArray(stored.paramsByScreen)
+          ? stored.paramsByScreen
+          : {},
+      ).filter(([name, params]) => isScreenName(name) && isNavParams(params)),
+    ) as Record<string, NavParams>;
+    if (!paramsByScreen[history[history.length - 1]] && isNavParams(stored.params)) {
+      paramsByScreen[history[history.length - 1]] = stored.params;
+    }
 
     return {
-      screen,
-      params: parsed.params ?? {},
       history,
-      paramsByScreen: parsed.paramsByScreen ?? { [screen]: parsed.params ?? {} },
+      paramsByScreen,
     };
   } catch {
     return null;
@@ -220,53 +232,74 @@ function getStoredNavigationState() {
 const EMPTY_PARAMS: NavParams = {};
 
 export function useNavigation() {
-  // Restored once per mount: this parses localStorage, and the hook re-renders
-  // on every navigation and every params change — reading it per render burned
-  // a getItem + JSON.parse on each one. A `useState` lazy initializer runs
-  // exactly once.
+  // Restore once so route state survives a full app close without parsing storage
+  // again on every render.
   const [restored] = useState(getStoredNavigationState);
   const [history, setHistory] = useState<ScreenName[]>(restored?.history ?? ['home']);
   const [paramsByScreen, setParamsByScreen] = useState<Record<string, NavParams>>(
-    restored?.paramsByScreen ?? { home: restored?.params ?? {} },
+    restored?.paramsByScreen ?? { home: {} },
   );
+  const historyRef = useRef(history);
+  historyRef.current = history;
   // Bumped only when the user re-taps the tab they are already on. Without it,
   // navigating to the current screen is a React no-op, so tapping "القرآن" while
   // reading a surah did nothing at all and the reader stayed open. Pairing this
   // nonce with the screen `key` in App turns a repeat tap into a reset-to-initial-state.
   const [resetNonce, setResetNonce] = useState(0);
 
-  // `screen` and `params` are derived from the stack and the per-screen map, so
-  // there is no second copy of "where am I" left to fall out of sync — and
-  // goBack is a pure state update instead of calling setScreen from inside a
-  // setHistory updater (a side effect in an updater runs twice under StrictMode,
-  // and React never guaranteed it ran at all).
+  // Keep the active route derived from the stack. The ref lets stable callbacks
+  // read the latest stack without re-registering native back-button listeners.
   const screen = history[history.length - 1] ?? 'home';
   const params = paramsByScreen[screen] ?? EMPTY_PARAMS;
+  const navigationStateRef = useRef({ screen, params, history, paramsByScreen });
+  navigationStateRef.current = { screen, params, history, paramsByScreen };
 
-  useEffect(() => {
+  const persistNavigation = useCallback(() => {
     try {
-      sessionStorage.setItem(
-        NAVIGATION_STORAGE_KEY,
-        JSON.stringify({ screen, params, history, paramsByScreen }),
-      );
+      localStorage.setItem(NAVIGATION_STORAGE_KEY, JSON.stringify(navigationStateRef.current));
     } catch {
       // Best-effort persistence only.
     }
-  }, [history, params, paramsByScreen, screen]);
+  }, []);
 
-  const navigate = (target: ScreenName, p: NavParams = {}) => {
+  useEffect(() => {
+    persistNavigation();
+  }, [history, params, paramsByScreen, persistNavigation, screen]);
+
+  useEffect(() => {
+    window.addEventListener('pagehide', persistNavigation);
+    return () => window.removeEventListener('pagehide', persistNavigation);
+  }, [persistNavigation]);
+
+  const navigate = useCallback((target: ScreenName, p: NavParams = {}) => {
+    const currentHistory = historyRef.current;
+    const currentScreen = currentHistory[currentHistory.length - 1] ?? 'home';
     setParamsByScreen((current) => ({ ...current, [target]: p }));
     window.scrollTo(0, 0);
-    if (target === screen) {
+    if (target === currentScreen) {
       setResetNonce((n) => n + 1);
       return;
     }
-    setHistory((current) => (current[current.length - 1] === target ? current : [...current, target]));
-  };
+    const previousIndex = currentHistory.lastIndexOf(target);
+    const nextHistory = previousIndex >= 0
+      ? currentHistory.slice(0, previousIndex + 1)
+      : [...currentHistory, target].slice(-MAX_NAVIGATION_HISTORY);
+    historyRef.current = nextHistory;
+    setHistory(nextHistory);
+  }, []);
 
-  const goBack = () => {
-    setHistory((current) => (current.length <= 1 ? current : current.slice(0, -1)));
-  };
+  const goBack = useCallback((): boolean => {
+    if (historyRef.current.length <= 1) {
+      if (historyRef.current[0] === 'home') return false;
+      historyRef.current = ['home'];
+      setHistory(['home']);
+      return true;
+    }
+    const previousHistory = historyRef.current.slice(0, -1);
+    historyRef.current = previousHistory;
+    setHistory(previousHistory);
+    return true;
+  }, []);
 
   return { screen, params, navigate, resetNonce, goBack, history };
 }

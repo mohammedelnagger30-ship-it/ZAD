@@ -3,7 +3,7 @@ import { Bookmark, Trash2, BookOpen, FileDown, FileText, Share2, Copy, ArrowUpRi
 import { db, type Bookmark as BookmarkType, type PageBookmark } from '@/db/database';
 import { getSurah, toArabicNumber } from '@/data/surahs';
 import { getAyah } from '@/data/quranText';
-import { Card, EmptyState, Badge } from '@/components/ui';
+import { Card, EmptyState, Badge, PageHeader } from '@/components/ui';
 import { useSnackbar } from '@/hooks/useSnackbar';
 import { buildBookmarksExport } from '@/utils/bookmarkExport';
 import { getHighlightColor } from '@/utils/ayahHighlights';
@@ -225,20 +225,13 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
 
   return (
     <div className="space-y-5 pb-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-primary-100 pb-3 dark:border-primary-800">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-primary-900 md:text-3xl dark:text-primary-50">
-            <Bookmark size={24} className="text-primary-600 dark:text-gold-400" />
-            محفوظاتي
-          </h1>
-          <p className="mt-0.5 text-xs text-primary-700/80 dark:text-primary-300">
-            {total > 0
-              ? `${toArabicNumber(total)} علامة محفوظة — عود إليها في أي وقت`
-              : 'الآيات والصفحات التي علّمتها للرجوع إليها لاحقًا'}
-          </p>
-        </div>
-        {total > 0 && (
+      <PageHeader
+        title="محفوظاتي"
+        description={total > 0
+          ? `${toArabicNumber(total)} علامة محفوظة — عود إليها في أي وقت`
+          : 'الآيات والصفحات التي علّمتها للرجوع إليها لاحقًا'}
+        icon={<Bookmark size={22} />}
+        action={total > 0 && (
           <button
             type="button"
             onClick={() => void exportAll()}
@@ -249,7 +242,7 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
             {exported ? 'نُسخ كنص' : 'تصدير كنص'}
           </button>
         )}
-      </div>
+      />
 
       {total === 0 && (
         <EmptyState

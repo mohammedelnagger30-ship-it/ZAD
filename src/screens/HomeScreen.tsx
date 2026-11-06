@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Check, X, Clock, Flame, BookOpen, Moon, Sunrise, BookText, ChevronLeft, Sparkles, Calendar, Heart, Repeat, Share2, LoaderCircle, Play, Pause } from 'lucide-react';
-import { Card, Button, Badge, SectionHeader, EmptyState, type BadgeProps } from '@/components/ui';
+import { Check, X, Clock, Clock3, Flame, BookOpen, Moon, Sunrise, BookText, ChevronLeft, Star, Calendar, Heart, Repeat, Share2, LoaderCircle, Play, Pause } from 'lucide-react';
+import { Card, Button, Badge, IconWell, SectionHeader, EmptyState, type BadgeProps } from '@/components/ui';
 import { PrayerStatusSheet } from '@/components/PrayerStatusSheet';
 import { DeviceProtectionBanner } from '@/components/DeviceProtectionBanner';
 import { type DailyTask, type Settings, type StrengthRating, type TaskStatus } from '@/db/database';
@@ -460,17 +460,17 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
       <div
         className="rounded-3xl p-5 md:p-6 text-white relative overflow-hidden shadow-xl"
         style={{
-          background: 'var(--brand-gradient, linear-gradient(135deg, #1f734e 0%, #2f8f64 45%, #b84414 100%))',
+          background: 'var(--brand-gradient, linear-gradient(135deg, #09251a 0%, #165b39 44%, #34764f 72%, #76560e 100%))',
           boxShadow: '0 20px 40px -15px var(--brand-glow, rgba(31, 115, 78, 0.35))',
         }}
       >
         <div
           className="absolute -top-12 -left-12 w-44 h-44 rounded-full blur-2xl pointer-events-none opacity-40 animate-float"
-          style={{ background: 'var(--brand-to, #b84414)' }}
+          style={{ background: 'var(--brand-to, #76560e)' }}
         />
         <div
           className="absolute -bottom-10 -right-10 w-40 h-40 rounded-full blur-xl pointer-events-none opacity-35 animate-float-slow"
-          style={{ background: 'var(--brand-from, #1f734e)' }}
+          style={{ background: 'var(--brand-from, #09251a)' }}
         />
         <div className="relative">
           <div className="flex items-center justify-between mb-2">
@@ -547,9 +547,9 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
           onClick={() => navigate('quran')}
           className="group flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
         >
-          <div className="h-11 w-11 md:h-12 md:w-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center mb-1.5 shadow-md shadow-emerald-600/25 transition-transform duration-200 group-hover:scale-110">
+          <IconWell className="mb-1.5 shadow-sm transition-transform duration-200 group-hover:scale-110 md:h-12 md:w-12">
             <BookOpen size={21} />
-          </div>
+          </IconWell>
           <span className="text-xs md:text-sm font-bold text-primary-900 dark:text-primary-100">المصحف</span>
         </button>
 
@@ -558,9 +558,9 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
           onClick={() => navigate('prayer')}
           className="group flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
         >
-          <div className="h-11 w-11 md:h-12 md:w-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center mb-1.5 shadow-md shadow-blue-600/25 transition-transform duration-200 group-hover:scale-110">
-            <Moon size={21} />
-          </div>
+          <IconWell className="mb-1.5 shadow-sm transition-transform duration-200 group-hover:scale-110 md:h-12 md:w-12">
+            <Clock3 size={21} />
+          </IconWell>
           <span className="text-xs md:text-sm font-bold text-primary-900 dark:text-primary-100">الصلاة</span>
         </button>
 
@@ -569,9 +569,9 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
           onClick={() => navigate('adhkar')}
           className="group flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
         >
-          <div className="h-11 w-11 md:h-12 md:w-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center mb-1.5 shadow-md shadow-amber-600/25 transition-transform duration-200 group-hover:scale-110">
+          <IconWell tone="accent" className="mb-1.5 shadow-sm transition-transform duration-200 group-hover:scale-110 md:h-12 md:w-12">
             <Heart size={21} />
-          </div>
+          </IconWell>
           <span className="text-xs md:text-sm font-bold text-primary-900 dark:text-primary-100">الأذكار</span>
         </button>
 
@@ -580,9 +580,9 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
           onClick={() => navigate('tasbih')}
           className="group flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
         >
-          <div className="h-11 w-11 md:h-12 md:w-12 rounded-xl bg-gradient-to-br from-fuchsia-500 to-pink-600 text-white flex items-center justify-center mb-1.5 shadow-md shadow-pink-600/25 transition-transform duration-200 group-hover:scale-110">
+          <IconWell tone="accent" className="mb-1.5 shadow-sm transition-transform duration-200 group-hover:scale-110 md:h-12 md:w-12">
             <Repeat size={21} />
-          </div>
+          </IconWell>
           <span className="text-xs md:text-sm font-bold text-primary-900 dark:text-primary-100">المسبحة</span>
         </button>
       </div>
@@ -637,7 +637,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
 
       <Card className="border-gold-300/70 bg-gradient-to-bl from-gold-50/70 via-white to-primary-50/30 dark:border-gold-800/50 dark:from-gold-950/20 dark:via-primary-950/40 dark:to-primary-900/40 shadow-[0_8px_24px_-10px_var(--brand-glow)] transition-all duration-300 hover:shadow-lg">
         <div className="flex items-center gap-2 text-primary-700 dark:text-gold-300">
-          <Sparkles size={18} className="animate-pulse-soft text-accent-500 shrink-0" />
+          <Star size={18} className="text-accent-500 shrink-0" />
           <h2 className="flex-1 font-bold">رسالة اليوم من القرآن</h2>
           {dailyQuranMessage && (
             <div className="flex items-center gap-2">
@@ -912,7 +912,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
           <>
             <Card onClick={() => navigate('hadith', { hadithId: hadith.id })}>
               <div className="flex items-start gap-3">
-                <Sparkles size={20} className="text-gold-500 shrink-0 mt-1" />
+                <Star size={20} className="text-gold-500 shrink-0 mt-1" />
                 <div className="flex-1">
                   <p className="text-sm md:text-base md:leading-relaxed md:max-w-prose text-primary-800 dark:text-primary-100 line-clamp-3 quran-text whitespace-pre-line">
                     {hadith.text}
@@ -937,7 +937,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
         ) : (
           <Card onClick={() => navigate('hadith')}>
             <div className="flex items-start gap-3">
-              <Sparkles size={20} className="text-gold-500 shrink-0 mt-1" />
+              <Star size={20} className="text-gold-500 shrink-0 mt-1" />
               <div className="flex-1">
                 <p className="text-sm leading-relaxed text-primary-800 dark:text-primary-100">
                   {seedingHadith

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Flame, TrendingUp, Award, BookOpen, Check, Target, Share2, Download, Lock, Trophy } from 'lucide-react';
-import { Card, SectionHeader, Button } from '@/components/ui';
+import { Card, SectionHeader, Button, PageHeader } from '@/components/ui';
 import { db, type Settings } from '@/db/database';
 import { getStreakCount } from '@/utils/taskManager';
 import { getWeeklyPrayerStats, getMonthlyPrayerStats } from '@/utils/prayerTracker';
@@ -126,9 +126,10 @@ export function ProgressScreen({ settings }: ProgressScreenProps) {
 
   return (
     <div className="space-y-5 pb-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-primary-800 dark:text-primary-100">تقدّمي</h1>
-        <div className="flex items-center gap-2">
+      <PageHeader
+        title="تقدّمي"
+        icon={<TrendingUp size={22} />}
+        action={
           <Button
             size="sm"
             variant="secondary"
@@ -139,9 +140,8 @@ export function ProgressScreen({ settings }: ProgressScreenProps) {
             <Download size={16} />
             {isExporting ? 'جارٍ التصدير...' : 'تصدير تقرير'}
           </Button>
-          <TrendingUp size={28} className="text-primary-600 dark:text-gold-400" />
-        </div>
-      </div>
+        }
+      />
 
       {/* Streak hero */}
       <div className="bg-linear-to-bl from-accent-500 to-accent-700 rounded-3xl p-5 md:p-7 text-white relative overflow-hidden">

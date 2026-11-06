@@ -508,17 +508,14 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
     voiceTime,
     playbackRate,
     repeatCount,
-    voiceAudioRef,
-    setVoicePlaying,
     reciterId,
     handleVoiceReciter,
     openVoice,
+    startVoice,
     replayVoice,
     handleVoiceScope,
     closeAyahChoice,
     resetVoice,
-    handleVoiceTime,
-    handleVoiceEnded,
     handleVoiceRate,
     handleRepeatCount,
     seekVoice,
@@ -956,6 +953,7 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
         ayahPanelRef={ayahPanelRef}
         setTafsirAyah={setTafsirAyah}
         openVoice={openVoice}
+        startVoice={startVoice}
         voiceEngaged={voiceEngaged}
         voiceWholeFile={voiceWholeFile}
         voiceHint={voiceHint}
@@ -974,10 +972,6 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
         voicePrimaryDisabled={voicePrimaryDisabled}
         voicePrimaryLabel={voicePrimaryLabel}
         voiceError={voiceError}
-        voiceAudioRef={voiceAudioRef}
-        setVoicePlaying={setVoicePlaying}
-        handleVoiceTime={handleVoiceTime}
-        handleVoiceEnded={handleVoiceEnded}
       />
 
       {/* Rendered last so it stacks over the reader's own sheets. */}
@@ -1038,7 +1032,6 @@ const MushafLeaf = memo(function MushafLeaf({
     </div>
   );
 });
-
 
 
 

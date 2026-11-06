@@ -343,7 +343,7 @@ const OPPORTUNITY_CONTENT: Record<
   },
 };
 
-export default function NawafilScreen({ settings, params }: NawafilScreenProps) {
+export function NawafilScreen({ settings, params }: NawafilScreenProps) {
   const [records, setRecords] = useState<Record<string, boolean>>({});
   const [weekCounts, setWeekCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
@@ -528,7 +528,7 @@ export default function NawafilScreen({ settings, params }: NawafilScreenProps) 
       {/* ---- Hero: date, ring, stats, week dots ---- */}
       <section
         className="relative overflow-hidden rounded-3xl p-5 text-white shadow-lg"
-        style={{ background: 'var(--brand-gradient, linear-gradient(135deg, #1f734e 0%, #2f8f64 45%, #b84414 100%))' }}
+        style={{ background: 'var(--brand-gradient, linear-gradient(135deg, #09251a 0%, #165b39 44%, #34764f 72%, #76560e 100%))' }}
       >
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">

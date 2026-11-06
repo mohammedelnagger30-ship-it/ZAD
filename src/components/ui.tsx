@@ -71,6 +71,53 @@ export function SectionHeader({ title, icon, action }: SectionHeaderProps) {
   );
 }
 
+interface PageHeaderProps {
+  title: string;
+  description?: string;
+  icon?: ReactNode;
+  action?: ReactNode;
+  className?: string;
+}
+
+export function PageHeader({ title, description, icon, action, className = '' }: PageHeaderProps) {
+  return (
+    <header className={`flex flex-wrap items-center justify-between gap-3 border-b border-primary-100 pb-4 dark:border-primary-800 ${className}`}>
+      <div className="flex min-w-0 items-center gap-2.5">
+        {icon && <span className="app-accent-icon shrink-0">{icon}</span>}
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold text-primary-900 dark:text-primary-50 md:text-3xl">{title}</h1>
+          {description && <p className="mt-1 text-xs text-primary-700/80 dark:text-primary-300">{description}</p>}
+        </div>
+      </div>
+      {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
+    </header>
+  );
+}
+
+interface IconWellProps {
+  children: ReactNode;
+  tone?: 'primary' | 'accent';
+  size?: 'md' | 'lg';
+  className?: string;
+}
+
+export function IconWell({ children, tone = 'primary', size = 'md', className = '' }: IconWellProps) {
+  const tones = {
+    primary: 'bg-primary-100 text-primary-700 dark:bg-primary-900/60 dark:text-primary-200',
+    accent: 'bg-accent-100 text-accent-700 dark:bg-accent-900/50 dark:text-accent-200',
+  };
+  const sizes = {
+    md: 'h-11 w-11 rounded-xl',
+    lg: 'h-12 w-12 rounded-2xl',
+  };
+
+  return (
+    <span className={`inline-flex shrink-0 items-center justify-center ${tones[tone]} ${sizes[size]} ${className}`}>
+      {children}
+    </span>
+  );
+}
+
 interface ButtonProps {
   children: ReactNode;
   onClick?: () => void;

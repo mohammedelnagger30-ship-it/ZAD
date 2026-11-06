@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BookOpen, LockKeyhole, Mail, RefreshCcw, Sun, Moon, Monitor, Sparkles, Palette, Check, X } from 'lucide-react';
+import { BookOpen, LockKeyhole, Mail, RefreshCcw, Sun, Moon, Sparkles, Palette, Check, X } from 'lucide-react';
 import { supabase } from '@/utils/supabaseClient';
 import { useTheme } from '@/hooks/useApp';
 import { COLOR_PALETTES, type ColorPalette } from '@/utils/colorThemes';
@@ -34,7 +34,7 @@ export function AuthScreen({ onAuthenticated, onContinueOffline, onClose, initia
     // Force immediate update of CSS variables
     document.documentElement.dataset.palette = palette;
     const themeColor = COLOR_PALETTES.find((item) => item.id === palette)?.color;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor ?? '#0369a1');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor ?? '#165b39');
   };
 
   const resendConfirmation = async () => {
@@ -110,7 +110,7 @@ export function AuthScreen({ onAuthenticated, onContinueOffline, onClose, initia
         
         {/* Top Header Controls: Theme Mode & Color Palette Switcher */}
         <div className="mb-6 flex items-center justify-between border-b border-primary-100 pb-4 dark:border-primary-900">
-          {/* Theme Mode Selector (Light / Dark / System) */}
+          {/* Theme Mode Selector (Light / Dark) */}
           <div className="flex items-center gap-1 rounded-xl bg-primary-50 p-1 dark:bg-primary-900/60 border border-primary-200/50 dark:border-primary-800/50">
             <button
               type="button"
@@ -119,7 +119,7 @@ export function AuthScreen({ onAuthenticated, onContinueOffline, onClose, initia
               aria-label="الوضع الفاتح"
               className="rounded-lg min-h-10 min-w-10 p-2.5 md:p-3 text-xs transition"
               style={{
-                background: themeMode === 'light' ? 'var(--brand-from, #1f734e)' : 'transparent',
+                background: themeMode === 'light' ? 'var(--brand-from, #09251a)' : 'transparent',
                 color: themeMode === 'light' ? 'white' : '#6b7280'
               }}
             >
@@ -132,24 +132,11 @@ export function AuthScreen({ onAuthenticated, onContinueOffline, onClose, initia
               aria-label="الوضع الداكن"
               className="rounded-lg min-h-10 min-w-10 p-2.5 md:p-3 text-xs transition"
               style={{
-                background: themeMode === 'dark' ? 'var(--brand-from, #1f734e)' : 'transparent',
+                background: themeMode === 'dark' ? 'var(--brand-from, #09251a)' : 'transparent',
                 color: themeMode === 'dark' ? 'white' : '#6b7280'
               }}
             >
               <Moon size={15} />
-            </button>
-            <button
-              type="button"
-              onClick={() => void changeTheme('system')}
-              title="حسب النظام"
-              aria-label="حسب النظام"
-              className="rounded-lg min-h-10 min-w-10 p-2.5 md:p-3 text-xs transition"
-              style={{
-                background: themeMode === 'system' ? 'var(--brand-from, #1f734e)' : 'transparent',
-                color: themeMode === 'system' ? 'white' : '#6b7280'
-              }}
-            >
-              <Monitor size={15} />
             </button>
           </div>
 
@@ -162,9 +149,9 @@ export function AuthScreen({ onAuthenticated, onContinueOffline, onClose, initia
               aria-label="اختيار لون الواجهة"
               className="relative h-10 w-10 rounded-xl border-2 transition-all duration-300 hover:scale-110 active:scale-95 shadow-lg"
               style={{
-                borderColor: 'var(--brand-from, #1f734e)',
-                background: 'var(--brand-gradient, linear-gradient(135deg, #1f734e 0%, #2f8f64 45%, #b84414 100%))',
-                boxShadow: `0 4px 12px var(--brand-glow, rgba(31,115,78,0.22))`
+                borderColor: 'var(--brand-from, #09251a)',
+                background: 'var(--brand-gradient, linear-gradient(135deg, #09251a 0%, #165b39 44%, #34764f 72%, #76560e 100%))',
+                boxShadow: `0 4px 12px var(--brand-glow, rgba(22,91,57,0.28))`
               }}
             >
               <div className="absolute inset-0 flex items-center justify-center">

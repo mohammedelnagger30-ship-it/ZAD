@@ -359,7 +359,7 @@ interface SunnahScreenProps {
   params?: Record<string, unknown>;
 }
 
-export default function SunnahScreen({ navigate, params }: SunnahScreenProps) {
+export function SunnahScreen({ navigate, params }: SunnahScreenProps) {
   const deepLinkCategoryId = typeof params?.categoryId === 'string' ? params.categoryId : null;
   const deepLinkItemTitle = typeof params?.itemTitle === 'string' ? params.itemTitle : null;
   const [selected, setSelected] = useState(() =>

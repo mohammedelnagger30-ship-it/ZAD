@@ -1,6 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import { DEFAULT_NOTIFICATION_VOICE_ID } from '@/data/notificationSounds';
-import { type ColorPalette } from '@/utils/colorThemes';
+import { DEFAULT_COLOR_PALETTE, type ColorPalette } from '@/utils/colorThemes';
 import {
   CITY_PRESETS,
   DEFAULT_IQAMAH_OFFSETS,
@@ -468,7 +468,7 @@ export const SETTINGS_ROW_ID = 1;
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'light',
-  colorPalette: 'ocean',
+  colorPalette: DEFAULT_COLOR_PALETTE,
   fontSize: 28,
   notificationSound: true,
   notificationVoiceId: DEFAULT_NOTIFICATION_VOICE_ID,

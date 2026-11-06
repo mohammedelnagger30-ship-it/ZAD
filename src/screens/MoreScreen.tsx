@@ -1,25 +1,17 @@
 import {
   BarChart3,
   BookOpen,
-  BookText,
-  Bookmark,
-  Calendar,
   ChevronLeft,
-  Heart,
   Info,
   Mic2,
   Moon,
-  Music2,
-  Repeat,
-  Search,
-  Settings as SettingsIcon,
   Shield,
-  Sparkles,
-  Star,
+  Layers,
   type LucideIcon,
 } from 'lucide-react';
 import { toArabicNumber } from '@/data/surahs';
-import { Card } from '@/components/ui';
+import { Card, PageHeader } from '@/components/ui';
+import { SCREEN_ICONS } from '@/components/screenIcons';
 import type { ScreenName, NavParams } from '@/hooks/useApp';
 
 interface MoreScreenProps {
@@ -31,7 +23,6 @@ interface MoreItem {
   params?: NavParams;
   label: string;
   description: string;
-  icon: LucideIcon;
   badge?: string;
 }
 
@@ -50,7 +41,6 @@ const FEATURED: MoreItem = {
   screen: 'huwaini',
   label: 'الشيخ أبو إسحاق الحويني',
   description: 'كل دوراته العلمية وسلاسله ومحاضراته، مرتّبة بأجود الأصوات، مع تنزيل ما تريد للاستماع بلا إنترنت',
-  icon: Mic2,
   badge: 'جديد',
 };
 
@@ -69,36 +59,30 @@ const GROUPS: MoreGroup[] = [
         screen: 'search',
         label: 'البحث الشامل',
         description: 'ابحث في الآيات والأحاديث والأذكار ونصوص التفسير في نتيجة واحدة',
-        icon: Search,
         badge: 'شامل',
       },
       {
         screen: 'bookmarks',
         label: 'محفوظاتي',
         description: 'الآيات والصفحات التي علّمتها في المصحف، عود إليها بضغطة واحدة',
-        icon: Bookmark,
-        badge: 'جديد',
       },
       {
         screen: 'library',
         params: { section: 'audio' },
         label: 'إدارة التلاوات',
         description: 'تنزيل التلاوات وترتيب السور المحفوظة لكل قارئ',
-        icon: Music2,
       },
       {
         screen: 'library',
         params: { section: 'tafsir' },
         label: 'إدارة التفاسير',
         description: 'اختيار التفاسير وتنزيلها وإدارة المحفوظ منها',
-        icon: BookOpen,
       },
       {
         screen: 'library',
         params: { section: 'hadith' },
         label: 'إدارة الأحاديث',
         description: 'تنزيل كتب الحديث وإدارة المجموعات المحفوظة',
-        icon: BookText,
       },
     ],
   },
@@ -110,42 +94,34 @@ const GROUPS: MoreGroup[] = [
         screen: 'adhkar',
         label: 'الأذكار اليومية',
         description: 'أذكار الصباح والمساء والنوم وبعد الصلاة، مع أذكار الوضوء والمسجد والطعام والسفر والميت',
-        icon: Heart,
         badge: 'مستحسنة',
       },
       {
         screen: 'tasbih',
         label: 'المسبحة الإلكترونية',
         description: 'عداد الذكر التفاعلي بالاهتزاز اللمسي',
-        icon: Repeat,
         badge: 'تفاعلي',
       },
       {
         screen: 'salah',
         label: 'فقه الصلاة',
         description: 'أركان الصلاة وحركاتها الصحيحة وأخطاؤها وسننها بأدلتها',
-        icon: BookOpen,
         badge: 'دليل',
       },
       {
         screen: 'nawafil',
         label: 'النوافل',
         description: 'السنن الرواتب والوتر والضحى وقيام الليل ونوافل الصلوات بأوقاتها وأفضلها',
-        icon: Moon,
-        badge: 'جديد',
       },
       {
         screen: 'prophet',
         label: 'النبي محمد ﷺ',
         description: 'اسمه ونسبه وشمائل خَلْقه وأخلاقه وأسرته وسيرته ومعجزاته',
-        icon: Star,
-        badge: 'جديد',
       },
       {
         screen: 'sunnah',
         label: 'سنن عن النبي',
         description: 'سنن يومية وصفات وأخلاق وتعامل، مع الأدلة',
-        icon: Sparkles,
       },
     ],
   },
@@ -157,19 +133,16 @@ const GROUPS: MoreGroup[] = [
         screen: 'planner',
         label: 'خطة الحفظ والمراجعة',
         description: 'جدولة وردك اليومي وتذكيرات التكرار',
-        icon: Calendar,
       },
       {
         screen: 'progress',
         label: 'إحصائيات الإنجاز',
         description: 'متابعة تقدمك والتزامك اليومي بالأيام المتتالية',
-        icon: BarChart3,
       },
       {
         screen: 'settings',
         label: 'إعدادات التطبيق',
         description: 'تخصيص المظهر، الأذان والنسخ الاحتياطي',
-        icon: SettingsIcon,
       },
     ],
   },
@@ -177,7 +150,7 @@ const GROUPS: MoreGroup[] = [
 
 /** One shelf entry: an icon in the theme's tint, the name, and what waits behind it. */
 function MoreCard({ item, onOpen }: { item: MoreItem; onOpen: () => void }) {
-  const Icon = item.icon;
+  const Icon = SCREEN_ICONS[item.screen];
 
   return (
     <button
@@ -222,21 +195,16 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
       className="mx-auto w-full max-w-6xl space-y-5 px-2.5 pb-[calc(env(safe-area-inset-bottom,0)+1.75rem)] pt-1 sm:space-y-6 sm:px-3 md:px-4 lg:px-6"
       dir="rtl"
     >
-      {/* Page title — one line of purpose, and how much sits behind it. */}
-      <div className="flex flex-col gap-2 border-b border-primary-100 pb-3.5 sm:flex-row sm:items-start sm:justify-between sm:gap-3 dark:border-primary-800/80">
-        <div>
-          <h1 className="flex items-center gap-2 text-lg font-extrabold text-primary-900 xs:text-xl md:text-2xl dark:text-primary-50">
-            <Sparkles size={20} className="text-primary-500 dark:text-gold-300" aria-hidden="true" />
-            جميع الأقسام والخدمات
-          </h1>
-          <p className="mt-1 text-xs text-primary-700/70 dark:text-primary-300/80">
-            تصفح كافة ميزات وأقسام تطبيق قُرّة
-          </p>
-        </div>
-        <span className="self-start rounded-full bg-primary-50 px-2.5 py-1 text-[0.625rem] font-bold text-primary-700 sm:mt-1 dark:bg-primary-900/60 dark:text-primary-200">
-          {toArabicNumber(total)} قسمًا
-        </span>
-      </div>
+      <PageHeader
+        title="جميع الأقسام والخدمات"
+        description="تصفح كافة ميزات وأقسام تطبيق قُرّة"
+        icon={<Layers size={22} aria-hidden="true" />}
+        action={
+          <span className="rounded-full bg-primary-50 px-2.5 py-1 text-[0.625rem] font-bold text-primary-700 dark:bg-primary-900/60 dark:text-primary-200">
+            {toArabicNumber(total)} قسمًا
+          </span>
+        }
+      />
 
       {/* The featured section — full width, dressed in the theme's own gradient. */}
       <button

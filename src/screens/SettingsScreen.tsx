@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Settings as SettingsIcon } from 'lucide-react';
+import { PageHeader } from '@/components/ui';
 import { BackupSection } from '@/components/settings/BackupSection';
 import { AutoBackupSection } from '@/components/settings/AutoBackupSection';
 import { AccountSection } from '@/components/settings/AccountSection';
@@ -97,18 +98,11 @@ export function SettingsScreen({
 
   return (
     <div className="space-y-6 pb-8" dir="rtl">
-      {/* Top Main Header */}
-      <div className="flex items-center justify-between border-b border-primary-100 pb-4 dark:border-primary-800">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-primary-900 dark:text-primary-50 flex items-center gap-2">
-            <SettingsIcon size={26} className="text-primary-600 dark:text-gold-400" />
-            إعدادات التطبيق
-          </h1>
-          <p className="mt-1 text-xs text-primary-700/80 dark:text-primary-300">
-            تخصيص المظهر، التنبيهات، مواقيت الصلاة والنسخ الاحتياطي
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="إعدادات التطبيق"
+        description="تخصيص المظهر، التنبيهات، مواقيت الصلاة والنسخ الاحتياطي"
+        icon={<SettingsIcon size={22} />}
+      />
 
       {/* Two balanced columns on tablets/desktop. Flex, not a grid: section heights differ
           wildly (notifications vs prayer times), and grid rows would stretch a short section's
@@ -147,4 +141,3 @@ export function SettingsScreen({
     </div>
   );
 }
-

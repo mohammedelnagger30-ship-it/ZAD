@@ -28,6 +28,7 @@ import {
   Vibrate,
   X,
 } from 'lucide-react';
+import { PageHeader } from '@/components/ui';
 import { Card } from '@/components/ui';
 import { toArabicNumber } from '@/data/surahs';
 import { ADHKAR_CATEGORIES, type AdhkarCategory, type Dhikr } from '@/data/adhkar';
@@ -601,12 +602,12 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
 
   return (
     <div className="space-y-4 pb-5">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-primary-800 md:text-3xl dark:text-primary-100">الأذكار</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">أذكارك وأدعيتك، مع حفظ تقدمك على الجهاز</p>
-        </div>
-        <button
+      <PageHeader
+        title="الأذكار"
+        description="أذكارك وأدعيتك، مع حفظ تقدمك على الجهاز"
+        icon={<Heart size={22} />}
+        className="pb-3"
+        action={<button
           onClick={() => setState((previous) => ({ ...previous, haptics: !previous.haptics }))}
           aria-pressed={state.haptics}
           aria-label={state.haptics ? 'إيقاف الاهتزاز عند العد' : 'تفعيل الاهتزاز عند العد'}
@@ -617,8 +618,8 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
           }`}
         >
           <Vibrate size={19} />
-        </button>
-      </div>
+        </button>}
+      />
 
       {storageError && (
         <Card className="border-error-200 bg-error-50 dark:border-error-800 dark:bg-error-900/20">

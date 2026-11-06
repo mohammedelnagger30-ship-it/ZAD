@@ -153,6 +153,28 @@ describe('recitationEngine playback', () => {
     expect(state.interrupted).toBe(false);
   });
 
+  it('resumes through the shared media session and respects the selected ayah scope', async () => {
+    await playFirstAyah();
+    engine.seekTo(1500);
+    engine.pauseRecitation();
+
+    expect(engine.getRecitationState().sessionOpen).toBe(true);
+    expect(engine.getRecitationState().isPlaying).toBe(false);
+
+    engine.setContinuousPlayback(false);
+    await engine.resumeAyah(false);
+    await flush();
+    expect(engine.getRecitationState().isPlaying).toBe(true);
+    expect(engine.getRecitationState().activeAyah).toBe(2);
+    expect(sessionHandlers.pause).toBeDefined();
+
+    recitationAudio().currentTime = 2.1;
+    recitationAudio().dispatchEvent(new Event('timeupdate'));
+
+    expect(engine.getRecitationState().sessionOpen).toBe(false);
+    expect(engine.getRecitationState().isPlaying).toBe(false);
+  });
+
   it('leaves a deliberate pause alone when the window regains focus', async () => {
     await playFirstAyah();
     await engine.toggleSurah();

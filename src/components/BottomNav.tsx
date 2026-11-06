@@ -1,18 +1,20 @@
-import { Home, BookOpen, Moon, BookText, MoreHorizontal } from 'lucide-react';
+import { BookOpen } from 'lucide-react';
 import type { ScreenName } from '@/hooks/useApp';
+import { SCREEN_ICONS } from '@/components/screenIcons';
+import type { LucideIcon } from 'lucide-react';
 
 interface NavItem {
   screen: ScreenName;
   label: string;
-  icon: typeof Home;
+  icon: LucideIcon;
 }
 
 const navItems: NavItem[] = [
-  { screen: 'home', label: 'الرئيسية', icon: Home },
-  { screen: 'quran', label: 'القرآن', icon: BookOpen },
-  { screen: 'prayer', label: 'الصلاة', icon: Moon },
-  { screen: 'hadith', label: 'الأحاديث', icon: BookText },
-  { screen: 'more', label: 'المزيد', icon: MoreHorizontal },
+  { screen: 'home', label: 'الرئيسية', icon: SCREEN_ICONS.home },
+  { screen: 'quran', label: 'القرآن', icon: SCREEN_ICONS.quran },
+  { screen: 'prayer', label: 'الصلاة', icon: SCREEN_ICONS.prayer },
+  { screen: 'hadith', label: 'الأحاديث', icon: SCREEN_ICONS.hadith },
+  { screen: 'more', label: 'المزيد', icon: SCREEN_ICONS.more },
 ];
 
 /** Screens reachable from the "المزيد" tab — they all highlight that tab as active. */
@@ -29,6 +31,8 @@ const MORE_TAB_SCREENS: ScreenName[] = [
   'search',
   'prophet',
   'huwaini',
+  'sunnah',
+  'nawafil',
 ];
 
 interface BottomNavProps {

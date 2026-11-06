@@ -33,8 +33,8 @@ export default defineConfig(({ mode }) => {
         description: 'قُرّة — القرآن والصلاة والعبادة اليومية',
         dir: 'rtl',
         lang: 'ar',
-        theme_color: '#0369a1',
-        background_color: '#0f1a14',
+        theme_color: '#165b39',
+        background_color: '#f7f5ec',
         display: 'standalone',
         orientation: 'portrait',
         icons: [

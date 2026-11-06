@@ -76,7 +76,11 @@ export function AyahVoicePanel({
     <section className="mushaf-voice" aria-label="مشغل التلاوة">
       <div className="mushaf-voice__now-playing" aria-live="polite">
         <span className="mushaf-voice__track">
-          <strong>تلاوة الآية {toArabicNumber(ayahChoice?.ayahNumber ?? 1)}</strong>
+          <strong>
+            {voiceScope === 'surah'
+              ? `تلاوة سورة ${getSurah(ayahChoice?.surahId ?? 1)?.name ?? ''}`
+              : `تلاوة الآية ${toArabicNumber(ayahChoice?.ayahNumber ?? 1)}`}
+          </strong>
           <small>
             {getSurah(ayahChoice?.surahId ?? 1)?.name ?? ''} ·{' '}
             {AUDIO_RECITERS.find((reciter) => reciter.id === reciterId)?.name ?? ''}
@@ -203,7 +207,7 @@ export function AyahVoicePanel({
             className="mushaf-select"
             value={repeatCount}
             onChange={(event) => handleRepeatCount(Number(event.target.value))}
-            disabled={voiceWholeFile}
+            disabled={voiceWholeFile || voiceScope === 'surah'}
           >
             <option value={1}>مرة واحدة</option>
             <option value={2}>مرتان</option>

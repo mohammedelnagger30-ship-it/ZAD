@@ -436,7 +436,56 @@ function markPlaying(): void {
 
 /** Select an Ayah without playing */
 export function selectAyah(ayah: number): void {
-  patch({ selectedAyah: ayah });
+  patch({ selectedAyah: ayah, error: null });
+}
+
+/**
+ * Change whether the current timed ayah should stop at its end or flow into the
+ * rest of the surah. A whole-file recording has no verse boundary to change.
+ */
+export function setContinuousPlayback(continuous: boolean): void {
+  const audio = audioElement;
+  const prepared = sourceRef;
+  if (!audio || !prepared || prepared.verseTimings.length === 0) return;
+
+  const positionMs = audio.currentTime * 1000;
+  const timing = prepared.verseTimings.find(
+    (item) => positionMs >= item.startMs && positionMs < item.endMs,
+  );
+  if (!timing) return;
+
+  activeAyahRef = timing.ayah;
+  currentTimingRef = timing;
+  continuousRef = continuous;
+  verseEndRef = continuous ? null : timing.endMs / 1000;
+}
+
+/** Pause from the reader without ending the shared player or its notification. */
+export function pauseRecitation(): void {
+  pausePlayback();
+}
+
+/** Resume the shared reader session at its current position and chosen scope. */
+export async function resumeAyah(continuous: boolean): Promise<void> {
+  const prepared = await ensureSource();
+  if (!prepared) return;
+
+  const audio = audioEl();
+  if (activeAyahRef !== null && audio.src && !audio.ended) {
+    setContinuousPlayback(continuous);
+    audio
+      .play()
+      .then(() => markPlaying())
+      .catch((cause: unknown) => {
+        patch({
+          isPlaying: false,
+          error: cause instanceof Error ? cause.message : 'تعذّر استئناف التلاوة',
+        });
+      });
+    return;
+  }
+
+  playAyah(state.selectedAyah ?? 1, continuous);
 }
 
 export function updatePlaybackRate(rate: number): void {

@@ -203,39 +203,38 @@
 
 :root {
   --font-uidir: rtl;
-  /* Emerald — default professional palette. Deep green primary with refined emerald accent. */
-  --primary-50: 239 247 243;
-  --primary-100: 219 238 227;
-  --primary-200: 186 223 200;
-  --primary-300: 134 200 166;
-  --primary-400: 74 171 121;
-  --primary-500: 34 139 83;
-  --primary-600: 21 128 61;
-  --primary-700: 19 108 53;
-  --primary-800: 17 86 45;
-  --primary-900: 15 72 39;
-  --primary-950: 8 39 22;
-  --accent-50: 240 253 244;
-  --accent-100: 220 252 231;
-  --accent-200: 187 247 208;
-  --accent-300: 134 239 172;
-  --accent-400: 74 222 128;
-  --accent-500: 34 197 94;
-  --accent-600: 22 163 74;
-  --accent-700: 21 128 61;
-  --accent-800: 22 101 52;
-  --accent-900: 20 83 45;
-  --surface-light: 239 247 243;
-  --surface-dark: 15 26 20;
+  /* Qurra defaults: forest green, warm paper, and antique gold. */
+  --primary-50: 244 249 245;
+  --primary-100: 226 239 229;
+  --primary-200: 196 220 202;
+  --primary-300: 153 193 166;
+  --primary-400: 91 155 116;
+  --primary-500: 42 119 79;
+  --primary-600: 22 91 57;
+  --primary-700: 18 73 47;
+  --primary-800: 13 54 36;
+  --primary-900: 9 39 27;
+  --primary-950: 5 25 17;
+  --accent-50: 252 249 239;
+  --accent-100: 246 237 211;
+  --accent-200: 235 215 160;
+  --accent-300: 219 188 104;
+  --accent-400: 190 150 56;
+  --accent-500: 138 100 29;
+  --accent-600: 117 83 21;
+  --accent-700: 94 67 17;
+  --accent-800: 73 52 13;
+  --accent-900: 54 39 10;
+  --surface-light: 247 245 236;
+  --surface-dark: 9 25 17;
   --surface-panel: color-mix(in srgb, rgb(var(--surface-light)) 72%, rgb(var(--primary-100)) 28%);
   --surface-raised: color-mix(in srgb, rgb(var(--surface-light)) 42%, var(--color-white) 58%);
-  /* Deep, high-contrast brand gradient — emerald dominant, professional. */
-  --brand-from: #15803d;
-  --brand-to: #b45309;
-  --brand-gradient: linear-gradient(125deg, var(--brand-from) 0%, color-mix(in oklch, var(--brand-from) 56%, var(--brand-to)) 52%, rgb(var(--primary-800)) 100%);
-  --brand-glow: rgba(21, 128, 61, 0.32);
-  --brand-glow-strong: rgba(34, 197, 94, 0.18);
-  --brand-soft: #ecfdf5;
+  --brand-from: #09251a;
+  --brand-to: #76560e;
+  --brand-gradient: linear-gradient(125deg, #09251a 0%, #165b39 44%, #34764f 72%, #76560e 100%);
+  --brand-glow: rgba(22, 91, 57, 0.28);
+  --brand-glow-strong: rgba(190, 150, 56, 0.2);
+  --brand-soft: #f4f3e8;
   /* Functional colors — unified and harmonious. */
   --func-primary: rgb(var(--primary-700));
   --func-primary-soft: rgb(var(--primary-50));
@@ -266,6 +265,272 @@ html.dark {
   --func-gold-soft: rgb(var(--primary-950));
   --func-error: rgb(var(--primary-600));
   --func-error-soft: rgb(var(--primary-950));
+}
+
+:root[data-palette='qurra'] {
+  --primary-50: 244 249 245;
+  --primary-100: 226 239 229;
+  --primary-200: 196 220 202;
+  --primary-300: 153 193 166;
+  --primary-400: 91 155 116;
+  --primary-500: 42 119 79;
+  --primary-600: 22 91 57;
+  --primary-700: 18 73 47;
+  --primary-800: 13 54 36;
+  --primary-900: 9 39 27;
+  --primary-950: 5 25 17;
+  --accent-50: 252 249 239;
+  --accent-100: 246 237 211;
+  --accent-200: 235 215 160;
+  --accent-300: 219 188 104;
+  --accent-400: 190 150 56;
+  --accent-500: 138 100 29;
+  --accent-600: 117 83 21;
+  --accent-700: 94 67 17;
+  --accent-800: 73 52 13;
+  --accent-900: 54 39 10;
+  --surface-light: 247 245 236;
+  --surface-dark: 9 25 17;
+  --surface-panel: color-mix(in srgb, rgb(var(--surface-light)) 72%, rgb(var(--primary-100)) 28%);
+  --surface-raised: color-mix(in srgb, rgb(var(--surface-light)) 38%, #fffefa 62%);
+  --brand-from: #09251a;
+  --brand-to: #76560e;
+  --brand-gradient: linear-gradient(125deg, #09251a 0%, #165b39 44%, #34764f 72%, #76560e 100%);
+  --brand-glow: rgba(22, 91, 57, 0.28);
+  --brand-glow-strong: rgba(190, 150, 56, 0.2);
+  --brand-soft: #f4f3e8;
+  --func-primary: rgb(var(--primary-700));
+  --func-primary-soft: rgb(var(--primary-50));
+  --func-accent: rgb(var(--accent-600));
+  --func-accent-soft: rgb(var(--accent-50));
+  --func-success: rgb(var(--primary-700));
+  --func-success-soft: rgb(var(--primary-50));
+  --func-warning: rgb(var(--accent-700));
+  --func-warning-soft: rgb(var(--accent-50));
+  --func-gold: rgb(var(--accent-700));
+  --func-gold-soft: rgb(var(--accent-50));
+  --func-error: #b42318;
+  --func-error-soft: #fee4e2;
+}
+
+html.dark[data-palette='qurra'] {
+  --surface-panel: color-mix(in srgb, rgb(var(--surface-dark)) 78%, rgb(var(--primary-900)) 22%);
+  --surface-raised: color-mix(in srgb, rgb(var(--surface-dark)) 58%, rgb(var(--primary-800)) 42%);
+  --func-primary: rgb(var(--primary-300));
+  --func-primary-soft: rgb(var(--primary-950));
+  --func-accent: rgb(var(--accent-300));
+  --func-accent-soft: rgb(var(--accent-900));
+  --func-success: rgb(var(--primary-300));
+  --func-success-soft: rgb(var(--primary-950));
+  --func-warning: rgb(var(--accent-300));
+  --func-warning-soft: rgb(var(--accent-900));
+  --func-gold: rgb(var(--accent-300));
+  --func-gold-soft: rgb(var(--accent-900));
+  --func-error: #f87171;
+  --func-error-soft: #451a1a;
+}
+
+/* Emerald is the original green-and-gold identity, kept as a selectable palette. */
+:root[data-palette='emerald'] {
+  --primary-50: 239 247 243;
+  --primary-100: 219 238 227;
+  --primary-200: 186 223 200;
+  --primary-300: 134 200 166;
+  --primary-400: 74 171 121;
+  --primary-500: 34 139 83;
+  --primary-600: 21 128 61;
+  --primary-700: 19 108 53;
+  --primary-800: 17 86 45;
+  --primary-900: 15 72 39;
+  --primary-950: 8 39 22;
+  --accent-50: 255 247 237;
+  --accent-100: 255 237 213;
+  --accent-200: 254 215 170;
+  --accent-300: 253 186 116;
+  --accent-400: 251 146 60;
+  --accent-500: 180 83 9;
+  --accent-600: 146 64 14;
+  --accent-700: 120 53 15;
+  --accent-800: 99 44 14;
+  --accent-900: 69 26 3;
+  --surface-light: 239 247 243;
+  --surface-dark: 15 26 20;
+  --brand-from: #15803d;
+  --brand-to: #b45309;
+  --brand-gradient: linear-gradient(125deg, var(--brand-from) 0%, color-mix(in oklch, var(--brand-from) 56%, var(--brand-to)) 52%, rgb(var(--primary-800)) 100%);
+  --brand-glow: rgba(21, 128, 61, 0.30);
+  --brand-glow-strong: rgba(180, 83, 9, 0.18);
+  --brand-soft: #ecfdf5;
+}
+
+/*
+ * Feature screens use Tailwind's named hues for charts, completion states,
+ * badges and gradients. In Qurra mode, cool/green hues follow the forest
+ * primary and warm hues follow the antique-gold accent. Error reds and rose
+ * favorites stay distinct and retain their meaning.
+ */
+:root[data-palette='qurra'] {
+  --color-blue-50: rgb(var(--primary-50));
+  --color-blue-100: rgb(var(--primary-100));
+  --color-blue-200: rgb(var(--primary-200));
+  --color-blue-300: rgb(var(--primary-300));
+  --color-blue-400: rgb(var(--primary-400));
+  --color-blue-500: rgb(var(--primary-500));
+  --color-blue-600: rgb(var(--primary-600));
+  --color-blue-700: rgb(var(--primary-700));
+  --color-blue-800: rgb(var(--primary-800));
+  --color-blue-900: rgb(var(--primary-900));
+  --color-blue-950: rgb(var(--primary-950));
+  --color-cyan-50: rgb(var(--primary-50));
+  --color-cyan-100: rgb(var(--primary-100));
+  --color-cyan-200: rgb(var(--primary-200));
+  --color-cyan-300: rgb(var(--primary-300));
+  --color-cyan-400: rgb(var(--primary-400));
+  --color-cyan-500: rgb(var(--primary-500));
+  --color-cyan-600: rgb(var(--primary-600));
+  --color-cyan-700: rgb(var(--primary-700));
+  --color-cyan-800: rgb(var(--primary-800));
+  --color-cyan-900: rgb(var(--primary-900));
+  --color-cyan-950: rgb(var(--primary-950));
+  --color-sky-50: rgb(var(--primary-50));
+  --color-sky-100: rgb(var(--primary-100));
+  --color-sky-200: rgb(var(--primary-200));
+  --color-sky-300: rgb(var(--primary-300));
+  --color-sky-400: rgb(var(--primary-400));
+  --color-sky-500: rgb(var(--primary-500));
+  --color-sky-600: rgb(var(--primary-600));
+  --color-sky-700: rgb(var(--primary-700));
+  --color-sky-800: rgb(var(--primary-800));
+  --color-sky-900: rgb(var(--primary-900));
+  --color-sky-950: rgb(var(--primary-950));
+  --color-teal-100: rgb(var(--primary-100));
+  --color-teal-50: rgb(var(--primary-50));
+  --color-teal-200: rgb(var(--primary-200));
+  --color-teal-300: rgb(var(--primary-300));
+  --color-teal-400: rgb(var(--primary-400));
+  --color-teal-500: rgb(var(--primary-500));
+  --color-teal-600: rgb(var(--primary-600));
+  --color-teal-700: rgb(var(--primary-700));
+  --color-teal-800: rgb(var(--primary-800));
+  --color-teal-900: rgb(var(--primary-900));
+  --color-teal-950: rgb(var(--primary-950));
+  --color-emerald-50: rgb(var(--primary-50));
+  --color-emerald-100: rgb(var(--primary-100));
+  --color-emerald-200: rgb(var(--primary-200));
+  --color-emerald-300: rgb(var(--primary-300));
+  --color-emerald-400: rgb(var(--primary-400));
+  --color-emerald-500: rgb(var(--primary-500));
+  --color-emerald-600: rgb(var(--primary-600));
+  --color-emerald-700: rgb(var(--primary-700));
+  --color-emerald-800: rgb(var(--primary-800));
+  --color-emerald-900: rgb(var(--primary-900));
+  --color-emerald-950: rgb(var(--primary-950));
+  --color-green-50: rgb(var(--primary-50));
+  --color-green-100: rgb(var(--primary-100));
+  --color-green-200: rgb(var(--primary-200));
+  --color-green-300: rgb(var(--primary-300));
+  --color-green-400: rgb(var(--primary-400));
+  --color-green-500: rgb(var(--primary-500));
+  --color-green-600: rgb(var(--primary-600));
+  --color-green-700: rgb(var(--primary-700));
+  --color-green-800: rgb(var(--primary-800));
+  --color-green-900: rgb(var(--primary-900));
+  --color-green-950: rgb(var(--primary-950));
+  --color-lime-50: rgb(var(--primary-50));
+  --color-lime-100: rgb(var(--primary-100));
+  --color-lime-200: rgb(var(--primary-200));
+  --color-lime-300: rgb(var(--primary-300));
+  --color-lime-400: rgb(var(--primary-400));
+  --color-lime-500: rgb(var(--primary-500));
+  --color-lime-600: rgb(var(--primary-600));
+  --color-lime-700: rgb(var(--primary-700));
+  --color-lime-800: rgb(var(--primary-800));
+  --color-lime-900: rgb(var(--primary-900));
+  --color-lime-950: rgb(var(--primary-950));
+  --color-success-50: rgb(var(--primary-50));
+  --color-success-100: rgb(var(--primary-100));
+  --color-success-200: rgb(var(--primary-200));
+  --color-success-300: rgb(var(--primary-300));
+  --color-success-400: rgb(var(--primary-400));
+  --color-success-500: rgb(var(--primary-500));
+  --color-success-600: rgb(var(--primary-600));
+  --color-success-700: rgb(var(--primary-700));
+  --color-success-800: rgb(var(--primary-800));
+  --color-success-900: rgb(var(--primary-900));
+  --color-success-950: rgb(var(--primary-950));
+  --color-indigo-50: rgb(var(--primary-50));
+  --color-indigo-100: rgb(var(--primary-100));
+  --color-indigo-200: rgb(var(--primary-200));
+  --color-indigo-300: rgb(var(--primary-300));
+  --color-indigo-400: rgb(var(--primary-400));
+  --color-indigo-500: rgb(var(--primary-500));
+  --color-indigo-600: rgb(var(--primary-600));
+  --color-indigo-700: rgb(var(--primary-700));
+  --color-indigo-800: rgb(var(--primary-800));
+  --color-indigo-900: rgb(var(--primary-900));
+  --color-indigo-950: rgb(var(--primary-950));
+  --color-violet-50: rgb(var(--primary-50));
+  --color-violet-100: rgb(var(--primary-100));
+  --color-violet-200: rgb(var(--primary-200));
+  --color-violet-300: rgb(var(--primary-300));
+  --color-violet-400: rgb(var(--primary-400));
+  --color-violet-500: rgb(var(--primary-500));
+  --color-violet-600: rgb(var(--primary-600));
+  --color-violet-700: rgb(var(--primary-700));
+  --color-violet-800: rgb(var(--primary-800));
+  --color-violet-900: rgb(var(--primary-900));
+  --color-violet-950: rgb(var(--primary-950));
+  --color-amber-50: rgb(var(--accent-50));
+  --color-amber-100: rgb(var(--accent-100));
+  --color-amber-200: rgb(var(--accent-200));
+  --color-amber-300: rgb(var(--accent-300));
+  --color-amber-400: rgb(var(--accent-400));
+  --color-amber-500: rgb(var(--accent-500));
+  --color-amber-600: rgb(var(--accent-600));
+  --color-amber-700: rgb(var(--accent-700));
+  --color-amber-800: rgb(var(--accent-800));
+  --color-amber-900: rgb(var(--accent-900));
+  --color-amber-950: rgb(var(--accent-900));
+  --color-gold-950: rgb(var(--accent-900));
+  --color-warning-50: rgb(var(--accent-50));
+  --color-warning-100: rgb(var(--accent-100));
+  --color-warning-200: rgb(var(--accent-200));
+  --color-warning-300: rgb(var(--accent-300));
+  --color-warning-400: rgb(var(--accent-400));
+  --color-warning-500: rgb(var(--accent-500));
+  --color-warning-600: rgb(var(--accent-600));
+  --color-warning-700: rgb(var(--accent-700));
+  --color-warning-800: rgb(var(--accent-800));
+  --color-warning-900: rgb(var(--accent-900));
+  --color-orange-50: rgb(var(--accent-50));
+  --color-orange-100: rgb(var(--accent-100));
+  --color-orange-200: rgb(var(--accent-200));
+  --color-orange-300: rgb(var(--accent-300));
+  --color-orange-400: rgb(var(--accent-400));
+  --color-orange-500: rgb(var(--accent-500));
+  --color-orange-600: rgb(var(--accent-600));
+  --color-orange-700: rgb(var(--accent-700));
+  --color-orange-800: rgb(var(--accent-800));
+  --color-orange-900: rgb(var(--accent-900));
+  --color-orange-950: rgb(var(--accent-900));
+  --color-yellow-50: rgb(var(--accent-50));
+  --color-yellow-100: rgb(var(--accent-100));
+  --color-yellow-200: rgb(var(--accent-200));
+  --color-yellow-300: rgb(var(--accent-300));
+  --color-yellow-400: rgb(var(--accent-400));
+  --color-yellow-500: rgb(var(--accent-500));
+  --color-yellow-600: rgb(var(--accent-600));
+  --color-yellow-700: rgb(var(--accent-700));
+  --color-yellow-800: rgb(var(--accent-800));
+  --color-yellow-900: rgb(var(--accent-900));
+  --color-yellow-950: rgb(var(--accent-900));
+  --color-rose-100: rgb(var(--accent-100));
+  --color-rose-500: rgb(var(--accent-500));
+  --color-rose-600: rgb(var(--accent-600));
+  --color-rose-900: rgb(var(--accent-900));
+  --color-pink-600: rgb(var(--accent-600));
+  --color-purple-500: rgb(var(--accent-500));
+  --color-purple-600: rgb(var(--accent-600));
 }
 
 :root[data-palette='ocean'] {
@@ -512,7 +777,7 @@ html.dark {
   --primary-900: 92 43 17;
   --primary-950: 45 22 7;
   /* Deep indigo on golden honey. */
-  --accent-50: 239 238 256;
+  --accent-50: 239 238 255;
   --accent-100: 226 224 255;
   --accent-200: 201 198 254;
   --accent-300: 167 160 252;
@@ -599,7 +864,7 @@ html.dark {
 }
 
 :root[data-palette='lavender'] {
-  --primary-50: 244 241 256;
+  --primary-50: 244 241 255;
   --primary-100: 233 227 255;
   --primary-200: 214 206 253;
   --primary-300: 186 173 249;
@@ -621,7 +886,7 @@ html.dark {
   --accent-700: 53 83 15;
   --accent-800: 45 69 17;
   --accent-900: 39 59 16;
-  --surface-light: 245 242 256;
+  --surface-light: 245 242 255;
   --surface-dark: 20 16 32;
   --brand-from: #6d28d9;
   --brand-to: #15803d;
@@ -896,6 +1161,15 @@ html.dark body {
 
 .safe-bottom {
   padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.375rem);
+}
+
+.screen-transition {
+  animation: screen-enter 160ms ease-out both;
+}
+
+@keyframes screen-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* RTL support */
@@ -2800,6 +3074,10 @@ button.mushaf-ayah-mark:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .screen-transition {
+    animation: none;
+  }
+
   /* The mushaf's own movement first — a page turn is motion the reader can do
      without, and the sheet is the largest thing that slides. */
   .mushaf-turn[data-dir],

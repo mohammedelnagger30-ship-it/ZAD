@@ -466,17 +466,14 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
     voiceTime,
     playbackRate,
     repeatCount,
-    voiceAudioRef,
-    setVoicePlaying,
     reciterId,
     handleVoiceReciter,
     openVoice,
+    startVoice,
     replayVoice,
     handleVoiceScope,
     closeAyahChoice,
     resetVoice,
-    handleVoiceTime,
-    handleVoiceEnded,
     handleVoiceRate,
     handleRepeatCount,
     seekVoice,
@@ -968,6 +965,7 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
                   setTafsirAyah(choice ? { surahId: choice.surahId, ayah: choice.ayahNumber } : null)
                 }
                 openVoice={openVoice}
+                startVoice={startVoice}
                 voiceEngaged={voiceEngaged}
                 voiceWholeFile={voiceWholeFile}
                 voiceHint={voiceHint}
@@ -986,10 +984,6 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
                 voicePrimaryDisabled={voicePrimaryDisabled}
                 voicePrimaryLabel={voicePrimaryLabel}
                 voiceError={voiceError}
-                voiceAudioRef={voiceAudioRef}
-                setVoicePlaying={setVoicePlaying}
-                handleVoiceTime={handleVoiceTime}
-                handleVoiceEnded={handleVoiceEnded}
                 extra={
                   ayahChoice !== null ? (
                     <ReaderAyahMarks
