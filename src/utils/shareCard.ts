@@ -1,5 +1,6 @@
 import { toArabicNumber } from '@/data/surahs';
 import { Capacitor } from '@capacitor/core';
+import { COLOR_PALETTES, type ColorPalette } from '@/utils/colorThemes';
 
 /**
  * Sharing an ayah as a picture, not as a string of text.
@@ -37,8 +38,6 @@ const CARD_WIDTH = 1080;
 const CARD_HEIGHT = 1350;
 
 /** The default palette, deliberately: the card leaves the app and outlives the theme. */
-const DEEP_GREEN = '#143b2b';
-const DEEPER_GREEN = '#0a2118';
 const GOLD = '#d4a017';
 const GOLD_LIGHT = '#f0c83a';
 const PARCHMENT = '#fefce8';
@@ -51,7 +50,8 @@ const QURAN_FONT = '"Amiri Quran", "Amiri", serif';
 const UI_FONT = '"Cairo", "Tajawal", system-ui, sans-serif';
 
 /** Where the ayah itself may live; the reference and the name sit below it. */
-const AYAH_BOX = { left: 150, right: 930, top: 200, bottom: 1010 };
+const AYAH_BOX = { left: 150, right: 930, top: 285, bottom: 1010 };
+const CATEGORY_BADGE_BASELINE = 190;
 const DIVIDER_Y = 1078;
 const REFERENCE_BASELINE = 1168;
 const APP_NAME_BASELINE = 1262;
@@ -77,11 +77,40 @@ export interface AyahShareInput {
   ayahText: string;
   surahName: string;
   ayahNumber: number;
+  palette?: ColorPalette;
+}
+
+export function getAyahFontCeiling(text: string): number {
+  const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+  if (wordCount <= 4) return 94;
+  if (wordCount <= 8) return 118;
+  return MAX_AYAH_FONT;
 }
 
 export interface PreparedAyahShare {
   blob: Blob;
   nativeUri?: string;
+}
+
+export interface ContentShareInput {
+  type: 'hadith' | 'dhikr';
+  text: string;
+  reference: string;
+  title?: string;
+  palette?: ColorPalette;
+}
+
+interface ContentCardLayout {
+  lines: string[];
+  fontSize: number;
+  height: number;
+}
+
+export interface ShareCardColors {
+  dark: string;
+  mid: string;
+  deeper: string;
+  glow: string;
 }
 
 export type ShareOutcome =
@@ -104,6 +133,10 @@ export type ShareOutcome =
 export function composeSharePayload(input: AyahShareInput): string {
   const reference = `${input.surahName} — الآية ${toArabicNumber(input.ayahNumber)}`;
   return `﴿${input.ayahText}﴾\n${reference}`;
+}
+
+export function composeContentSharePayload(input: ContentShareInput): string {
+  return `${input.text}\n\n${input.reference}\nمن تطبيق قُرّة`;
 }
 
 /**
@@ -192,15 +225,39 @@ export async function renderAyahCard(input: AyahShareInput): Promise<Blob | null
 
   await ensureQuranFont(context);
 
-  const background = context.createLinearGradient(0, 0, CARD_WIDTH, CARD_HEIGHT);
-  background.addColorStop(0, DEEP_GREEN);
-  background.addColorStop(1, DEEPER_GREEN);
-  context.fillStyle = background;
-  context.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
-
-  drawFrame(context);
-  drawAyah(context, input.ayahText);
+  drawCardSurface(context, CARD_HEIGHT, input.palette);
+  drawHeader(context, 'آية اليوم');
+  drawMihrab(context);
+  drawAyah(context, input.ayahText, input.ayahNumber);
   drawReference(context, input.surahName, input.ayahNumber);
+
+  return new Promise<Blob | null>((resolve) => {
+    try {
+      canvas.toBlob((blob) => resolve(blob), 'image/png');
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+export async function renderContentCard(input: ContentShareInput): Promise<Blob | null> {
+  if (typeof document === 'undefined') return null;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = CARD_WIDTH;
+  canvas.height = CARD_HEIGHT;
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+
+  await ensureQuranFont(context);
+  const layout = fitContentText(context, input.text);
+  canvas.height = layout.height;
+  drawCardSurface(context, layout.height, input.palette);
+  drawHeader(context, input.type === 'hadith' ? 'حديث نبوي' : 'ذكر مبارك');
+  drawMihrab(context);
+  drawContentText(context, layout);
+  drawDivider(context, CARD_WIDTH / 2, layout.height - 272);
+  drawContentReference(context, input.reference, layout.height - 182, layout.height - 88);
 
   return new Promise<Blob | null>((resolve) => {
     try {
@@ -228,6 +285,30 @@ export async function prepareAyahShare(input: AyahShareInput): Promise<PreparedA
       return { blob, nativeUri: uri };
     } catch (error) {
       console.warn('Could not prepare the Quran message image for native sharing:', error);
+      return { blob };
+    }
+  } catch {
+    return null;
+  }
+}
+
+export async function prepareContentShare(input: ContentShareInput): Promise<PreparedAyahShare | null> {
+  try {
+    const blob = await renderContentCard(input);
+    if (!blob) return null;
+    if (!Capacitor.isNativePlatform()) return { blob };
+
+    try {
+      const { Directory, Filesystem } = await import('@capacitor/filesystem');
+      const data = await blobToBase64(blob);
+      const { uri } = await Filesystem.writeFile({
+        path: `share-${input.type}-${Date.now()}.png`,
+        data,
+        directory: Directory.Cache,
+      });
+      return { blob, nativeUri: uri };
+    } catch (error) {
+      console.warn('Could not prepare the content share image for native sharing:', error);
       return { blob };
     }
   } catch {
@@ -269,17 +350,70 @@ async function ensureQuranFont(context: CanvasRenderingContext2D): Promise<void>
   try {
     context.font = `400 ${MAX_AYAH_FONT}px ${QURAN_FONT}`;
     await document.fonts.load(context.font);
+    await document.fonts.load(`700 32px ${UI_FONT}`);
   } catch {
-    // The fallback face is already in the font string; drawing continues with it.
+    // The fallback faces are already in the font strings; drawing can continue.
   }
 }
 
-/** Two hairlines with air between them: the manuscript frame, not a picture border. */
-function drawFrame(context: CanvasRenderingContext2D): void {
+function drawBackdrop(
+  context: CanvasRenderingContext2D,
+  glowColor: string,
+  cardHeight = CARD_HEIGHT,
+): void {
+  const centerY = cardHeight / 2;
+  const glow = context.createRadialGradient(540, centerY, 100, 540, centerY, 800);
+  glow.addColorStop(0, glowColor);
+  glow.addColorStop(0.72, 'rgba(0, 0, 0, 0.08)');
+  glow.addColorStop(1, 'rgba(0, 0, 0, 0.42)');
+  context.fillStyle = glow;
+  context.fillRect(0, 0, CARD_WIDTH, cardHeight);
+
+  context.save();
+  context.strokeStyle = GOLD_LIGHT;
+  context.lineWidth = 2;
+  const ornaments = [
+    [120, 245, 58], [960, 245, 58],
+    [120, 675, 46], [960, 675, 46],
+    [120, 1095, 58], [960, 1095, 58],
+  ] as const;
+  for (const [x, y, radius] of ornaments) {
+    context.globalAlpha = 0.13;
+    drawEightPointStar(context, x, y, radius, radius * 0.58);
+    context.globalAlpha = 0.11;
+    context.beginPath();
+    context.arc(x, y, radius * 1.28, 0, Math.PI * 2);
+    context.stroke();
+  }
+  context.restore();
+}
+
+function drawEightPointStar(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  outerRadius: number,
+  innerRadius: number,
+): void {
+  context.beginPath();
+  for (let point = 0; point < 16; point += 1) {
+    const angle = -Math.PI / 2 + (point * Math.PI) / 8;
+    const radius = point % 2 === 0 ? outerRadius : innerRadius;
+    const px = x + Math.cos(angle) * radius;
+    const py = y + Math.sin(angle) * radius;
+    if (point === 0) context.moveTo(px, py);
+    else context.lineTo(px, py);
+  }
+  context.closePath();
+  context.stroke();
+}
+
+/** Fine double frame with corner rosettes and a restrained manuscript finish. */
+function drawFrame(context: CanvasRenderingContext2D, cardHeight = CARD_HEIGHT): void {
   context.save();
   context.strokeStyle = GOLD;
   context.lineWidth = 2;
-  context.strokeRect(FRAME_INSET, FRAME_INSET, CARD_WIDTH - FRAME_INSET * 2, CARD_HEIGHT - FRAME_INSET * 2);
+  context.strokeRect(FRAME_INSET, FRAME_INSET, CARD_WIDTH - FRAME_INSET * 2, cardHeight - FRAME_INSET * 2);
 
   context.strokeStyle = GOLD_LIGHT;
   context.globalAlpha = 0.55;
@@ -288,17 +422,200 @@ function drawFrame(context: CanvasRenderingContext2D): void {
     FRAME_INSET_INNER,
     FRAME_INSET_INNER,
     CARD_WIDTH - FRAME_INSET_INNER * 2,
-    CARD_HEIGHT - FRAME_INSET_INNER * 2,
+    cardHeight - FRAME_INSET_INNER * 2,
   );
+  context.globalAlpha = 0.75;
+  context.strokeStyle = GOLD_LIGHT;
+  context.lineWidth = 2;
+  const corners = [
+    [FRAME_INSET_INNER, FRAME_INSET_INNER, 1, 1],
+    [CARD_WIDTH - FRAME_INSET_INNER, FRAME_INSET_INNER, -1, 1],
+    [FRAME_INSET_INNER, cardHeight - FRAME_INSET_INNER, 1, -1],
+    [CARD_WIDTH - FRAME_INSET_INNER, cardHeight - FRAME_INSET_INNER, -1, -1],
+  ] as const;
+  for (const [x, y, horizontal, vertical] of corners) {
+    context.beginPath();
+    context.moveTo(x, y + vertical * 52);
+    context.lineTo(x, y);
+    context.lineTo(x + horizontal * 52, y);
+    context.moveTo(x + horizontal * 12, y + vertical * 12);
+    context.lineTo(x + horizontal * 30, y + vertical * 30);
+    context.stroke();
+    context.beginPath();
+    context.arc(x + horizontal * 42, y + vertical * 42, 4, 0, Math.PI * 2);
+    context.fillStyle = GOLD_LIGHT;
+    context.fill();
+  }
   context.restore();
 }
 
-function drawAyah(context: CanvasRenderingContext2D, text: string): void {
+function drawCardSurface(
+  context: CanvasRenderingContext2D,
+  cardHeight = CARD_HEIGHT,
+  paletteId?: ColorPalette,
+): void {
+  const colors = getShareCardColors(paletteId);
+  const background = context.createLinearGradient(0, 0, CARD_WIDTH, cardHeight);
+  background.addColorStop(0, colors.dark);
+  background.addColorStop(0.52, colors.mid);
+  background.addColorStop(1, colors.deeper);
+  context.fillStyle = background;
+  context.fillRect(0, 0, CARD_WIDTH, cardHeight);
+  drawBackdrop(context, colors.glow, cardHeight);
+  drawFrame(context, cardHeight);
+}
+
+export function getShareCardColors(paletteId?: ColorPalette): ShareCardColors {
+  const palette = COLOR_PALETTES.find(({ id }) => id === (paletteId ?? getSelectedPalette())) ??
+    COLOR_PALETTES[0];
+  return {
+    dark: darkenColor(palette.color, 0.24),
+    mid: darkenColor(palette.color, 0.38),
+    deeper: darkenColor(palette.color, 0.15),
+    glow: toRgba(palette.color, 0.18),
+  };
+}
+
+function getSelectedPalette(): ColorPalette {
+  const paletteId = typeof document === 'undefined'
+    ? undefined
+    : document.documentElement.dataset.palette;
+  return COLOR_PALETTES.find(({ id }) => id === paletteId)?.id ?? COLOR_PALETTES[0].id;
+}
+
+function darkenColor(hexColor: string, factor: number): string {
+  const channels = hexColor.match(/^#([0-9a-f]{6})$/i)?.[1];
+  if (!channels) return '#143b2b';
+  const rgb = [0, 2, 4].map((offset) => Math.round(parseInt(channels.slice(offset, offset + 2), 16) * factor));
+  return `#${rgb.map((channel) => channel.toString(16).padStart(2, '0')).join('')}`;
+}
+
+function toRgba(hexColor: string, alpha: number): string {
+  const channels = hexColor.match(/^#([0-9a-f]{6})$/i)?.[1];
+  if (!channels) return `rgba(57, 111, 77, ${alpha})`;
+  const rgb = [0, 2, 4].map((offset) => parseInt(channels.slice(offset, offset + 2), 16));
+  return `rgba(${rgb.join(', ')}, ${alpha})`;
+}
+
+function drawHeader(context: CanvasRenderingContext2D, badgeLabel: string): void {
+  const centerX = CARD_WIDTH / 2;
+  context.save();
+  context.direction = 'rtl';
+  context.textAlign = 'center';
+  context.textBaseline = 'alphabetic';
+
+  const badgeWidth = 184;
+  const badgeHeight = 42;
+  const badgeX = centerX - badgeWidth / 2;
+  const badgeY = CATEGORY_BADGE_BASELINE - 32;
+  context.fillStyle = 'rgba(212, 160, 23, 0.14)';
+  context.strokeStyle = 'rgba(240, 200, 58, 0.75)';
+  context.lineWidth = 1.5;
+  roundedRect(context, badgeX, badgeY, badgeWidth, badgeHeight, 21);
+  context.fill();
+  context.stroke();
+  context.fillStyle = GOLD_LIGHT;
+  context.font = `700 24px ${UI_FONT}`;
+  context.fillText(badgeLabel, centerX, CATEGORY_BADGE_BASELINE - 4);
+  context.restore();
+}
+
+function roundedRect(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+): void {
+  context.beginPath();
+  context.moveTo(x + radius, y);
+  context.lineTo(x + width - radius, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + radius);
+  context.lineTo(x + width, y + height - radius);
+  context.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  context.lineTo(x + radius, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - radius);
+  context.lineTo(x, y + radius);
+  context.quadraticCurveTo(x, y, x + radius, y);
+  context.closePath();
+}
+
+/** A quiet mihrab silhouette gives the verse a focal point without sitting behind its ink. */
+function drawMihrab(context: CanvasRenderingContext2D): void {
+  context.save();
+  context.strokeStyle = GOLD_LIGHT;
+  context.lineWidth = 2;
+  context.globalAlpha = 0.12;
+  for (const inset of [0, 24]) {
+    const left = 156 + inset;
+    const right = 924 - inset;
+    const spring = 620 + inset;
+    const peak = 276 + inset;
+    context.beginPath();
+    context.moveTo(left, 1014);
+    context.lineTo(left, spring);
+    context.quadraticCurveTo(left, peak + 34, CARD_WIDTH / 2, peak);
+    context.quadraticCurveTo(right, peak + 34, right, spring);
+    context.lineTo(right, 1014);
+    context.stroke();
+  }
+  context.restore();
+}
+
+function fitContentText(context: CanvasRenderingContext2D, text: string): ContentCardLayout {
+  const left = 150;
+  const right = 930;
+  const top = 300;
+  const boxWidth = right - left;
+  const defaultBoxHeight = CARD_HEIGHT - 272 - 70 - top;
+  let fontSize = 82;
+  let lines: string[] = [];
+
+  for (; fontSize >= 26; fontSize -= 2) {
+    context.font = `${fontSize}px ${QURAN_FONT}`;
+    lines = wrapLines(text, boxWidth, (line) => context.measureText(line).width);
+    if (
+      lines.length * fontSize * 1.65 <= defaultBoxHeight &&
+      lines.every((line) => context.measureText(line).width <= boxWidth)
+    ) return { lines, fontSize, height: CARD_HEIGHT };
+  }
+
+  fontSize = 26;
+  context.font = `${fontSize}px ${QURAN_FONT}`;
+  lines = wrapLines(text, boxWidth, (line) => context.measureText(line).width);
+  return {
+    lines,
+    fontSize,
+    height: Math.max(CARD_HEIGHT, Math.ceil(top + lines.length * fontSize * 1.65 + 70 + 272)),
+  };
+}
+
+function drawContentText(context: CanvasRenderingContext2D, layout: ContentCardLayout): void {
+  const top = 300;
+  const bottom = layout.height - 272 - 70;
+  const centerX = CARD_WIDTH / 2;
+  const { fontSize, lines } = layout;
+  const lineHeight = fontSize * 1.65;
+  const blockHeight = lines.length * lineHeight;
+  const firstBaseline = (top + bottom - blockHeight) / 2 + lineHeight * 0.72;
+  context.save();
+  context.direction = 'rtl';
+  context.textAlign = 'center';
+  context.textBaseline = 'alphabetic';
+  context.fillStyle = PARCHMENT;
+  context.font = `${fontSize}px ${QURAN_FONT}`;
+  lines.forEach((line, index) => context.fillText(line, centerX, firstBaseline + index * lineHeight));
+  context.restore();
+}
+
+function drawAyah(context: CanvasRenderingContext2D, text: string, ayahNumber: number): void {
   const boxWidth = AYAH_BOX.right - AYAH_BOX.left;
   const boxHeight = AYAH_BOX.bottom - AYAH_BOX.top;
   const centerX = (AYAH_BOX.left + AYAH_BOX.right) / 2;
 
-  const fit = fitAyah(context, text, boxWidth, boxHeight);
+  const ayahMarker = `۝${toArabicNumber(ayahNumber)}`;
+  const fit = fitAyah(context, text, boxWidth, boxHeight, ayahMarker);
 
   context.save();
   context.direction = 'rtl';
@@ -314,7 +631,10 @@ function drawAyah(context: CanvasRenderingContext2D, text: string): void {
   const firstBaseline = (AYAH_BOX.top + AYAH_BOX.bottom - blockHeight) / 2 + lineHeight * 0.72;
 
   fit.lines.forEach((line, index) => {
-    context.fillText(line, centerX, firstBaseline + index * lineHeight);
+    const bracketed =
+      `${index === 0 ? '﴿' : ''}${line}` +
+      `${index === fit.lines.length - 1 ? `${ayahMarker}﴾` : ''}`;
+    context.fillText(bracketed, centerX, firstBaseline + index * lineHeight);
   });
   context.restore();
 
@@ -332,25 +652,62 @@ function fitAyah(
   text: string,
   boxWidth: number,
   boxHeight: number,
+  ayahMarker: string,
 ): { lines: string[]; fontSize: number } {
-  for (let fontSize = MAX_AYAH_FONT; fontSize >= MIN_AYAH_FONT; fontSize -= FONT_STEP) {
+  const maxFontSize = getAyahFontCeiling(text);
+  for (let fontSize = maxFontSize; fontSize >= MIN_AYAH_FONT; fontSize -= FONT_STEP) {
     context.font = `${fontSize}px ${QURAN_FONT}`;
-    const measure = (line: string) => context.measureText(line).width;
-    const lines = wrapLines(text, boxWidth, measure);
-    if (lines.length * fontSize * LINE_HEIGHT_RATIO <= boxHeight) {
+    const lines = fitBracketedLines(context, text, boxWidth, ayahMarker);
+    if (
+      lines.length * fontSize * LINE_HEIGHT_RATIO <= boxHeight &&
+      bracketedLinesFit(context, lines, boxWidth, ayahMarker)
+    ) {
       return { lines, fontSize };
     }
   }
 
   context.font = `${MIN_AYAH_FONT}px ${QURAN_FONT}`;
   return {
-    lines: wrapLines(text, boxWidth, (line) => context.measureText(line).width),
+    lines: fitBracketedLines(context, text, boxWidth, ayahMarker),
     fontSize: MIN_AYAH_FONT,
   };
 }
 
+function fitBracketedLines(
+  context: CanvasRenderingContext2D,
+  text: string,
+  boxWidth: number,
+  ayahMarker: string,
+): string[] {
+  const measure = (line: string) => context.measureText(line).width;
+  const openingWidth = measure('﴿');
+  const ending = `${ayahMarker}﴾`;
+  const endingWidth = measure(ending);
+  const lines = wrapLines(text, boxWidth - Math.max(openingWidth, endingWidth), measure);
+  if (lines.length !== 1 || measure(`﴿${lines[0]}${ending}`) <= boxWidth) return lines;
+  return wrapLines(text, boxWidth - openingWidth - endingWidth, measure);
+}
+
+function bracketedLinesFit(
+  context: CanvasRenderingContext2D,
+  lines: string[],
+  boxWidth: number,
+  ayahMarker: string,
+): boolean {
+  if (lines.length === 0) return true;
+  const measure = (line: string) => context.measureText(line).width;
+  return (
+    measure(`﴿${lines[0]}`) <= boxWidth &&
+    measure(`${lines[lines.length - 1]}${ayahMarker}﴾`) <= boxWidth
+  );
+}
+
 /** A gold line with a diamond where the verse ends. */
-function drawDivider(context: CanvasRenderingContext2D, centerX: number): void {
+function drawDivider(
+  context: CanvasRenderingContext2D,
+  centerX: number,
+  dividerY = DIVIDER_Y,
+): void {
   context.save();
   context.strokeStyle = GOLD;
   context.globalAlpha = 0.7;
@@ -359,24 +716,28 @@ function drawDivider(context: CanvasRenderingContext2D, centerX: number): void {
   const half = 150;
   const gap = 34;
   context.beginPath();
-  context.moveTo(centerX - half, DIVIDER_Y);
-  context.lineTo(centerX - gap, DIVIDER_Y);
-  context.moveTo(centerX + gap, DIVIDER_Y);
-  context.lineTo(centerX + half, DIVIDER_Y);
+  context.moveTo(centerX - half, dividerY);
+  context.lineTo(centerX - gap, dividerY);
+  context.moveTo(centerX + gap, dividerY);
+  context.lineTo(centerX + half, dividerY);
   context.stroke();
 
   context.fillStyle = GOLD_LIGHT;
   context.beginPath();
-  context.moveTo(centerX, DIVIDER_Y - 11);
-  context.lineTo(centerX + 11, DIVIDER_Y);
-  context.lineTo(centerX, DIVIDER_Y + 11);
-  context.lineTo(centerX - 11, DIVIDER_Y);
+  context.moveTo(centerX, dividerY - 11);
+  context.lineTo(centerX + 11, dividerY);
+  context.lineTo(centerX, dividerY + 11);
+  context.lineTo(centerX - 11, dividerY);
   context.closePath();
   context.fill();
   context.restore();
 }
 
-function drawReference(context: CanvasRenderingContext2D, surahName: string, ayahNumber: number): void {
+function drawReference(
+  context: CanvasRenderingContext2D,
+  surahName: string,
+  ayahNumber: number,
+): void {
   const centerX = CARD_WIDTH / 2;
 
   context.save();
@@ -395,7 +756,32 @@ function drawReference(context: CanvasRenderingContext2D, surahName: string, aya
   context.fillStyle = PARCHMENT_DIM;
   context.globalAlpha = 0.75;
   context.font = `600 30px ${UI_FONT}`;
-  context.fillText('قُرّة', centerX, APP_NAME_BASELINE);
+  context.fillText('قُرّة · رفيق وردك اليومي', centerX, APP_NAME_BASELINE);
+  context.restore();
+}
+
+function drawContentReference(
+  context: CanvasRenderingContext2D,
+  reference: string,
+  referenceBaseline: number,
+  appNameBaseline: number,
+): void {
+  const centerX = CARD_WIDTH / 2;
+  context.save();
+  context.direction = 'rtl';
+  context.textAlign = 'center';
+  context.textBaseline = 'alphabetic';
+  context.fillStyle = GOLD_LIGHT;
+  context.font = `700 34px ${UI_FONT}`;
+  const lines = wrapLines(reference, 820, (line) => context.measureText(line).width);
+  const shownLines = lines.slice(0, 2);
+  shownLines.forEach((line, index) => {
+    context.fillText(line, centerX, referenceBaseline + index * 42);
+  });
+  context.fillStyle = PARCHMENT_DIM;
+  context.globalAlpha = 0.75;
+  context.font = `600 30px ${UI_FONT}`;
+  context.fillText('قُرّة · رفيق وردك اليومي', centerX, appNameBaseline);
   context.restore();
 }
 
@@ -483,4 +869,44 @@ function toPngFile(blob: Blob, input: AyahShareInput): File | null {
   } catch {
     return null;
   }
+}
+
+export async function shareContentCard(
+  input: ContentShareInput,
+  preparedShare?: PreparedAyahShare | null,
+): Promise<ShareOutcome> {
+  const payload = composeContentSharePayload(input);
+  const prepared = preparedShare === undefined
+    ? await prepareContentShare(input)
+    : preparedShare;
+  const title = input.title ?? (input.type === 'hadith' ? 'مشاركة حديث نبوي' : 'مشاركة ذكر');
+
+  if (Capacitor.isNativePlatform() && prepared?.nativeUri) {
+    try {
+      const { Share } = await import('@capacitor/share');
+      await Share.share({
+        files: [prepared.nativeUri],
+        text: payload,
+        title,
+        dialogTitle: title,
+      });
+      return 'shared';
+    } catch (error) {
+      console.warn('Could not share the content image natively:', error);
+    }
+  }
+
+  if (prepared && typeof navigator !== 'undefined' && navigator.share) {
+    try {
+      const file = new File([prepared.blob], `${input.type}-share.png`, { type: 'image/png' });
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], text: payload, title });
+        return 'shared';
+      }
+    } catch (error) {
+      if (isAbortError(error)) return 'cancelled';
+    }
+  }
+
+  return shareTextOrCopy(payload);
 }

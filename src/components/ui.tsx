@@ -13,6 +13,9 @@ interface CardProps {
  * `cursor-pointer` div has neither focus nor an accessible role.
  */
 export function Card({ children, className = '', onClick, noPadding }: CardProps) {
+  const hasGradientBackground = className
+    .split(/\s+/)
+    .some((name) => name.startsWith('bg-linear-') || name.startsWith('bg-gradient-to-'));
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!onClick) return;
     // Enter and Space are the two keys a native <button> would respond to. Space must
@@ -31,6 +34,7 @@ export function Card({ children, className = '', onClick, noPadding }: CardProps
       tabIndex={onClick ? 0 : undefined}
       className={`
         bg-panel dark:bg-raised
+        ${hasGradientBackground ? '' : 'app-card-surface'}
         rounded-2xl shadow-sm
         border border-primary-100/80 dark:border-primary-800/60
         transition-smooth
@@ -56,7 +60,7 @@ export function SectionHeader({ title, icon, action }: SectionHeaderProps) {
   return (
     <div className="flex items-center justify-between mb-3">
       <div className="flex items-center gap-2">
-        {icon && <span className="text-primary-600 dark:text-gold-400">{icon}</span>}
+        {icon && <span className="app-accent-icon">{icon}</span>}
         <h2 className="text-lg md:text-xl font-bold text-primary-800 dark:text-primary-100">{title}</h2>
       </div>
       {/* The action arrives as a bare text link; grow the BUTTON itself to a
@@ -90,7 +94,7 @@ export function Button({
   style,
 }: ButtonProps) {
   const variants: Record<string, string> = {
-    primary: 'bg-primary-600 hover:bg-primary-700 text-white shadow-sm',
+    primary: 'app-button-primary bg-primary-600 hover:bg-primary-700 text-white shadow-sm',
     secondary: 'bg-primary-100 hover:bg-primary-200 dark:bg-primary-800 dark:hover:bg-primary-700 text-primary-700 dark:text-primary-100',
     // These four sit on bright fills — gold-500, success-500, warning-500,
     // error-500 — and white on them measures 2.38, 2.28, 2.15 and 3.76:1, all

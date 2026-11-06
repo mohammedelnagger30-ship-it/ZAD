@@ -6,7 +6,15 @@
  * because a canvas is the one thing a test cannot make.
  */
 import { describe, it, expect, jest } from '@jest/globals';
-import { composeSharePayload, shareAyahCard, wrapLines } from '@/utils/shareCard';
+import {
+  composeContentSharePayload,
+  composeSharePayload,
+  getAyahFontCeiling,
+  getShareCardColors,
+  shareAyahCard,
+  shareContentCard,
+  wrapLines,
+} from '@/utils/shareCard';
 
 /** One unit per character: widths become counts, which are easy to reason about. */
 const measure = (line: string) => line.length;
@@ -74,6 +82,79 @@ describe('composeSharePayload', () => {
         ayahNumber: 45,
       }),
     ).toContain('الآية ٤٥');
+  });
+});
+
+describe('share card appearance', () => {
+  it('uses the selected palette for a dark, coordinated card background', () => {
+    const ocean = getShareCardColors('ocean');
+    const rose = getShareCardColors('rose');
+
+    expect(ocean.dark).not.toBe(rose.dark);
+    expect(ocean.glow).toContain('3, 105, 161');
+    expect(rose.glow).toContain('190, 24, 93');
+  });
+
+  it('reads the current app palette when a card does not provide one explicitly', () => {
+    const previousPalette = document.documentElement.dataset.palette;
+    document.documentElement.dataset.palette = 'ocean';
+    try {
+      expect(getShareCardColors()).toEqual(getShareCardColors('ocean'));
+    } finally {
+      if (previousPalette === undefined) delete document.documentElement.dataset.palette;
+      else document.documentElement.dataset.palette = previousPalette;
+    }
+  });
+
+  it('keeps short ayahs smaller while allowing longer text more room', () => {
+    expect(getAyahFontCeiling('قُلْ هُوَ اللَّهُ أَحَدٌ')).toBe(94);
+    expect(getAyahFontCeiling('إِنَّا أَعْطَيْنَاكَ الْكَوْثَرَ')).toBe(94);
+    expect(getAyahFontCeiling('وَالضُّحَىٰ وَاللَّيْلِ إِذَا سَجَىٰ مَا وَدَّعَكَ رَبُّكَ')).toBe(118);
+    expect(getAyahFontCeiling('هذا نص طويل يتكون من كلمات كثيرة لقياس حجم الخط المناسب للآيات')).toBe(150);
+  });
+});
+
+describe('content share cards', () => {
+  it('keeps hadith and adhkar as plain text with their own references', () => {
+    expect(composeContentSharePayload({
+      type: 'hadith',
+      text: 'إنما الأعمال بالنيات',
+      reference: 'صحيح البخاري — رقم ١',
+    })).toBe('إنما الأعمال بالنيات\n\nصحيح البخاري — رقم ١\nمن تطبيق قُرّة');
+    expect(composeContentSharePayload({
+      type: 'dhikr',
+      text: 'سبحان الله',
+      reference: 'رواه مسلم',
+    })).not.toContain('﴿');
+  });
+
+  it('shares hadith and adhkar as a named image file when available', async () => {
+    const shareDescriptor = Object.getOwnPropertyDescriptor(navigator, 'share');
+    const canShareDescriptor = Object.getOwnPropertyDescriptor(navigator, 'canShare');
+    const share = jest.fn(async (_data: ShareData) => {});
+    Object.defineProperty(navigator, 'share', { configurable: true, value: share });
+    Object.defineProperty(navigator, 'canShare', {
+      configurable: true,
+      value: jest.fn(() => true),
+    });
+
+    try {
+      const outcome = await shareContentCard(
+        { type: 'dhikr', text: 'سبحان الله', reference: 'رواه مسلم' },
+        { blob: new Blob(['png'], { type: 'image/png' }) },
+      );
+
+      expect(outcome).toBe('shared');
+      expect(share).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'مشاركة ذكر',
+        files: [expect.objectContaining({ name: 'dhikr-share.png', type: 'image/png' })],
+      }));
+    } finally {
+      if (shareDescriptor) Object.defineProperty(navigator, 'share', shareDescriptor);
+      else Reflect.deleteProperty(navigator, 'share');
+      if (canShareDescriptor) Object.defineProperty(navigator, 'canShare', canShareDescriptor);
+      else Reflect.deleteProperty(navigator, 'canShare');
+    }
   });
 });
 

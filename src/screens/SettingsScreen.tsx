@@ -38,6 +38,7 @@ interface SettingsScreenProps {
   onSignOut?: (options?: SignOutOptions) => Promise<SignOutResult>;
   /** Supplied only to an allow-listed account: the way back to the dashboard. */
   onOpenAdmin?: () => void;
+  onRefreshAdmin?: () => Promise<boolean>;
   /** Supplied only to a guest — the way from here to the sign-up form. */
   onCreateAccount?: () => void;
 }
@@ -55,6 +56,7 @@ export function SettingsScreen({
   onSyncNow,
   onSignOut,
   onOpenAdmin,
+  onRefreshAdmin,
   onCreateAccount,
 }: SettingsScreenProps) {
   // Reached from the dhikr reminder notice on the home screen. Settings is a single page, so
@@ -120,6 +122,7 @@ export function SettingsScreen({
             onSyncNow={onSyncNow}
             onSignOut={onSignOut}
             onOpenAdmin={onOpenAdmin}
+            onRefreshAdmin={onRefreshAdmin}
             onCreateAccount={onCreateAccount}
           />
           <AppUpdatesSection />

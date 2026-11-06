@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Bookmark } from 'lucide-react';
 import { getSurah, getSurahsForPage, getJuzForPage, toArabicNumber } from '@/data/surahs';
-import { getPageMeta, getHizbForPage } from '@/data/mushafPages';
+import { getHizbForPage, SAJDAH_AYAHS } from '@/data/mushafPages';
 import { getAyahs } from '@/data/quranText';
 import { splitBasmala } from '@/utils/basmala';
 import { getSurahWordMeanings } from '@/utils/wordMeaningsService';
@@ -129,7 +129,6 @@ export function MushafPage({
   onWordPress,
   activeAyah,
 }: MushafPageProps) {
-  const pageMeta = getPageMeta(page);
   const juz = getJuzForPage(page);
   const hizb = getHizbForPage(page);
 
@@ -297,8 +296,6 @@ export function MushafPage({
         <span>الحزب {toArabicNumber(hizb)}</span>
       </div>
 
-      {pageMeta?.isSajdah && <p className="mushaf-sajdah">۩ سجدة</p>}
-
       {segments.map((segment) => {
         if (segment.kind === 'heading') {
           const surah = getSurah(segment.surahId);
@@ -329,6 +326,9 @@ export function MushafPage({
               // The last word carries the medallion inside one unbreakable tail, so the
               // two are always cut from the line together.
               const words = ayah.text.split(' ');
+              const isSajdah = SAJDAH_AYAHS.some(
+                (sajdah) => sajdah.surahId === ayah.surahId && sajdah.ayah === ayah.ayahNumber,
+              );
               return (
                 <span key={`${ayah.surahId}:${ayah.ayahNumber}`}>
                   <span
@@ -364,6 +364,11 @@ export function MushafPage({
                           {'\u06DD'}{toArabicNumber(ayah.ayahNumber)}
                         </span>
                       </button>
+                      {isSajdah && (
+                        <span className="mushaf-sajdah" role="img" aria-label="آية سجدة">
+                          ۩
+                        </span>
+                      )}
                     </span>
                   </span>{' '}
                 </span>

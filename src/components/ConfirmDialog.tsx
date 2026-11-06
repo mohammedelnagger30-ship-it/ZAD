@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Info } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { useOverlayDismiss } from '@/hooks/useOverlayDismiss';
 
@@ -78,43 +78,53 @@ export function ConfirmDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
-        className="relative w-full max-w-sm rounded-3xl border border-primary-100 bg-white p-5 shadow-2xl animate-scale-in dark:border-primary-800 dark:bg-primary-900"
+        className="relative w-full max-w-sm overflow-hidden rounded-3xl border border-primary-100/80 bg-white shadow-2xl animate-scale-in dark:border-primary-800 dark:bg-primary-950"
       >
-        <div className="flex items-start gap-3">
-          {destructive && (
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-error-100 text-error-600 dark:bg-error-900/40 dark:text-error-300">
-              <AlertTriangle size={20} aria-hidden="true" />
+        <div className={`h-1 w-full ${destructive ? 'bg-gradient-to-l from-error-500 via-error-400 to-gold-400' : 'bg-gradient-to-l from-primary-600 via-primary-400 to-gold-400'}`} />
+        <div className="p-5">
+          <div className="flex items-start gap-3">
+            <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
+              destructive
+                ? 'bg-error-100 text-error-600 dark:bg-error-900/40 dark:text-error-300'
+                : 'bg-primary-100 text-primary-700 dark:bg-primary-800 dark:text-primary-200'
+            }`}>
+              {destructive
+                ? <AlertTriangle size={20} aria-hidden="true" />
+                : <Info size={20} aria-hidden="true" />}
             </div>
-          )}
-          <div className="min-w-0 flex-1">
-            <h3
-              id="confirm-dialog-title"
-              className="text-base font-bold text-primary-900 dark:text-primary-50"
-            >
-              {title}
-            </h3>
-            {description && (
-              <p className="mt-1.5 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
-                {description}
+            <div className="min-w-0 flex-1 pt-0.5">
+              <p className={`mb-1 text-[0.6875rem] font-bold ${destructive ? 'text-error-600 dark:text-error-300' : 'text-primary-600 dark:text-primary-300'}`}>
+                {destructive ? 'تأكيد إجراء' : 'تأكيد'}
               </p>
-            )}
+              <h3
+                id="confirm-dialog-title"
+                className="text-base font-bold text-primary-900 dark:text-primary-50"
+              >
+                {title}
+              </h3>
+              {description && (
+                <p className="mt-1.5 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+                  {description}
+                </p>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="mt-5 flex gap-2.5">
-          <Button
-            variant={destructive ? 'error' : 'primary'}
-            size="md"
-            fullWidth
-            onClick={onConfirm}
-          >
-            {confirmLabel}
-          </Button>
-          {/* Button is not a ref-forwarding component; the wrapper carries the focus ref. */}
-          <span ref={cancelWrapRef} className="contents">
-            <Button variant="secondary" size="md" fullWidth onClick={onCancel}>
-              {cancelLabel}
+          <div className="mt-5 flex gap-2.5">
+            <Button
+              variant={destructive ? 'error' : 'primary'}
+              size="md"
+              fullWidth
+              onClick={onConfirm}
+            >
+              {confirmLabel}
             </Button>
-          </span>
+            {/* Button is not a ref-forwarding component; the wrapper carries the focus ref. */}
+            <span ref={cancelWrapRef} className="contents">
+              <Button variant="secondary" size="md" fullWidth onClick={onCancel}>
+                {cancelLabel}
+              </Button>
+            </span>
+          </div>
         </div>
       </div>
     </div>

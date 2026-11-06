@@ -41,6 +41,7 @@ import {
   type HuwainiSeries,
 } from '@/data/scholarHuwaini';
 import { useLectureDownloads, useLecturePlayer } from '@/hooks/useLecturePlayer';
+import { useConfirm } from '@/hooks/useConfirm';
 import type { ScreenName } from '@/hooks/useApp';
 import { HuwainiProgress } from '@/components/HuwainiProgress';
 import { LectureProgressMark } from '@/components/LectureProgressBadge';
@@ -481,6 +482,8 @@ export function HuwainiScreen({ navigate }: HuwainiScreenProps) {
   const [filter, setFilter] = useState<Filter>('all');
   const [visibleSingles, setVisibleSingles] = useState(40);
   const [bioOpen, setBioOpen] = useState(false);
+  const [downloadActionError, setDownloadActionError] = useState<string | null>(null);
+  const { confirm, dialog } = useConfirm();
   const { downloaded, phoneSaved } = useLectureDownloads();
 
   useEffect(() => {
@@ -557,6 +560,28 @@ export function HuwainiScreen({ navigate }: HuwainiScreenProps) {
     () => queueFor(visibleList, HUWAINI_LIBRARY_ITEM, 'محاضرات ودروس مفردة'),
     [visibleList],
   );
+
+  const removeAllDownloads = async (location: 'app' | 'phone') => {
+    const isApp = location === 'app';
+    const count = isApp ? keptCount : phoneCount;
+    if (count === 0) return;
+    const confirmed = await confirm({
+      title: isApp ? 'حذف التنزيلات من التطبيق' : 'حذف الملفات من الهاتف',
+      description: isApp
+        ? `سيُحذف ${toArabicDigits(count)} درسًا محفوظًا داخل التطبيق. يمكنك تنزيله مرة أخرى لاحقًا.`
+        : `سيُحذف ${toArabicDigits(count)} درسًا من مجلد تنزيلات قُرّة على الهاتف.`,
+      confirmLabel: 'حذف',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    setDownloadActionError(null);
+    try {
+      if (isApp) await deleteAllLectureDownloads();
+      else await deleteAllPhoneLectures();
+    } catch (cause) {
+      setDownloadActionError(cause instanceof Error ? cause.message : 'تعذّر حذف التنزيلات.');
+    }
+  };
 
   return (
     <div className="space-y-5 pb-8" dir="rtl">
@@ -689,15 +714,14 @@ export function HuwainiScreen({ navigate }: HuwainiScreenProps) {
         </div>
       </div>
 
-      {/* Storage */}
-      {(keptCount > 0 || phoneCount > 0) && (
-        <Card className="border border-primary-100 dark:border-primary-800/70">
+      <Card className="border border-primary-100 dark:border-primary-800/70">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-100 text-primary-700 dark:bg-primary-800 dark:text-primary-100">
                 <HardDrive size={18} aria-hidden="true" />
               </div>
               <div>
+                <h2 className="text-sm font-bold text-primary-900 dark:text-primary-100">إدارة التنزيلات</h2>
                 {keptCount > 0 && (
                   <>
                     <p className="text-sm font-bold text-primary-900 dark:text-primary-100">
@@ -707,6 +731,11 @@ export function HuwainiScreen({ navigate }: HuwainiScreenProps) {
                       {formatBytes(keptBytes)} — تعمل بلا إنترنت داخل التطبيق
                     </p>
                   </>
+                )}
+                {keptCount === 0 && phoneCount === 0 && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    لا توجد حلقات محفوظة حاليًا. نزّل أي درس للاحتفاظ به والاستماع إليه دون اتصال.
+                  </p>
                 )}
                 {phoneCount > 0 && (
                   <p
@@ -720,10 +749,19 @@ export function HuwainiScreen({ navigate }: HuwainiScreenProps) {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setFilter('downloaded')}
+                disabled={keptCount === 0 && phoneCount === 0}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-primary-100 px-3 py-2 text-xs font-semibold text-primary-700 transition-colors hover:bg-primary-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-primary-800 dark:text-primary-200 dark:hover:bg-primary-700"
+              >
+                <HardDrive size={14} aria-hidden="true" />
+                عرض المحفوظ
+              </button>
               {keptCount > 0 && (
                 <button
                   type="button"
-                  onClick={() => void deleteAllLectureDownloads()}
+                  onClick={() => void removeAllDownloads('app')}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-600 transition-colors hover:bg-error-50 hover:text-error-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-error-900/30 dark:hover:text-error-400"
                 >
                   <Trash2 size={14} aria-hidden="true" />
@@ -733,7 +771,7 @@ export function HuwainiScreen({ navigate }: HuwainiScreenProps) {
               {phoneCount > 0 && (
                 <button
                   type="button"
-                  onClick={() => void deleteAllPhoneLectures()}
+                  onClick={() => void removeAllDownloads('phone')}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-primary-100 px-3 py-2 text-xs font-semibold text-primary-700 transition-colors hover:bg-error-50 hover:text-error-600 dark:bg-primary-800 dark:text-primary-200 dark:hover:bg-error-900/30 dark:hover:text-error-400"
                 >
                   <Trash2 size={14} aria-hidden="true" />
@@ -742,8 +780,12 @@ export function HuwainiScreen({ navigate }: HuwainiScreenProps) {
               )}
             </div>
           </div>
-        </Card>
-      )}
+          {downloadActionError && (
+            <p className="mt-3 text-xs font-medium text-error-600 dark:text-error-400" role="alert">
+              {downloadActionError}
+            </p>
+          )}
+      </Card>
 
       {filter === 'best' && (
         <p className="rounded-2xl bg-gold-50 px-4 py-3 text-xs leading-relaxed text-gold-800 dark:bg-gold-900/20 dark:text-gold-200">
@@ -846,6 +888,7 @@ export function HuwainiScreen({ navigate }: HuwainiScreenProps) {
         </a>
         . البثّ والتنزيل مباشرةً من الأرشيف، ولا يُخزَّن شيء على جهازك ولا يخرج منه إلا ما طلبت حفظه.
       </p>
+      {dialog}
     </div>
   );
 }

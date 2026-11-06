@@ -374,7 +374,7 @@ export function PrayerScreen({ settings, onSaveSettings, navigate, params }: Pra
       {nextPrayer && (
         <div className="relative isolate overflow-hidden rounded-[2rem] p-6 shadow-2xl backdrop-blur-sm">
           {/* Deep primary gradient: light mode uses 600→900 for strong contrast, dark mode uses 700→950 */}
-          <div className="absolute inset-0 rounded-[2rem] bg-gradient-to-br from-primary-600 via-primary-700 to-primary-900 dark:from-primary-700 dark:via-primary-800 dark:to-primary-950" />
+          <div className="app-brand-panel absolute inset-0 rounded-[2rem] bg-gradient-to-br from-primary-600 via-primary-700 to-primary-900 dark:from-primary-700 dark:via-primary-800 dark:to-primary-950" />
           {/* Ambient accent glow for depth */}
           <div className="pointer-events-none absolute -top-8 -right-8 -z-10 h-48 w-48 rounded-full bg-[var(--func-accent)]/25 blur-3xl dark:bg-[var(--func-accent)]/15" />
           {/* Decorative patterns — clearer borders for light mode */}

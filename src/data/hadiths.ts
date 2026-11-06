@@ -15,9 +15,9 @@ export { HADITH_OF_DAY_BOOK } from '@/data/contentCatalog';
 
 export {
   getHadithCollection,
+  getDailyHadith,
   installedCollections,
   searchInstalledHadiths,
-  hadithOfDay,
 } from '@/utils/hadithService';
 
 export { GRADE_INFO } from '@/data/hadithCollections';

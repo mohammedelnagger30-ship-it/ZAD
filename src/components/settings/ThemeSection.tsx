@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { Check, Monitor, Moon, Sun, Palette } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { SectionTitle } from '@/components/settings/SectionTitle';
@@ -57,56 +58,62 @@ export function ThemeSection({ themeMode, onChangeTheme, colorPalette, onChangeC
               {COLOR_PALETTES.map((palette) => {
                 const selected = colorPalette === palette.id;
                 return (
-                  <button
-                    key={palette.id}
-                    type="button"
-                    aria-label={`اختيار اللون ${palette.name}`}
-                    aria-pressed={selected}
-                    title={palette.vibe}
-                    onClick={() => onChangeColorPalette(palette.id)}
-                    className="group relative flex flex-col items-center gap-2 rounded-2xl p-3 transition-all duration-300 hover:scale-105 active:scale-95"
-                    style={{
-                      background: selected ? palette.gradient : '#ffffff',
-                      boxShadow: selected
-                        ? `0 12px 32px ${palette.glow}, 0 0 0 3px ${palette.color}66`
-                        : '0 4px 16px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)',
-                    }}
-                  >
-                    {/* Color preview circles with glow */}
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className="h-3.5 w-3.5 rounded-full ring-2 ring-white/40 drop-shadow-sm"
-                        style={{ backgroundColor: palette.color, boxShadow: `0 0 8px ${palette.color}44` }}
-                      />
-                      <span
-                        className="h-3.5 w-3.5 rounded-full ring-2 ring-white/40 drop-shadow-sm"
-                        style={{ backgroundColor: palette.accent, boxShadow: `0 0 8px ${palette.accent}44` }}
-                      />
-                    </div>
-
-                    {/* Labels */}
-                    <div className="flex flex-col items-center text-center leading-tight">
-                      <span
-                        className="text-[11px] font-bold tracking-tight"
-                        style={{ color: selected ? '#ffffff' : palette.color }}
-                      >
-                        {palette.name}
-                      </span>
-                      <span
-                        className="text-[8px] font-medium tracking-wider opacity-80"
-                        style={{ color: selected ? 'rgba(255,255,255,0.85)' : '#9ca3af' }}
-                      >
-                        {palette.latin}
-                      </span>
-                    </div>
-
-                    {/* Checkmark for selected */}
-                    {selected && (
-                      <div className="absolute -top-1.5 -right-1.5 h-6 w-6 flex items-center justify-center rounded-full bg-white shadow-lg border border-white/60">
-                        <Check size={14} className="text-[var(--brand-from, #15803d)]" strokeWidth={3} />
-                      </div>
+                  <Fragment key={palette.id}>
+                    {palette.id === 'obsidian' && (
+                      <p className="col-span-full pt-1 text-[11px] font-bold text-gray-500 dark:text-gray-400">
+                        تدرجات داكنة مميزة
+                      </p>
                     )}
-                  </button>
+                    <button
+                      type="button"
+                      aria-label={`اختيار اللون ${palette.name}`}
+                      aria-pressed={selected}
+                      title={palette.vibe}
+                      onClick={() => onChangeColorPalette(palette.id)}
+                      className="group relative flex flex-col items-center gap-2 rounded-2xl p-3 transition-all duration-300 hover:scale-105 active:scale-95"
+                      style={{
+                        background: selected ? palette.gradient : '#ffffff',
+                        boxShadow: selected
+                          ? `0 12px 32px ${palette.glow}, 0 0 0 3px ${palette.color}66`
+                          : '0 4px 16px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)',
+                      }}
+                    >
+                      {/* Color preview circles with glow */}
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className="h-3.5 w-3.5 rounded-full ring-2 ring-white/40 drop-shadow-sm"
+                          style={{ backgroundColor: palette.color, boxShadow: `0 0 8px ${palette.color}44` }}
+                        />
+                        <span
+                          className="h-3.5 w-3.5 rounded-full ring-2 ring-white/40 drop-shadow-sm"
+                          style={{ backgroundColor: palette.accent, boxShadow: `0 0 8px ${palette.accent}44` }}
+                        />
+                      </div>
+
+                      {/* Labels */}
+                      <div className="flex flex-col items-center text-center leading-tight">
+                        <span
+                          className="text-[11px] font-bold tracking-tight"
+                          style={{ color: selected ? '#ffffff' : palette.color }}
+                        >
+                          {palette.name}
+                        </span>
+                        <span
+                          className="text-[8px] font-medium tracking-wider opacity-80"
+                          style={{ color: selected ? 'rgba(255,255,255,0.85)' : '#9ca3af' }}
+                        >
+                          {palette.latin}
+                        </span>
+                      </div>
+
+                      {/* Checkmark for selected */}
+                      {selected && (
+                        <div className="absolute -top-1.5 -right-1.5 h-6 w-6 flex items-center justify-center rounded-full bg-white shadow-lg border border-white/60">
+                          <Check size={14} className="text-[var(--brand-from, #15803d)]" strokeWidth={3} />
+                        </div>
+                      )}
+                    </button>
+                  </Fragment>
                 );
               })}
             </div>

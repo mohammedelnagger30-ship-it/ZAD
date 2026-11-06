@@ -807,6 +807,12 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
     setSheet(sheet === 'jump' ? null : 'jump');
   };
 
+  const openJuzPicker = () => {
+    setPageField('');
+    setJumpTarget('juz');
+    setSheet('jump');
+  };
+
   /** The sheets the stack is currently holding, as page numbers. */
   const leafPages = useMemo(() => {
     const pages: number[] = [];
@@ -822,6 +828,7 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
         currentJuz={currentJuz}
         currentHizb={currentHizb}
         currentPage={currentPage}
+        openJuzPicker={openJuzPicker}
         isBookmarked={isBookmarked}
         toggleBookmark={toggleBookmark}
         mode={mode}
@@ -1031,7 +1038,6 @@ const MushafLeaf = memo(function MushafLeaf({
     </div>
   );
 });
-
 
 
 

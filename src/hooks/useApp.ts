@@ -176,9 +176,19 @@ export type NavParams = Record<string, unknown>;
 
 const NAVIGATION_STORAGE_KEY = 'zad:navigation-state';
 
+// Clear legacy persisted navigation state from localStorage so the app doesn't
+// restore an old random screen on cold start.
+try {
+  localStorage.removeItem(NAVIGATION_STORAGE_KEY);
+} catch {
+  // ignore
+}
+
 function getStoredNavigationState() {
   try {
-    const raw = localStorage.getItem(NAVIGATION_STORAGE_KEY);
+    // Use sessionStorage instead of localStorage so cold starts always land
+    // on the home screen cleanly, while warm in-app reload preserves stack.
+    const raw = sessionStorage.getItem(NAVIGATION_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as {
       screen?: ScreenName;
@@ -235,7 +245,7 @@ export function useNavigation() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(
+      sessionStorage.setItem(
         NAVIGATION_STORAGE_KEY,
         JSON.stringify({ screen, params, history, paramsByScreen }),
       );

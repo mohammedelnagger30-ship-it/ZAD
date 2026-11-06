@@ -2,6 +2,7 @@ import { describe, it, expect } from '@jest/globals';
 import { BACKUP_TABLES, isValidBackupRow, pickSettingsRow } from '@/utils/backup';
 import { DEFAULT_SETTINGS } from '@/db/database';
 import { TOTAL_QURAN_PAGES } from '@/data/surahs';
+import { COLOR_PALETTES } from '@/utils/colorThemes';
 
 /**
  * The import path's gate: user-supplied JSON only reaches Dexie through
@@ -9,6 +10,12 @@ import { TOTAL_QURAN_PAGES } from '@/data/surahs';
  * bounds are taken from the bundled mushaf data, not hardcoded folklore.
  */
 describe('isValidBackupRow', () => {
+  it('accepts settings using each newly added dark palette', () => {
+    for (const { id } of COLOR_PALETTES.filter(({ id }) => ['obsidian', 'nocturne', 'abyss'].includes(id))) {
+      expect(isValidBackupRow('settings', { colorPalette: id })).toBe(true);
+    }
+  });
+
   it('accepts a khatmah plan row shaped like the table', () => {
     expect(isValidBackupRow('khatmah', { startDate: '2026-10-10', targetDate: null, currentPage: 12, updatedAt: 1 })).toBe(true);
     expect(isValidBackupRow('khatmah', { startDate: '2026-10-10', targetDate: '2026-11-08', currentPage: 0, updatedAt: 1 })).toBe(true);

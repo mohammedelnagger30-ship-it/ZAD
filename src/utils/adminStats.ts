@@ -97,29 +97,64 @@ export function normalizeAdminStats(value: unknown): AdminStats {
  * left the signed-in user parked on «جارٍ فتح الحساب...» forever, on a build
  * that rendered instantly before the gate existed. The abort turns the hang
  * into the failure the comment already promised. */
-const ADMIN_CHECK_TIMEOUT_MS = 2_000;
+const ADMIN_CHECK_TIMEOUT_MS = 4_000;
 
-/** Is the signed-in account on `admin_emails`? False on any failure, so a
+const ADMIN_CACHE_PREFIX = 'zad:admin-verified:';
+const ADMIN_CACHE_TTL_MS = 7 * 24 * 60 * 60_000; // 7 days
+
+export function getCachedAdminStatus(userId: string | null | undefined): boolean {
+  if (!userId) return false;
+  try {
+    const raw = localStorage.getItem(ADMIN_CACHE_PREFIX + userId);
+    if (!raw) return false;
+    const { isAdmin, expiresAt } = JSON.parse(raw);
+    if (typeof isAdmin === 'boolean' && typeof expiresAt === 'number') {
+      return Date.now() < expiresAt ? isAdmin : false;
+    }
+  } catch {
+    // Ignore cache parse errors
+  }
+  return false;
+}
+
+export function setCachedAdminStatus(userId: string | null | undefined, isAdmin: boolean): void {
+  if (!userId) return;
+  try {
+    if (isAdmin) {
+      localStorage.setItem(
+        ADMIN_CACHE_PREFIX + userId,
+        JSON.stringify({ isAdmin: true, expiresAt: Date.now() + ADMIN_CACHE_TTL_MS }),
+      );
+    } else {
+      localStorage.removeItem(ADMIN_CACHE_PREFIX + userId);
+    }
+  } catch {
+    // Best-effort cache write
+  }
+}
+
+/** Is the signed-in account on dmin_emails? False on any failure, so a
  * missing migration or a dead network leaves the app in its normal state
  * instead of wedging at a gate nobody can open. */
-export async function isAdminAccount(): Promise<boolean> {
-  if (!supabase) return false;
+export async function isAdminAccount(userId?: string | null): Promise<boolean> {
+  if (!supabase) return getCachedAdminStatus(userId);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ADMIN_CHECK_TIMEOUT_MS);
   try {
     const { data, error } = await supabase.rpc('is_admin').abortSignal(controller.signal);
     if (error) {
       console.warn('Admin check unavailable:', error.message);
-      return false;
+      return getCachedAdminStatus(userId);
     }
-    return data === true;
+    const isAdmin = data === true;
+    if (userId) setCachedAdminStatus(userId, isAdmin);
+    return isAdmin;
   } catch (cause) {
     const reason = cause instanceof Error ? cause.message : String(cause);
-    // An abort is the expected shape of a slow gate, not a fault worth a stack.
     console.warn(
       /abort/i.test(reason) ? 'Admin check timed out — opening the ordinary app.' : 'Admin check unavailable: ' + reason,
     );
-    return false;
+    return getCachedAdminStatus(userId);
   } finally {
     clearTimeout(timer);
   }

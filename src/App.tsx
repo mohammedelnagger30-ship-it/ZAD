@@ -18,7 +18,7 @@ import {
 } from '@/utils/cloudSync';
 import { isSupabaseConfigured, supabase } from '@/utils/supabaseClient';
 import { trackAppOpen } from '@/utils/analytics';
-import { isAdminAccount } from '@/utils/adminStats';
+import { getCachedAdminStatus, isAdminAccount } from '@/utils/adminStats';
 import { applySystemFontScale } from '@/utils/displayScale';
 import { useAppUpdate } from '@/hooks/useAppUpdate';
 import { App as CapApp } from '@capacitor/app';
@@ -276,8 +276,29 @@ function readOfflineUsage(): boolean {
   }
 }
 
+function readInitialSession(): Session | null {
+  try {
+    const keys = Object.keys(localStorage);
+    for (const key of keys) {
+      if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          const s = parsed?.currentSession || parsed?.session || parsed;
+          if (s?.access_token && s?.user) {
+            return s as Session;
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 function Application() {
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<Session | null>(readInitialSession);
   // Don't block the UI waiting for Supabase: read cached session in background
   // and let the app open immediately so it works fully offline.
   const [offlineUsage, setOfflineUsage] = useState(readOfflineUsage);
@@ -285,9 +306,12 @@ function Application() {
   // that they want their data on more than one device. Held here rather than in
   // Settings so a session appearing mid-sign-up swaps the whole view over, as at the gate.
   const [showAuthForGuest, setShowAuthForGuest] = useState(false);
-  // Default to 'user' so a logged-in account never gets stuck behind a slow/admin
-  // check on poor connections or offline. Upgraded to 'admin' in the background if confirmed.
-  const [adminState, setAdminState] = useState<'unknown' | 'admin' | 'user'>('user');
+  // Initialize with cached admin status so verified admins see the admin dashboard
+  // option immediately even offline or on slow connections.
+  const [adminState, setAdminState] = useState<'unknown' | 'admin' | 'user'>(() => {
+    const initS = readInitialSession();
+    return initS?.user?.id && getCachedAdminStatus(initS.user.id) ? 'admin' : 'user';
+  });
   // كل مستخدم — أدمن أو لا — يفتح التطبيق العادى، ولوحة الإدارة تُفتح بالطلب من
   // الإعدادات. الحالة هنا لا داخل `AdminApp`: زر «لوحة الإدارة» يصل إلى هذا المكوّن
   // من تحت، فلا بدّ أن يرفع الطلب إلى هذا المستوى ليُبدّل العرض.
@@ -313,17 +337,26 @@ function Application() {
       return;
     }
     let alive = true;
-    setAdminState('user');
-    void isAdminAccount()
+    if (!getCachedAdminStatus(sessionUserId)) {
+      setAdminState('user');
+    }
+    void isAdminAccount(sessionUserId)
       .then((isAdmin) => {
-        if (alive && isAdmin) setAdminState('admin');
+        if (alive) setAdminState(isAdmin ? 'admin' : 'user');
       })
       .catch(() => {
-        if (alive) setAdminState('user');
+        if (alive && !getCachedAdminStatus(sessionUserId)) setAdminState('user');
       });
     return () => {
       alive = false;
     };
+  }, [sessionUserId]);
+
+  const handleRefreshAdmin = useCallback(async (): Promise<boolean> => {
+    if (!sessionUserId) return false;
+    const isAdmin = await isAdminAccount(sessionUserId);
+    setAdminState(isAdmin ? 'admin' : 'user');
+    return isAdmin;
   }, [sessionUserId]);
 
   useEffect(() => {
@@ -402,6 +435,7 @@ function Application() {
         key={session.user.id}
         session={session}
         onOpenAdmin={adminState === 'admin' ? () => setShowAdminDashboard(true) : undefined}
+        onRefreshAdmin={handleRefreshAdmin}
       />
     );
   }
@@ -524,7 +558,15 @@ function useSessionSync(userId: string) {
   return { syncState, handleSignOut };
 }
 
-function AuthenticatedApp({ session, onOpenAdmin }: { session: Session; onOpenAdmin?: () => void }) {
+function AuthenticatedApp({
+  session,
+  onOpenAdmin,
+  onRefreshAdmin,
+}: {
+  session: Session;
+  onOpenAdmin?: () => void;
+  onRefreshAdmin?: () => Promise<boolean>;
+}) {
   const { syncState, handleSignOut } = useSessionSync(session.user.id);
 
   return (
@@ -534,6 +576,7 @@ function AuthenticatedApp({ session, onOpenAdmin }: { session: Session; onOpenAd
       syncState={syncState}
       onSyncNow={() => synchronizeNow()}
       onOpenAdmin={onOpenAdmin}
+      onRefreshAdmin={onRefreshAdmin}
     />
   );
 }
@@ -648,6 +691,7 @@ function AppContent({
   syncState,
   onSyncNow,
   onOpenAdmin,
+  onRefreshAdmin,
   onCreateAccount,
 }: {
   accountEmail: string | undefined;
@@ -656,6 +700,7 @@ function AppContent({
   onSyncNow: (() => Promise<void>) | undefined;
   /** Only supplied for an allow-listed account — the way back to the dashboard. */
   onOpenAdmin?: (() => void) | undefined;
+  onRefreshAdmin?: (() => Promise<boolean>) | undefined;
   /** Supplied only to a guest: the way from Settings to creating an account. */
   onCreateAccount?: (() => void) | undefined;
 }) {
@@ -1035,7 +1080,7 @@ function AppContent({
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-surface-light dark:bg-surface-dark text-primary-900 dark:text-primary-50" dir="rtl">
+      <div className="app-shell min-h-screen bg-surface-light dark:bg-surface-dark text-primary-900 dark:text-primary-50" dir="rtl">
         <main className={`min-h-screen min-h-dvh px-4 pt-4 sm:px-6 md:pr-24 md:pl-8 md:pt-8 lg:pr-32 xl:pr-36 ${
           /* Room for the tab bar — plus, on mobile, the recitation's mini bar stacked
              on top of it; on desktop the mini bar floats near the bottom instead, so it
@@ -1085,6 +1130,7 @@ function AppContent({
                   onSyncNow={onSyncNow}
                   onSignOut={onSignOut}
                   onOpenAdmin={onOpenAdmin}
+                  onRefreshAdmin={onRefreshAdmin}
                   onCreateAccount={onCreateAccount}
                 />
               )}

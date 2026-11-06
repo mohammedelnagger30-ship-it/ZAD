@@ -242,7 +242,7 @@ export function MoreScreen({ navigate }: MoreScreenProps) {
       <button
         type="button"
         onClick={() => navigate(FEATURED.screen)}
-        className="group relative w-full overflow-hidden rounded-3xl bg-gradient-to-br from-primary-600 via-primary-700 to-primary-900 p-3.5 text-right text-white shadow-lg shadow-primary-900/15 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 active:scale-[0.995] sm:p-4 md:p-5 dark:focus-visible:ring-offset-primary-950"
+        className="app-brand-panel group relative w-full overflow-hidden rounded-3xl bg-gradient-to-br from-primary-600 via-primary-700 to-primary-900 p-3.5 text-right text-white shadow-lg shadow-primary-900/15 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 active:scale-[0.995] sm:p-4 md:p-5 dark:focus-visible:ring-offset-primary-950"
       >
         <span
           aria-hidden="true"

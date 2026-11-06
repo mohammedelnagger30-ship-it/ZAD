@@ -148,9 +148,67 @@ export async function generateDailyTasks(date: Date = trustedNow()): Promise<voi
 }
 
 export async function getTodayTasks(): Promise<DailyTask[]> {
-  const dateKey = todayKey();
+  const now = trustedNow();
+  const dateKey = formatDateKey(now);
   const tasks = await db.tasks.where('date').equals(dateKey).toArray();
-  return tasks.sort((a, b) => a.scheduledTime.localeCompare(b.scheduledTime));
+  const planIds = [...new Set(tasks.map((task) => task.planId))];
+  const plans = await db.plans.bulkGet(planIds);
+  const plansById = new Map(
+    plans.flatMap((plan) => plan?.id === undefined ? [] : [[plan.id, plan] as const]),
+  );
+  const orphanedTaskIds = tasks
+    .filter((task) => {
+      const plan = plansById.get(task.planId);
+      return !plan ||
+        plan.syncPlaceholder ||
+        plan.type !== task.type ||
+        (!!task.planSyncId && !!plan.syncId && task.planSyncId !== plan.syncId);
+    })
+    .flatMap((task) => task.id === undefined ? [] : [task.id]);
+  if (orphanedTaskIds.length > 0) {
+    await db.tasks.bulkDelete(orphanedTaskIds);
+  }
+  return filterTasksForVisiblePlans(tasks, plans, now).sort((a, b) =>
+    a.scheduledTime.localeCompare(b.scheduledTime),
+  );
+}
+
+export function filterTasksForVisiblePlans(
+  tasks: DailyTask[],
+  plans: Array<HifzPlan | undefined>,
+  date: Date,
+): DailyTask[] {
+  const visiblePlans = new Map(
+    plans.flatMap((plan) =>
+      plan &&
+      plan.id !== undefined &&
+      plan.active &&
+      !plan.syncPlaceholder &&
+      plan.daysOfWeek.includes(date.getDay())
+        ? [[plan.id, plan] as const]
+        : [],
+    ),
+  );
+  return tasks.filter((task) => {
+    const plan = visiblePlans.get(task.planId);
+    return !!plan &&
+      task.type === plan.type &&
+      (!task.planSyncId || !plan.syncId || task.planSyncId === plan.syncId);
+  });
+}
+
+export async function deletePlanAndUnfinishedTasks(planId: number): Promise<void> {
+  if (!Number.isInteger(planId) || planId < 1) {
+    throw new RangeError('معرّف الخطة غير صالح للحذف.');
+  }
+
+  await db.transaction('rw', db.plans, db.tasks, async () => {
+    const plan = await db.plans.get(planId);
+    if (!plan) return;
+
+    await db.tasks.where('planId').equals(planId).delete();
+    await db.plans.delete(planId);
+  });
 }
 
 export async function getRecentTasks(days = 30): Promise<DailyTask[]> {

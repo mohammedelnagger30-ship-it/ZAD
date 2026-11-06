@@ -2,6 +2,7 @@ import type { ReactNode, RefObject } from 'react';
 import { BookOpen, Volume2 } from 'lucide-react';
 import { Sheet } from '@/components/mushaf/Sheet';
 import { getSurah, toArabicNumber } from '@/data/surahs';
+import { getAyahs } from '@/data/quranText';
 import { type VoiceScope } from '@/components/mushaf/readerConfig';
 import { AyahVoicePanel } from '@/components/mushaf/AyahVoicePanel';
 
@@ -75,6 +76,10 @@ export function AyahVoiceSheet({
   handleVoiceEnded,
   extra,
 }: AyahVoiceSheetProps) {
+  const selectedAyah = ayahChoice
+    ? getAyahs(ayahChoice.surahId, ayahChoice.ayahNumber, ayahChoice.ayahNumber)[0]
+    : undefined;
+
   return (
     <>
       {/* ── The pressed ayah: what it is needed for ───────────────────────── */}
@@ -85,6 +90,11 @@ export function AyahVoiceSheet({
           onClose={closeAyahChoice}
           panelRef={ayahPanelRef}
         >
+          {selectedAyah && (
+            <p className="mushaf-body mushaf-voice__ayah" dir="rtl">
+              {selectedAyah.text}
+            </p>
+          )}
           <div className="mushaf-seg">
             <button className="mushaf-seg__item" onClick={() => setTafsirAyah(ayahChoice)}>
               <BookOpen size={18} aria-hidden="true" />

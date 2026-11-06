@@ -323,12 +323,8 @@ export function getWordMeaningBook(id: number): WordMeaningBook | undefined {
 }
 
 /**
- * The collection "hadith of the day" reads from — and the base of the library.
- *
- * It is fetched once on first run so the home card works offline immediately, and it is
- * the collection the card falls back to whenever nothing else is installed. Sahih Muslim
- * is a full canonical collection rather than a booklet, so the daily card, the offline
- * fallback and a fresh install all start from the same book.
+ * The bundled collection used to seed a fresh install. Once other collections
+ * are installed, the daily hadith is selected across all of them instead.
  */
 export const HADITH_OF_DAY_BOOK = 'sahih_muslim';
 
@@ -362,4 +358,3 @@ export function formatBytes(bytes: number): string {
   if (bytes >= 1024) return `${toArabicDigits(Math.round(bytes / 1024))} KB`;
   return `${toArabicDigits(bytes)} بايت`;
 }
-

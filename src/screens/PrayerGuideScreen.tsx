@@ -199,7 +199,7 @@ export function PrayerGuideScreen({ navigate }: PrayerGuideScreenProps) {
       </button>
 
       {/* Hero */}
-      <section className="relative isolate overflow-hidden rounded-[2rem] bg-linear-to-br from-primary-600 via-primary-700 to-primary-900 p-6 text-white shadow-2xl dark:from-primary-900 dark:via-primary-950 dark:to-primary-950">
+      <section className="app-brand-panel relative isolate overflow-hidden rounded-[2rem] bg-linear-to-br from-primary-600 via-primary-700 to-primary-900 p-6 text-white shadow-2xl dark:from-primary-900 dark:via-primary-950 dark:to-primary-950">
         <div className="pointer-events-none absolute -right-20 -top-20 -z-10 h-64 w-64 rounded-full border-4 border-white/5" />
         <div className="pointer-events-none absolute -left-16 top-16 -z-10 h-40 w-40 rounded-full border-4 border-white/5" />
         <div className="pointer-events-none absolute bottom-0 left-1/3 -z-10 h-44 w-44 rounded-full border-4 border-white/5" />

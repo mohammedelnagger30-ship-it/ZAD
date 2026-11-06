@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, Heart, BookText, X, ChevronLeft, ChevronRight, Filter, AlertTriangle, Library, Loader2, Download, Copy } from 'lucide-react';
+import { Search, Heart, BookText, X, ChevronLeft, ChevronRight, Filter, AlertTriangle, Library, Loader2, Download, Copy, Share2 } from 'lucide-react';
 import { Card, Badge, EmptyState } from '@/components/ui';
 import { HadithSharh } from '@/components/HadithSharh';
 import { ContentLibrary } from '@/screens/ContentLibrary';
 import {
   GRADE_INFO,
   getHadithCollection,
-  hadithOfDay,
+  getDailyHadith,
   installedCollections,
   searchInstalledHadiths,
   type HadithCollection,
@@ -18,6 +18,7 @@ import { HADITH_BOOKS, HADITH_OF_DAY_BOOK, getHadithBook } from '@/data/contentC
 import type { HadithGrade } from '@/data/hadithCollections';
 import { toArabicNumber } from '@/data/surahs';
 import { db } from '@/db/database';
+import { shareContentCard } from '@/utils/shareCard';
 
 type ViewMode = 'search' | 'browse' | 'detail' | 'manager';
 const SEARCH_PAGE_SIZE = 50;
@@ -88,6 +89,8 @@ export function HadithScreen({ params }: HadithScreenProps) {
   const [searchPage, setSearchPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
+  const [shareNotice, setShareNotice] = useState<string | null>(null);
+  const [sharingHadith, setSharingHadith] = useState(false);
   const [copiedHadithId, setCopiedHadithId] = useState<string | null>(null);
   const [detailReturnView, setDetailReturnView] = useState<ViewMode>('search');
   // The query whose results are in `hits`. Distinguishes "search done, nothing found"
@@ -157,22 +160,15 @@ export function HadithScreen({ params }: HadithScreenProps) {
     })();
   }, [deepLinkId]);
 
-  // "Hadith of the day" deep link — the notification that quotes a hadith's opening
-  // words. Unlike a bookmark or a search hit it cannot carry an id: the hadith is
-  // derived from the day of the year over whichever collection is on the device, and
-  // the scheduler cannot know that. It resolves the same entry the home card shows,
-  // through the same path, so the tap lands on exactly the hadith that was announced.
+  // Resolve the daily notification through the same selector as the home card.
   const deepLinkHadithOfDay = params?.hadithOfDay === true;
   useEffect(() => {
     if (!deepLinkHadithOfDay) return;
     let cancelled = false;
     void (async () => {
       try {
-        const installed = await installedCollections();
-        const id = installed.has(HADITH_OF_DAY_BOOK) ? HADITH_OF_DAY_BOOK : [...installed].sort()[0];
-        await getHadithCollection(id ?? HADITH_OF_DAY_BOOK);
+        const record = await getDailyHadith();
         if (cancelled) return;
-        const record = hadithOfDay();
         if (!record) return;
         setSelected(record);
         setDetailReturnView('search');
@@ -295,6 +291,25 @@ export function HadithScreen({ params }: HadithScreenProps) {
     }
   };
 
+  const shareHadith = async (hadith: HadithRecord) => {
+    setShareNotice(null);
+    setSharingHadith(true);
+    try {
+      const outcome = await shareContentCard({
+        type: 'hadith',
+        text: hadith.text,
+        reference: `${hadith.collectionTitle} — رقم ${toArabicNumber(hadith.arabicNumber)}`,
+      });
+      if (outcome === 'copied') setShareNotice('نُسخ الحديث ومصدره — يمكنك إرساله الآن.');
+      else if (outcome === 'failed') setShareNotice('تعذّرت مشاركة الحديث أو نسخه.');
+    } catch (error) {
+      console.error('Hadith sharing failed:', error);
+      setShareNotice('تعذّرت مشاركة الحديث الآن. حاول مرة أخرى.');
+    } finally {
+      setSharingHadith(false);
+    }
+  };
+
   const openHadith = (hadith: HadithRecord, returnTo: ViewMode) => {
     setSelected(hadith);
     setDetailReturnView(returnTo);
@@ -386,7 +401,18 @@ export function HadithScreen({ params }: HadithScreenProps) {
                 <Copy size={16} />
                 {copiedHadithId === selected.id ? 'تم النسخ' : 'نسخ نص الحديث'}
               </button>
+              <button
+                onClick={() => void shareHadith(selected)}
+                disabled={sharingHadith}
+                aria-label="مشاركة الحديث كصورة"
+                aria-busy={sharingHadith}
+                className="inline-flex items-center gap-2 rounded-lg bg-gold-100 px-3 py-2 text-sm font-medium text-gold-800 hover:bg-gold-200 disabled:opacity-60 dark:bg-gold-900/30 dark:text-gold-300 dark:hover:bg-gold-900/50"
+              >
+                {sharingHadith ? <Loader2 size={16} className="animate-spin" /> : <Share2 size={16} />}
+                مشاركة كصورة
+              </button>
               {copyError && <p role="alert" className="text-xs text-error-600 dark:text-error-300">{copyError}</p>}
+              {shareNotice && <p role="status" className="text-xs text-primary-700 dark:text-primary-300">{shareNotice}</p>}
             </div>
 
             <HadithSharh hadithId={selected.id} text={selected.text} />

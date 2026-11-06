@@ -19,6 +19,7 @@ import {
   Plane,
   RotateCcw,
   Search,
+  Share2,
   Sparkles,
   Sun,
   Sunrise,
@@ -34,6 +35,7 @@ import { todayKey, getDayNameShort, getLast7Days } from '@/utils/dateUtils';
 import { trustedNow } from '@/utils/clock';
 import { normalizeArabic } from '@/utils/arabic';
 import { normalizeCompletedDays, recordCompletedDay } from '@/utils/adhkarDays';
+import { shareContentCard } from '@/utils/shareCard';
 
 const STORAGE_KEY = 'hifzi-adhkar-state';
 const SYNC_COMPLETE_EVENT = 'zad:cloud-sync-complete';
@@ -56,18 +58,11 @@ const ICONS: Record<string, typeof Sunrise> = {
   sparkles: Sparkles,
 };
 
-/**
- * One visual identity per collection: the tile gradient on its card, the bar
- * that fills under its title, the ring around its counter, and the hero it
- * gets on its own page. Written out here rather than derived from the id so
- * every step stays a plain class Tailwind can see in this file — a computed
- * `bg-${color}-500` would be dropped from the build and the whole identity
- * would silently vanish in production.
- */
+/** Keep every collection on the app's active palette; icons distinguish the content. */
 interface CategoryStyle {
   /** Tinted pill for the hadith reference and small badges. */
   chip: string;
-  /** Gradient for the icon tile and the accent line over the card. */
+  /** Shared brand gradient for the icon tile and the accent line over the card. */
   icon: string;
   /** Solid fill for progress bars and the hero's meter. */
   bar: string;
@@ -85,122 +80,11 @@ interface CategoryStyle {
 
 const DEFAULT_CATEGORY_STYLE: CategoryStyle = {
   chip: 'bg-primary-100 text-primary-800 dark:bg-primary-800 dark:text-primary-200',
-  icon: 'from-primary-400 to-primary-600',
+  icon: 'from-primary-600 to-primary-800',
   bar: 'bg-primary-500',
   ring: 'stroke-primary-500',
   hero: 'from-primary-600 to-primary-950',
 };
-
-const CATEGORY_STYLES: Record<string, CategoryStyle> = {
-  morning: {
-    chip: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300',
-    icon: 'from-amber-400 to-orange-500',
-    bar: 'bg-amber-500',
-    ring: 'stroke-amber-500',
-    hero: 'from-amber-600 to-orange-800',
-  },
-  evening: {
-    chip: 'bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-300',
-    icon: 'from-violet-500 to-indigo-700',
-    bar: 'bg-violet-500',
-    ring: 'stroke-violet-500',
-    hero: 'from-violet-600 to-indigo-800',
-  },
-  after_prayer: {
-    chip: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300',
-    icon: 'from-emerald-500 to-teal-700',
-    bar: 'bg-emerald-500',
-    ring: 'stroke-emerald-500',
-    hero: 'from-emerald-600 to-teal-800',
-  },
-  sleep: {
-    chip: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300',
-    icon: 'from-blue-500 to-blue-800',
-    bar: 'bg-blue-500',
-    ring: 'stroke-blue-500',
-    hero: 'from-blue-600 to-blue-900',
-  },
-  wakeup: {
-    chip: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300',
-    icon: 'from-rose-500 to-pink-700',
-    bar: 'bg-rose-500',
-    ring: 'stroke-rose-500',
-    hero: 'from-rose-600 to-pink-800',
-  },
-  general_adhkar: {
-    chip: 'bg-gold-100 text-gold-800 dark:bg-gold-950/60 dark:text-gold-300',
-    icon: 'from-gold-400 to-gold-600',
-    bar: 'bg-gold-500',
-    ring: 'stroke-gold-500',
-    hero: 'from-gold-500 to-amber-700',
-  },
-  wudu: {
-    chip: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-300',
-    icon: 'from-cyan-500 to-sky-700',
-    bar: 'bg-cyan-500',
-    ring: 'stroke-cyan-500',
-    hero: 'from-cyan-600 to-sky-800',
-  },
-  mosque: {
-    chip: 'bg-primary-100 text-primary-800 dark:bg-primary-800 dark:text-primary-200',
-    icon: 'from-primary-500 to-primary-800',
-    bar: 'bg-primary-500',
-    ring: 'stroke-primary-500',
-    hero: 'from-primary-600 to-primary-950',
-  },
-  food: {
-    chip: 'bg-orange-100 text-orange-800 dark:bg-orange-950/60 dark:text-orange-300',
-    icon: 'from-orange-500 to-amber-700',
-    bar: 'bg-orange-500',
-    ring: 'stroke-orange-500',
-    hero: 'from-orange-600 to-amber-800',
-  },
-  home: {
-    chip: 'bg-lime-100 text-lime-800 dark:bg-lime-950/60 dark:text-lime-300',
-    icon: 'from-lime-500 to-emerald-700',
-    bar: 'bg-lime-500',
-    ring: 'stroke-lime-500',
-    hero: 'from-lime-600 to-emerald-800',
-  },
-  travel: {
-    chip: 'bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300',
-    icon: 'from-sky-500 to-indigo-600',
-    bar: 'bg-sky-500',
-    ring: 'stroke-sky-500',
-    hero: 'from-sky-600 to-indigo-800',
-  },
-  deceased: {
-    chip: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300',
-    icon: 'from-slate-500 to-slate-700',
-    bar: 'bg-slate-500',
-    ring: 'stroke-slate-500',
-    hero: 'from-slate-600 to-slate-800',
-  },
-  general_duas: {
-    chip: 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300',
-    icon: 'from-purple-500 to-fuchsia-600',
-    bar: 'bg-purple-500',
-    ring: 'stroke-purple-500',
-    hero: 'from-purple-600 to-fuchsia-800',
-  },
-  quranic_duas: {
-    chip: 'bg-gold-100 text-gold-800 dark:bg-gold-950/60 dark:text-gold-300',
-    icon: 'from-gold-500 to-primary-700',
-    bar: 'bg-gold-500',
-    ring: 'stroke-gold-500',
-    hero: 'from-gold-600 to-primary-950',
-  },
-  friday: {
-    chip: 'bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300',
-    icon: 'from-teal-500 to-emerald-700',
-    bar: 'bg-teal-500',
-    ring: 'stroke-teal-500',
-    hero: 'from-teal-600 to-emerald-800',
-  },
-};
-
-const styleOf = (categoryId: string): CategoryStyle =>
-  CATEGORY_STYLES[categoryId] ?? DEFAULT_CATEGORY_STYLE;
 
 /** The three chips under the search box. */
 const FILTERS = [
@@ -571,8 +455,23 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
     }
   };
 
+  const shareDhikr = async (dhikr: Dhikr) => {
+    try {
+      const outcome = await shareContentCard({
+        type: 'dhikr',
+        text: dhikr.text,
+        reference: dhikr.reference,
+      });
+      if (outcome === 'copied') setNotice('نُسخ الذكر ومرجعه — يمكنك إرساله الآن.');
+      else if (outcome === 'failed') setNotice('تعذّرت مشاركة الذكر أو نسخه.');
+    } catch (error) {
+      console.error('Dhikr sharing failed:', error);
+      setNotice('تعذّرت مشاركة الذكر الآن. حاول مرة أخرى.');
+    }
+  };
+
   if (active) {
-    const style = styleOf(active.id);
+    const style = DEFAULT_CATEGORY_STYLE;
     const categoryDone = active.items.every((item) => (state.counts[item.id] ?? 0) >= item.count);
     return (
       <div className="space-y-4 pb-5">
@@ -583,7 +482,7 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
               setQuery('');
               setFilter('all');
             }}
-            className="inline-flex min-h-11 items-center gap-1 rounded-lg py-2 text-sm font-medium text-primary-600 dark:text-gold-400"
+            className="inline-flex min-h-11 items-center gap-1 rounded-lg py-2 text-sm font-medium text-primary-600 dark:text-primary-300"
           >
             <ChevronLeft size={19} className="rotate-180" />
             كل الأذكار
@@ -644,7 +543,7 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
                 key={dhikr.id}
                 id={`dhikr-${dhikr.id}`}
                 className={`animate-stagger-in scroll-mt-24 rounded-2xl ${
-                  dhikr.id === deepLinkDhikrId ? 'ring-2 ring-gold-400/80 dark:ring-gold-500/70' : ''
+                  dhikr.id === deepLinkDhikrId ? 'ring-2 ring-primary-400/80 dark:ring-primary-500/70' : ''
                 }`}
                 style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}
               >
@@ -660,6 +559,7 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
                   onReset={() => resetDhikr(dhikr.id)}
                   onFavorite={() => toggleFavorite(dhikr.id)}
                   onCopy={() => void copyDhikr(dhikr)}
+                  onShare={() => void shareDhikr(dhikr)}
                 />
               </div>
             ))}
@@ -686,7 +586,7 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
       title: 'روتينك اليومي',
       note: 'يُحتسب في إنجاز اليوم',
       Icon: Sunrise,
-      iconClass: 'text-amber-600',
+      iconClass: 'text-primary-600 dark:text-primary-300',
       categories: ADHKAR_CATEGORIES.filter((category) => category.daily !== false),
     },
     {
@@ -694,7 +594,7 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
       title: 'أذكار المناسبات ونداؤها',
       note: 'تُقرأ عند الحاجة ولا تُحتسب يومياً',
       Icon: Sparkles,
-      iconClass: 'text-gold-600',
+      iconClass: 'text-primary-500 dark:text-primary-300',
       categories: ADHKAR_CATEGORIES.filter((category) => category.daily === false),
     },
   ];
@@ -713,7 +613,7 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
           className={`flex h-11 w-11 items-center justify-center rounded-xl transition-smooth ${
             state.haptics
               ? 'bg-primary-600 text-white'
-              : 'bg-primary-100 text-primary-600 dark:bg-primary-800 dark:text-gold-400'
+              : 'bg-primary-100 text-primary-600 dark:bg-primary-800 dark:text-primary-200'
           }`}
         >
           <Vibrate size={19} />
@@ -758,7 +658,7 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
             <section key={category.id} className="space-y-2">
               <h2 className="flex items-center gap-2 text-sm font-bold text-primary-800 dark:text-primary-100">
                 <span
-                  className={`h-3 w-3 shrink-0 rounded-full bg-linear-to-br ${styleOf(category.id).icon}`}
+                  className={`h-3 w-3 shrink-0 rounded-full bg-linear-to-br ${DEFAULT_CATEGORY_STYLE.icon}`}
                   aria-hidden="true"
                 />
                 {category.title}
@@ -771,7 +671,7 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
                   key={dhikr.id}
                   id={`dhikr-${dhikr.id}`}
                   className={`animate-stagger-in scroll-mt-24 rounded-2xl ${
-                    dhikr.id === deepLinkDhikrId ? 'ring-2 ring-gold-400/80 dark:ring-gold-500/70' : ''
+                    dhikr.id === deepLinkDhikrId ? 'ring-2 ring-primary-400/80 dark:ring-primary-500/70' : ''
                   }`}
                   style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}
                 >
@@ -781,12 +681,13 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
                     count={state.counts[dhikr.id] ?? 0}
                     fontSize={state.fontSize}
                     favorite={state.favorites.includes(dhikr.id)}
-                    accent={styleOf(category.id)}
+                    accent={DEFAULT_CATEGORY_STYLE}
                     onTap={() => updateCount(dhikr, 1)}
                     onUndo={() => updateCount(dhikr, -1)}
                     onReset={() => resetDhikr(dhikr.id)}
                     onFavorite={() => toggleFavorite(dhikr.id)}
                     onCopy={() => void copyDhikr(dhikr)}
+                    onShare={() => void shareDhikr(dhikr)}
                   />
                 </div>
               ))}
@@ -872,7 +773,7 @@ function DailyHero({
   const isComplete = progress === 1;
   const last7 = getLast7Days();
   return (
-    <Card className="relative overflow-hidden border-primary-700 bg-linear-to-br from-primary-800 via-primary-900 to-primary-950 text-white dark:border-primary-800">
+    <Card className="app-brand-panel relative overflow-hidden border-primary-700 bg-linear-to-br from-primary-800 via-primary-900 to-primary-950 text-white dark:border-primary-800">
       <div className="pointer-events-none absolute -top-16 -left-14 h-44 w-44 rounded-full bg-gold-400/20 blur-3xl" aria-hidden="true" />
       <div className="pointer-events-none absolute -bottom-20 -right-10 h-40 w-40 rounded-full bg-primary-400/20 blur-3xl" aria-hidden="true" />
 
@@ -962,7 +863,7 @@ function CategoryProgress({
   haptics: boolean;
   onHapticsChange: (enabled: boolean) => void;
 }) {
-  const style = styleOf(category.id);
+  const style = DEFAULT_CATEGORY_STYLE;
   const completed = category.items.filter((item) => (counts[item.id] ?? 0) >= item.count).length;
   const progress = completed / category.items.length;
   const isComplete = completed === category.items.length;
@@ -1031,7 +932,7 @@ function CategoryCard({
   index: number;
   onOpen: () => void;
 }) {
-  const style = styleOf(category.id);
+  const style = DEFAULT_CATEGORY_STYLE;
   const Icon = ICONS[category.icon] ?? Heart;
   const done = category.items.filter((item) => (counts[item.id] ?? 0) >= item.count).length;
   const progress = category.items.length ? done / category.items.length : 0;
@@ -1090,6 +991,7 @@ function DhikrCard({
   onReset,
   onFavorite,
   onCopy,
+  onShare,
 }: {
   dhikr: Dhikr;
   index: number;
@@ -1102,6 +1004,7 @@ function DhikrCard({
   onReset: () => void;
   onFavorite: () => void;
   onCopy: () => void;
+  onShare: () => void;
 }) {
   const isDone = count >= dhikr.count;
   const progress = Math.min(count / dhikr.count, 1);
@@ -1189,6 +1092,14 @@ function DhikrCard({
             : `${toArabicNumber(count)} / ${toArabicNumber(dhikr.count)}`}
         </span>
         <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onShare}
+            aria-label="مشاركة الذكر كصورة"
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-400 hover:bg-primary-100 hover:text-primary-600 dark:hover:bg-primary-800/40 md:h-11 md:w-11"
+          >
+            <Share2 size={16} />
+          </button>
           <button
             type="button"
             onClick={onFavorite}

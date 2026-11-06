@@ -13,6 +13,7 @@ interface AyahSpanProps {
   hideWordByWord: boolean;
   selected: boolean;
   activeAudio: boolean;
+  sajdah?: boolean;
   /**
    * Which words of this ayah carry a gloss, keyed `${surahId}:${ayahNumber}`.
    *
@@ -52,6 +53,7 @@ export function AyahSpan({
   hideWordByWord,
   selected,
   activeAudio,
+  sajdah = false,
   meaningWords,
   onToggleBookmark,
   onShowTafsir,
@@ -129,6 +131,11 @@ export function AyahSpan({
       {toArabicNumber(ayah.ayahNumber)}
     </span>
   );
+  const sajdahMark = sajdah ? (
+    <span className="mushaf-sajdah" role="img" aria-label="آية سجدة">
+      ۩
+    </span>
+  ) : null;
   const word = (value: string, index: number) => (
     <span
       key={index}
@@ -218,6 +225,7 @@ export function AyahSpan({
                 {tailWord}
               </span>
               {mark}
+              {sajdahMark}
             </span>
           </>
         ) : hideWordByWord ? (
@@ -226,6 +234,7 @@ export function AyahSpan({
             <span className="mushaf-ayah-tail">
               {word(tailWord, words.length - 1)}
               {mark}
+              {sajdahMark}
             </span>
           </>
         ) : (
@@ -234,6 +243,7 @@ export function AyahSpan({
             <span className="mushaf-ayah-tail">
               {readingWord(tailWord, words.length - 1)}
               {mark}
+              {sajdahMark}
             </span>
           </>
         )}

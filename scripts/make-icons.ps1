@@ -7,8 +7,8 @@
 #                                           icon-prepared-adaptive.png (32%)
 #   powershell -File scripts\make-icons.ps1
 #
-# The mark is the open Mushaf in warm ivory on a deep-green field
-# with a soft glow (the small status-bar icon's exact silhouette).
+# Web icons use the existing prepared artwork; Android branding is generated
+# from android-brand-source.png by build-android-brand.py below.
 # The border is the program's rounded square cut as a true squircle
 # (superellipse n=5, continuous curvature like iOS/WhatsApp)
 # rather than a plain rounded rect, so the corners read as one
@@ -220,67 +220,6 @@ function Save-OgImage {
     Save-Png -Bmp $bmp -Path (Join-Path $outDir 'og-image.png')
 }
 
-# Legacy launcher PNGs: pre-cut so old devices and the round variant look right.
-function Save-AndroidLauncherIcons {
-    $androidResDir = Join-Path $root 'android\app\src\main\res'
-    $densitySizes = @{
-        'mipmap-mdpi'    = 48
-        'mipmap-hdpi'    = 72
-        'mipmap-xhdpi'   = 96
-        'mipmap-xxhdpi'  = 144
-        'mipmap-xxxhdpi' = 192
-    }
-    foreach ($entry in $densitySizes.GetEnumerator()) {
-        $directory = Join-Path $androidResDir $entry.Key
-        New-Item -ItemType Directory -Force -Path $directory | Out-Null
-        $size = [int]$entry.Value
-        Save-Png -Bmp (New-Mark -Size $size -Shape 'squircle' -Fill 'opaque') `
-                 -Path (Join-Path $directory 'ic_launcher.png')
-        Save-Png -Bmp (New-Mark -Size $size -Shape 'circle' -Fill 'opaque') `
-                 -Path (Join-Path $directory 'ic_launcher_round.png')
-    }
-}
-
-# Notification large icon: the mark full-bleed on its field, square, so the
-# system's own round/squircle presentation on the content always sits on the
-# brand green. Referenced by every notification as `ic_notification_large`.
-function Save-AndroidNotificationIcon {
-    $androidResDir = Join-Path $root 'android\app\src\main\res'
-    $fgDir = Join-Path $androidResDir 'drawable-nodpi'
-    New-Item -ItemType Directory -Force -Path $fgDir | Out-Null
-    Save-Png -Bmp (New-Mark -Size 256 -Shape 'square' -Fill 'opaque') `
-             -Path (Join-Path $fgDir 'ic_notification_large.png')
-}
-
-# Adaptive icon (API 26+): full-bleed foreground the launcher masks itself,
-# over a deep-green background layer so every mask stays seamless.
-function Save-AndroidAdaptiveLayers {
-    $androidResDir = Join-Path $root 'android\app\src\main\res'
-
-    $fgDir = Join-Path $androidResDir 'drawable-nodpi'
-    New-Item -ItemType Directory -Force -Path $fgDir | Out-Null
-    Save-Png -Bmp (New-Mark -Size 432 -Shape 'square' -Fill 'opaque' -Adaptive) `
-             -Path (Join-Path $fgDir 'ic_launcher_foreground.png')
-
-    foreach ($rel in @('drawable\ic_launcher_foreground.xml', 'drawable-v24\ic_launcher_foreground.xml')) {
-        $p = Join-Path $androidResDir $rel
-        if (Test-Path $p) {
-            Remove-Item $p -Force
-            "  removed android\$rel"
-        }
-    }
-
-    $bgXml = @"
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <color name="ic_launcher_background">#09211C</color>
-</resources>
-"@
-    $bgPath = Join-Path $androidResDir 'values\ic_launcher_background.xml'
-    [System.IO.File]::WriteAllText($bgPath, $bgXml, [System.Text.UTF8Encoding]::new($false))
-    "  android\values\ic_launcher_background.xml (#09211C)"
-}
-
 # Favicon + in-app logo, pixel-identical to the launcher icon.
 function Save-SvgIcon {
     $b64 = [Convert]::ToBase64String([System.IO.File]::ReadAllBytes((Join-Path $outDir 'icon-192.png')))
@@ -299,9 +238,12 @@ function Save-SvgIcon {
 Save-Icon -Size 512 -Name 'icon-512.png'
 Save-Icon -Size 192 -Name 'icon-192.png'
 Save-SvgIcon
-Save-AndroidLauncherIcons
-Save-AndroidAdaptiveLayers
-Save-AndroidNotificationIcon
 Save-OgImage
 $script:SourceImage.Dispose()
+
+# Android uses only the supplied artwork for launcher, notifications, and splash.
+& python (Join-Path $PSScriptRoot 'build-android-brand.py')
+if ($LASTEXITCODE -ne 0) {
+    throw 'Android brand artwork generation failed.'
+}
 'done'

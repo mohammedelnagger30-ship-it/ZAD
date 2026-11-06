@@ -16,7 +16,8 @@
  * The pairings below stay distinct in both light and dark modes:
  * emerald×copper, sea×ember, plum×antique-gold, bronze×oasis,
  * olive×brick, rose×emerald, midnight×amber, ruby×teal,
- * honey×indigo, forest×berry, slate×rust, lavender×leaf
+ * honey×indigo, forest×berry, slate×rust, lavender×leaf,
+ * obsidian×jade, nocturne×antique-gold, abyss×turquoise
  */
 export const COLOR_PALETTES = [
   {
@@ -162,6 +163,42 @@ export const COLOR_PALETTES = [
       'linear-gradient(135deg, #6d28d9 0%, #a78bfa 40%, #d8b4fe 65%, #15803d 100%)',
     glow: 'rgba(109, 40, 217, 0.35)',
     soft: '#f5f3ff',
+  },
+  {
+    id: 'obsidian',
+    name: 'أونيكس',
+    latin: 'Obsidian',
+    vibe: 'فحمي عميق بوهج زمردي',
+    color: '#1f2937',
+    accent: '#115e59',
+    gradient:
+      'linear-gradient(135deg, #101820 0%, #1f2937 42%, #164e63 72%, #115e59 100%)',
+    glow: 'rgba(15, 118, 110, 0.38)',
+    soft: '#f1f7f7',
+  },
+  {
+    id: 'nocturne',
+    name: 'نوكتورن',
+    latin: 'Nocturne',
+    vibe: 'مخمل ليلي بذهب عتيق',
+    color: '#3b1f5c',
+    accent: '#78350f',
+    gradient:
+      'linear-gradient(135deg, #1b1028 0%, #3b1f5c 44%, #592c73 72%, #713f12 100%)',
+    glow: 'rgba(91, 44, 115, 0.4)',
+    soft: '#f7f2fa',
+  },
+  {
+    id: 'abyss',
+    name: 'لُجّي',
+    latin: 'Abyss',
+    vibe: 'أعماق كحلية بوهج فيروزي',
+    color: '#0b3954',
+    accent: '#155e75',
+    gradient:
+      'linear-gradient(135deg, #061625 0%, #0b3954 44%, #075985 72%, #155e75 100%)',
+    glow: 'rgba(14, 116, 144, 0.4)',
+    soft: '#eff7fa',
   },
 ] as const;
 

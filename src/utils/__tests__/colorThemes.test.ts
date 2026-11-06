@@ -15,8 +15,9 @@ function contrastAgainstWhite(hex: string): number {
 }
 
 describe('color palettes', () => {
-  it('provides twelve distinct, labeled palettes', () => {
-    expect(COLOR_PALETTES).toHaveLength(12);
+  it('provides fifteen distinct, labeled palettes including three dark palettes', () => {
+    expect(COLOR_PALETTES).toHaveLength(15);
+    expect(COLOR_PALETTES.filter(({ id }) => ['obsidian', 'nocturne', 'abyss'].includes(id))).toHaveLength(3);
     expect(new Set(COLOR_PALETTES.map(({ id }) => id)).size).toBe(COLOR_PALETTES.length);
     expect(new Set(COLOR_PALETTES.map(({ color }) => color)).size).toBe(COLOR_PALETTES.length);
     expect(new Set(COLOR_PALETTES.map(({ accent }) => accent)).size).toBe(COLOR_PALETTES.length);

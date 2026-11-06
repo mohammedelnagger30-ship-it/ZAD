@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { Search, BookOpen, BookText, Layers, X, ChevronLeft } from 'lucide-react';
 import { SURAHS, JUZ_INFO, TOTAL_QURAN_PAGES, getSurah, getAyahPage, getJuzForPage, toArabicNumber, type SurahMeta } from '@/data/surahs';
@@ -620,7 +620,7 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
     return (
       <div className="space-y-6 pb-6">
         {/* Enhanced Hero Section */}
-        <section className="relative isolate overflow-hidden rounded-[2rem] bg-linear-to-br from-primary-600 via-primary-700 to-primary-900 px-6 py-6 text-white shadow-2xl sm:px-8 sm:py-8">
+        <section className="app-brand-panel relative isolate overflow-hidden rounded-[2rem] bg-linear-to-br from-primary-600 via-primary-700 to-primary-900 px-6 py-6 text-white shadow-2xl sm:px-8 sm:py-8">
           {/* Decorative patterns */}
           <div className="pointer-events-none absolute -right-20 -top-20 -z-10 h-64 w-64 rounded-full border-4 border-white/5" />
           <div className="pointer-events-none absolute -right-10 top-10 -z-10 h-40 w-40 rounded-full border-4 border-white/5" />
@@ -900,16 +900,6 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
             SAJDAH_AYAHS.filter((s) => s.surahId === selectedSurah.id).map((s) => s.ayah),
           );
 
-          // The reader runs its text as paragraphs and sets the sajdah marker between
-          // them, never inside one — a <p> may not nest. The surah view splits the same
-          // way, at the ayah that carries the prostration.
-          const blocks: { sajdah: boolean; ayahs: AyahText[] }[] = [];
-          for (const ayah of ayahs) {
-            const sajdah = sajdahAyahs.has(ayah.ayahNumber);
-            if (sajdah || blocks.length === 0) blocks.push({ sajdah, ayahs: [ayah] });
-            else blocks[blocks.length - 1].ayahs.push(ayah);
-          }
-
           const renderAyah = (ayah: AyahText) => (
             <AyahSpan
               key={`${ayah.surahId}:${ayah.ayahNumber}`}
@@ -921,6 +911,7 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
               hideWordByWord={hideWordByWord}
               selected={ayahChoice?.surahId === ayah.surahId && ayahChoice?.ayahNumber === ayah.ayahNumber}
               activeAudio={isReciting(ayah.surahId, ayah.ayahNumber)}
+              sajdah={sajdahAyahs.has(ayah.ayahNumber)}
               meaningWords={meaningWords}
               onToggleBookmark={() => toggleBookmark(ayah.surahId, ayah.ayahNumber)}
               onShowTafsir={() => setTafsirAyah({ surahId: ayah.surahId, ayah: ayah.ayahNumber })}
@@ -960,12 +951,7 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
                     </p>
                   )}
 
-                  {blocks.map((block, index) => (
-                    <Fragment key={`block-${index}`}>
-                      {block.sajdah && <p className="mushaf-sajdah">۩ سجدة</p>}
-                      <p className="mushaf-body">{block.ayahs.map(renderAyah)}</p>
-                    </Fragment>
-                  ))}
+                  <p className="mushaf-body">{ayahs.map(renderAyah)}</p>
 
                   <div className="mushaf-folio">{toArabicNumber(currentPage)}</div>
                 </div>

@@ -29,10 +29,16 @@ import { todayKey, formatArabicDate, getHijriDate, getDayName } from '@/utils/da
 // module is imported on demand in the effect below — a static import here would
 // put the full text chunk on the app's very first screen.
 import type { DailyQuranMessage } from '@/utils/dailyQuranMessage';
-import { prepareAyahShare, shareAyahCard, shareTextOrCopy, type PreparedAyahShare } from '@/utils/shareCard';
+import {
+  prepareAyahShare,
+  prepareContentShare,
+  shareAyahCard,
+  shareContentCard,
+  type PreparedAyahShare,
+} from '@/utils/shareCard';
 import { loadPreferredReciter } from '@/data/audioReciters';
 import { ensureSource, playAyah, stop as stopRecitation, getRecitationState, subscribeRecitation, setTrack } from '@/utils/recitationEngine';
-import { getHadithCollection, hadithOfDay, installedCollections, HADITH_OF_DAY_BOOK } from '@/data/hadiths';
+import { getDailyHadith, type HadithRecord } from '@/data/hadiths';
 import { toArabicNumber } from '@/data/surahs';
 import { getSurah } from '@/data/surahs';
 import type { ScreenName, NavParams } from '@/hooks/useApp';
@@ -56,8 +62,10 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
   const [isSharingAyah, setIsSharingAyah] = useState(false);
   const [isSharingHadith, setIsSharingHadith] = useState(false);
   const [hadithShareNotice, setHadithShareNotice] = useState<string | null>(null);
+  const [preparedHadithCard, setPreparedHadithCard] = useState<PreparedAyahShare | null>(null);
   const shareInProgress = useRef(false);
   const hadithShareInProgress = useRef(false);
+  const taskLoadVersion = useRef(0);
   // Reference clock for the countdown: armed once, ticking per-second only in the
   // last minute before the next prayer (see useCountdownClock) instead of
   // re-rendering this screen every second of the day.
@@ -74,6 +82,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
   const today = trustedNow();
 
   const load = useCallback(async () => {
+    const loadVersion = ++taskLoadVersion.current;
     // Four independent reads — run them together so a refresh is one round-trip
     // wide instead of four deep. The streak scan is the slowest and used to hold
     // up the task list behind it.
@@ -83,6 +92,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
       getDayPrayerRecords(todayKey()),
       getDaySunnahRecords(todayKey()),
     ]);
+    if (loadVersion !== taskLoadVersion.current) return;
     setTasks(t);
     setStreak(s);
     const map: Record<string, PrayerStatus | null> = {};
@@ -94,7 +104,12 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
   }, []);
 
   useEffect(() => {
-    load();
+    const refreshTasks = () => {
+      void load();
+    };
+    void load();
+    window.addEventListener('zad:cloud-sync-complete', refreshTasks);
+    return () => window.removeEventListener('zad:cloud-sync-complete', refreshTasks);
   }, [load]);
 
   // The message is one per local day, so the work (and the whole-Quran chunk it
@@ -129,13 +144,14 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
       ayahText: dailyQuranMessage.text,
       surahName: dailyQuranMessage.surahName,
       ayahNumber: dailyQuranMessage.ayahNumber,
+      palette: settings.colorPalette,
     }).then((blob) => {
       if (alive) setPreparedAyahCard(blob);
     });
     return () => {
       alive = false;
     };
-  }, [dailyQuranMessage]);
+  }, [dailyQuranMessage, settings.colorPalette]);
 
   /**
    * Sends the day's ayah as a picture.
@@ -156,6 +172,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
         ayahText: dailyQuranMessage.text,
         surahName: dailyQuranMessage.surahName,
         ayahNumber: dailyQuranMessage.ayahNumber,
+        palette: settings.colorPalette,
       }, preparedAyahCard);
       if (outcome === 'shared' || outcome === 'cancelled') return;
       setShareNotice(
@@ -263,44 +280,20 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
     return () => clearInterval(id);
   }, [prayerResult, nextPrayer]);
 
-  const [hadith, setHadith] = useState(() => hadithOfDay());
-  // True while the default collection is being put on the device on a fresh
-  // install. Sahih Muslim is ~8.3 MB, so the prompt card says what is
-  // happening instead of sitting still.
-  const [seedingHadith, setSeedingHadith] = useState(false);
+  const [hadith, setHadith] = useState<HadithRecord | null>(null);
+  const [seedingHadith, setSeedingHadith] = useState(true);
 
-  // "Hadith of the day" needs a collection on the device. On a fresh install none
-  // exists, so the default collection (صحيح مسلم) is installed once — it is
-  // bundled inside the app itself, so this copies the local asset with no
-  // network at all — and the card then works offline from then on.
-  //
-  // The installed case has to *open* a collection, not merely find one on the device:
-  // `hadithOfDay()` reads a synchronous in-memory snapshot that is empty on every fresh
-  // boot, and only parsing a collection fills it. Checking the store and then calling
-  // `hadithOfDay()` without opening anything left the snapshot empty, so the card fell back
-  // to its "download a book" prompt on every launch after the first — including offline
-  // launches, with the collection sitting right there in IndexedDB.
   useEffect(() => {
     let cancelled = false;
+    setSeedingHadith(true);
     void (async () => {
       try {
-        const installed = await installedCollections();
-        // Prefer the default collection so the card is stable, otherwise take the first
-        // installed id in a fixed order so the choice does not vary with store iteration.
-        const id = installed.has(HADITH_OF_DAY_BOOK)
-          ? HADITH_OF_DAY_BOOK
-          : [...installed].sort()[0];
-        if (!id && !cancelled) setSeedingHadith(true);
-        try {
-          // `getHadithCollection` reads from IndexedDB when the file is already there, so
-          // this costs nothing offline and never re-downloads.
-          await getHadithCollection(id ?? HADITH_OF_DAY_BOOK);
-        } finally {
-          if (!cancelled) setSeedingHadith(false);
-        }
-        if (!cancelled) setHadith(hadithOfDay());
-      } catch {
-        // Offline or blocked: the card renders its own prompt.
+        const dailyHadith = await getDailyHadith();
+        if (!cancelled) setHadith(dailyHadith);
+      } catch (error) {
+        console.error('Loading daily hadith failed:', error);
+        if (!cancelled) setHadith(null);
+      } finally {
         if (!cancelled) setSeedingHadith(false);
       }
     })();
@@ -309,15 +302,35 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    setPreparedHadithCard(null);
+    if (!hadith) return () => { cancelled = true; };
+    void prepareContentShare({
+      type: 'hadith',
+      text: hadith.text,
+      reference: `${hadith.collectionTitle} — رقم ${toArabicNumber(hadith.number)}`,
+      title: 'حديث اليوم',
+      palette: settings.colorPalette,
+    }).then((prepared) => {
+      if (!cancelled) setPreparedHadithCard(prepared);
+    });
+    return () => { cancelled = true; };
+  }, [hadith, settings.colorPalette]);
+
   const shareDailyHadith = async () => {
     if (!hadith || hadithShareInProgress.current) return;
     hadithShareInProgress.current = true;
     setIsSharingHadith(true);
     setHadithShareNotice(null);
     try {
-      const outcome = await shareTextOrCopy(
-        `${hadith.text}\n\n${hadith.collectionTitle} — رقم ${toArabicNumber(hadith.number)}\nحديث اليوم من تطبيق قُرّة`,
-      );
+      const outcome = await shareContentCard({
+        type: 'hadith',
+        text: hadith.text,
+        reference: `${hadith.collectionTitle} — رقم ${toArabicNumber(hadith.number)}`,
+        title: 'حديث اليوم',
+        palette: settings.colorPalette,
+      }, preparedHadithCard ?? undefined);
       if (outcome === 'copied') {
         setHadithShareNotice('نُسخ الحديث ومصدره — يمكنك إرساله الآن.');
         setTimeout(() => setHadithShareNotice(null), 3000);
@@ -904,9 +917,14 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
                   <p className="text-sm md:text-base md:leading-relaxed md:max-w-prose text-primary-800 dark:text-primary-100 line-clamp-3 quran-text whitespace-pre-line">
                     {hadith.text}
                   </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                    {hadith.collectionTitle} — رقم {toArabicNumber(hadith.number)}
-                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Badge variant={Array.from(hadith.text).length <= 180 ? 'gold' : 'primary'}>
+                      {Array.from(hadith.text).length <= 180 ? 'مختصر اليوم' : 'مطوّل اليوم'}
+                    </Badge>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {hadith.collectionTitle} — رقم {toArabicNumber(hadith.number)}
+                    </p>
+                  </div>
                 </div>
               </div>
             </Card>
@@ -923,13 +941,13 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
               <div className="flex-1">
                 <p className="text-sm leading-relaxed text-primary-800 dark:text-primary-100">
                   {seedingHadith
-                    ? 'جارٍ تحميل صحيح مسلم — قد يطول قليلاً على شبكة بطيئة.'
-                    : 'حمّل كتاب حديث لتظهر هنا أحاديث اليوم من فضلك.'}
+                    ? 'جارٍ اختيار حديث اليوم من المجموعات المثبتة على جهازك.'
+                    : 'حمّل مجموعة أحاديث من المكتبة لتظهر هنا رسالة اليوم.'}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                   {seedingHadith
-                    ? '٧٣٦٠ حديثاً · ٨.٣ ميجابايت · يُحفظ على جهازك مرة واحدة'
-                    : 'يبدأ بصحيح مسلم — أساس المكتبة، ٨.٣ ميجابايت مرة واحدة'}
+                    ? 'يتناوب الاختيار بين الأحاديث المختصرة والمطوّلة مع تفضيل الصحيح منها.'
+                    : 'كلما زادت المجموعات المثبتة، تنوّعت أحاديث اليوم.'}
                 </p>
               </div>
             </div>
@@ -985,23 +1003,25 @@ function TaskCard({
   const portionDesc = describePortion(task.portion);
 
   const statusBg: Record<TaskStatus, string> = {
-    done: 'border-r-success-500 bg-success-50/50 dark:bg-success-900/20',
-    missed: 'border-r-error-500 bg-error-50/50 dark:bg-error-900/20',
-    pending: 'border-r-primary-500',
-    snoozed: 'border-r-warning-500 bg-warning-50/50 dark:bg-warning-900/20',
+    done: 'border-r-success-500 bg-gradient-to-l from-success-50/70 to-white dark:from-success-900/20 dark:to-primary-950',
+    missed: 'border-r-error-500 bg-gradient-to-l from-error-50/70 to-white dark:from-error-900/20 dark:to-primary-950',
+    pending: 'border-r-primary-500 bg-gradient-to-l from-primary-50/70 to-white dark:from-primary-900/30 dark:to-primary-950',
+    snoozed: 'border-r-warning-500 bg-gradient-to-l from-warning-50/70 to-white dark:from-warning-900/20 dark:to-primary-950',
   };
 
   return (
-    <Card className={`border-r-4 ${statusBg[task.status]} animate-slide-up`}>
+    <Card className={`group overflow-hidden border-r-4 shadow-sm ${statusBg[task.status]} animate-slide-up`}>
       <div className="flex items-start justify-between gap-3">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
+        <div className="min-w-0 flex-1">
+          <div className="mb-2 flex flex-wrap items-center gap-1.5">
             <Badge variant={typeColor}>{typeLabel}</Badge>
-            <span className="text-xs text-gray-500 dark:text-gray-400">
+            <span className="inline-flex items-center gap-1 rounded-full bg-white/70 px-2 py-0.5 text-xs font-medium text-gray-500 dark:bg-primary-900/70 dark:text-gray-300">
+              <Clock size={12} aria-hidden="true" />
               {task.status === 'snoozed' && task.snoozedUntil
                 ? new Date(task.snoozedUntil).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
                 : task.scheduledTime}
             </span>
+            {task.status === 'pending' && <Badge variant="neutral">قيد التنفيذ</Badge>}
             {task.status === 'done' && <Badge variant="success"><Check size={10} /> تم</Badge>}
             {/* The answer to «كيف كان حفظك؟», finally shown back. */}
             {task.status === 'done' && task.strength && (
@@ -1012,7 +1032,7 @@ function TaskCard({
             {task.status === 'missed' && <Badge variant="error"><X size={10} /> فات</Badge>}
             {task.status === 'snoozed' && <Badge variant="warning"><Clock size={10} /> مؤجل</Badge>}
           </div>
-          <p className="font-semibold text-primary-800 dark:text-primary-100">{portionDesc}</p>
+          <p className="text-base font-bold leading-relaxed text-primary-900 dark:text-primary-50">{portionDesc}</p>
         </div>
       </div>
 
@@ -1045,8 +1065,8 @@ function TaskCard({
       )}
 
       {showStrength && (
-        <div className="mt-3 animate-slide-down">
-          <p className="text-xs text-gray-600 dark:text-gray-300 mb-2">كيف كان حفظك؟</p>
+        <div className="mt-4 rounded-2xl border border-primary-100 bg-white/80 p-3 animate-slide-down dark:border-primary-800 dark:bg-primary-900/60">
+          <p className="mb-2.5 text-sm font-semibold text-primary-800 dark:text-primary-100">كيف كان حفظك؟</p>
           <div className="flex gap-2">
             <Button size="sm" variant="success" onClick={() => { onConfirm(task.id!, 'done', 'strong'); setShowStrength(false); }} className="flex-1">
               قوي
@@ -1062,7 +1082,8 @@ function TaskCard({
       )}
 
       {showSnooze && (
-        <div className="mt-3 animate-slide-down">
+        <div className="mt-4 rounded-2xl border border-primary-100 bg-white/80 p-3 animate-slide-down dark:border-primary-800 dark:bg-primary-900/60">
+          <p className="mb-2.5 text-sm font-semibold text-primary-800 dark:text-primary-100">تأجيل التذكير</p>
           <div className="flex gap-2">
             <Button
               size="sm"

@@ -1,6 +1,7 @@
 import { ADHKAR_CATEGORIES } from '@/data/adhkar';
 import { TOTAL_QURAN_PAGES } from '@/data/surahs';
 import { db, DEFAULT_SETTINGS, SETTINGS_ROW_ID, type Settings } from '@/db/database';
+import { COLOR_PALETTES } from '@/utils/colorThemes';
 
 /**
  * Backup export/import validation.
@@ -143,7 +144,7 @@ export function isValidBackupRow(table: BackupTable, value: unknown): value is R
           ].includes(key)
         ) &&
         (value.theme === undefined || ['light', 'dark', 'system'].includes(value.theme as string)) &&
-        (value.colorPalette === undefined || ['emerald', 'ocean', 'plum', 'sand', 'olive', 'rose'].includes(value.colorPalette as string)) &&
+        (value.colorPalette === undefined || COLOR_PALETTES.some(({ id }) => id === value.colorPalette)) &&
         (value.fontSize === undefined || isFiniteNumber(value.fontSize)) &&
         (value.notificationSound === undefined || typeof value.notificationSound === 'boolean') &&
         (value.notificationVoiceId === undefined || typeof value.notificationVoiceId === 'string') &&

@@ -1,4 +1,4 @@
-import { Bookmark, Moon, SlidersHorizontal, Sun, X } from 'lucide-react';
+import { Bookmark, Layers, Moon, SlidersHorizontal, Sun, X } from 'lucide-react';
 import { toArabicNumber } from '@/data/surahs';
 import { type MushafPrefs, type SheetName } from '@/components/mushaf/readerConfig';
 
@@ -8,6 +8,7 @@ interface MushafHeaderProps {
   currentJuz: number;
   currentHizb: number;
   currentPage: number;
+  openJuzPicker: () => void;
   isBookmarked: boolean;
   toggleBookmark: (page: number) => void;
   mode: MushafPrefs['mode'];
@@ -24,6 +25,7 @@ export function MushafHeader({
   currentJuz,
   currentHizb,
   currentPage,
+  openJuzPicker,
   isBookmarked,
   toggleBookmark,
   mode,
@@ -43,9 +45,20 @@ export function MushafHeader({
           <p className="mushaf-heading__title">
             {surahsOnPage.length > 0 ? surahsOnPage.map((s) => s.name).join(' · ') : `الجزء ${toArabicNumber(currentJuz)}`}
           </p>
-          <p className="mushaf-heading__meta">
-            الجزء {toArabicNumber(currentJuz)} · الحزب {toArabicNumber(currentHizb)}
-          </p>
+          <div className="mushaf-heading__meta flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={openJuzPicker}
+              aria-label={`الانتقال إلى الجزء ${toArabicNumber(currentJuz)}`}
+              title="اختر جزءًا للقراءة"
+              className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 font-semibold text-primary-700 transition-colors hover:bg-primary-100 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-primary-200 dark:hover:bg-primary-800"
+            >
+              <Layers size={12} aria-hidden="true" />
+              الجزء {toArabicNumber(currentJuz)}
+            </button>
+            <span aria-hidden="true">·</span>
+            <span>الحزب {toArabicNumber(currentHizb)}</span>
+          </div>
         </div>
 
         <div className="mushaf-actions">
