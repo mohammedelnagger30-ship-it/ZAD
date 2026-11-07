@@ -65,6 +65,7 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
   const [pageField, setPageField] = useState('');
   const [turnDir, setTurnDir] = useState<'next' | 'prev'>('next');
   const [autoScrollActive, setAutoScrollActive] = useState(false);
+  const [autoScrollTouchPaused, setAutoScrollTouchPaused] = useState(false);
   const [bookmarkedPages, setBookmarkedPages] = useState<Set<number>>(() => new Set<number>());
   const bookmarkedPagesRef = useRef(bookmarkedPages);
   const bookmarkTouchedPagesRef = useRef(new Set<number>());
@@ -432,7 +433,14 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
   }, [applyLeaves, onPageChange, prependLeaves, totalPages]);
 
   useEffect(() => {
-    if (!autoScrollActive || orientation !== 'vertical' || sheet || tafsirAyah || ayahChoice) {
+    if (
+      !autoScrollActive ||
+      autoScrollTouchPaused ||
+      orientation !== 'vertical' ||
+      sheet ||
+      tafsirAyah ||
+      ayahChoice
+    ) {
       if (animationFrameRef.current !== null) cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
       previousFrameTimeRef.current = null;
@@ -463,7 +471,7 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
       animationFrameRef.current = null;
       previousFrameTimeRef.current = null;
     };
-  }, [autoScrollActive, orientation, prefs.autoScrollSpeed, sheet, tafsirAyah, ayahChoice, totalPages]);
+  }, [autoScrollActive, autoScrollTouchPaused, orientation, prefs.autoScrollSpeed, sheet, tafsirAyah, ayahChoice, totalPages]);
 
   useEffect(() => {
     if (orientation !== 'vertical') setAutoScrollActive(false);
@@ -674,6 +682,11 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
     else if (deltaX < -SWIPE_DISTANCE) goToPage(currentPage - 1);
   };
 
+  const handleTouchCancel = () => {
+    touchStartRef.current = null;
+    touchEndRef.current = null;
+  };
+
   // In the stack, a drag or a wheel aimed at the head of the pages has nothing to
   // move yet — no movement means no scroll event, which means no chance to ask for
   // the sheets above. It asks here instead, once, and the scroll carries on.
@@ -828,6 +841,15 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
       className="mushaf-shell"
       data-mode={nightPaper ? 'night' : 'day'}
       data-paper={paper}
+      onTouchStartCapture={() => {
+        if (autoScrollActive) setAutoScrollTouchPaused(true);
+      }}
+      onTouchEndCapture={(event) => {
+        if (event.touches.length === 0) setAutoScrollTouchPaused(false);
+      }}
+      onTouchCancelCapture={(event) => {
+        if (event.touches.length === 0) setAutoScrollTouchPaused(false);
+      }}
     >
       <MushafHeader
         onClose={onClose}
@@ -858,6 +880,7 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
         onTouchStart={handleTouchStart}
         onTouchMove={orientation === 'vertical' ? handleVerticalTouchMove : handleTouchMove}
         onTouchEnd={orientation === 'horizontal' ? handleTouchEnd : undefined}
+        onTouchCancel={handleTouchCancel}
       >
         {orientation === 'vertical' ? (
           /* Sheets end to end: scrolling down is turning the page. */

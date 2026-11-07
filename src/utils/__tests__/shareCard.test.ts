@@ -128,7 +128,7 @@ describe('content share cards', () => {
     })).not.toContain('﴿');
   });
 
-  it('shares hadith and adhkar as a named image file when available', async () => {
+  it('shares hadith and adhkar as a JPEG image only', async () => {
     const shareDescriptor = Object.getOwnPropertyDescriptor(navigator, 'share');
     const canShareDescriptor = Object.getOwnPropertyDescriptor(navigator, 'canShare');
     const share = jest.fn(async (_data: ShareData) => {});
@@ -141,19 +141,58 @@ describe('content share cards', () => {
     try {
       const outcome = await shareContentCard(
         { type: 'dhikr', text: 'سبحان الله', reference: 'رواه مسلم' },
-        { blob: new Blob(['png'], { type: 'image/png' }) },
+        { blob: new Blob(['jpeg'], { type: 'image/jpeg' }) },
       );
 
       expect(outcome).toBe('shared');
-      expect(share).toHaveBeenCalledWith(expect.objectContaining({
+      expect(share).toHaveBeenCalledWith({
         title: 'مشاركة ذكر',
-        files: [expect.objectContaining({ name: 'dhikr-share.png', type: 'image/png' })],
-      }));
+        files: [expect.objectContaining({ name: 'dhikr-share.jpg', type: 'image/jpeg' })],
+      });
+      expect(share.mock.calls[0][0]).not.toHaveProperty('text');
     } finally {
       if (shareDescriptor) Object.defineProperty(navigator, 'share', shareDescriptor);
       else Reflect.deleteProperty(navigator, 'share');
       if (canShareDescriptor) Object.defineProperty(navigator, 'canShare', canShareDescriptor);
       else Reflect.deleteProperty(navigator, 'canShare');
+    }
+  });
+
+  it('does not silently copy text when image sharing fails', async () => {
+    const shareDescriptor = Object.getOwnPropertyDescriptor(navigator, 'share');
+    const canShareDescriptor = Object.getOwnPropertyDescriptor(navigator, 'canShare');
+    const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    const share = jest.fn(async (_data: ShareData) => {
+      throw new Error('share failed');
+    });
+    const writeText = jest.fn(async (_text: string) => {});
+    const consoleWarning = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    Object.defineProperty(navigator, 'share', { configurable: true, value: share });
+    Object.defineProperty(navigator, 'canShare', {
+      configurable: true,
+      value: jest.fn(() => true),
+    });
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+
+    try {
+      const outcome = await shareContentCard(
+        { type: 'dhikr', text: 'سبحان الله', reference: 'رواه مسلم' },
+        { blob: new Blob(['jpeg'], { type: 'image/jpeg' }) },
+      );
+
+      expect(outcome).toBe('failed');
+      expect(writeText).not.toHaveBeenCalled();
+    } finally {
+      if (shareDescriptor) Object.defineProperty(navigator, 'share', shareDescriptor);
+      else Reflect.deleteProperty(navigator, 'share');
+      if (canShareDescriptor) Object.defineProperty(navigator, 'canShare', canShareDescriptor);
+      else Reflect.deleteProperty(navigator, 'canShare');
+      if (clipboardDescriptor) Object.defineProperty(navigator, 'clipboard', clipboardDescriptor);
+      else Reflect.deleteProperty(navigator, 'clipboard');
+      consoleWarning.mockRestore();
     }
   });
 });
@@ -172,14 +211,15 @@ describe('shareAyahCard', () => {
     try {
       const outcome = await shareAyahCard(
         { surahId: 1, ayahText: 'بِسْمِ اللَّهِ', surahName: 'الفاتحة', ayahNumber: 1 },
-        { blob: new Blob(['png'], { type: 'image/png' }) },
+        { blob: new Blob(['jpeg'], { type: 'image/jpeg' }) },
       );
 
       expect(outcome).toBe('shared');
-      expect(share).toHaveBeenCalledWith(expect.objectContaining({
-        title: 'آية اليوم',
-        files: [expect.objectContaining({ name: 'ayah-1-1.png', type: 'image/png' })],
-      }));
+      expect(share).toHaveBeenCalledWith({
+        title: 'مشاركة آية اليوم',
+        files: [expect.objectContaining({ name: 'ayah-1-1.jpg', type: 'image/jpeg' })],
+      });
+      expect(share.mock.calls[0][0]).not.toHaveProperty('text');
     } finally {
       if (shareDescriptor) Object.defineProperty(navigator, 'share', shareDescriptor);
       else Reflect.deleteProperty(navigator, 'share');

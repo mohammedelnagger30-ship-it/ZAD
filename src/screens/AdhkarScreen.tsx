@@ -7,19 +7,25 @@ import {
   Copy,
   BookOpen,
   CalendarHeart,
+  Bath,
+  CloudRain,
   Droplets,
   Flower2,
   Heart,
   HeartHandshake,
+  LoaderCircle,
+  HeartPulse,
   Home,
   Landmark,
   LayoutGrid,
+  MessageCircle,
   Minus,
   Moon,
   Plane,
   RotateCcw,
   Search,
   Share2,
+  Shirt,
   Sparkles,
   Sun,
   Sunrise,
@@ -40,6 +46,20 @@ import { shareContentCard } from '@/utils/shareCard';
 
 const STORAGE_KEY = 'hifzi-adhkar-state';
 const SYNC_COMPLETE_EVENT = 'zad:cloud-sync-complete';
+const ADHKAR_ITEMS_BY_ID = new Map(
+  ADHKAR_CATEGORIES.flatMap((category) => category.items.map((item) => [item.id, item] as const)),
+);
+const ADHKAR_ITEM_IDS = new Set(ADHKAR_ITEMS_BY_ID.keys());
+const SEARCHABLE_DHIKR_TEXT = new Map<string, string>();
+
+function getSearchableDhikrText(dhikr: Dhikr): string {
+  let searchableText = SEARCHABLE_DHIKR_TEXT.get(dhikr.id);
+  if (searchableText === undefined) {
+    searchableText = normalizeArabic(`${dhikr.text} ${dhikr.reference} ${dhikr.virtue ?? ''} ${dhikr.note ?? ''}`);
+    SEARCHABLE_DHIKR_TEXT.set(dhikr.id, searchableText);
+  }
+  return searchableText;
+}
 
 const ICONS: Record<string, typeof Sunrise> = {
   sunrise: Sunrise,
@@ -57,6 +77,11 @@ const ICONS: Record<string, typeof Sunrise> = {
   'heart-handshake': HeartHandshake,
   'flower-2': Flower2,
   sparkles: Sparkles,
+  shirt: Shirt,
+  bath: Bath,
+  'heart-pulse': HeartPulse,
+  'cloud-rain': CloudRain,
+  'message-circle': MessageCircle,
 };
 
 /** Keep every collection on the app's active palette; icons distinguish the content. */
@@ -130,29 +155,20 @@ function loadState(): { state: AdhkarState; error: string | null } {
     if (!raw) return { state: DEFAULT_STATE, error: null };
     const stored = JSON.parse(raw) as Partial<AdhkarState>;
     const currentDay = todayKey();
-    const counts = stored.day === currentDay && stored.counts && typeof stored.counts === 'object'
-      ? Object.fromEntries(
-          Object.entries(stored.counts)
-            .filter(([id, value]) =>
-              ADHKAR_CATEGORIES.some((category) => category.items.some((item) => item.id === id)) &&
-              typeof value === 'number' &&
-              Number.isFinite(value),
-            )
-            .map(([id, value]) => {
-              const item = ADHKAR_CATEGORIES.flatMap((category) => category.items).find((dhikr) => dhikr.id === id);
-              return [id, Math.min(Math.max(Math.floor(value), 0), item?.count ?? 0)];
-            }),
-        )
-      : {};
+    const counts: Record<string, number> = {};
+    if (stored.day === currentDay && stored.counts && typeof stored.counts === 'object') {
+      for (const [id, value] of Object.entries(stored.counts)) {
+        const item = ADHKAR_ITEMS_BY_ID.get(id);
+        if (!item || typeof value !== 'number' || !Number.isFinite(value)) continue;
+        counts[id] = Math.min(Math.max(Math.floor(value), 0), item.count);
+      }
+    }
     return {
       state: {
         day: currentDay,
         counts,
         favorites: Array.isArray(stored.favorites)
-          ? stored.favorites.filter((id): id is string =>
-              typeof id === 'string' &&
-              ADHKAR_CATEGORIES.some((category) => category.items.some((item) => item.id === id)),
-            )
+          ? stored.favorites.filter((id): id is string => typeof id === 'string' && ADHKAR_ITEM_IDS.has(id))
           : [],
         fontSize: typeof stored.fontSize === 'number' ? Math.min(Math.max(stored.fontSize, 18), 32) : 22,
         haptics: stored.haptics === true,
@@ -293,6 +309,7 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
   const [state, setState] = useState<AdhkarState>(initialState.state);
   const [storageError, setStorageError] = useState<string | null>(initialState.error);
   const [notice, setNotice] = useState<string | null>(null);
+  const [sharingDhikrId, setSharingDhikrId] = useState<string | null>(null);
 
   // Nothing is written on mount. Opening the screen used to persist the state
   // it had just read and fire `zad:adhkar-updated` along with it — and that
@@ -368,8 +385,7 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
   const active = ADHKAR_CATEGORIES.find((category) => category.id === activeCategory) ?? null;
   const normalizedQuery = normalizeArabic(query);
   const activeItems = active?.items.filter((dhikr) => {
-    const matchesQuery = normalizeArabic(`${dhikr.text} ${dhikr.reference} ${dhikr.virtue ?? ''} ${dhikr.note ?? ''}`)
-      .includes(normalizedQuery);
+    const matchesQuery = !normalizedQuery || getSearchableDhikrText(dhikr).includes(normalizedQuery);
     if (!matchesQuery) return false;
     if (favoritesOnly && !state.favorites.includes(dhikr.id)) return false;
     if (filter === 'incomplete' && (state.counts[dhikr.id] ?? 0) >= dhikr.count) return false;
@@ -384,7 +400,7 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
         if (favoritesOnly && !state.favorites.includes(item.id)) return false;
         if (filter === 'incomplete' && (state.counts[item.id] ?? 0) >= item.count) return false;
         if (!search) return true;
-        return normalizeArabic(`${item.text} ${item.reference} ${item.virtue ?? ''} ${item.note ?? ''}`).includes(search);
+        return getSearchableDhikrText(item).includes(search);
       }),
     })).filter(({ items }) => items.length > 0);
   }, [query, filter, favoritesOnly, state.favorites, state.counts]);
@@ -429,10 +445,11 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
   };
 
   const resetCategory = (category: AdhkarCategory) => {
+    const categoryItemIds = new Set(category.items.map((item) => item.id));
     setState((previous) => ({
       ...previous,
       counts: Object.fromEntries(
-        Object.entries(previous.counts).filter(([id]) => !category.items.some((item) => item.id === id)),
+        Object.entries(previous.counts).filter(([id]) => !categoryItemIds.has(id)),
       ),
     }));
     setNotice('تم تصفير عدّادات هذه الفئة');
@@ -457,17 +474,20 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
   };
 
   const shareDhikr = async (dhikr: Dhikr) => {
+    if (sharingDhikrId) return;
+    setSharingDhikrId(dhikr.id);
     try {
       const outcome = await shareContentCard({
         type: 'dhikr',
         text: dhikr.text,
         reference: dhikr.reference,
       });
-      if (outcome === 'copied') setNotice('نُسخ الذكر ومرجعه — يمكنك إرساله الآن.');
-      else if (outcome === 'failed') setNotice('تعذّرت مشاركة الذكر أو نسخه.');
+      if (outcome === 'failed') setNotice('تعذّرت مشاركة صورة الذكر. استخدم زر النسخ لإرسال نصه.');
     } catch (error) {
       console.error('Dhikr sharing failed:', error);
       setNotice('تعذّرت مشاركة الذكر الآن. حاول مرة أخرى.');
+    } finally {
+      setSharingDhikrId(null);
     }
   };
 
@@ -561,6 +581,7 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
                   onFavorite={() => toggleFavorite(dhikr.id)}
                   onCopy={() => void copyDhikr(dhikr)}
                   onShare={() => void shareDhikr(dhikr)}
+                  sharing={sharingDhikrId === dhikr.id}
                 />
               </div>
             ))}
@@ -691,6 +712,7 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
                     onFavorite={() => toggleFavorite(dhikr.id)}
                     onCopy={() => void copyDhikr(dhikr)}
                     onShare={() => void shareDhikr(dhikr)}
+                    sharing={sharingDhikrId === dhikr.id}
                   />
                 </div>
               ))}
@@ -945,8 +967,9 @@ function CategoryCard({
       <Card onClick={onOpen} className="group relative overflow-hidden transition-smooth hover:-translate-y-0.5">
         <div className={`pointer-events-none absolute inset-x-0 top-0 h-1 bg-linear-to-r ${style.icon}`} aria-hidden="true" />
         <div className="flex items-center gap-3 pt-0.5">
-          <div className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br ${style.icon} shadow-sm`}>
-            <Icon size={22} className="text-white drop-shadow-sm" />
+          <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-gold-300/70 bg-linear-to-br from-gold-100 via-primary-50 to-primary-100 text-primary-700 shadow-sm shadow-gold-900/10 transition-smooth group-hover:scale-105 group-hover:rotate-3 dark:border-gold-500/30 dark:from-primary-800 dark:via-primary-900 dark:to-primary-950 dark:text-gold-300">
+            <span className="pointer-events-none absolute -right-2 -top-2 h-7 w-7 rounded-full bg-gold-300/40 blur-md dark:bg-gold-400/20" aria-hidden="true" />
+            <Icon size={22} strokeWidth={1.8} className="relative z-10 drop-shadow-sm" />
             {isComplete && (
               <span className="absolute -bottom-1.5 -left-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-success-500 text-white ring-2 ring-panel dark:ring-raised">
                 <Check size={12} strokeWidth={3} />
@@ -995,6 +1018,7 @@ function DhikrCard({
   onFavorite,
   onCopy,
   onShare,
+  sharing,
 }: {
   dhikr: Dhikr;
   index: number;
@@ -1008,6 +1032,7 @@ function DhikrCard({
   onFavorite: () => void;
   onCopy: () => void;
   onShare: () => void;
+  sharing?: boolean;
 }) {
   const isDone = count >= dhikr.count;
   const progress = Math.min(count / dhikr.count, 1);
@@ -1098,10 +1123,12 @@ function DhikrCard({
           <button
             type="button"
             onClick={onShare}
+            disabled={sharing}
             aria-label="مشاركة الذكر كصورة"
+            aria-busy={sharing}
             className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-400 hover:bg-primary-100 hover:text-primary-600 dark:hover:bg-primary-800/40 md:h-11 md:w-11"
           >
-            <Share2 size={16} />
+            {sharing ? <LoaderCircle size={16} className="animate-spin" /> : <Share2 size={16} />}
           </button>
           <button
             type="button"

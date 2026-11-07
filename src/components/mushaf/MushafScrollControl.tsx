@@ -44,9 +44,9 @@ export function MushafScrollControl({
         <input
           className="mushaf-scroll-control__range"
           type="range"
-          min={10}
+          min={2}
           max={80}
-          step={5}
+          step={1}
           value={speed}
           onChange={(event) => onSpeedChange(Number(event.target.value))}
           aria-label="سرعة التمرير التلقائي"

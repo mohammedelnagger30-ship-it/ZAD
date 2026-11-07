@@ -5,20 +5,14 @@ import { COLOR_PALETTES, type ColorPalette } from '@/utils/colorThemes';
 /**
  * Sharing an ayah as a picture, not as a string of text.
  *
- * A copied ayah arrives in a chat as three plain lines that nobody looks at
- * twice; the same ayah as a card is a thing worth keeping. This module owns
- * the whole path — laying the words out on a canvas, drawing them, and handing
- * the result to the system share sheet — plus every honest fallback when that
- * path is closed: the platform that shares files but not this one, the browser
- * with no share sheet at all, and the person who simply cancels, who must not
- * be told that something failed.
+ * The card is drawn once, then handed to the system share sheet as an image
+ * only. Copying is a separate action so a platform that cannot share images
+ * never silently sends a different kind of content.
  *
  * Three things are worth knowing before changing any of it:
  *
- *   * **The card is drawn at a fixed size and a fixed palette.** It leaves the
- *     app, so it must not follow the reader's colour scheme or the width of
- *     their phone — a card that looks different on every device that sent it
- *     is not a card.
+ *   * **The card has a fixed size and follows the selected app palette.** It
+ *     leaves the app, so its layout does not depend on the reader's phone.
  *
  *   * **Wrapping is greedy and measured, never estimated.** Arabic with
  *     harakat is wide and its shaping is decided by the font, so the only
@@ -36,8 +30,10 @@ import { COLOR_PALETTES, type ColorPalette } from '@/utils/colorThemes';
 /** 4:5 — the proportion messaging apps give the most room. */
 const CARD_WIDTH = 1080;
 const CARD_HEIGHT = 1350;
+const CARD_IMAGE_TYPE = 'image/jpeg';
+const CARD_IMAGE_QUALITY = 0.9;
 
-/** The default palette, deliberately: the card leaves the app and outlives the theme. */
+/** The card leaves the app, so its ornaments and text use a consistent contrast. */
 const GOLD = '#d4a017';
 const GOLD_LIGHT = '#f0c83a';
 const PARCHMENT = '#fefce8';
@@ -70,6 +66,8 @@ const MAX_AYAH_FONT = 150;
 const MIN_AYAH_FONT = 34;
 const FONT_STEP = 4;
 const LINE_HEIGHT_RATIO = 1.9;
+const PREPARED_CONTENT_CACHE_LIMIT = 4;
+const preparedContentShares = new Map<string, Promise<PreparedAyahShare | null>>();
 
 export interface AyahShareInput {
   /** Kept for the file name: what lands in a gallery should say which ayah it is. */
@@ -210,9 +208,8 @@ export async function shareTextOrCopy(payload: string): Promise<ShareOutcome> {
  * Draws the ayah on a canvas and hands back the pixels.
  *
  * Returns null rather than throwing wherever the environment can refuse — no
- * canvas in a headless test, no canvas in a locked-down WebView — because the
- * caller has a text share to fall back on, and refusing to draw is not the
- * same as failing to share.
+ * canvas in a headless test, no canvas in a locked-down WebView — so callers
+ * can report that image sharing is unavailable.
  */
 export async function renderAyahCard(input: AyahShareInput): Promise<Blob | null> {
   if (typeof document === 'undefined') return null;
@@ -233,7 +230,7 @@ export async function renderAyahCard(input: AyahShareInput): Promise<Blob | null
 
   return new Promise<Blob | null>((resolve) => {
     try {
-      canvas.toBlob((blob) => resolve(blob), 'image/png');
+      canvas.toBlob((blob) => resolve(blob), CARD_IMAGE_TYPE, CARD_IMAGE_QUALITY);
     } catch {
       resolve(null);
     }
@@ -261,7 +258,7 @@ export async function renderContentCard(input: ContentShareInput): Promise<Blob 
 
   return new Promise<Blob | null>((resolve) => {
     try {
-      canvas.toBlob((blob) => resolve(blob), 'image/png');
+      canvas.toBlob((blob) => resolve(blob), CARD_IMAGE_TYPE, CARD_IMAGE_QUALITY);
     } catch {
       resolve(null);
     }
@@ -270,15 +267,18 @@ export async function renderContentCard(input: ContentShareInput): Promise<Blob 
 
 export async function prepareAyahShare(input: AyahShareInput): Promise<PreparedAyahShare | null> {
   try {
+    const nativeModules = preloadNativeShareModules();
     const blob = await renderAyahCard(input);
     if (!blob) return null;
     if (!Capacitor.isNativePlatform()) return { blob };
 
     try {
-      const { Directory, Filesystem } = await import('@capacitor/filesystem');
+      const modules = await nativeModules;
+      if (!modules) return { blob };
+      const { Directory, Filesystem } = modules.filesystem;
       const data = await blobToBase64(blob);
       const { uri } = await Filesystem.writeFile({
-        path: 'daily-quran-message.png',
+        path: 'daily-quran-message.jpg',
         data,
         directory: Directory.Cache,
       });
@@ -292,17 +292,49 @@ export async function prepareAyahShare(input: AyahShareInput): Promise<PreparedA
   }
 }
 
-export async function prepareContentShare(input: ContentShareInput): Promise<PreparedAyahShare | null> {
+export function prepareContentShare(input: ContentShareInput): Promise<PreparedAyahShare | null> {
+  const cacheKey = JSON.stringify([
+    input.type,
+    input.text,
+    input.reference,
+    input.title ?? '',
+    input.palette ?? '',
+  ]);
+  const cached = preparedContentShares.get(cacheKey);
+  if (cached) return cached;
+
+  const preparation = createContentShare(input);
+  preparedContentShares.set(cacheKey, preparation);
+  if (preparedContentShares.size > PREPARED_CONTENT_CACHE_LIMIT) {
+    const oldestKey = preparedContentShares.keys().next().value;
+    if (oldestKey !== undefined) preparedContentShares.delete(oldestKey);
+  }
+  void preparation.then((prepared) => {
+    if (!prepared && preparedContentShares.get(cacheKey) === preparation) {
+      preparedContentShares.delete(cacheKey);
+    }
+  }, () => {
+    if (preparedContentShares.get(cacheKey) === preparation) {
+      preparedContentShares.delete(cacheKey);
+    }
+  });
+  return preparation;
+}
+
+async function createContentShare(input: ContentShareInput): Promise<PreparedAyahShare | null> {
   try {
+    const nativeModules = preloadNativeShareModules();
     const blob = await renderContentCard(input);
     if (!blob) return null;
     if (!Capacitor.isNativePlatform()) return { blob };
 
     try {
-      const { Directory, Filesystem } = await import('@capacitor/filesystem');
+      const modules = await nativeModules;
+      if (!modules) return { blob };
+      const { Directory, Filesystem } = modules.filesystem;
       const data = await blobToBase64(blob);
       const { uri } = await Filesystem.writeFile({
-        path: `share-${input.type}-${Date.now()}.png`,
+        path: `share-${input.type}-${Date.now()}.jpg`,
         data,
         directory: Directory.Cache,
       });
@@ -314,6 +346,17 @@ export async function prepareContentShare(input: ContentShareInput): Promise<Pre
   } catch {
     return null;
   }
+}
+
+function preloadNativeShareModules() {
+  if (!Capacitor.isNativePlatform()) return Promise.resolve(null);
+  return Promise.all([
+    import('@capacitor/filesystem'),
+    import('@capacitor/share'),
+  ]).then(([filesystem, share]) => ({ filesystem, share })).catch((error: unknown) => {
+    console.warn('Could not preload native image sharing:', error);
+    return null;
+  });
 }
 
 function blobToBase64(blob: Blob): Promise<string> {
@@ -347,12 +390,22 @@ function blobToBase64(blob: Blob): Promise<string> {
  */
 async function ensureQuranFont(context: CanvasRenderingContext2D): Promise<void> {
   if (typeof document === 'undefined' || !document.fonts) return;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     context.font = `400 ${MAX_AYAH_FONT}px ${QURAN_FONT}`;
-    await document.fonts.load(context.font);
-    await document.fonts.load(`700 32px ${UI_FONT}`);
+    await Promise.race([
+      Promise.all([
+        document.fonts.load(context.font),
+        document.fonts.load(`700 32px ${UI_FONT}`),
+      ]),
+      new Promise<void>((resolve) => {
+        timeout = setTimeout(resolve, 700);
+      }),
+    ]);
   } catch {
     // The fallback faces are already in the font strings; drawing continues with them.
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
   }
 }
 
@@ -780,127 +833,69 @@ function drawContentReference(
 }
 
 /**
- * Shares the card, and degrades in the order that keeps the ayah moving.
- *
- * Picture, then the share sheet with text, then the clipboard. Each step is
- * reached only because the one before it was *closed*, not because it failed:
- * a platform that offers no share sheet is not broken, and neither is one that
- * shares text but not images. The single case that must not fall through is
- * the person cancelling — sending a second sheet after they closed the first
- * would be the app not listening.
+ * Shares the card as an image only. Text copying has its own explicit action.
  */
 export async function shareAyahCard(
   input: AyahShareInput,
   preparedShare?: PreparedAyahShare | null,
 ): Promise<ShareOutcome> {
-  if (typeof navigator === 'undefined' || !navigator.share) {
-    if (Capacitor.isNativePlatform() && preparedShare?.nativeUri) {
-      try {
-        const { Share } = await import('@capacitor/share');
-        await Share.share({
-          files: [preparedShare.nativeUri],
-          text: composeSharePayload(input),
-          title: 'رسالة اليوم من القرآن',
-          dialogTitle: 'مشاركة آية اليوم',
-        });
-        return 'shared';
-      } catch (error) {
-        console.warn('Could not share the Quran message image natively:', error);
-        try {
-          const { Share } = await import('@capacitor/share');
-          await Share.share({ text: composeSharePayload(input), title: 'رسالة اليوم من القرآن' });
-          return 'shared';
-        } catch (textShareError) {
-          console.warn('Could not share the Quran message text natively:', textShareError);
-          return copyToClipboard(composeSharePayload(input));
-        }
-      }
-    }
-    return copyToClipboard(composeSharePayload(input));
-  }
-
-  const payload = composeSharePayload(input);
   const prepared = preparedShare === undefined
     ? await prepareAyahShare(input)
     : preparedShare;
-  if (Capacitor.isNativePlatform() && prepared?.nativeUri) {
-    try {
-      const { Share } = await import('@capacitor/share');
-      await Share.share({
-        files: [prepared.nativeUri],
-        text: payload,
-        title: 'رسالة اليوم من القرآن',
-        dialogTitle: 'مشاركة آية اليوم',
-      });
-      return 'shared';
-    } catch (error) {
-      console.warn('Could not share the Quran message image natively:', error);
-    }
-  }
-  const file = prepared ? toPngFile(prepared.blob, input) : null;
-
-  if (file && navigator.canShare?.({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], text: payload, title: 'آية اليوم' });
-      return 'shared';
-    } catch (error) {
-      if (isAbortError(error)) return 'cancelled';
-      // The sheet refused the file; the words below are still a real share.
-    }
-  }
-
-  return shareTextOrCopy(payload);
-}
-
-/**
- * Names the file after the ayah, so what lands in the gallery says which one
- * it is. A share sheet that shows «image.png» forty times tells nobody
- * anything a week later.
- */
-function toPngFile(blob: Blob, input: AyahShareInput): File | null {
-  try {
-    return new File([blob], `ayah-${input.surahId}-${input.ayahNumber}.png`, { type: 'image/png' });
-  } catch {
-    return null;
-  }
+  return shareImageOnly(
+    prepared,
+    `ayah-${input.surahId}-${input.ayahNumber}.jpg`,
+    'مشاركة آية اليوم',
+  );
 }
 
 export async function shareContentCard(
   input: ContentShareInput,
   preparedShare?: PreparedAyahShare | null,
 ): Promise<ShareOutcome> {
-  const payload = composeContentSharePayload(input);
   const prepared = preparedShare === undefined
     ? await prepareContentShare(input)
     : preparedShare;
   const title = input.title ?? (input.type === 'hadith' ? 'مشاركة حديث نبوي' : 'مشاركة ذكر');
+  return shareImageOnly(prepared, `${input.type}-share.jpg`, title);
+}
 
-  if (Capacitor.isNativePlatform() && prepared?.nativeUri) {
+async function shareImageOnly(
+  prepared: PreparedAyahShare | null,
+  fileName: string,
+  title: string,
+): Promise<ShareOutcome> {
+  if (!prepared) return 'failed';
+
+  if (Capacitor.isNativePlatform()) {
+    if (!prepared.nativeUri) return 'failed';
     try {
       const { Share } = await import('@capacitor/share');
       await Share.share({
         files: [prepared.nativeUri],
-        text: payload,
         title,
         dialogTitle: title,
       });
       return 'shared';
     } catch (error) {
-      console.warn('Could not share the content image natively:', error);
+      if (isAbortError(error)) return 'cancelled';
+      console.warn('Could not share the image natively:', error);
+      return 'failed';
     }
   }
 
-  if (prepared && typeof navigator !== 'undefined' && navigator.share) {
+  if (typeof navigator !== 'undefined' && navigator.share) {
     try {
-      const file = new File([prepared.blob], `${input.type}-share.png`, { type: 'image/png' });
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], text: payload, title });
+      const file = new File([prepared.blob], fileName, { type: CARD_IMAGE_TYPE });
+      if (!navigator.canShare || navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title });
         return 'shared';
       }
     } catch (error) {
       if (isAbortError(error)) return 'cancelled';
+      console.warn('Could not share the image in the browser:', error);
     }
   }
 
-  return shareTextOrCopy(payload);
+  return 'failed';
 }

@@ -406,20 +406,6 @@ function Application() {
   );
 }
 
-/** Full-screen holding state for the moment between a session and its view. */
-function GateLoading({ message }: { message: string }) {
-  return (
-    <div className="min-h-screen bg-surface-light dark:bg-surface-dark flex items-center justify-center">
-      <div className="text-center">
-        <div className="w-16 h-16 mx-auto mb-4 overflow-hidden rounded-2xl shadow-lg animate-pulse-soft">
-          <img src="/icon.svg" alt="قُرّة" className="h-full w-full" />
-        </div>
-        <p className="text-primary-600 dark:text-primary-300 text-sm">{message}</p>
-      </div>
-    </div>
-  );
-}
-
 /**
  * Everything a signed-in session owes the device: the background sync loop and
  * a sign-out that uploads before it clears. Shared by the ordinary app and the
@@ -512,7 +498,7 @@ function AdminApp({ session }: { session: Session }) {
 
   return (
     <ErrorBoundary>
-      <Suspense fallback={<GateLoading message="جارٍ فتح لوحة الإدارة..." />}>
+      <Suspense fallback={<ScreenLoading />}>
         <AdminScreen
           accountEmail={session.user.email}
           onSignOut={handleSignOut}
@@ -941,16 +927,7 @@ function AppContent({
   }, [save]);
 
   if (loading || onboarded === null) {
-    return (
-      <div className="min-h-screen bg-surface-light dark:bg-surface-dark flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 overflow-hidden rounded-2xl shadow-lg animate-pulse-soft">
-            <img src="/icon.svg" alt="قُرّة" className="h-full w-full" />
-          </div>
-          <p className="text-primary-600 dark:text-primary-300 text-sm">جارٍ التحميل...</p>
-        </div>
-      </div>
-    );
+    return <ScreenLoading />;
   }
 
   if (settingsError) {
@@ -1086,8 +1063,9 @@ function AppContent({
 
 function ScreenLoading() {
   return (
-    <div className="flex min-h-48 items-center justify-center" role="status">
-      <p className="text-sm text-primary-600 dark:text-primary-300">جارٍ تحميل الصفحة...</p>
+    <div className="flex min-h-24 items-center justify-center gap-2" role="status" aria-label="جارٍ التحميل">
+      <img src="/icon.svg" alt="" className="h-10 w-10 animate-pulse-soft rounded-xl" />
+      <span className="text-xs text-primary-600 dark:text-primary-300">جارٍ التحميل...</span>
     </div>
   );
 }

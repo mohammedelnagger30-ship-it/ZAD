@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Check, X, Clock, Flame, BookOpen, Moon, Sunrise, BookText, ChevronLeft, Sparkles, Calendar, Heart, Repeat, Share2, LoaderCircle } from 'lucide-react';
+import { Check, X, Clock, Flame, BookOpen, Moon, Sunrise, BookText, ChevronLeft, Sparkles, Calendar, Heart, Repeat, Share2, LoaderCircle, Copy } from 'lucide-react';
 import { Card, Button, Badge, SectionHeader, EmptyState, type BadgeProps } from '@/components/ui';
 import { PrayerStatusSheet } from '@/components/PrayerStatusSheet';
 import { DeviceProtectionBanner } from '@/components/DeviceProtectionBanner';
@@ -35,6 +35,8 @@ import type { DailyQuranMessage } from '@/utils/quran/dailyQuranMessage';
 import {
   prepareAyahShare,
   prepareContentShare,
+  composeContentSharePayload,
+  composeSharePayload,
   shareAyahCard,
   shareContentCard,
   type PreparedAyahShare,
@@ -166,13 +168,9 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
         surahName: dailyQuranMessage.surahName,
         ayahNumber: dailyQuranMessage.ayahNumber,
         palette: settings.colorPalette,
-      }, preparedAyahCard);
+      }, preparedAyahCard ?? undefined);
       if (outcome === 'shared' || outcome === 'cancelled') return;
-      setShareNotice(
-        outcome === 'copied'
-          ? 'نُسخت الآية ومصدرها — يمكنك إرسالها الآن.'
-          : 'تعذّرت المشاركة والنسخ على هذا الجهاز.',
-      );
+      setShareNotice('تعذّرت مشاركة صورة الآية. استخدم زر النسخ لإرسال نصها.');
       setTimeout(() => setShareNotice(null), 3000);
     } catch (error) {
       console.error('Daily Quran ayah sharing failed:', error);
@@ -181,6 +179,24 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
     } finally {
       shareInProgress.current = false;
       setIsSharingAyah(false);
+    }
+  };
+
+  const copyDailyAyah = async () => {
+    if (!dailyQuranMessage) return;
+    try {
+      await navigator.clipboard.writeText(composeSharePayload({
+        surahId: dailyQuranMessage.surahId,
+        ayahText: dailyQuranMessage.text,
+        surahName: dailyQuranMessage.surahName,
+        ayahNumber: dailyQuranMessage.ayahNumber,
+      }));
+      setShareNotice('تم نسخ الآية ومرجعها.');
+      setTimeout(() => setShareNotice(null), 2500);
+    } catch (error) {
+      console.error('Daily Quran ayah copy failed:', error);
+      setShareNotice('تعذّر نسخ الآية على هذا الجهاز.');
+      setTimeout(() => setShareNotice(null), 3000);
     }
   };
 
@@ -308,11 +324,8 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
         palette: settings.colorPalette,
       }, preparedHadithCard ?? undefined);
       if (outcome === 'shared' || outcome === 'cancelled') return;
-      if (outcome === 'copied') {
-        setHadithShareNotice('نُسخ الحديث ومصدره — يمكنك إرساله الآن.');
-        setTimeout(() => setHadithShareNotice(null), 3000);
-      } else if (outcome === 'failed') {
-        setHadithShareNotice('تعذّرت مشاركة الحديث أو نسخه.');
+      if (outcome === 'failed') {
+        setHadithShareNotice('تعذّرت مشاركة صورة الحديث. استخدم زر النسخ لإرسال نصه.');
         setTimeout(() => setHadithShareNotice(null), 3000);
       }
     } catch (error) {
@@ -322,6 +335,23 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
     } finally {
       hadithShareInProgress.current = false;
       setIsSharingHadith(false);
+    }
+  };
+
+  const copyDailyHadith = async () => {
+    if (!hadith) return;
+    try {
+      await navigator.clipboard.writeText(composeContentSharePayload({
+        type: 'hadith',
+        text: hadith.text,
+        reference: `${hadith.collectionTitle} — رقم ${toArabicNumber(hadith.number)}`,
+      }));
+      setHadithShareNotice('تم نسخ الحديث ومرجعه.');
+      setTimeout(() => setHadithShareNotice(null), 2500);
+    } catch (error) {
+      console.error('Daily hadith copy failed:', error);
+      setHadithShareNotice('تعذّر نسخ الحديث على هذا الجهاز.');
+      setTimeout(() => setHadithShareNotice(null), 3000);
     }
   };
 
@@ -438,11 +468,11 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
       >
         <div
           className="absolute -top-12 -left-12 w-44 h-44 rounded-full blur-2xl pointer-events-none opacity-40 animate-float"
-          style={{ background: 'var(--brand-to, #b84414)' }}
+          style={{ background: 'var(--brand-to, #f59e0b)' }}
         />
         <div
           className="absolute -bottom-10 -right-10 w-40 h-40 rounded-full blur-xl pointer-events-none opacity-35 animate-float-slow"
-          style={{ background: 'var(--brand-from, #1f734e)' }}
+          style={{ background: 'var(--brand-from, #177a4b)' }}
         />
         <div className="relative">
           <div className="flex items-center justify-between mb-2">
@@ -458,10 +488,10 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
 
           {/* Next prayer card */}
           {nextPrayer && (
-            <div className="mt-4 bg-white/15 dark:bg-black/20 rounded-2xl p-3.5 backdrop-blur-md border border-white/20 shadow-inner">
+            <div className="mt-4 bg-white/20 dark:bg-black/25 rounded-2xl p-4 backdrop-blur-lg border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.12)]">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 backdrop-blur-sm text-white shadow-xs">
+                  <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-300 via-amber-400 to-amber-500 text-slate-950 shadow-md ring-2 ring-white/60">
                     <Sunrise size={20} />
                     <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
                       <span className="animate-ping-soft absolute inline-flex h-full w-full rounded-full bg-[var(--func-accent)] opacity-75" />
@@ -470,15 +500,15 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
                   </div>
                   <div>
                     <div className="flex items-center gap-1.5">
-                      <p className="text-[11px] text-white/85 font-medium">الصلاة القادمة</p>
+                      <p className="text-[11px] text-emerald-100 font-semibold">الصلاة القادمة</p>
                       <span className="inline-block h-1 w-1 rounded-full bg-[var(--func-accent)] animate-pulse" />
                     </div>
-                    <p className="font-bold text-base text-white">{nextPrayer.arabicName}</p>
+                    <p className="font-extrabold text-lg md:text-xl text-white tracking-tight drop-shadow-xs">{nextPrayer.arabicName}</p>
                   </div>
                 </div>
                 <div className="text-left">
-                  <p className="font-bold text-lg md:text-xl text-white">{formatTime12h(nextPrayer.time, prayerTimeZone)}</p>
-                  <p className="text-xs text-white/80 font-medium">{getTimeUntil(nextPrayer.time, now)}</p>
+                  <p className="font-black text-xl md:text-2xl text-white tracking-tight drop-shadow-xs">{formatTime12h(nextPrayer.time, prayerTimeZone)}</p>
+                  <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full bg-black/25 border border-white/20 text-[11px] font-bold text-amber-200 shadow-xs">{getTimeUntil(nextPrayer.time, now)}</span>
                 </div>
               </div>
 
@@ -487,7 +517,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
                   fraction rounded, so the two never disagree. */}
               <div className="mt-3 pt-2.5 border-t border-white/15 flex items-center gap-2.5">
                 <div
-                  className="flex-1 h-1.5 rounded-full bg-black/20 overflow-hidden p-0.5 backdrop-blur-xs"
+                  className="flex-1 h-2 rounded-full bg-black/30 overflow-hidden p-0.5 ring-1 ring-white/25"
                   role="progressbar"
                   aria-valuemin={0}
                   aria-valuemax={100}
@@ -495,11 +525,11 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
                   aria-label={`ما مضى من الوقت حتى ${nextPrayer.arabicName}`}
                 >
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-white via-white/90 to-white/60 transition-[width] duration-1000 ease-linear shadow-xs"
+                    className="h-full rounded-full bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-100 transition-[width] duration-1000 ease-linear shadow-[0_0_12px_rgba(251,191,36,0.8)]"
                     style={{ width: `${prayerProgressFill.toFixed(2)}%` }}
                   />
                 </div>
-                <span className="text-[10px] text-white/90 font-bold tabular-nums">
+                <span className="text-xs text-amber-200 font-black tabular-nums drop-shadow-xs">
                   {Math.round(prayerProgressFill)}%
                 </span>
               </div>
@@ -599,6 +629,15 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
           <h2 className="flex-1 font-bold">رسالة اليوم من القرآن</h2>
           {dailyQuranMessage && (
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void copyDailyAyah()}
+                aria-label="نسخ آية اليوم"
+                title="نسخ الآية ومرجعها"
+                className="inline-flex min-h-10 w-10 items-center justify-center rounded-xl bg-primary-100 text-primary-700 transition-colors hover:bg-primary-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:bg-primary-800 dark:text-primary-100 dark:hover:bg-primary-700"
+              >
+                <Copy size={16} aria-hidden="true" />
+              </button>
               <button
                 type="button"
                 onClick={() => void shareDailyAyah()}
@@ -827,21 +866,32 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
           action={
             <div className="flex items-center gap-2">
               {hadith && (
-                <button
-                  type="button"
-                  onClick={() => void shareDailyHadith()}
-                  disabled={isSharingHadith}
-                  aria-label="مشاركة حديث اليوم"
-                  aria-busy={isSharingHadith}
-                  title="مشاركة حديث اليوم"
-                  className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-primary-700 px-3 text-xs font-bold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:shadow-sm motion-reduce:transition-none dark:bg-gold-400 dark:text-primary-950 dark:hover:bg-gold-300"
-                >
-                  {isSharingHadith ? (
-                    <LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                  ) : (
-                    <Share2 size={18} aria-hidden="true" />
-                  )}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void copyDailyHadith()}
+                    aria-label="نسخ حديث اليوم"
+                    title="نسخ الحديث ومرجعه"
+                    className="inline-flex min-h-10 w-10 items-center justify-center rounded-xl bg-primary-100 text-primary-700 transition-colors hover:bg-primary-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:bg-primary-800 dark:text-primary-100 dark:hover:bg-primary-700"
+                  >
+                    <Copy size={16} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void shareDailyHadith()}
+                    disabled={isSharingHadith}
+                    aria-label="مشاركة حديث اليوم كصورة"
+                    aria-busy={isSharingHadith}
+                    title="مشاركة صورة حديث اليوم"
+                    className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-primary-700 px-3 text-xs font-bold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:shadow-sm motion-reduce:transition-none dark:bg-gold-400 dark:text-primary-950 dark:hover:bg-gold-300"
+                  >
+                    {isSharingHadith ? (
+                      <LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                    ) : (
+                      <Share2 size={18} aria-hidden="true" />
+                    )}
+                  </button>
+                </>
               )}
               <button onClick={() => navigate('hadith')} className="text-sm text-primary-600 dark:text-gold-400 flex items-center gap-0.5">
                 <span>المكتبة</span>

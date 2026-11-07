@@ -39,40 +39,6 @@ def make_circle_icon(image: Image.Image, size: int) -> Image.Image:
     return background.resize((size, size), Image.Resampling.LANCZOS)
 
 
-def make_notification_icon(image: Image.Image) -> Image.Image:
-    width, height = image.size
-    logo = image.crop((
-        round(width * 0.29),
-        round(height * 0.16),
-        round(width * 0.80),
-        round(height * 0.78),
-    ))
-    mask = Image.new("L", logo.size)
-    source_pixels = logo.load()
-    mask_pixels = mask.load()
-
-    for y in range(logo.height):
-        for x in range(logo.width):
-            red, green, blue = source_pixels[x, y]
-            green_contrast = green - max(red, blue)
-            mask_pixels[x, y] = max(0, min(255, (green_contrast - 7) * 10))
-
-    bounds = mask.point(lambda alpha: 255 if alpha > 64 else 0).getbbox()
-    if bounds is None:
-        raise ValueError("The supplied artwork has no recognizable green logo mark.")
-
-    mark = mask.crop(bounds)
-    mark.thumbnail((72, 82), Image.Resampling.LANCZOS)
-    icon = Image.new("RGBA", (96, 96), (255, 255, 255, 0))
-    white_mark = Image.new("RGBA", mark.size, (255, 255, 255, 255))
-    white_mark.putalpha(mark)
-    icon.alpha_composite(
-        white_mark,
-        ((icon.width - mark.width) // 2, (icon.height - mark.height) // 2),
-    )
-    return icon
-
-
 def replace_legacy_splash_assets(image: Image.Image) -> None:
     for path in ANDROID_RES.glob("drawable*/splash.png"):
         with Image.open(path) as old_splash:
@@ -175,10 +141,6 @@ def main() -> None:
         ANDROID_RES / "drawable-nodpi" / "ic_notification_large.png",
         optimize=True,
     )
-    make_notification_icon(artwork).save(
-        ANDROID_RES / "drawable-nodpi" / "ic_notification.png", optimize=True
-    )
-
     values = ANDROID_RES / "values"
     values.mkdir(parents=True, exist_ok=True)
     (values / "ic_launcher_background.xml").write_text(

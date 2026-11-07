@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Bookmark, Trash2, BookOpen, FileDown, FileText, Share2, Copy, ArrowUpRight } from 'lucide-react';
+import { Bookmark, Trash2, BookOpen, FileDown, FileText, Share2, Copy, ArrowUpRight, Loader2 } from 'lucide-react';
 import { db, type Bookmark as BookmarkType, type PageBookmark } from '@/db/database';
 import { getSurah, toArabicNumber } from '@/data/surahs';
 import { getAyah } from '@/data/quranText';
@@ -35,6 +35,7 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
   const [pageBookmarks, setPageBookmarks] = useState<PageBookmark[]>([]);
   const [loading, setLoading] = useState(true);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [sharingKey, setSharingKey] = useState<string | null>(null);
   /** True while the whole collection sits on the clipboard after «تصدير». */
   const [exported, setExported] = useState(false);
   const { show, snackbar } = useSnackbar();
@@ -106,23 +107,29 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
   /**
    * Shares the ayah as a picture, with the words behind it.
    *
-   * The card is drawn first and the system sheet takes the image; a device
-   * that will not take an image gets the text instead, and one with no sheet
-   * at all gets the clipboard and the very same «تم النسخ» the copy button
-   * shows. Those two cases are the only ones that leave the ayah stuck on the
-   * phone, so they are the only ones that say anything on screen.
+   * The image share action never changes into a text copy; copying has its
+   * own button on each saved ayah.
    */
   const shareAyah = async (bm: AyahBookmarkRow) => {
-    if (!bm.text || !bm.surahName) return;
-    const outcome = await shareAyahCard({
-      surahId: bm.surahId,
-      ayahText: bm.text,
-      surahName: bm.surahName,
-      ayahNumber: bm.ayahNumber,
-    });
-    if (outcome !== 'copied') return;
-    setCopiedKey(ayahKey(bm));
-    setTimeout(() => setCopiedKey(null), 2500);
+    if (!bm.text || !bm.surahName || sharingKey) return;
+    const key = ayahKey(bm);
+    setSharingKey(key);
+    try {
+      const outcome = await shareAyahCard({
+        surahId: bm.surahId,
+        ayahText: bm.text,
+        surahName: bm.surahName,
+        ayahNumber: bm.ayahNumber,
+      });
+      if (outcome === 'failed') {
+        show({ message: 'تعذّرت مشاركة صورة الآية. استخدم زر النسخ لإرسال نصها.' });
+      }
+    } catch (error) {
+      console.error('Failed to share bookmarked ayah:', error);
+      show({ message: 'تعذّرت مشاركة الآية الآن. حاول مرة أخرى.' });
+    } finally {
+      setSharingKey(null);
+    }
   };
 
   /**
@@ -338,11 +345,15 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
                         </button>
                         <button
                           type="button"
-                          onClick={() => shareAyah(bm)}
-                          aria-label="مشاركة الآية"
+                          onClick={() => void shareAyah(bm)}
+                          disabled={sharingKey !== null}
+                          aria-label={sharingKey === ayahKey(bm) ? 'جارٍ تجهيز صورة الآية' : 'مشاركة الآية كصورة'}
+                          aria-busy={sharingKey === ayahKey(bm)}
                           className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-primary-50 hover:text-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-gray-400 dark:hover:bg-primary-800/40 dark:hover:text-gold-300"
                         >
-                          <Share2 size={16} />
+                          {sharingKey === ayahKey(bm)
+                            ? <Loader2 size={16} className="animate-spin" />
+                            : <Share2 size={16} />}
                         </button>
                         <button
                           type="button"

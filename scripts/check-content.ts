@@ -591,6 +591,32 @@ check(
   'the deceased collection exists outside the daily counter with its own icon',
 );
 check(
+  ['clothing', 'bathroom', 'illness', 'distress', 'sneezing'].every((id) =>
+    ADHKAR_CATEGORIES.some((category) => category.id === id && category.daily === false && category.items.length > 0),
+  ),
+  'clothing, bathroom, illness, distress, and sneeze collections are available outside daily progress',
+);
+check(
+  adhkarById.get('cl1')?.reference.includes('حصن المسلم ٥') &&
+    adhkarById.get('cl2')?.reference.includes('حصن المسلم ٦') &&
+    adhkarById.get('cl5')?.reference.includes('حصن المسلم ٩'),
+  'the new clothing adhkar cite their corresponding Hisn al-Muslim entries',
+);
+check(
+  adhkarById.get('bath1')?.reference.includes('البخاري ١٤٢') &&
+    adhkarById.get('bath2')?.reference.includes('حصن المسلم ١١'),
+  'entering and leaving the bathroom adhkar cite their sources',
+);
+check(
+  adhkarById.get('ill1')?.reference.includes('البخاري ٥٧٤٣') &&
+    adhkarById.get('dist1')?.reference.includes('البخاري ٦٣٤٦') &&
+    ['sneeze1', 'sneeze2', 'sneeze3'].every((id) =>
+      adhkarById.get(id)?.reference.includes('البخاري ٦٢٢٤') &&
+      adhkarById.get(id)?.countIsSpecified === false,
+    ),
+  'illness, distress, and sneeze adhkar have verified references and no invented repetition count',
+);
+check(
   adhkarById.get('v1')?.text.endsWith('لَنَا وَلَكُمْ') &&
     adhkarById.get('v4')?.text.endsWith('أَوْ مِنْ عَذَابِ النَّارِ') &&
     adhkarById.get('v5')?.text.endsWith('وَلاَ تُضِلَّنَا بَعْدَهُ') &&

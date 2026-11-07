@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, Heart, BookText, X, ChevronLeft, ChevronRight, Filter, AlertTriangle, Library, Loader2, Download, Copy, Share2 } from 'lucide-react';
+import { Search, Heart, BookText, X, ChevronLeft, ChevronRight, Filter, AlertTriangle, Library, Loader2, Download, Copy, Check, Share2 } from 'lucide-react';
 import { Card, Badge, EmptyState, PageHeader } from '@/components/ui';
 import { SCREEN_METADATA } from '@/navigation/screenMetadata';
 import { HadithSharh } from '@/components/HadithSharh';
@@ -19,7 +19,7 @@ import { HADITH_BOOKS, HADITH_OF_DAY_BOOK, getHadithBook } from '@/data/contentC
 import type { HadithGrade } from '@/data/hadithCollections';
 import { toArabicNumber } from '@/data/surahs';
 import { db } from '@/db/database';
-import { shareContentCard } from '@/utils/shareCard';
+import { prepareContentShare, shareContentCard, type PreparedAyahShare } from '@/utils/shareCard';
 
 type ViewMode = 'search' | 'browse' | 'detail' | 'manager';
 const SEARCH_PAGE_SIZE = 50;
@@ -91,6 +91,10 @@ export function HadithScreen({ params }: HadithScreenProps) {
   const [hasMore, setHasMore] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
   const [shareNotice, setShareNotice] = useState<string | null>(null);
+  const [preparedSelectedShare, setPreparedSelectedShare] = useState<{
+    hadithId: string;
+    prepared: PreparedAyahShare | null;
+  } | null>(null);
   const [sharingHadith, setSharingHadith] = useState(false);
   const [copiedHadithId, setCopiedHadithId] = useState<string | null>(null);
   const [detailReturnView, setDetailReturnView] = useState<ViewMode>('search');
@@ -299,6 +303,21 @@ export function HadithScreen({ params }: HadithScreenProps) {
     }
   };
 
+  useEffect(() => {
+    if (!selected || viewMode !== 'detail') return;
+    let active = true;
+    void prepareContentShare({
+      type: 'hadith',
+      text: selected.text,
+      reference: `${selected.collectionTitle} — رقم ${toArabicNumber(selected.arabicNumber)}`,
+    }).then((prepared) => {
+      if (active) setPreparedSelectedShare({ hadithId: selected.id, prepared });
+    });
+    return () => {
+      active = false;
+    };
+  }, [selected, viewMode]);
+
   const shareHadith = async (hadith: HadithRecord) => {
     setShareNotice(null);
     setSharingHadith(true);
@@ -307,9 +326,10 @@ export function HadithScreen({ params }: HadithScreenProps) {
         type: 'hadith',
         text: hadith.text,
         reference: `${hadith.collectionTitle} — رقم ${toArabicNumber(hadith.arabicNumber)}`,
-      });
-      if (outcome === 'copied') setShareNotice('نُسخ الحديث ومصدره — يمكنك إرساله الآن.');
-      else if (outcome === 'failed') setShareNotice('تعذّرت مشاركة الحديث أو نسخه.');
+      }, preparedSelectedShare?.hadithId === hadith.id
+        ? preparedSelectedShare.prepared
+        : undefined);
+      if (outcome === 'failed') setShareNotice('تعذّرت مشاركة صورة الحديث. استخدم زر النسخ لإرسال نصه.');
     } catch (error) {
       console.error('Hadith sharing failed:', error);
       setShareNotice('تعذّرت مشاركة الحديث الآن. حاول مرة أخرى.');
@@ -404,20 +424,21 @@ export function HadithScreen({ params }: HadithScreenProps) {
             <div className="flex flex-wrap items-center gap-2 border-t border-primary-100 pt-3 dark:border-primary-800">
               <button
                 onClick={() => void copyHadith(selected)}
-                className="inline-flex items-center gap-2 rounded-lg bg-primary-50 px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-100 dark:bg-primary-800/50 dark:text-primary-200 dark:hover:bg-primary-800"
+                aria-label={copiedHadithId === selected.id ? 'تم نسخ الحديث' : 'نسخ نص الحديث'}
+                title={copiedHadithId === selected.id ? 'تم نسخ الحديث' : 'نسخ نص الحديث'}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-primary-50 text-primary-700 transition-colors hover:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:bg-primary-800/50 dark:text-primary-200 dark:hover:bg-primary-800"
               >
-                <Copy size={16} />
-                {copiedHadithId === selected.id ? 'تم النسخ' : 'نسخ نص الحديث'}
+                {copiedHadithId === selected.id ? <Check size={18} /> : <Copy size={18} />}
               </button>
               <button
                 onClick={() => void shareHadith(selected)}
                 disabled={sharingHadith}
                 aria-label="مشاركة الحديث كصورة"
                 aria-busy={sharingHadith}
-                className="inline-flex items-center gap-2 rounded-lg bg-gold-100 px-3 py-2 text-sm font-medium text-gold-800 hover:bg-gold-200 disabled:opacity-60 dark:bg-gold-900/30 dark:text-gold-300 dark:hover:bg-gold-900/50"
+                title="مشاركة الحديث كصورة"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-gold-100 text-gold-800 transition-colors hover:bg-gold-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 disabled:opacity-60 dark:bg-gold-900/30 dark:text-gold-300 dark:hover:bg-gold-900/50"
               >
                 {sharingHadith ? <Loader2 size={16} className="animate-spin" /> : <Share2 size={16} />}
-                مشاركة كصورة
               </button>
               {copyError && <p role="alert" className="text-xs text-error-600 dark:text-error-300">{copyError}</p>}
               {shareNotice && <p role="status" className="text-xs text-primary-700 dark:text-primary-300">{shareNotice}</p>}
