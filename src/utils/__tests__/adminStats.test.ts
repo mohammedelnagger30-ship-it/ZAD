@@ -121,40 +121,43 @@ describe('normalizeAdminStats', () => {
 });
 
 describe('isAdminAccount', () => {
-  it('is true only for an explicit yes', async () => {
+  it('distinguishes an admin, a regular user, and an unavailable check', async () => {
     answer = { data: true, error: null };
-    await expect(isAdminAccount()).resolves.toBe(true);
+    await expect(isAdminAccount()).resolves.toBe('admin');
 
     answer = { data: false, error: null };
-    await expect(isAdminAccount()).resolves.toBe(false);
+    await expect(isAdminAccount()).resolves.toBe('user');
+
+    answer = { data: null, error: null };
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await expect(isAdminAccount()).resolves.toBe('unavailable');
+    warn.mockRestore();
   });
 
-  it('is false when the RPC is missing — a project without the migration is not a dashboard', async () => {
+  it('marks a missing RPC as unavailable so a later check can recover', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     answer = { data: null, error: { code: 'PGRST202', message: 'function public.is_admin() does not exist' } };
-    await expect(isAdminAccount()).resolves.toBe(false);
+    await expect(isAdminAccount()).resolves.toBe('unavailable');
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });
 
-  it('is false when the network is gone', async () => {
+  it('marks a network failure as unavailable', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     shouldThrow = true;
-    await expect(isAdminAccount()).resolves.toBe(false);
+    await expect(isAdminAccount()).resolves.toBe('unavailable');
     warn.mockRestore();
   });
 
-  it('opens the ordinary app instead of waiting forever on a hung network', async () => {
+  it('marks a hung request unavailable instead of waiting forever', async () => {
     jest.useFakeTimers();
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     neverSettles = true;
 
-    // Without the abort this never settles: the user would sit on the gate's
-    // «جارٍ فتح الحساب...» for as long as the connection stays black-holed.
     const pending = isAdminAccount();
     await jest.advanceTimersByTimeAsync(5_000);
-    await expect(pending).resolves.toBe(false);
-    expect(warn).toHaveBeenCalledWith('Admin check timed out — opening the ordinary app.');
+    await expect(pending).resolves.toBe('unavailable');
+    expect(warn).toHaveBeenCalledWith('Admin check timed out; access will be checked again.');
 
     warn.mockRestore();
     jest.useRealTimers();

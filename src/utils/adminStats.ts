@@ -150,38 +150,34 @@ export function normalizeAdminStats(value: unknown): AdminStats {
   };
 }
 
-/** How long the admin gate waits before it stops waiting.
- *
- * `isAdminAccount` is documented to fail *closed* — a missing migration or a
- * dead network returns false and the account gets the ordinary app. That held
- * for a rejected request but not for one that never settles: supabase-js sends
- * no timeout of its own, so a captive portal or a black-holed TCP connection
- * left the signed-in user parked on «جارٍ فتح الحساب...» forever, on a build
- * that rendered instantly before the gate existed. The abort turns the hang
- * into the failure the comment already promised. */
+/** A slow admin check must not block normal app use; unavailable results are
+ * retried by the application and checked again when connectivity returns. */
 const ADMIN_CHECK_TIMEOUT_MS = 2_000;
 
-/** Is the signed-in account on `admin_emails`? False on any failure, so a
- * missing migration or a dead network leaves the app in its normal state
- * instead of wedging at a gate nobody can open. */
-export async function isAdminAccount(): Promise<boolean> {
-  if (!supabase) return false;
+export type AdminAccountStatus = 'admin' | 'user' | 'unavailable';
+
+/** Check the signed-in account against `admin_emails` without confusing a
+ * temporary network failure with a confirmed non-admin account. */
+export async function isAdminAccount(): Promise<AdminAccountStatus> {
+  if (!supabase) return 'unavailable';
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ADMIN_CHECK_TIMEOUT_MS);
   try {
     const { data, error } = await supabase.rpc('is_admin').abortSignal(controller.signal);
     if (error) {
       console.warn('Admin check unavailable:', error.message);
-      return false;
+      return 'unavailable';
     }
-    return data === true;
+    if (data === true) return 'admin';
+    if (data === false) return 'user';
+    console.warn('Admin check returned an unexpected response.');
+    return 'unavailable';
   } catch (cause) {
     const reason = cause instanceof Error ? cause.message : String(cause);
-    // An abort is the expected shape of a slow gate, not a fault worth a stack.
     console.warn(
-      /abort/i.test(reason) ? 'Admin check timed out — opening the ordinary app.' : 'Admin check unavailable: ' + reason,
+      /abort/i.test(reason) ? 'Admin check timed out; access will be checked again.' : 'Admin check unavailable: ' + reason,
     );
-    return false;
+    return 'unavailable';
   } finally {
     clearTimeout(timer);
   }

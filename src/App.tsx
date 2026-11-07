@@ -228,6 +228,8 @@ function readOfflineUsage(): boolean {
   }
 }
 
+const ADMIN_CHECK_RETRY_DELAYS_MS = [1_500, 5_000, 15_000];
+
 function Application() {
   const [session, setSession] = useState<Session | null>(null);
   // Don't block the UI waiting for Supabase: read cached session in background
@@ -239,7 +241,7 @@ function Application() {
   const [showAuthForGuest, setShowAuthForGuest] = useState(false);
   // Default to 'user' so a logged-in account never gets stuck behind a slow/admin
   // check on poor connections or offline. Upgraded to 'admin' in the background if confirmed.
-  const [adminState, setAdminState] = useState<'unknown' | 'admin' | 'user'>('user');
+  const [adminState, setAdminState] = useState<'admin' | 'user'>('user');
   // كل مستخدم — أدمن أو لا — يفتح التطبيق العادى، ولوحة الإدارة تُفتح بالطلب من
   // الإعدادات. الحالة هنا لا داخل `AdminApp`: زر «لوحة الإدارة» يصل إلى هذا المكوّن
   // من تحت، فلا بدّ أن يرفع الطلب إلى هذا المستوى ليُبدّل العرض.
@@ -256,8 +258,8 @@ function Application() {
   /**
    * Whether this account opens the dashboard or the ordinary app is decided
    * server-side by `public.admin_emails` — the client only ever learns a yes or
-   * a no. The check runs in the background and never blocks rendering; on failure
-   * or offline the account stays as a normal user.
+   * a no. The check runs in the background and never blocks rendering; a
+   * temporary failure is retried and checked again when connectivity returns.
    */
   useEffect(() => {
     if (!sessionUserId) {
@@ -265,16 +267,62 @@ function Application() {
       return;
     }
     let alive = true;
+    let checking = false;
+    let retryIndex = 0;
+    let retryTimer: number | undefined;
+    let removeAppStateListener: (() => void) | undefined;
     setAdminState('user');
-    void isAdminAccount()
-      .then((isAdmin) => {
-        if (alive && isAdmin) setAdminState('admin');
+    const checkAdmin = async () => {
+      if (!alive || checking) return;
+      checking = true;
+      const status = await isAdminAccount();
+      checking = false;
+      if (!alive) return;
+
+      if (status === 'unavailable') {
+        const delay = ADMIN_CHECK_RETRY_DELAYS_MS[retryIndex];
+        if (delay !== undefined) {
+          retryIndex += 1;
+          retryTimer = window.setTimeout(() => void checkAdmin(), delay);
+        }
+        return;
+      }
+
+      retryIndex = 0;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+      setAdminState(status);
+    };
+    const retryAdminCheck = () => {
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+      retryIndex = 0;
+      void checkAdmin();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') retryAdminCheck();
+    };
+
+    void checkAdmin();
+    window.addEventListener('online', retryAdminCheck);
+    document.addEventListener('visibilitychange', onVisible);
+    if (Capacitor.isNativePlatform()) {
+      void CapApp.addListener('appStateChange', ({ isActive }) => {
+        if (isActive) retryAdminCheck();
       })
-      .catch(() => {
-        if (alive) setAdminState('user');
-      });
+        .then((handle) => {
+          if (alive) removeAppStateListener = () => void handle.remove();
+          else void handle.remove();
+        })
+        .catch((error: unknown) => {
+          console.warn('Could not monitor app resume for admin access:', error);
+        });
+    }
+
     return () => {
       alive = false;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+      window.removeEventListener('online', retryAdminCheck);
+      document.removeEventListener('visibilitychange', onVisible);
+      removeAppStateListener?.();
     };
   }, [sessionUserId]);
 
