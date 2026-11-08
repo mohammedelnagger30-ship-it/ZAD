@@ -1404,19 +1404,66 @@ html.dark body {
  * to be the one that renders — leading with the Google "Amiri" broke the match whenever
  * the webfont arrived, and every measured break drifted.
  */
-.mushaf-body {
+.mushaf-body,
+.mushaf-line {
   position: relative;
   z-index: 1;
   font-family: 'Amiri Quran', 'Amiri', serif;
   font-size: var(--fs);
   line-height: var(--lh, 1.9);
+  /*
+   * The printed page is a column of a fixed measure (COLUMN_EM in mushafFlow.ts, handed in
+   * as `--mushaf-column`). Letting the paragraph stretch to the sheet width changes where
+   * the browser breaks lines and hands justification more slack to push into the gaps,
+   * which is exactly the wide, uneven spacing a printed mushaf never shows. Pinning the
+   * measure keeps the same words on the same line as the flow table, so justification only
+   * absorbs the few percent the table left behind. `margin-inline: auto` centres the
+   * column in whatever room the sheet gives it.
+   *
+   * `--word-extra` is the reader's word-spacing choice, added to the measure so it can
+   * survive justification (justification otherwise cancels `word-spacing` exactly).
+   */
+  width: calc(var(--mushaf-column, 18.08em) + var(--word-extra, 0em));
+  max-width: 100%;
+  margin-inline: auto;
   text-align: justify;
-  text-align-last: center;
   text-justify: inter-word;
-  letter-spacing: var(--letter-gap, 0.01em);
+  letter-spacing: var(--letter-gap, 0);
   word-spacing: var(--word-gap, normal);
   color: var(--ink);
   text-shadow: 0 0 0 rgba(0, 0, 0, 0.02);
+}
+
+/*
+ * One line of the printed page, drawn from `getPageLines()`.
+ *
+ * Every line is its own block, so the browser never re-wraps the text and never gets to
+ * decide where a line ends — the flow table already did, against the same measure. The
+ * only slack justification has to distribute is what the table's own greedy fit left
+ * over, which is less than one word per line: the gaps stay even and narrow, the way a
+ * printed mushaf sets them. No block margins: the lines stack on the leading exactly.
+ */
+.mushaf-line {
+  margin-block: 0;
+  text-align-last: justify;
+}
+
+/* The closing line of a surah is short by nature; stretching it across the column would
+   blow its few gaps wide open. A printed page lets it finish where it finishes. */
+.mushaf-line--surah-end {
+  text-align-last: center;
+}
+
+/* One surah ends and the next begins further down the same page: the closing ayah gets
+   clear paper before the new surah's band, so the two read as two surahs rather than two
+   verses of one. The band's own top margin is only a hair for every other case. */
+.mushaf-line--surah-end + .mushaf-banner {
+  margin-top: 1.5rem;
+}
+
+/* The continuous surah view (not the page-turner) keeps a centred last line. */
+.mushaf-body {
+  text-align-last: center;
 }
 
 /* The reader's page rules apply to every mushaf page — the surah view included — so the
@@ -1500,14 +1547,22 @@ button.mushaf-ayah-mark {
   align-items: center;
   justify-content: center;
   width: auto;
-  height: calc(var(--fs) * 1.45);
-  margin: 0 0.06em;
+  height: calc(var(--fs) * 1.05);
+  /*
+   * The flow table reserved exactly 1.15em for an end-of-ayah mark (AYAH_MARK_EM) while
+   * measuring every line. The bundled face draws the ornament at 1.279em, so leaving its
+   * advance at that width makes every line that carries a marker slightly wider than the
+   * measure it was broken against — and the last word of those lines wraps. Cancelling the
+   * extra in the side bearings (the ornament's ink is narrower than its advance) brings the
+   * mark back to the width the line breaks were computed for, without shrinking the glyph.
+   */
+  margin: 0 -0.065em;
   border: 0;
   border-radius: 50%;
   color: var(--frame);
   background: transparent;
   line-height: 1;
-  vertical-align: middle;
+  vertical-align: baseline;
   user-select: none;
   padding: 0;
   font-family: inherit;
@@ -1549,13 +1604,14 @@ span.mushaf-ayah-mark {
   display: inline-block;
   color: inherit;
   font-family: 'Amiri Quran', 'Amiri', serif;
-  font-size: calc(var(--fs) * 0.8);
-  font-weight: 400;
+  font-size: var(--fs);
+  font-weight: 500;
   line-height: 1;
   white-space: nowrap;
   direction: rtl;
   unicode-bidi: isolate;
-  transform: translateY(-0.02em);
+  vertical-align: baseline;
+  transform: translateY(0);
   text-shadow: 0 0.5px 0 var(--paper);
 }
 

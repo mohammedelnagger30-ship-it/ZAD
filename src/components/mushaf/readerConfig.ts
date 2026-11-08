@@ -32,6 +32,30 @@ export const LEAF_WINDOW = 40;
 export const LEAF_HEADROOM = 8;
 
 /**
+ * Most word gaps a single flow-table line can hold: the longest line the generator
+ * produces is 13 words, so 12 gaps. The reader's word-spacing choice widens the printed
+ * measure by this many gaps so no line can outgrow the column it was broken against.
+ */
+export const MAX_LINE_WORD_GAPS = 12;
+
+/**
+ * Width of the printed text column in CSS pixels for a viewport. These breakpoints and
+ * insets mirror the reader's scroll padding, page padding, and column max-widths in
+ * index.css, so the flow table's column fits the actual sheet rather than browser-wrapped
+ * text leaving oversized spaces between words.
+ */
+export function mushafTextColumnWidth(viewportWidth: number): number {
+  const scrollWidth = Math.max(0, viewportWidth - 24);
+  const pageWidth = Math.min(
+    scrollWidth,
+    viewportWidth >= 1024 ? 54 * 16 : viewportWidth >= 768 ? 48 * 16 : Infinity,
+  );
+  const pagePadding =
+    viewportWidth <= 480 ? 4.35 * 16 : viewportWidth >= 768 ? 7.6 * 16 : 5.95 * 16;
+  return Math.max(0, pageWidth - pagePadding);
+}
+
+/**
  * The sheet the reader is printed on. The paper *is* the reading light: white and
  * warm are day sheets, navy and black are night sheets, so one choice themes both
  * the page and the chrome around it and they can never end up half switched.

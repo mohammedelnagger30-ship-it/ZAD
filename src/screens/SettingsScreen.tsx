@@ -127,8 +127,6 @@ export function SettingsScreen({
           <PrayerTimesSection settings={settings} onSaveSettings={onSaveSettings} />
           <FontSection settings={settings} onSaveSettings={onSaveSettings} />
           <BackupSection />
-          <AboutSection />
-          <DeveloperSection />
         </div>
         <div className="space-y-6 md:flex-1 md:min-w-0">
           <NotificationsSection settings={settings} onSaveSettings={onSaveSettings} />
@@ -137,6 +135,8 @@ export function SettingsScreen({
           <AutoBackupSection />
         </div>
       </div>
+      <AboutSection />
+      <DeveloperSection />
     </div>
   );
 }

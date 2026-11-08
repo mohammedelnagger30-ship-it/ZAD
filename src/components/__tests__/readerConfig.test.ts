@@ -1,8 +1,23 @@
-import { loadPrefs, PREFS_KEY, isDarkPaper, isMushafPaper } from '@/components/mushaf/readerConfig';
+import {
+  loadPrefs,
+  PREFS_KEY,
+  isDarkPaper,
+  isMushafPaper,
+  mushafTextColumnWidth,
+} from '@/components/mushaf/readerConfig';
 
 describe('readerConfig paper migration', () => {
   beforeEach(() => {
     localStorage.clear();
+  });
+
+  describe('mushafTextColumnWidth', () => {
+    it('matches the available printed column at phone and tablet widths', () => {
+      expect(mushafTextColumnWidth(390)).toBeCloseTo(296.4);
+      expect(mushafTextColumnWidth(600)).toBeCloseTo(480.8);
+      expect(mushafTextColumnWidth(768)).toBeCloseTo(622.4);
+      expect(mushafTextColumnWidth(1200)).toBeCloseTo(742.4);
+    });
   });
 
   it('defaults to the white paper when nothing is saved', () => {

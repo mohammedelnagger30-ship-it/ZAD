@@ -14,7 +14,7 @@ const config: CapacitorConfig = {
   },
   plugins: {
     LocalNotifications: {
-      smallIcon: 'ic_notification',
+      smallIcon: 'ic_qaf_notification',
       // Default sound for notifications that do not pick one. Must be a file that
       // actually exists (public/audio + android res/raw): `adhan.mp3` never shipped,
       // so the default silently resolved to nothing.

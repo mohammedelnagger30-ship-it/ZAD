@@ -425,7 +425,7 @@ public class RecitationMediaService extends Service {
         for (Notification.Action action : actions) builder.addAction(action);
 
         return builder
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(R.drawable.ic_qaf_notification)
             .setLargeIcon(BitmapFactory.decodeResource(
                 getResources(), R.drawable.ic_notification_large))
             .setColor(0xFF1F734E)

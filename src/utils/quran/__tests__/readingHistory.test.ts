@@ -10,6 +10,7 @@ import {
   clearReadingHistory,
   READING_STATE_KEY,
 } from '@/utils/quran/readingHistory';
+import { TOTAL_QURAN_PAGES } from '@/data/surahs';
 
 const HISTORY_KEY = 'zad:reading-history';
 
@@ -60,7 +61,7 @@ describe('recordReading / listReading', () => {
 
   it('drops impossible positions instead of recording them', () => {
     recordReading({ kind: 'page', page: 0 });
-    recordReading({ kind: 'page', page: 603 });
+    recordReading({ kind: 'page', page: TOTAL_QURAN_PAGES + 1 });
     recordReading({ kind: 'page', page: 2.5 });
     recordReading({ kind: 'surah', surahId: 999 });
     recordReading({ kind: 'surah', surahId: 1, ayah: 99 });

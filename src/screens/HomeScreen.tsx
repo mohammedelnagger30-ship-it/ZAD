@@ -45,18 +45,23 @@ import { getHadithCollection, hadithOfDay, installedCollections, HADITH_OF_DAY_B
 import { toArabicNumber, TOTAL_QURAN_PAGES } from '@/data/surahs';
 import type { ScreenName, NavParams } from '@/hooks/useApp';
 
+let cachedDailyQuranMessage: DailyQuranMessage | null = null;
+
 interface HomeScreenProps {
   settings: Settings;
   navigate: (screen: ScreenName, params?: NavParams) => void;
 }
 
 export function HomeScreen({ settings, navigate }: HomeScreenProps) {
+  const messageDayKey = todayKey();
   const [tasks, setTasks] = useState<DailyTask[]>([]);
   const [khatmahPlan, setKhatmahPlan] = useState<KhatmahPlan | null>(null);
   const [streak, setStreak] = useState(0);
   const [prayerRecords, setPrayerRecords] = useState<Record<string, PrayerStatus | null>>({});
   const [sunnahRecords, setSunnahRecords] = useState<Record<string, boolean>>({});
-  const [dailyQuranMessage, setDailyQuranMessage] = useState<DailyQuranMessage | null>(null);
+  const [dailyQuranMessage, setDailyQuranMessage] = useState<DailyQuranMessage | null>(() =>
+    cachedDailyQuranMessage?.date === messageDayKey ? cachedDailyQuranMessage : null,
+  );
   const [dailyQuranMessageError, setDailyQuranMessageError] = useState('');
   const [shareNotice, setShareNotice] = useState<string | null>(null);
   const [preparedAyahCard, setPreparedAyahCard] = useState<PreparedAyahShare | null>(null);
@@ -108,29 +113,26 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
   }, [load]);
 
   // The message is one per local day, so the work (and the whole-Quran chunk it
-  // pulls in) is keyed to the day — not to the every-second countdown tick. The
-  // card already says it is loading while the chunk arrives.
-  const messageDayKey = todayKey();
+  // pulls in) is keyed to the day — not to the every-second countdown tick.
   useEffect(() => {
     let alive = true;
-    const timeout = window.setTimeout(() => {
-      void (async () => {
-        try {
-          const { getDailyQuranMessage } = await import('@/utils/quran/dailyQuranMessage');
-          if (!alive) return;
-          setDailyQuranMessage(getDailyQuranMessage(trustedNow()));
-          setPreparedAyahCard(null);
-          setDailyQuranMessageError('');
-        } catch (error) {
-          if (!alive) return;
-          setDailyQuranMessage(null);
-          setDailyQuranMessageError(error instanceof Error ? error.message : 'تعذّر تحميل رسالة القرآن اليومية.');
-        }
-      })();
-    }, 350);
+    if (cachedDailyQuranMessage?.date === messageDayKey) return;
+    void import('@/utils/quran/dailyQuranMessage')
+      .then(({ getDailyQuranMessage }) => {
+        if (!alive) return;
+        const message = getDailyQuranMessage(trustedNow());
+        cachedDailyQuranMessage = message;
+        setDailyQuranMessage(message);
+        setPreparedAyahCard(null);
+        setDailyQuranMessageError('');
+      })
+      .catch((error: unknown) => {
+        if (!alive) return;
+        setDailyQuranMessage(null);
+        setDailyQuranMessageError(error instanceof Error ? error.message : 'تعذّر تحميل رسالة القرآن اليومية.');
+      });
     return () => {
       alive = false;
-      window.clearTimeout(timeout);
     };
   }, [messageDayKey]);
 
@@ -683,10 +685,14 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
         {dailyQuranMessage ? (
           <>
             <p className="mt-3 text-lg leading-[2.2] text-primary-900 dark:text-primary-50 quran-text">
-              {dailyQuranMessage.text}
+              ﴿{dailyQuranMessage.text}{' '}
+              <span className="whitespace-nowrap text-[0.8em] text-gold-700 dark:text-gold-300">
+                ۝{toArabicNumber(dailyQuranMessage.ayahNumber)}
+              </span>
+              ﴾
             </p>
             <p className="mt-2 text-xs md:text-sm text-gray-500 dark:text-gray-400">
-              سورة {dailyQuranMessage.surahName} — الآية {toArabicNumber(dailyQuranMessage.ayahNumber)}
+              سورة {dailyQuranMessage.surahName}
             </p>
             {shareNotice ? (
               <p role="status" className="mt-1 text-[0.6875rem] md:text-sm text-success-700 dark:text-success-300">

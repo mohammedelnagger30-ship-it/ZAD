@@ -40,8 +40,10 @@ interface SurahRaw {
 /**
  * Pages in this app's mushaf.
  *
- * Not the printed mushaf's 604. The printed boundaries live in `mushafPrinted` and are
- * mapped through the flow at build time; what the reader displays is always this.
+ * The reader's own pagination, from the flow table. It is calibrated to the printed
+ * mushaf's 604 and lands on the same number, but the boundaries are the flow's own; the
+ * printed ones live in `mushafPrinted` and are mapped through the flow at build time.
+ * What the reader displays is always this.
  */
 export const TOTAL_QURAN_PAGES = TOTAL_PAGES;
 

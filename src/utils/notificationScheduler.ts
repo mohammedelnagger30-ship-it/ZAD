@@ -165,7 +165,7 @@ const CONTENT_NOTIFICATION_DAYS = 4;
  * and the app name as sub-text so grouped notifications stay recognisable.
  */
 export const NOTIFICATION_BRAND = {
-  smallIcon: 'ic_notification',
+  smallIcon: 'ic_qaf_notification',
   largeIcon: 'ic_notification_large',
   iconColor: '#FFFFFF',
   summaryText: 'قُرّة',

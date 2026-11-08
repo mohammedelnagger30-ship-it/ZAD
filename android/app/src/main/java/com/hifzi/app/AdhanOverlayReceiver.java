@@ -152,7 +152,7 @@ public class AdhanOverlayReceiver extends BroadcastReceiver {
         );
 
         Notification notification = new NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(R.drawable.ic_qaf_notification)
             .setLargeIcon(BitmapFactory.decodeResource(
                 context.getResources(), R.drawable.ic_notification_large))
             .setColor(COLOR_BRAND)
@@ -317,7 +317,7 @@ public class AdhanOverlayReceiver extends BroadcastReceiver {
             + (when != null ? " — كان موعدها " + when : "");
 
         Notification notification = new NotificationCompat.Builder(context, LATE_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(R.drawable.ic_qaf_notification)
             .setLargeIcon(BitmapFactory.decodeResource(
                 context.getResources(), R.drawable.ic_notification_large))
             .setColor(COLOR_BRAND)

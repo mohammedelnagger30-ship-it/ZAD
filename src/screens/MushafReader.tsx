@@ -9,7 +9,7 @@ import { MushafScrollControl } from '@/components/mushaf/MushafScrollControl';
 import { AyahVoiceSheet } from '@/components/mushaf/AyahVoiceSheet';
 import { WordAnalysisSheet, type SelectedQuranWord } from '@/components/mushaf/WordAnalysisSheet';
 import { useAyahVoice } from '@/hooks/useAyahVoice';
-import { useViewportStep } from '@/hooks/useViewportStep';
+import { useViewportStep, useViewportWidth } from '@/hooks/useViewportStep';
 import {
   ZOOM_STEP,
   ZOOM_MIN,
@@ -21,17 +21,20 @@ import {
   LEAF_CHUNK,
   LEAF_WINDOW,
   LEAF_HEADROOM,
+  MAX_LINE_WORD_GAPS,
   AUTO_SCROLL_MIN,
   AUTO_SCROLL_MAX,
   clampNumber,
   loadPrefs,
   isDarkPaper,
+  mushafTextColumnWidth,
   type MushafPrefs,
   type MushafPaper,
   type Orientation,
   type JumpTarget,
   type SheetName,
 } from '@/components/mushaf/readerConfig';
+import { COLUMN_EM } from '@/data/mushafFlow';
 import { TafsirBottomSheet } from '@/components/TafsirBottomSheet';
 import { useWordMeanings } from '@/hooks/useContent';
 import { getWordMeanings } from '@/utils/quran/wordMeaningsService';
@@ -810,9 +813,18 @@ export function MushafReader({
   // as before; the viewport only lifts the base a step on a wider sheet, so a tablet reads
   // at a tablet size while the reader's saved size stays the size the reader asked for.
   const viewportStep = useViewportStep();
-  const effectiveFontSize = Math.round(
-    settings.fontSize * viewportStep * prefs.zoom * prefs.readingScale
-  );
+  const viewportWidth = useViewportWidth();
+  // The page measure is the flow column plus whatever the reader's word-spacing choice
+  // adds, so the cap has to account for both — otherwise a wide word gap at the largest
+  // font size pushes lines past the sheet's padding.
+  const pageMeasureEm = COLUMN_EM + Math.max(0, prefs.wordSpacing) * MAX_LINE_WORD_GAPS;
+  const effectiveFontSize =
+    Math.round(
+      Math.min(
+        settings.fontSize * viewportStep * prefs.zoom * prefs.readingScale,
+        mushafTextColumnWidth(viewportWidth) / pageMeasureEm,
+      ) * 100,
+    ) / 100;
   const paper = prefs.paper;
   const nightPaper = isDarkPaper(paper);
   /** The ayah under discussion, held on the page while either of its sheets is open. */
@@ -850,6 +862,7 @@ export function MushafReader({
       className="mushaf-shell"
       data-mode={nightPaper ? 'night' : 'day'}
       data-paper={paper}
+      data-zoomed={prefs.zoom * prefs.readingScale > 1 ? 'true' : 'false'}
       onTouchStartCapture={() => {
         if (autoScrollActive) setAutoScrollTouchPaused(true);
       }}
@@ -903,7 +916,6 @@ export function MushafReader({
                 fontSize={effectiveFontSize}
                 paper={paper}
                 lineHeight={1.9 + (prefs.lineSpacing - 1) * 0.55}
-                letterSpacing={0.01 + Math.max(0, prefs.lineSpacing - 1) * 0.01}
                 wordSpacing={prefs.wordSpacing}
                 wordMeaningsInstalled={wordMeaningsInstalled}
                 onAyahPress={handleAyahPress}
@@ -926,7 +938,6 @@ export function MushafReader({
               fontSize={effectiveFontSize}
               paper={paper}
               lineHeight={1.9 + (prefs.lineSpacing - 1) * 0.55}
-              letterSpacing={0.01 + Math.max(0, prefs.lineSpacing - 1) * 0.01}
               wordSpacing={prefs.wordSpacing}
               wordMeaningsInstalled={wordMeaningsInstalled}
               onAyahPress={handleAyahPress}
@@ -1045,7 +1056,6 @@ interface MushafLeafProps {
   fontSize: number;
   paper: MushafPaper;
   lineHeight: number;
-  letterSpacing: number;
   wordSpacing: number;
   /** Whether the meanings pack is on the device — decides what a pressed word can offer. */
   wordMeaningsInstalled: boolean;
