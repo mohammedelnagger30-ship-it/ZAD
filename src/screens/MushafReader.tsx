@@ -820,14 +820,13 @@ export function MushafReader({
   // mushaf stays at its designed size (responsive to the screen, not to a zoom gesture).
   const pageMeasureEm = COLUMN_EM + Math.max(0, prefs.wordSpacing) * MAX_LINE_WORD_GAPS;
   const zoomCap = mushafTextColumnWidth(viewportWidth) / pageMeasureEm;
+  // The fitted size is the largest font that fits the sheet at rest. Zoom scales from
+  // that fitted size (so zooming out actually shrinks even on a phone, where the fitted
+  // size already fills the sheet) and is clamped to the fitted size (no overflow).
+  const fittedFontSize = Math.min(settings.fontSize * viewportStep, zoomCap);
   const effectiveFontSize = Math.round(
-    Math.min(
-      settings.fontSize * viewportStep * prefs.zoom * prefs.readingScale,
-      zoomCap,
-    ) * 100,
+    Math.min(fittedFontSize * prefs.zoom * prefs.readingScale, zoomCap) * 100,
   ) / 100;
-  // Zoom in is only useful while the column still fits the sheet; once it is capped,
-  // further steps change nothing, so the button is disabled instead of looking broken.
   const canZoomIn = effectiveFontSize < zoomCap - 0.5;
   const paper = prefs.paper;
   const nightPaper = isDarkPaper(paper);
