@@ -11,6 +11,7 @@ import { PrayerTimesSection } from '@/components/settings/PrayerTimesSection';
 import { HijriSection } from '@/components/settings/HijriSection';
 import { FontSection } from '@/components/settings/FontSection';
 import { AboutSection } from '@/components/settings/AboutSection';
+import { DeveloperSection } from '@/components/settings/DeveloperSection';
 import { UISettingsSection } from '@/components/settings/UISettingsSection';
 import { type Settings } from '@/db/database';
 import { type ColorPalette } from '@/utils/colorThemes';
@@ -127,6 +128,7 @@ export function SettingsScreen({
           <FontSection settings={settings} onSaveSettings={onSaveSettings} />
           <BackupSection />
           <AboutSection />
+          <DeveloperSection />
         </div>
         <div className="space-y-6 md:flex-1 md:min-w-0">
           <NotificationsSection settings={settings} onSaveSettings={onSaveSettings} />

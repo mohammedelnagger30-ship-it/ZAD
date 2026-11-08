@@ -28,9 +28,14 @@ type Props = Parameters<typeof AyahVoiceSheet>[0];
 const REF: { current: HTMLAudioElement | null } = { current: null };
 
 /** أقصر ورقةٍ تُظهر عنصر الصوت: لا يُشترى فيها تفعيلُ الأصوات، إذ ليس في الأمر صوت. */
-function sheet(spy: (...args: unknown[]) => void, onEnded?: (...args: unknown[]) => void): ReactElement {
+function sheet(
+  spy: (...args: unknown[]) => void,
+  onEnded?: (...args: unknown[]) => void,
+  ayahChoice: { surahId: number; ayahNumber: number } = { surahId: 1, ayahNumber: 1 },
+  onPickHighlightColor: (colorId: string | null) => void = () => {},
+): ReactElement {
   const props: Props = {
-    ayahChoice: { surahId: 1, ayahNumber: 1 },
+    ayahChoice,
     closeAyahChoice: () => {},
     ayahPanelRef: { current: null },
     setTafsirAyah: () => {},
@@ -57,6 +62,8 @@ function sheet(spy: (...args: unknown[]) => void, onEnded?: (...args: unknown[])
     setVoicePlaying: () => {},
     handleVoiceTime: spy as Props['handleVoiceTime'],
     handleVoiceEnded: (onEnded ?? (() => {})) as Props['handleVoiceEnded'],
+    highlightColor: 'gold',
+    onPickHighlightColor,
   };
   return <AyahVoiceSheet {...props} />;
 }
@@ -90,9 +97,26 @@ describe('AyahVoiceSheet recitation transport', () => {
   });
 
   it('shows the selected ayah text when its actions are open', () => {
-    expect(container.querySelector('.mushaf-voice__ayah')?.textContent).toBe(getAyahs(1, 1, 1)[0]?.text);
+    const selectedAyah = getAyahs(1, 1, 1)[0]!;
+    expect(container.querySelector('.mushaf-voice__ayah')?.textContent).toBe(selectedAyah.text);
+    expect(container.querySelector('.mushaf-sheet__juz')).toBeNull();
     expect(container.textContent).toContain('التفسير');
     expect(container.textContent).toContain('التلاوة');
+    expect(container.querySelector('[aria-label="لون تمييز الآية"]')).not.toBeNull();
+  });
+
+  it('saves the selected highlight colour from the picker', async () => {
+    const pickedColors: (string | null)[] = [];
+    await act(async () => {
+      root.render(sheet(spy, undefined, undefined, (colorId) => pickedColors.push(colorId)));
+    });
+
+    const green = container.querySelector<HTMLButtonElement>('[aria-label="تمييز بلون أخضر"]');
+    expect(green).not.toBeNull();
+    await act(async () => {
+      green!.click();
+    });
+    expect(pickedColors).toEqual(['green']);
   });
 
   it('sends the timeupdate to the handler with no argument, so «انتهى» stays false', async () => {

@@ -11,6 +11,7 @@ ANDROID_RES = ROOT / "android" / "app" / "src" / "main" / "res"
 PUBLIC_DIR = ROOT / "public"
 PUBLIC_ICONS = PUBLIC_DIR / "icons"
 BACKGROUND = (3, 31, 17)
+ADAPTIVE_ART_SCALE = 0.88
 ICON_SIZES = {
     "mipmap-mdpi": 48,
     "mipmap-hdpi": 72,
@@ -122,13 +123,13 @@ def main() -> None:
         )
 
         adaptive = Image.new("RGB", (size, size), BACKGROUND)
-        art_size = round(size * 0.62)
+        art_size = round(size * ADAPTIVE_ART_SCALE)
         scaled = artwork.resize((art_size, art_size), Image.Resampling.LANCZOS)
         adaptive.paste(scaled, ((size - art_size) // 2, (size - art_size) // 2))
         adaptive.save(target / "ic_launcher_foreground.png", optimize=True)
 
     adaptive_foreground = Image.new("RGB", (432, 432), BACKGROUND)
-    art_size = round(432 * 0.62)
+    art_size = round(432 * ADAPTIVE_ART_SCALE)
     scaled = artwork.resize((art_size, art_size), Image.Resampling.LANCZOS)
     adaptive_foreground.paste(scaled, ((432 - art_size) // 2, (432 - art_size) // 2))
     adaptive_foreground.save(

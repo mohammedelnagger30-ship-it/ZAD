@@ -304,6 +304,13 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
     () => new Map(bookmarks.map((b) => [`${b.surahId}:${b.ayahNumber}`, b])),
     [bookmarks]
   );
+  const ayahHighlights = useMemo(() => {
+    const highlights = new Map<string, string>();
+    for (const bookmark of bookmarks) {
+      if (bookmark.color) highlights.set(`${bookmark.surahId}:${bookmark.ayahNumber}`, bookmark.color);
+    }
+    return highlights;
+  }, [bookmarks]);
 
   // Filtered surah list
   const filteredSurahs = useMemo(() => {
@@ -460,6 +467,16 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
     next.syncModifiedAt = Date.now();
     await db.bookmarks.put(next);
     await loadBookmarks();
+  };
+
+  const pickAyahHighlight = (
+    surahId: number,
+    ayahNumber: number,
+    colorId: string | null,
+  ) => {
+    const current = bookmarkByKey.get(`${surahId}:${ayahNumber}`);
+    if (colorId === null && !current?.color) return;
+    return saveBookmark(surahId, ayahNumber, { color: colorId });
   };
 
   const toggleBookmark = async (surahId: number, ayahNumber: number) => {
@@ -1037,15 +1054,21 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
                 setVoicePlaying={setVoicePlaying}
                 handleVoiceTime={handleVoiceTime}
                 handleVoiceEnded={handleVoiceEnded}
+                highlightColor={
+                  ayahChoice
+                    ? bookmarkByKey.get(`${ayahChoice.surahId}:${ayahChoice.ayahNumber}`)?.color
+                    : undefined
+                }
+                onPickHighlightColor={(colorId) => {
+                  if (ayahChoice) {
+                    void pickAyahHighlight(ayahChoice.surahId, ayahChoice.ayahNumber, colorId);
+                  }
+                }}
                 extra={
                   ayahChoice !== null ? (
                     <ReaderAyahMarks
                       bookmarked={bookmarkedKeys.has(`${ayahChoice.surahId}:${ayahChoice.ayahNumber}`)}
                       onToggleBookmark={() => toggleBookmark(ayahChoice.surahId, ayahChoice.ayahNumber)}
-                      highlightColor={bookmarkByKey.get(`${ayahChoice.surahId}:${ayahChoice.ayahNumber}`)?.color}
-                      onPickColor={(colorId) =>
-                        saveBookmark(ayahChoice.surahId, ayahChoice.ayahNumber, { color: colorId })
-                      }
                       note={bookmarkByKey.get(`${ayahChoice.surahId}:${ayahChoice.ayahNumber}`)?.note}
                       onSaveNote={(note) =>
                         saveBookmark(ayahChoice.surahId, ayahChoice.ayahNumber, { note })
@@ -1107,6 +1130,10 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
         initialPage={mushafPage}
         onClose={() => setViewMode('list')}
         onPageChange={updateMushafPage}
+        ayahHighlights={ayahHighlights}
+        onPickAyahHighlight={(surahId, ayahNumber, colorId) =>
+          pickAyahHighlight(surahId, ayahNumber, colorId)
+        }
       />
     );
   }

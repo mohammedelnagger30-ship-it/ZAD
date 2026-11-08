@@ -2602,6 +2602,60 @@ button.mushaf-ayah-mark:focus-visible {
   color: var(--on-accent);
 }
 
+.mushaf-highlight-picker {
+  margin-top: 0.75rem;
+}
+
+.mushaf-highlight-picker__label {
+  margin-bottom: 0.5rem;
+  color: var(--fg-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.mushaf-highlight-picker__colors {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.mushaf-highlight-picker__swatch {
+  width: 2rem;
+  height: 2rem;
+  border: 2px solid var(--paper);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--line);
+  transition: transform 140ms ease, box-shadow 140ms ease;
+}
+
+.mushaf-highlight-picker__swatch[aria-pressed='true'] {
+  transform: scale(1.12);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.mushaf-highlight-picker__swatch:focus-visible,
+.mushaf-highlight-picker__clear:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.mushaf-highlight-picker__clear {
+  min-height: 2rem;
+  padding: 0.25rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--fg);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.mushaf-highlight-picker__clear[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 /* Four papers in one row: the swatch is the choice, the word is the name. */
 .mushaf-paper-grid {
   display: grid;
@@ -2982,7 +3036,7 @@ button.mushaf-ayah-mark:focus-visible {
   --frame: var(--voice-frame);
   --frame-soft: var(--voice-frame-soft);
   --wash: var(--accent-soft);
-  margin: 0;
+  margin: 0 0 0.8rem;
   padding: 0.45rem 0.25rem;
   text-align: justify;
   text-align-last: center;

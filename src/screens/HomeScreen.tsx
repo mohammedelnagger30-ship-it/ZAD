@@ -708,7 +708,7 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
       {/* Streak + quick stats */}
       <div className="grid grid-cols-3 gap-3 md:gap-4">
         <Card className="flex flex-col items-center text-center p-3 md:p-4! group transition-all duration-300 hover:shadow-md hover:-translate-y-0.5">
-          <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-accent-50 text-accent-700 transition-transform duration-200 group-hover:scale-110 dark:bg-accent-900/30 dark:text-accent-200">
+          <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-primary-950 shadow-sm ring-1 ring-amber-200/80 transition-transform duration-200 group-hover:scale-110 dark:from-amber-300 dark:to-amber-500 dark:ring-amber-200/50">
             <Flame size={22} className={streak > 0 ? 'animate-flame' : 'opacity-70'} />
             {streak > 0 && (
               <span className="absolute -inset-1 rounded-xl bg-accent-500/25 blur-xs pointer-events-none -z-10 animate-pulse" />
@@ -718,14 +718,14 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
           <p className="text-xs font-medium text-gray-500 dark:text-gray-400">أيام متتالية</p>
         </Card>
         <Card className="flex flex-col items-center text-center p-3 md:p-4! group transition-all duration-300 hover:shadow-md hover:-translate-y-0.5">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary-50 text-primary-700 transition-transform duration-200 group-hover:scale-110 dark:bg-primary-900/40 dark:text-primary-200">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-700 to-primary-900 text-white shadow-sm ring-1 ring-white/80 transition-transform duration-200 group-hover:scale-110 dark:from-primary-500 dark:to-primary-700 dark:ring-white/15">
             <Check size={22} />
           </div>
           <p className="text-2xl font-extrabold text-primary-800 dark:text-primary-100 mt-2">{doneTasks.length}</p>
           <p className="text-xs font-medium text-gray-500 dark:text-gray-400">مهام مكتملة</p>
         </Card>
         <Card className="flex flex-col items-center text-center p-3 md:p-4! group transition-all duration-300 hover:shadow-md hover:-translate-y-0.5">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gold-100 text-gold-700 transition-transform duration-200 group-hover:scale-110 dark:bg-gold-900/30 dark:text-gold-200">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-600 to-amber-800 text-white shadow-sm ring-1 ring-amber-200/80 transition-transform duration-200 group-hover:scale-110 dark:from-amber-400 dark:to-amber-600 dark:text-primary-950 dark:ring-amber-200/50">
             <Clock size={22} />
           </div>
           <p className="text-2xl font-extrabold text-primary-800 dark:text-primary-100 mt-2">{pendingTasks.length}</p>

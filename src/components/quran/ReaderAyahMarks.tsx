@@ -1,15 +1,10 @@
 import { useState, useEffect } from 'react';
 import { BookMarked } from 'lucide-react';
-import { HIGHLIGHT_COLORS } from '@/utils/quran/ayahHighlights';
 
 interface ReaderAyahMarksProps {
   /** Whether the pressed ayah already sits in «محفوظاتي». */
   bookmarked: boolean;
   onToggleBookmark: () => void;
-  /** Highlight colour id currently on the ayah, or undefined. */
-  highlightColor?: string;
-  /** Sets the highlight colour, or clears it with `null`. */
-  onPickColor: (colorId: string | null) => void;
   /** The saved note for the ayah, if any. */
   note?: string;
   /** Saves the note; an empty string clears it. */
@@ -17,15 +12,14 @@ interface ReaderAyahMarksProps {
 }
 
 /**
- * What the reader keeps of an ayah: the mark, the colour it wears, and the note that
- * says why.
+ * What the reader keeps of an ayah: the mark and the note that says why.
  *
  * This used to sit in a sheet of its own — `ReaderChoiceSheet` — which meant the
  * reader needed two windows on a pressed ayah, one of them carrying its own copy of
  * «التفسير / التلاوة» at the top. The ayah window is now the one the mushaf opens,
  * shared by both screens, and this is what the reader adds to it. Nothing here is a
- * second kind of mark: both the colour and the note are fields on the same bookmark,
- * and the ayah is kept either way.
+ * second kind of mark: the note is a field on the same bookmark, and the ayah is kept
+ * either way. The shared ayah sheet owns the colour picker.
  *
  * The host is a plain fragment because the window is a fixed sheet that lays its own
  * children out; it does not need a wrapper of its own to escape a spacing rhythm.
@@ -33,8 +27,6 @@ interface ReaderAyahMarksProps {
 export function ReaderAyahMarks({
   bookmarked,
   onToggleBookmark,
-  highlightColor,
-  onPickColor,
   note,
   onSaveNote,
 }: ReaderAyahMarksProps) {
@@ -66,41 +58,6 @@ export function ReaderAyahMarks({
         <BookMarked size={16} aria-hidden="true" />
         <span>{bookmarked ? 'إزالة من المحفوظات' : 'حفظ الآية'}</span>
       </button>
-
-      {/* Highlight — the colour a kept ayah wears. Choosing one keeps the ayah if it
-          was not already kept, and choosing the active colour again (or «بلا لون»)
-          drops back to the plain bookmark wash without losing the mark. */}
-      <div>
-        <p className="mb-1.5 text-xs font-semibold text-primary-700 dark:text-gold-300">تمييز بلون</p>
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="لون التمييز">
-          {HIGHLIGHT_COLORS.map((c) => {
-            const active = highlightColor === c.id;
-            return (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => onPickColor(active ? null : c.id)}
-                aria-pressed={active}
-                aria-label={`تمييز بلون ${c.labelAr}`}
-                title={c.labelAr}
-                className={`h-8 w-8 rounded-full border-2 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${
-                  active
-                    ? 'scale-110 border-primary-700 dark:border-gold-300'
-                    : 'border-white/70 dark:border-black/40'
-                }`}
-                style={{ background: c.swatch }}
-              />
-            );
-          })}
-          <button
-            type="button"
-            onClick={() => onPickColor(null)}
-            className="min-h-8 rounded-full border border-primary-200 px-3 text-xs font-bold text-primary-700 transition-colors hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:border-primary-700 dark:text-primary-100 dark:hover:bg-primary-800/50"
-          >
-            بلا لون
-          </button>
-        </div>
-      </div>
 
       {/* Note — the reason for the mark, kept with it. Saving is explicit so a
           half-typed thought is never stored, and an emptied field clears whatever

@@ -51,10 +51,19 @@ interface MushafReaderProps {
   onClose: () => void;
   /** Reported on every turn, so the caller can reopen the reader where it was left. */
   onPageChange?: (page: number) => void;
+  ayahHighlights: ReadonlyMap<string, string>;
+  onPickAyahHighlight: (surahId: number, ayahNumber: number, colorId: string | null) => void;
 }
 
 
-export function MushafReader({ settings, initialPage = 1, onClose, onPageChange }: MushafReaderProps) {
+export function MushafReader({
+  settings,
+  initialPage = 1,
+  onClose,
+  onPageChange,
+  ayahHighlights,
+  onPickAyahHighlight,
+}: MushafReaderProps) {
   const totalPages = getTotalPages();
   const startPage = Math.min(totalPages, Math.max(1, Math.round(initialPage) || 1));
 
@@ -900,6 +909,7 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
                 onAyahPress={handleAyahPress}
                 onWordPress={handleWordPress}
                 activeAyah={activeReadingAyah}
+                ayahHighlights={ayahHighlights}
               />
             ))}
           </div>
@@ -922,6 +932,7 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
               onAyahPress={handleAyahPress}
               onWordPress={handleWordPress}
               activeAyah={activeReadingAyah}
+              ayahHighlights={ayahHighlights}
             />
           </div>
         )}
@@ -1008,6 +1019,10 @@ export function MushafReader({ settings, initialPage = 1, onClose, onPageChange 
         setVoicePlaying={setVoicePlaying}
         handleVoiceTime={handleVoiceTime}
         handleVoiceEnded={handleVoiceEnded}
+        highlightColor={ayahChoice ? ayahHighlights.get(`${ayahChoice.surahId}:${ayahChoice.ayahNumber}`) : undefined}
+        onPickHighlightColor={(colorId) => {
+          if (ayahChoice) onPickAyahHighlight(ayahChoice.surahId, ayahChoice.ayahNumber, colorId);
+        }}
       />
 
       {/* Rendered last so it stacks over the reader's own sheets. */}
@@ -1043,6 +1058,7 @@ interface MushafLeafProps {
     hasMeaning: boolean,
   ) => void;
   activeAyah: { surahId: number; ayahNumber: number } | null;
+  ayahHighlights: ReadonlyMap<string, string>;
 }
 
 /**

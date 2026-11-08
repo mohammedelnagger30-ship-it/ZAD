@@ -4,6 +4,7 @@ import { getSurah, getSurahsForPage, getJuzForPage, toArabicNumber } from '@/dat
 import { getHizbForPage, SAJDAH_AYAHS } from '@/data/mushafPages';
 import { getAyahs } from '@/data/quranText';
 import { splitBasmala } from '@/utils/basmala';
+import { highlightWash } from '@/utils/quran/ayahHighlights';
 import { getSurahWordMeanings } from '@/utils/quran/wordMeaningsService';
 import { loadBundledMeaningIndex, type WordMeaningIndex } from '@/utils/quran/wordMeaningIndex';
 import { isDarkPaper, type MushafPaper } from '@/components/mushaf/readerConfig';
@@ -96,6 +97,8 @@ export interface MushafPageProps {
   ) => void;
   /** The ayah currently selected in the reader, so the page can highlight it. */
   activeAyah?: { surahId: number; ayahNumber: number } | null;
+  /** Saved highlight ids keyed by `surahId:ayahNumber`. */
+  ayahHighlights?: ReadonlyMap<string, string>;
 }
 
 /** An eight-pointed illuminated rosette used to finish the page-frame corners. */
@@ -139,6 +142,7 @@ export function MushafPage({
   onAyahPress,
   onWordPress,
   activeAyah,
+  ayahHighlights,
 }: MushafPageProps) {
   const juz = getJuzForPage(page);
   const hizb = getHizbForPage(page);
@@ -339,15 +343,17 @@ export function MushafPage({
             {segment.ayahs.map((ayah) => {
               const isActive =
                 activeAyah?.surahId === ayah.surahId && activeAyah?.ayahNumber === ayah.ayahNumber;
-              // The last word carries the medallion inside one unbreakable tail, so the
-              // two are always cut from the line together.
+              const highlightColor = ayahHighlights?.get(`${ayah.surahId}:${ayah.ayahNumber}`);
+              const highlight = highlightWash(highlightColor);
+              const ayahStyle = highlight
+                ? { background: `linear-gradient(to bottom, transparent 24%, ${highlight} 24%)` }
+                : isActive
+                  ? { background: 'linear-gradient(to bottom, transparent 24%, var(--wash) 24%)' }
+                  : undefined;
               const words = ayah.text.split(' ');
               return (
                 <span key={`${ayah.surahId}:${ayah.ayahNumber}`}>
-                  <span
-                    className="mushaf-ayah"
-                    style={isActive ? { background: 'var(--wash)' } : undefined}
-                  >
+                  <span className="mushaf-ayah" style={ayahStyle}>
                     {words.slice(0, -1).map((word, index) => (
                       <span key={index}>
                         <MushafWordButton
