@@ -134,7 +134,7 @@ export function MushafPage({
   paper,
   night = false,
   lineHeight = 1.9,
-  letterSpacing = 0,
+  letterSpacing = 0.01,
   wordSpacing = 0,
   wordMeaningsInstalled = false,
   onAyahPress,
