@@ -84,22 +84,6 @@ export function OptionsSheet({ open, onClose, panelRef, prefs, updatePrefs, onOr
         <div className="mushaf-fields">
           <label className="mushaf-field">
             <span className="mushaf-field__label">
-              حجم الخط
-              <span className="mushaf-field__value">{toArabicNumber(Math.round(prefs.readingScale * 100))}%</span>
-            </span>
-            <input
-              className="mushaf-range"
-              type="range"
-              min={0.85}
-              max={1.35}
-              step={0.05}
-              value={prefs.readingScale}
-              onChange={(event) => updatePrefs({ readingScale: Number(event.target.value) })}
-            />
-          </label>
-
-          <label className="mushaf-field">
-            <span className="mushaf-field__label">
               تباعد السطور
               <span className="mushaf-field__value">{toArabicNumber(Math.round(prefs.lineSpacing * 100))}%</span>
             </span>

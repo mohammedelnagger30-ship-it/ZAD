@@ -1424,7 +1424,6 @@ html.dark body {
    * survive justification (justification otherwise cancels `word-spacing` exactly).
    */
   width: calc(var(--mushaf-column, 18.08em) + var(--word-extra, 0em));
-  max-width: 100%;
   margin-inline: auto;
   text-align: justify;
   text-justify: inter-word;
