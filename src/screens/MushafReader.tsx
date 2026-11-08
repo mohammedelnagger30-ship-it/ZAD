@@ -11,6 +11,9 @@ import { WordAnalysisSheet, type SelectedQuranWord } from '@/components/mushaf/W
 import { useAyahVoice } from '@/hooks/useAyahVoice';
 import { useViewportStep, useViewportWidth } from '@/hooks/useViewportStep';
 import {
+  ZOOM_STEP,
+  ZOOM_MIN,
+  ZOOM_MAX,
   PAGE_KEYBOARD_STEP,
   SWIPE_DISTANCE,
   PREFS_KEY,
@@ -377,6 +380,9 @@ export function MushafReader({
       return next;
     });
   }, []);
+
+  const zoomIn = useCallback(() => updatePrefs({ zoom: clampNumber(prefs.zoom + ZOOM_STEP, ZOOM_MIN, ZOOM_MAX, 1) }), [prefs.zoom, updatePrefs]);
+  const zoomOut = useCallback(() => updatePrefs({ zoom: clampNumber(prefs.zoom - ZOOM_STEP, ZOOM_MIN, ZOOM_MAX, 1) }), [prefs.zoom, updatePrefs]);
 
   /**
    * Swap between the stack and the single sheet. The stack has to open around the
@@ -803,6 +809,7 @@ export function MushafReader({
   // everything the books have to say stays behind the tap.
 
   const isBookmarked = bookmarkedPages.has(currentPage);
+  const zoomPercent = Math.round(prefs.zoom * 100);
   // The reader's own size keeps the reader's zoom and reading scale multiplying it exactly
   // as before; the viewport only lifts the base a step on a wider sheet, so a tablet reads
   // at a tablet size while the reader's saved size stays the size the reader asked for.
@@ -812,12 +819,16 @@ export function MushafReader({
   // never overflows the page. Zoom and a free font-size knob would break that, so the
   // mushaf stays at its designed size (responsive to the screen, not to a zoom gesture).
   const pageMeasureEm = COLUMN_EM + Math.max(0, prefs.wordSpacing) * MAX_LINE_WORD_GAPS;
+  const zoomCap = mushafTextColumnWidth(viewportWidth) / pageMeasureEm;
   const effectiveFontSize = Math.round(
     Math.min(
-      settings.fontSize * viewportStep,
-      mushafTextColumnWidth(viewportWidth) / pageMeasureEm,
+      settings.fontSize * viewportStep * prefs.zoom * prefs.readingScale,
+      zoomCap,
     ) * 100,
   ) / 100;
+  // Zoom in is only useful while the column still fits the sheet; once it is capped,
+  // further steps change nothing, so the button is disabled instead of looking broken.
+  const canZoomIn = effectiveFontSize < zoomCap - 0.5;
   const paper = prefs.paper;
   const nightPaper = isDarkPaper(paper);
   /** The ayah under discussion, held on the page while either of its sheets is open. */
@@ -960,6 +971,12 @@ export function MushafReader({
         openJumpSheet={openJumpSheet}
         sheet={sheet}
         setSheet={setSheet}
+        zoomOut={zoomOut}
+        zoomIn={zoomIn}
+        zoomPercent={zoomPercent}
+        zoomInDisabled={!canZoomIn}
+        zoomOutDisabled={prefs.zoom <= ZOOM_MIN}
+        prefs={prefs}
       />
 
       {/* ── Jump sheet ─────────────────────────────────────────────────── */}
