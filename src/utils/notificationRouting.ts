@@ -1,5 +1,4 @@
 import { JUZ_INFO, getSurah, TOTAL_QURAN_PAGES } from '@/data/surahs';
-import { ADHKAR_CATEGORIES } from '@/data/adhkar';
 import { SUNNAH_CATEGORIES } from '@/data/sunnah';
 import { PROPHET_SECTIONS } from '@/data/prophetData';
 import { RAWATIB_TYPES } from '@/utils/prayer/prayerTracker';
@@ -9,6 +8,29 @@ export interface NotificationDestination {
   screen: ScreenName;
   params: NavParams;
 }
+
+const ADHKAR_CATEGORY_IDS = new Set([
+  'morning',
+  'evening',
+  'after_prayer',
+  'sleep',
+  'wakeup',
+  'general_adhkar',
+  'wudu',
+  'clothing',
+  'bathroom',
+  'illness',
+  'distress',
+  'sneezing',
+  'mosque',
+  'food',
+  'home',
+  'travel',
+  'deceased',
+  'general_duas',
+  'quranic_duas',
+  'friday',
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -81,11 +103,8 @@ function getDhikrDestination(value: Record<string, unknown>): NotificationDestin
 
   const params: Record<string, unknown> = {};
   const categoryId = stringField(value, 'categoryId');
-  const category = categoryId
-    ? ADHKAR_CATEGORIES.find((candidate) => candidate.id === categoryId)
-    : undefined;
-  if (category) {
-    params.categoryId = category.id;
+  if (categoryId && ADHKAR_CATEGORY_IDS.has(categoryId)) {
+    params.categoryId = categoryId;
   } else if (value.category === 'morning' || value.category === 'evening') {
     // An older notification that only names the kind of reminder.
     params.categoryId = value.category;

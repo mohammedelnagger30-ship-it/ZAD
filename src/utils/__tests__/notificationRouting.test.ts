@@ -180,6 +180,16 @@ describe('getNotificationDestination', () => {
     });
   });
 
+  it('ignores unknown dhikr collections', () => {
+    expect(getNotificationDestination({
+      type: 'dhikr',
+      categoryId: 'not-a-collection',
+    })).toEqual({
+      screen: 'adhkar',
+      params: {},
+    });
+  });
+
   it('opens a spaced-repetition notification directly in its range quiz', () => {
     expect(getNotificationDestination({
       type: 'hifz-review',

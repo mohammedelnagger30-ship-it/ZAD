@@ -32,7 +32,7 @@ export default defineConfig(({ mode }) => {
       // on the first launch. The app registers the worker itself — on the web only —
       // and clears any leftover one on native (see src/main.tsx).
       injectRegister: null,
-      includeAssets: ['icon.svg', 'icons/*.png'],
+      includeAssets: ['icons/*.png'],
       manifest: {
         name: 'قُرّة',
         short_name: 'قُرّة',
@@ -76,7 +76,7 @@ export default defineConfig(({ mode }) => {
         // less and an unchanged file is not re-fetched on the next release —
         // workbox carries an unchanged precached entry over, but only if it is
         // precached in the first place.
-        globIgnores: ['**/quranText-*.js', '**/hadith/*.json'],
+        globIgnores: ['**/icon.svg', '**/quranText-*.js', '**/hadith/*.json'],
         // vite-plugin-pwa marks everything under assets/ as cache-bust-free, i.e. its URL
         // is taken as proof of its content — so a stylesheet rewritten under an unchanged
         // URL would never be re-fetched, and the old bytes would outlive the fix. A regex

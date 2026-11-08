@@ -1112,7 +1112,7 @@ function AppContent({
 function ScreenLoading() {
   return (
     <div className="flex min-h-24 items-center justify-center gap-2" role="status" aria-label="جارٍ التحميل">
-      <img src="/icon.svg" alt="" className="h-10 w-10 animate-pulse-soft rounded-xl" />
+      <img src="/icons/icon-192.png" alt="" className="h-8 w-8 rounded-lg" />
       <span className="text-xs text-primary-600 dark:text-primary-300">جارٍ التحميل...</span>
     </div>
   );

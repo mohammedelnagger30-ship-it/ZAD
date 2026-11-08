@@ -15,7 +15,7 @@ export function BottomNav({ current, onNavigate }: BottomNavProps) {
     <>
     <nav
       aria-label="التنقل الرئيسي"
-      className="fixed bottom-2.5 left-1/2 z-50 w-[calc(100%-1.5rem)] max-w-lg -translate-x-1/2 rounded-2xl border border-primary-200/80 bg-panel/92 shadow-[0_12px_36px_-12px_var(--brand-glow)] backdrop-blur-xl dark:border-primary-800/80 dark:bg-raised/92 safe-bottom md:hidden"
+      className="fixed bottom-2.5 left-1/2 z-50 w-[calc(100%-1.5rem)] max-w-lg -translate-x-1/2 rounded-2xl border border-primary-200/80 bg-panel shadow-md dark:border-primary-800/80 dark:bg-raised safe-bottom md:hidden"
     >
       <div className="flex items-center justify-around gap-1 px-2 pt-1.5 pb-1">
         {MAIN_TAB_SCREENS.map((screen) => {
@@ -61,7 +61,7 @@ export function BottomNav({ current, onNavigate }: BottomNavProps) {
     </nav>
     <nav
       aria-label="التنقل الرئيسي"
-      className="fixed inset-y-0 right-0 z-50 hidden w-[5.25rem] flex-col items-center overflow-y-auto border-l border-primary-100/80 bg-panel/90 py-5 shadow-xs backdrop-blur-xl dark:border-primary-800/50 dark:bg-raised/90 md:flex lg:w-24 xl:w-32"
+      className="fixed inset-y-0 right-0 z-50 hidden w-[5.25rem] flex-col items-center overflow-y-auto border-l border-primary-100/80 bg-panel py-5 shadow-xs dark:border-primary-800/50 dark:bg-raised md:flex lg:w-24 xl:w-32"
       style={{ boxShadow: '0 4px 20px var(--brand-glow)' }}
     >
       <div

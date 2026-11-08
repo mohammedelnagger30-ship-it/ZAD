@@ -804,7 +804,7 @@ function drawReference(
   context.fillStyle = PARCHMENT_DIM;
   context.globalAlpha = 0.75;
   context.font = `600 30px ${UI_FONT}`;
-  context.fillText('قُرّة · رفيق وردك اليومي', centerX, APP_NAME_BASELINE);
+  context.fillText('قُرّة', centerX, APP_NAME_BASELINE);
   context.restore();
 }
 
@@ -828,7 +828,7 @@ function drawContentReference(
   context.fillStyle = PARCHMENT_DIM;
   context.globalAlpha = 0.75;
   context.font = `600 30px ${UI_FONT}`;
-  context.fillText('قُرّة · رفيق وردك اليومي', centerX, appNameBaseline);
+  context.fillText('قُرّة', centerX, appNameBaseline);
   context.restore();
 }
 

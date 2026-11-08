@@ -170,4 +170,68 @@ describe('AdminScreen', () => {
     button?.click();
     expect(openApp).toHaveBeenCalledTimes(1);
   });
+
+  it('renders navigation tabs and switches views', async () => {
+    await render();
+
+    expect(text()).toContain('لوحة التحكم الشاملة');
+    expect(text()).toContain('التحليلات والمؤشرات');
+    expect(text()).toContain('دليل المستخدمين');
+    expect(text()).toContain('صحة النظام والمزامنة');
+    expect(text()).toContain('أدوات المشرف');
+
+    // Switch to system health tab
+    const systemTab = Array.from(container.querySelectorAll('button[role="tab"]')).find((b) =>
+      b.textContent?.includes('صحة النظام والمزامنة'),
+    );
+    expect(systemTab).toBeDefined();
+    await act(async () => {
+      (systemTab as HTMLElement)?.click();
+    });
+
+    expect(text()).toContain('صحة المنظومة والمزامنة');
+    expect(text()).toContain('جداول المزامنة السحابية النشطة');
+    expect(text()).toContain('settings');
+    expect(text()).toContain('hifzProgress');
+  });
+
+  it('opens user details modal when a user row is clicked and closes it', async () => {
+    await render();
+
+    const userRow = Array.from(container.querySelectorAll('li')).find((row) =>
+      row.textContent?.includes('reader@example.com'),
+    );
+    expect(userRow).toBeDefined();
+
+    await act(async () => {
+      (userRow as HTMLElement)?.click();
+    });
+
+    expect(text()).toContain('تفاصيل الحساب');
+    expect(text()).toContain('معلومات الحساب المسجل في المنظومة');
+    expect(text()).toContain('user-1');
+
+    // Close modal
+    const closeBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.trim() === 'إغلاق',
+    );
+    expect(closeBtn).toBeDefined();
+    await act(async () => {
+      closeBtn?.click();
+    });
+
+    expect(text()).not.toContain('معلومات الحساب المسجل في المنظومة');
+  });
+
+  it('provides CSV export button and auto-refresh selector', async () => {
+    await render();
+
+    const exportBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('تصدير CSV'),
+    );
+    expect(exportBtn).toBeDefined();
+
+    const autoRefreshSelect = container.querySelector('#auto-refresh-select');
+    expect(autoRefreshSelect).not.toBeNull();
+  });
 });

@@ -11,7 +11,7 @@ import {
 } from '@/utils/prayer/prayerTimes';
 import { deviceClockDriftMs, toDeviceClock, trustedNow, trustedNowMs } from '@/utils/clock';
 import { describePortion, generateDailyTasks, getTodayTasks } from '@/utils/taskManager';
-import { getDailyQuranMessage, type DailyMessageStorage } from '@/utils/quran/dailyQuranMessage';
+import type { DailyMessageStorage } from '@/utils/quran/dailyQuranMessage';
 import { SUNNAH_CATEGORIES, type SunnahItem } from '@/data/sunnah';
 import { PROPHET_SECTIONS, type ProphetEntry } from '@/data/prophetData';
 import { assembleNotificationQueue, dhikrFillerBudget } from '@/utils/notificationQueue';
@@ -33,7 +33,7 @@ import {
   getNotificationVoice,
   usableNotificationVoice,
 } from '@/data/notificationSounds';
-import { ADHKAR_CATEGORIES, ISTIGHFAR_DHIKR, type Dhikr } from '@/data/adhkar';
+import type { Dhikr } from '@/data/adhkar';
 import {
   cancelAllNotifications,
   canScheduleExactAlarms,
@@ -243,9 +243,17 @@ export function getDhikrReminderCategory(
  * uses its dedicated set rather than the generic fallback; يوم الجمعة resolves like
  * every other collection, straight from its own page.
  */
-function dhikrPool(category: DhikrReminderCategory): { items: Dhikr[]; categoryId: string } {
-  if (category === 'istighfar') return { items: ISTIGHFAR_DHIKR, categoryId: 'istighfar' };
-  const cat = ADHKAR_CATEGORIES.find((candidate) => candidate.id === category && candidate.items.length > 0);
+type AdhkarCatalog = Pick<
+  typeof import('@/data/adhkar'),
+  'ADHKAR_CATEGORIES' | 'ISTIGHFAR_DHIKR'
+>;
+
+function dhikrPool(
+  category: DhikrReminderCategory,
+  catalog: AdhkarCatalog,
+): { items: Dhikr[]; categoryId: string } {
+  if (category === 'istighfar') return { items: catalog.ISTIGHFAR_DHIKR, categoryId: 'istighfar' };
+  const cat = catalog.ADHKAR_CATEGORIES.find((candidate) => candidate.id === category && candidate.items.length > 0);
   if (cat) return { items: cat.items, categoryId: cat.id };
   return {
     items: [{ id: 'fallback', text: 'سُبْحَانَ اللَّهِ وَبِحَمْدِهِ', count: 1, reference: 'ذكر عام' }],
@@ -295,7 +303,7 @@ function shuffled<T>(items: readonly T[], seed: number): T[] {
  * date, so rescheduling the queue — which happens on every open — does not reshuffle what
  * a slot already shows.
  */
-export function createDhikrRotation(): (
+export function createDhikrRotation(catalog: AdhkarCatalog): (
   category: DhikrReminderCategory,
   at: Date,
 ) => { dhikr: Dhikr; categoryId: string } {
@@ -307,7 +315,7 @@ export function createDhikrRotation(): (
     const day = `${at.getFullYear()}-${at.getMonth() + 1}-${at.getDate()}`;
     let rotation = rotations.get(category);
     if (!rotation || rotation.day !== day) {
-      const pool = dhikrPool(category);
+      const pool = dhikrPool(category, catalog);
       rotation = {
         day,
         order: shuffled(pool.items, seedFrom(`${category}:${day}`)),
@@ -399,12 +407,12 @@ function isShortDhikr(dhikr: Dhikr): boolean {
  * read from the same data the page shows, with the istighfar set — which has no page
  * of its own — keeping its dedicated wording.
  */
-function dhikrNotificationTitle(category: DhikrReminderCategory, categoryId: string): string {
+function dhikrNotificationTitle(category: DhikrReminderCategory, categoryId: string, catalog: AdhkarCatalog): string {
   if (category === 'istighfar') return 'تذكير بالاستغفار';
   // The Friday cards arrive on the day itself, so they carry the day's own name rather
   // than «تذكير — …»: the reader should see what Friday is for at a glance.
   if (category === 'friday') return 'أذكار يوم الجمعة';
-  const collection = ADHKAR_CATEGORIES.find((candidate) => candidate.id === categoryId);
+  const collection = catalog.ADHKAR_CATEGORIES.find((candidate) => candidate.id === categoryId);
   return collection ? `تذكير — ${collection.title}` : 'تذكير بذكر';
 }
 
@@ -414,6 +422,7 @@ function dhikrNotificationTitle(category: DhikrReminderCategory, categoryId: str
  * Long dhikr: excerpt in body, full text in largeBody with "…", tap opens that dhikr in app.
  */
 function buildDhikrNotification(
+  catalog: AdhkarCatalog,
   dhikr: Dhikr,
   category: DhikrReminderCategory,
   slot: number,
@@ -425,7 +434,7 @@ function buildDhikrNotification(
   const notificationIdValue = notificationId.dhikr(dayOffset * 1000 + slot);
   const base = {
     id: notificationIdValue,
-    title: dhikrNotificationTitle(category, categoryId),
+    title: dhikrNotificationTitle(category, categoryId, catalog),
     channelId: 'azkar',
     schedule: { at: new Date(), allowWhileIdle: true }, // placeholder, set by caller
     sound: reminderSound,
@@ -1267,6 +1276,7 @@ async function rebuildNotifications(): Promise<void> {
       const quranTime = armContent(contentTimes.quran, CONTENT_STEP_MINUTES, 0);
       if (quranTime > queueNow && claim()) {
         try {
+          const { getDailyQuranMessage } = await import('@/utils/quran/dailyQuranMessage');
           const message = getDailyQuranMessage(
             dayDate,
             dayOffset === 0 ? undefined : ephemeralStorage,
@@ -1342,11 +1352,15 @@ async function rebuildNotifications(): Promise<void> {
   // ليست جزءاً من العجلة أدناه: الاختيار هنا يعتمد على الساعة واليوم، فقارئ ثبّت
   // «أذكار الصباح» لن يرى ذكر جمعة أبداً، وطابور بُني يوم الثلاثاء لا يحمل شيئاً
   // ليوم الجمعة. فلأذكار الجمعة بطاقاتها، تُدار بدورانها الخاص، وتصل يوم الجمعة.
-  if (settings.randomDhikrEnabled) {
-    const nextFridayDhikr = createDhikrRotation();
+  const adhkarCatalog = settings.randomDhikrEnabled
+    ? await import('@/data/adhkar')
+    : null;
+  if (adhkarCatalog) {
+    const nextFridayDhikr = createDhikrRotation(adhkarCatalog);
     for (const { at, dayOffset, slot } of fridayDhikrSlots(trustedNow())) {
       const { dhikr, categoryId } = nextFridayDhikr('friday', at);
       const notif = buildDhikrNotification(
+        adhkarCatalog,
         dhikr,
         'friday',
         FRIDAY_DHIKR_ID_SLOT_BASE + dayOffset * 100 + slot,
@@ -1365,7 +1379,7 @@ async function rebuildNotifications(): Promise<void> {
   //    so a full queue drops tomorrow's dhikr rather than a prayer or a task. The
   //    fallbacks claim nothing here: they are conditional on the takeover failing,
   //    and assembly ranks them first when it does — see dhikrFillerBudget.
-  if (settings.randomDhikrEnabled) {
+  if (adhkarCatalog) {
     const startMinute = timeToMinutes(settings.randomDhikrStartTime);
     const endMinute = timeToMinutes(settings.randomDhikrEndTime);
     const interval = settings.randomDhikrIntervalMinutes;
@@ -1379,7 +1393,7 @@ async function rebuildNotifications(): Promise<void> {
     } else {
       const duration = (endMinute - startMinute + 1440) % 1440;
       const now = trustedNow();
-      const nextDhikr = createDhikrRotation();
+      const nextDhikr = createDhikrRotation(adhkarCatalog);
       const budget = dhikrFillerBudget(
         {
           taskReminders,
@@ -1411,7 +1425,15 @@ async function rebuildNotifications(): Promise<void> {
             if (at <= now) continue;
             const category = getDhikrReminderCategory(settings.randomDhikrCategory, at, slot);
             const { dhikr, categoryId } = nextDhikr(category, at);
-            const notif = buildDhikrNotification(dhikr, category, slot, dayOffset, reminderSound, categoryId);
+            const notif = buildDhikrNotification(
+              adhkarCatalog,
+              dhikr,
+              category,
+              slot,
+              dayOffset,
+              reminderSound,
+              categoryId,
+            );
             notif.schedule = { at: armedAt(at), allowWhileIdle: true };
             dhikrFiller.push(notif);
             armed += 1;

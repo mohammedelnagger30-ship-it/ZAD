@@ -500,45 +500,31 @@ export function AzanOverlayModal({
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-start md:items-center justify-center overflow-y-auto p-3 sm:p-4 py-4 sm:py-6 min-h-full transition-all duration-300"
+      className="fixed inset-0 z-[9999] flex items-start md:items-center justify-center overflow-y-auto bg-black/90 p-3 py-4 backdrop-blur-sm transition-all duration-300 sm:p-4 sm:py-6"
       dir="rtl"
       role="dialog"
       aria-modal="true"
       data-color-palette={colorPalette}
       data-theme-mode={themeMode}
-      style={{
-        background: `radial-gradient(ellipse at top, ${primary}66 0%, ${primary}33 45%, #020a07 100%)`,
-      }}
+      style={{ backgroundColor: 'rgba(2, 8, 6, 0.94)' }}
     >
-      {/* Background Decorative Ambient Glows */}
-      <div
-        className="pointer-events-none absolute -top-40 right-1/2 h-[420px] w-[420px] -translate-x-1/2 rounded-full blur-[140px]"
-        style={{ backgroundColor: `${primary}40` }}
-      />
-      <div
-        className="pointer-events-none absolute -bottom-40 left-1/2 h-[380px] w-[380px] -translate-x-1/2 rounded-full blur-[140px]"
-        style={{ backgroundColor: `${accent}1f` }}
-      />
-
       {/* Main Container Card */}
       <div
-        className="relative w-full max-w-md sm:max-w-lg md:max-w-xl lg:max-w-lg xl:max-w-md overflow-hidden rounded-2xl sm:rounded-3xl border p-4 sm:p-6 text-white shadow-[0_40px_90px_-40px_rgba(0,0,0,0.8)] ring-1 ring-white/5 my-auto"
+        className="relative my-auto w-full max-w-md overflow-hidden rounded-3xl border p-4 text-white shadow-[0_32px_80px_-28px_rgba(0,0,0,0.9)] ring-1 ring-white/10 sm:p-6"
         style={{
-          borderColor: `${primary}40`,
-          background: `linear-gradient(180deg, ${primary}44 0%, rgba(6, 12, 9, 0.99) 55%, rgba(3, 8, 6, 1) 100%)`,
+          borderColor: `${primary}99`,
+          background: 'linear-gradient(160deg, #10251b 0%, #0a1711 42%, #07100c 100%)',
         }}
       >
         {/* Top Header Bar */}
         <div
-          className="flex items-center justify-between pb-4 border-b"
-          style={{ borderColor: `${primary}33` }}
+          className="flex items-center justify-between border-b border-white/10 pb-4"
         >
-          <div className="flex items-center gap-2">
-            <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: primary }}></span>
-              <span className="relative inline-flex rounded-full h-3 w-3" style={{ backgroundColor: primary }}></span>
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/10" style={{ color: accent }}>
+              <Bell size={16} />
             </span>
-            <span className="text-xs font-semibold tracking-wide" style={{ color: primary }}>
+            <span className="text-xs font-bold tracking-wide text-slate-200">
               {isTest
                 ? 'اختبار الأذان — تحقّق من وصول الصوت'
                 : isPreview
@@ -558,9 +544,9 @@ export function AzanOverlayModal({
         </div>
 
         {/* Center Visual Circle & Sound Wave */}
-        <div className="my-6 text-center">
+        <div className="my-5 rounded-2xl border border-white/10 p-4 text-center sm:p-5" style={{ backgroundColor: '#0d1c14' }}>
           <div
-            className="relative mx-auto flex h-28 w-28 items-center justify-center rounded-full p-1 shadow-lg"
+            className="relative mx-auto flex h-24 w-24 items-center justify-center rounded-full p-1 shadow-lg"
             style={{
               backgroundImage: `linear-gradient(135deg, ${primary} 0%, ${accent} 100%)`,
               boxShadow: `0 25px 60px -30px ${primary}80`,
@@ -572,35 +558,35 @@ export function AzanOverlayModal({
                 <div className="absolute -inset-2 animate-pulse rounded-full border" style={{ borderColor: `${accent}55` }} />
               </>
             )}
-            <div className="flex h-full w-full items-center justify-center rounded-full bg-slate-950/80 backdrop-blur-xs">
+            <div className="flex h-full w-full items-center justify-center rounded-full bg-[#07100c]">
               <Sparkles size={44} className="animate-pulse" style={{ color: accent }} />
             </div>
           </div>
 
           {/* Prayer Title & Time */}
-          <h2 className="mt-4 text-3xl font-extrabold text-white tracking-wide">
+          <h2 className="mt-4 text-2xl font-extrabold tracking-wide text-white sm:text-3xl">
             صلاة {displayName}
           </h2>
-          <p className="mt-1 text-2xl font-bold flex items-center justify-center gap-2" style={{ color: accent }}>
+          <p className="mt-1 flex items-center justify-center gap-2 text-2xl font-bold" style={{ color: accent }}>
             <Clock size={20} style={{ color: accent }} />
             {displayTime}
           </p>
           {iqamahTime && (
-            <p className="mt-1.5 flex items-center justify-center gap-2 text-sm font-semibold" style={{ color: primary }}>
+            <p className="mt-1.5 flex items-center justify-center gap-2 text-sm font-semibold text-slate-200">
               <Clock size={15} style={{ color: primary }} />
               الإقامة {iqamahTime}
             </p>
           )}
 
           {/* Location & Date */}
-          <div className="mt-3 flex flex-wrap items-center justify-center gap-3 text-xs text-slate-300">
-            <span className="flex items-center gap-1">
-              <MapPin size={14} style={{ color: primary }} />
-              {settings.cityName || 'الموقع الحالي'}
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 border-t border-white/10 pt-3 text-xs text-slate-300">
+            <span className="flex items-center gap-1.5">
+              <MapPin size={14} style={{ color: accent }} />
+              <span>{settings.cityName || 'الموقع الحالي'}</span>
             </span>
-            <span>•</span>
+            <span className="hidden text-slate-600 sm:inline">•</span>
             <span>{formatArabicDate(today)}</span>
-            <span>•</span>
+            <span className="hidden text-slate-600 sm:inline">•</span>
             <span>{getHijriDate(today, settings.hijriAdjustment)}</span>
           </div>
         </div>
@@ -608,10 +594,9 @@ export function AzanOverlayModal({
         {/* Adhan/Iqamah sound — starts by itself with the page, no button to hunt for */}
         {soundEnabled && (
           <div
-            className="mb-6 rounded-2xl border p-3.5"
+            className="mb-4 rounded-2xl border border-white/10 p-3.5"
             style={{
-              borderColor: `${primary}33`,
-              backgroundColor: `${primary}14`,
+              backgroundColor: '#102019',
             }}
           >
             <div className="flex items-center justify-between gap-3">
@@ -638,7 +623,7 @@ export function AzanOverlayModal({
                 )}
                 <div className="truncate text-right">
                   <p className="text-xs font-semibold text-white truncate">{adhanSound.name}</p>
-                  <p className="text-[0.6875rem]" style={{ color: primary }}>{soundStatus}</p>
+                  <p className="text-[0.6875rem] text-slate-400">{soundStatus}</p>
                 </div>
               </div>
 
@@ -661,7 +646,7 @@ export function AzanOverlayModal({
                 <button
                   type="button"
                   onClick={toggleMute}
-                  className="rounded-lg min-h-11 min-w-11 p-2.5 text-slate-400 hover:text-white transition"
+                  className="min-h-11 min-w-11 rounded-lg p-2.5 text-slate-400 transition hover:bg-white/10 hover:text-white"
                   aria-label={isMuted ? 'إلغاء الكتم' : 'كتم الصوت'}
                 >
                   {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
@@ -674,10 +659,9 @@ export function AzanOverlayModal({
         {/* Supplication After Azan Card — only for adhan, not iqamah */}
         {(
           <div
-            className="mb-6 rounded-2xl border p-4"
+            className="mb-4 rounded-2xl border border-white/10 p-4"
             style={{
-              borderColor: `${accent}40`,
-              backgroundColor: `${accent}12`,
+              backgroundColor: '#171c12',
             }}
           >
             <div className="flex items-center justify-between mb-2">
@@ -688,7 +672,7 @@ export function AzanOverlayModal({
               <button
                 type="button"
                 onClick={() => setShowDuaa(!showDuaa)}
-                className="px-2 py-1 text-xs text-slate-400 underline hover:text-slate-200"
+                className="rounded-lg px-2.5 py-1.5 text-xs text-slate-300 underline-offset-2 transition hover:bg-white/10 hover:text-white hover:underline"
               >
                 {showDuaa ? 'إخفاء' : 'عرض'}
               </button>
@@ -696,8 +680,8 @@ export function AzanOverlayModal({
 
             {showDuaa && (
               <div className="space-y-2 text-right">
-                <p className="text-sm font-semibold leading-relaxed font-serif" style={{ color: '#f8fafc' }}>
-                  "{AFTER_AZAN_DUAA.text}"
+                <p className="font-serif text-sm font-semibold leading-loose text-slate-100">
+                  «{AFTER_AZAN_DUAA.text}»
                 </p>
                 <p className="text-[0.6875rem] italic" style={{ color: accent }}>
                   {AFTER_AZAN_DUAA.benefit}
@@ -719,7 +703,7 @@ export function AzanOverlayModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 py-3 px-4 font-bold text-sm text-slate-200 transition hover:bg-slate-800"
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-slate-800 py-3 px-4 text-sm font-bold text-slate-100 transition hover:bg-slate-700"
             >
               <X size={18} />
               إنهاء المعاينة
@@ -731,7 +715,7 @@ export function AzanOverlayModal({
             type="button"
             onClick={handleConfirmPrayer}
             disabled={confirmed}
-            className="flex w-full items-center justify-center gap-2 rounded-xl py-3 px-4 font-bold text-sm transition-all shadow-lg text-white"
+            className="flex w-full items-center justify-center gap-2 rounded-xl py-3 px-4 text-sm font-bold text-white shadow-lg transition-all"
             style={
               confirmed
                 ? { backgroundColor: primary }
@@ -751,10 +735,10 @@ export function AzanOverlayModal({
               type="button"
               onClick={handleSnooze}
               disabled={snoozed}
-              className="flex items-center justify-center gap-1.5 rounded-xl border py-2.5 md:py-3 px-3 text-xs md:text-sm font-semibold text-slate-200 transition"
+              className="flex items-center justify-center gap-1.5 rounded-xl border py-2.5 px-3 text-xs font-semibold text-slate-100 transition hover:bg-white/10 md:py-3 md:text-sm"
               style={{
-                borderColor: `${primary}40`,
-                backgroundColor: `${primary}1a`,
+                borderColor: `${primary}99`,
+                backgroundColor: '#102019',
               }}
             >
               <Bell size={15} style={{ color: accent }} />
@@ -769,10 +753,10 @@ export function AzanOverlayModal({
             <button
               type="button"
               onClick={handleGoToAdhkar}
-              className="flex items-center justify-center gap-1.5 rounded-xl border py-2.5 md:py-3 px-3 text-xs md:text-sm font-semibold text-slate-200 transition"
+              className="flex items-center justify-center gap-1.5 rounded-xl border py-2.5 px-3 text-xs font-semibold text-slate-100 transition hover:bg-white/10 md:py-3 md:text-sm"
               style={{
-                borderColor: `${primary}40`,
-                backgroundColor: `${primary}1a`,
+                borderColor: `${primary}99`,
+                backgroundColor: '#102019',
               }}
             >
               <BookOpen size={15} style={{ color: primary }} />

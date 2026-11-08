@@ -113,21 +113,24 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
   const messageDayKey = todayKey();
   useEffect(() => {
     let alive = true;
-    void (async () => {
-      try {
-        const { getDailyQuranMessage } = await import('@/utils/quran/dailyQuranMessage');
-        if (!alive) return;
-        setDailyQuranMessage(getDailyQuranMessage(trustedNow()));
-        setPreparedAyahCard(null);
-        setDailyQuranMessageError('');
-      } catch (error) {
-        if (!alive) return;
-        setDailyQuranMessage(null);
-        setDailyQuranMessageError(error instanceof Error ? error.message : 'تعذّر تحميل رسالة القرآن اليومية.');
-      }
-    })();
+    const timeout = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const { getDailyQuranMessage } = await import('@/utils/quran/dailyQuranMessage');
+          if (!alive) return;
+          setDailyQuranMessage(getDailyQuranMessage(trustedNow()));
+          setPreparedAyahCard(null);
+          setDailyQuranMessageError('');
+        } catch (error) {
+          if (!alive) return;
+          setDailyQuranMessage(null);
+          setDailyQuranMessageError(error instanceof Error ? error.message : 'تعذّر تحميل رسالة القرآن اليومية.');
+        }
+      })();
+    }, 350);
     return () => {
       alive = false;
+      window.clearTimeout(timeout);
     };
   }, [messageDayKey]);
 
@@ -573,50 +576,70 @@ export function HomeScreen({ settings, navigate }: HomeScreenProps) {
           fix lives in the system settings, and nobody opens those on a hint alone. */}
       <DeviceProtectionBanner />
 
-      {/* Quick Shortcuts */}
+            {/* Quick Shortcuts */}
       <div className="grid grid-cols-4 gap-2.5 md:gap-3">
+        {/* المصحف */}
         <button
           type="button"
           onClick={() => navigate('quran')}
-          className="group flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
+          className="group relative isolate flex flex-col items-center justify-center overflow-hidden rounded-2xl border border-primary-200/80 bg-gradient-to-br from-primary-50 via-white to-primary-100 p-3 text-primary-950 shadow-md shadow-primary-950/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary-400 hover:shadow-lg active:scale-95 dark:border-primary-700/70 dark:from-primary-900 dark:via-primary-950 dark:to-primary-900 dark:text-primary-50 dark:shadow-black/25 dark:hover:border-primary-500 md:p-5"
         >
-          <div className="h-11 w-11 md:h-12 md:w-12 rounded-2xl bg-primary-50 text-primary-700 flex items-center justify-center mb-1.5 ring-1 ring-primary-200/60 transition-transform duration-200 group-hover:scale-110 dark:bg-primary-900/40 dark:text-primary-200 dark:ring-primary-800/60">
-            <BookOpen size={21} />
+          <div
+            className="pointer-events-none absolute -left-3 -top-3 h-10 w-10 rounded-full bg-primary-500/15 blur-md dark:bg-primary-400/20"
+            aria-hidden="true"
+          />
+          <div className="relative z-10 mb-1.5 flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-700 to-primary-900 text-white shadow-sm ring-1 ring-white/80 transition-transform duration-200 group-hover:scale-110 dark:from-primary-500 dark:to-primary-700 dark:ring-white/15 md:h-12 md:w-12">
+            <BookOpen size={21} className="drop-shadow-xs" />
           </div>
-          <span className="text-xs md:text-sm font-bold text-primary-900 dark:text-primary-100">المصحف</span>
+          <span className="relative z-10 text-xs font-extrabold text-primary-950 dark:text-primary-50 md:text-sm">المصحف</span>
         </button>
 
+        {/* الصلاة */}
         <button
           type="button"
           onClick={() => navigate('prayer')}
-          className="group flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
+          className="group relative isolate flex flex-col items-center justify-center overflow-hidden rounded-2xl border border-teal-200/80 bg-gradient-to-br from-teal-50 via-white to-teal-100 p-3 text-teal-950 shadow-md shadow-teal-950/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-teal-400 hover:shadow-lg active:scale-95 dark:border-teal-800/70 dark:from-teal-950 dark:via-primary-950 dark:to-teal-950 dark:text-teal-50 dark:shadow-black/25 dark:hover:border-teal-600 md:p-5"
         >
-          <div className="h-11 w-11 md:h-12 md:w-12 rounded-2xl bg-accent-50 text-accent-700 flex items-center justify-center mb-1.5 ring-1 ring-accent-200/60 transition-transform duration-200 group-hover:scale-110 dark:bg-accent-900/30 dark:text-accent-200 dark:ring-accent-800/60">
-            <Moon size={21} />
+          <div
+            className="pointer-events-none absolute -left-3 -top-3 h-10 w-10 rounded-full bg-amber-400/25 blur-md"
+            aria-hidden="true"
+          />
+          <div className="relative z-10 mb-1.5 flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-primary-950 shadow-sm ring-1 ring-amber-200/80 transition-transform duration-200 group-hover:scale-110 dark:from-amber-300 dark:to-amber-500 dark:ring-amber-200/50 md:h-12 md:w-12">
+            <Moon size={21} className="drop-shadow-xs" />
           </div>
-          <span className="text-xs md:text-sm font-bold text-primary-900 dark:text-primary-100">الصلاة</span>
+          <span className="relative z-10 text-xs font-extrabold text-teal-950 dark:text-teal-50 md:text-sm">الصلاة</span>
         </button>
 
+        {/* الأذكار */}
         <button
           type="button"
           onClick={() => navigate('adhkar')}
-          className="group flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
+          className="group relative isolate flex flex-col items-center justify-center overflow-hidden rounded-2xl border border-amber-200/80 bg-gradient-to-br from-amber-50 via-white to-gold-100 p-3 text-primary-950 shadow-md shadow-amber-950/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-amber-400 hover:shadow-lg active:scale-95 dark:border-amber-800/70 dark:from-amber-950 dark:via-primary-950 dark:to-gold-950 dark:text-primary-50 dark:shadow-black/25 dark:hover:border-amber-600 md:p-5"
         >
-          <div className="h-11 w-11 md:h-12 md:w-12 rounded-2xl bg-gold-100 text-gold-700 flex items-center justify-center mb-1.5 ring-1 ring-gold-300/60 transition-transform duration-200 group-hover:scale-110 dark:bg-gold-900/30 dark:text-gold-200 dark:ring-gold-800/60">
-            <Heart size={21} />
+          <div
+            className="pointer-events-none absolute -left-3 -top-3 h-10 w-10 rounded-full bg-amber-400/20 blur-md"
+            aria-hidden="true"
+          />
+          <div className="relative z-10 mb-1.5 flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-600 to-amber-800 text-white shadow-sm ring-1 ring-amber-200/80 transition-transform duration-200 group-hover:scale-110 dark:from-amber-400 dark:to-amber-600 dark:text-primary-950 dark:ring-amber-200/50 md:h-12 md:w-12">
+            <Heart size={21} className="drop-shadow-xs" />
           </div>
-          <span className="text-xs md:text-sm font-bold text-primary-900 dark:text-primary-100">الأذكار</span>
+          <span className="relative z-10 text-xs font-extrabold text-primary-950 dark:text-primary-50 md:text-sm">الأذكار</span>
         </button>
 
+        {/* المسبحة */}
         <button
           type="button"
           onClick={() => navigate('tasbih')}
-          className="group flex flex-col items-center justify-center p-3 md:p-5 rounded-2xl bg-white dark:bg-primary-950/80 border border-primary-100 dark:border-primary-800/80 shadow-xs hover:border-primary-400 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
+          className="group relative isolate flex flex-col items-center justify-center overflow-hidden rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-teal-100 p-3 text-emerald-950 shadow-md shadow-emerald-950/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-400 hover:shadow-lg active:scale-95 dark:border-emerald-800/70 dark:from-emerald-950 dark:via-teal-950 dark:to-primary-950 dark:text-emerald-50 dark:shadow-black/25 dark:hover:border-emerald-600 md:p-5"
         >
-          <div className="h-11 w-11 md:h-12 md:w-12 rounded-2xl bg-primary-50 text-accent-700 flex items-center justify-center mb-1.5 ring-1 ring-primary-200/60 transition-transform duration-200 group-hover:scale-110 dark:bg-primary-900/40 dark:text-accent-200 dark:ring-primary-800/60">
-            <Repeat size={21} />
+          <div
+            className="pointer-events-none absolute -left-3 -top-3 h-10 w-10 rounded-full bg-emerald-400/20 blur-md"
+            aria-hidden="true"
+          />
+          <div className="relative z-10 mb-1.5 flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-700 to-teal-900 text-white shadow-sm ring-1 ring-emerald-100/80 transition-transform duration-200 group-hover:scale-110 dark:from-emerald-400 dark:to-teal-600 dark:text-primary-950 dark:ring-emerald-200/50 md:h-12 md:w-12">
+            <Repeat size={21} className="drop-shadow-xs" />
           </div>
-          <span className="text-xs md:text-sm font-bold text-primary-900 dark:text-primary-100">المسبحة</span>
+          <span className="relative z-10 text-xs font-extrabold text-emerald-950 dark:text-emerald-50 md:text-sm">المسبحة</span>
         </button>
       </div>
 
