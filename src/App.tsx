@@ -1,17 +1,25 @@
-import { lazy, Suspense, type ComponentType, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { CloudOff, X } from 'lucide-react';
 import { useSettings, useTheme, useNavigation } from '@/hooks/useApp';
 import { BottomNav } from '@/components/BottomNav';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { AuthScreen } from '@/components/AuthScreen';
+import { AuthScreen } from '@/screens/AuthScreen';
 import { generateDailyTasks, markMissedTasks } from '@/utils/taskManager';
 import { rescheduleAllNotifications } from '@/utils/notificationScheduler';
 import { dismissTopOverlay } from '@/utils/overlayRegistry';
 import { onClockChange, startClockService } from '@/utils/clock';
-import { clearLocalUserData, startCloudSync, synchronizeNow, type CloudSyncState } from '@/utils/cloudSync';
-import { isSupabaseConfigured, supabase } from '@/utils/supabaseClient';
+import {
+  clearLocalUserData,
+  startCloudSync,
+  synchronizeNow,
+  type CloudSyncState,
+  type SignOutOptions,
+  type SignOutResult,
+} from '@/utils/sync/cloudSync';
+import { isSupabaseConfigured, supabase } from '@/utils/sync/supabaseClient';
 import { trackAppOpen } from '@/utils/analytics';
 import { isAdminAccount } from '@/utils/adminStats';
+import { applySystemFontScale } from '@/utils/displayScale';
 import { useAppUpdate } from '@/hooks/useAppUpdate';
 import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
@@ -19,6 +27,9 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import type { Session } from '@supabase/supabase-js';
 import type { Settings } from '@/db/database';
 import { AzanOverlayModal } from '@/components/AzanOverlayModal';
+import { AudioPlayer } from '@/components/AudioPlayer';
+import { useRecitationVisible } from '@/hooks/useRecitation';
+import { useLecturePlayer } from '@/hooks/useLecturePlayer';
 import { useAzanTrigger } from '@/hooks/useAzanTrigger';
 import { useWirdWidget } from '@/hooks/useWirdWidget';
 import {
@@ -29,78 +40,36 @@ import {
   readLastDeviceTimeZone,
   writeLastDeviceTimeZone,
   TIME_ZONE_ADOPTION_EVENT,
-} from '@/utils/timeZoneTravel';
-import { initAutoBackup } from '@/utils/autoBackup';
-import { isEgyptianLocation } from '@/utils/prayerTimes';
+} from '@/utils/prayer/timeZoneTravel';
+import { initAutoBackup } from '@/utils/sync/autoBackup';
+import { ensurePersistentStorage } from '@/utils/sync/storagePersistence';
+import { isEgyptianLocation } from '@/utils/prayer/prayerTimes';
 import { getNotificationDestination } from '@/utils/notificationRouting';
+import { DhikrReminderNotice } from '@/components/DhikrReminderNotice';
+import {
+  AdhkarScreen,
+  AdminScreen,
+  BookmarksScreen,
+  ContentLibrary,
+  HadithScreen,
+  HomeScreen,
+  MoreScreen,
+  HuwainiScreen,
+  NawafilScreen,
+  Onboarding,
+  PlannerScreen,
+  PrayerGuideScreen,
+  PrayerScreen,
+  ProphetScreen,
+  ProgressScreen,
+  QuranScreen,
+  SearchScreen,
+  SettingsScreen,
+  SunnahScreen,
+  TasbihScreen,
+} from '@/app/lazyScreens';
 
 const ONBOARDED_KEY = 'hifzi-onboarded';
-// Latch used by lazyWithRetry: after a chunk 404 we reload once; a reloaded page that
-// fails again surfaces the real error instead of reloading in a loop.
-const LAZY_RETRY_KEY = 'hifzi-lazy-reload-tried';
-
-/**
- * Wrap a screen's dynamic import in a single-reload recovery.
- *
- * A route chunk can be served either by the service worker's precache or by the APK's own
- * assets, and for a brief window right after an in-app update those two disagree: the page asks
- * for the new hashed filename while the old worker is still in control, so the dynamic import
- * rejects once with "Failed to fetch dynamically imported module". A rejected import would
- * otherwise propagate up to the top-level ErrorBoundary and blank the whole app.
- *
- * A same-URL retry cannot succeed: Chromium (and the app's WebView) caches the failed import
- * in the module map for the document's lifetime, so re-importing the identical URL fails
- * instantly without even hitting the network. The only recovery is to reload: a fresh document
- * starts with a clean module map, and by then the newly activated service worker serves the
- * chunk. We reload at most once per boot (latch); a reloaded page that still cannot load the
- * chunk lets the true error reach the error boundary instead of reloading forever.
- */
-// The constraint mirrors @types/react's own `lazy()` (T extends ComponentType<any>); a concrete
-// props type cannot name it because function components are contravariant in their props.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type LazyScreenModule = { default: ComponentType<any> };
-
-function lazyWithRetry<M extends LazyScreenModule>(loader: () => Promise<M>) {
-  return lazy(async () => {
-    try {
-      const module = await loader();
-      // A successfully loaded screen re-arms the latch so a later transient failure
-      // (e.g. a future in-app update) can trigger recovery again.
-      sessionStorage.removeItem(LAZY_RETRY_KEY);
-      return module;
-    } catch (error) {
-      if (sessionStorage.getItem(LAZY_RETRY_KEY)) {
-        throw error; // already reloaded once this boot: surface the real failure
-      }
-      sessionStorage.setItem(LAZY_RETRY_KEY, '1');
-      window.location.reload();
-      // The frame is torn down during navigation; keep the lazy promise pending so no error
-      // boundary flashes in the dying frame. If the reload is blocked for some reason, surface
-      // the original error after a grace period.
-      return new Promise<M>((_, reject) => {
-        window.setTimeout(() => reject(error), 15000);
-      });
-    }
-  });
-}
-
-const HomeScreen = lazyWithRetry(() => import('@/screens/HomeScreen').then((module) => ({ default: module.HomeScreen })));
-const Onboarding = lazyWithRetry(() => import('@/components/Onboarding').then((module) => ({ default: module.Onboarding })));
-const QuranScreen = lazyWithRetry(() => import('@/screens/QuranScreen').then((module) => ({ default: module.QuranScreen })));
-const PlannerScreen = lazyWithRetry(() => import('@/screens/PlannerScreen').then((module) => ({ default: module.PlannerScreen })));
-const PrayerScreen = lazyWithRetry(() => import('@/screens/PrayerScreen').then((module) => ({ default: module.PrayerScreen })));
-const PrayerGuideScreen = lazyWithRetry(() => import('@/screens/PrayerGuideScreen').then((module) => ({ default: module.PrayerGuideScreen })));
-const HadithScreen = lazyWithRetry(() => import('@/screens/HadithScreen').then((module) => ({ default: module.HadithScreen })));
-const ProgressScreen = lazyWithRetry(() => import('@/screens/ProgressScreen').then((module) => ({ default: module.ProgressScreen })));
-const SettingsScreen = lazyWithRetry(() => import('@/screens/SettingsScreen').then((module) => ({ default: module.SettingsScreen })));
-const MoreScreen = lazyWithRetry(() => import('@/screens/MoreScreen').then((module) => ({ default: module.MoreScreen })));
-const ContentLibrary = lazyWithRetry(() => import('@/screens/ContentLibrary').then((module) => ({ default: module.ContentLibrary })));
-const AdhkarScreen = lazyWithRetry(() => import('@/screens/AdhkarScreen').then((module) => ({ default: module.AdhkarScreen })));
-const TasbihScreen = lazyWithRetry(() => import('@/screens/TasbihScreen').then((module) => ({ default: module.TasbihScreen })));
-const BookmarksScreen = lazyWithRetry(() => import('@/screens/BookmarksScreen').then((module) => ({ default: module.BookmarksScreen })));
-const SearchScreen = lazyWithRetry(() => import('@/screens/SearchScreen').then((module) => ({ default: module.SearchScreen })));
-// Only an allow-listed account ever mounts this, so it stays out of the first paint.
-const AdminScreen = lazyWithRetry(() => import('@/components/AdminScreen').then((module) => ({ default: module.AdminScreen })));
 
 function App() {
   return (
@@ -259,12 +228,24 @@ function readOfflineUsage(): boolean {
   }
 }
 
+const ADMIN_CHECK_RETRY_DELAYS_MS = [1_500, 5_000, 15_000];
+
 function Application() {
   const [session, setSession] = useState<Session | null>(null);
-  const [authChecked, setAuthChecked] = useState(!isSupabaseConfigured);
+  // Don't block the UI waiting for Supabase: read cached session in background
+  // and let the app open immediately so it works fully offline.
   const [offlineUsage, setOfflineUsage] = useState(readOfflineUsage);
-  // 'unknown' until the allow-list has answered for this account — see below.
-  const [adminState, setAdminState] = useState<'unknown' | 'admin' | 'user'>('unknown');
+  // Opened from Settings → الحساب: the reader who walked in as a guest decides later
+  // that they want their data on more than one device. Held here rather than in
+  // Settings so a session appearing mid-sign-up swaps the whole view over, as at the gate.
+  const [showAuthForGuest, setShowAuthForGuest] = useState(false);
+  // Default to 'user' so a logged-in account never gets stuck behind a slow/admin
+  // check on poor connections or offline. Upgraded to 'admin' in the background if confirmed.
+  const [adminState, setAdminState] = useState<'admin' | 'user'>('user');
+  // كل مستخدم — أدمن أو لا — يفتح التطبيق العادى، ولوحة الإدارة تُفتح بالطلب من
+  // الإعدادات. الحالة هنا لا داخل `AdminApp`: زر «لوحة الإدارة» يصل إلى هذا المكوّن
+  // من تحت، فلا بدّ أن يرفع الطلب إلى هذا المستوى ليُبدّل العرض.
+  const [showAdminDashboard, setShowAdminDashboard] = useState(false);
   const sessionUserId = session?.user.id ?? null;
 
   // Report the open while the identity is settled: a guest counts under the
@@ -277,24 +258,71 @@ function Application() {
   /**
    * Whether this account opens the dashboard or the ordinary app is decided
    * server-side by `public.admin_emails` — the client only ever learns a yes or
-   * a no, and a project without the migration simply reports "no" and carries
-   * on as the app it was.
-   *
-   * The answer is held as 'unknown' rather than guessed: an admin on a slow
-   * link would otherwise flash the whole app before landing on the dashboard.
+   * a no. The check runs in the background and never blocks rendering; a
+   * temporary failure is retried and checked again when connectivity returns.
    */
   useEffect(() => {
     if (!sessionUserId) {
-      setAdminState('unknown');
+      setAdminState('user');
       return;
     }
     let alive = true;
-    setAdminState('unknown');
-    void isAdminAccount().then((isAdmin) => {
-      if (alive) setAdminState(isAdmin ? 'admin' : 'user');
-    });
+    let checking = false;
+    let retryIndex = 0;
+    let retryTimer: number | undefined;
+    let removeAppStateListener: (() => void) | undefined;
+    setAdminState('user');
+    const checkAdmin = async () => {
+      if (!alive || checking) return;
+      checking = true;
+      const status = await isAdminAccount();
+      checking = false;
+      if (!alive) return;
+
+      if (status === 'unavailable') {
+        const delay = ADMIN_CHECK_RETRY_DELAYS_MS[retryIndex];
+        if (delay !== undefined) {
+          retryIndex += 1;
+          retryTimer = window.setTimeout(() => void checkAdmin(), delay);
+        }
+        return;
+      }
+
+      retryIndex = 0;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+      setAdminState(status);
+    };
+    const retryAdminCheck = () => {
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+      retryIndex = 0;
+      void checkAdmin();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') retryAdminCheck();
+    };
+
+    void checkAdmin();
+    window.addEventListener('online', retryAdminCheck);
+    document.addEventListener('visibilitychange', onVisible);
+    if (Capacitor.isNativePlatform()) {
+      void CapApp.addListener('appStateChange', ({ isActive }) => {
+        if (isActive) retryAdminCheck();
+      })
+        .then((handle) => {
+          if (alive) removeAppStateListener = () => void handle.remove();
+          else void handle.remove();
+        })
+        .catch((error: unknown) => {
+          console.warn('Could not monitor app resume for admin access:', error);
+        });
+    }
+
     return () => {
       alive = false;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+      window.removeEventListener('online', retryAdminCheck);
+      document.removeEventListener('visibilitychange', onVisible);
+      removeAppStateListener?.();
     };
   }, [sessionUserId]);
 
@@ -312,16 +340,48 @@ function Application() {
   useEffect(() => {
     if (!supabase) return;
     let alive = true;
-    void supabase.auth.getSession().then(({ data, error }) => {
-      if (error) console.error('Could not restore Supabase session:', error.message);
-      if (alive) {
-        setSession(data.session);
-        setAuthChecked(true);
+    // Read cached session first; never block UI on network. Supabase persists
+    // tokens in localStorage so getSession() resolves from cache quickly even offline.
+    // Try to read from localStorage immediately for instant boot, then verify in background.
+    try {
+      // Supabase v2 stores session under keys like sb-<project-ref>-auth-token
+      const keys = Object.keys(localStorage);
+      for (const key of keys) {
+        if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              const session = parsed?.currentSession || parsed?.session || parsed;
+              if (session?.access_token && session?.user) {
+                if (alive) {
+                  setSession(session as Session);
+                }
+                break;
+              }
+            } catch {
+              // ignore parse errors
+            }
+          }
+        }
       }
-    });
+    } catch {
+      // ignore localStorage errors
+    }
+
+    // Also call getSession() in background to refresh/validate without blocking
+    void supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (alive) {
+          setSession(data.session ?? null);
+        }
+      })
+      .catch(() => {
+        // ignore
+      });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
-      setAuthChecked(true);
     });
     return () => {
       alive = false;
@@ -329,19 +389,21 @@ function Application() {
     };
   }, []);
 
-  if (isSupabaseConfigured && !authChecked) {
-    // The session check reads local storage, so this is a beat, not a wait.
-    // Mounting AppContent here — the whole shell, settings from IndexedDB and
-    // navigation and the sync loop — and then mounting it again as
-    // AuthenticatedApp ran every hook in it twice on every single launch, and
-    // flashed the app under the gate while doing it. Holding here costs one
-    // icon and one line of text.
-    return <GateLoading message="جارٍ فحص الحساب..." />;
-  }
+  // Auth check is non-blocking: the app opens immediately (works offline).
   if (isSupabaseConfigured && session) {
-    if (adminState === 'unknown') return <GateLoading message="جارٍ فتح الحساب..." />;
-    if (adminState === 'admin') return <AdminApp session={session} />;
-    return <AuthenticatedApp key={session.user.id} session={session} />;
+    // كل المستخدمين — כולל الأدمن — يفتحوا التطبيق العادى. صفحة الإدارة يمكن
+    // فتحها من داخل التطبيق لو احتجنا لاحقًا، لكن مش تلقائياً عند تسجيل الدخول.
+    // لوحة الإدارة لا تُفتح تلقائيًا عند تسجيل الدخول: كل الحسابات تدخل التطبيق
+    // العادى. الرافع هنا هو هذا المستوى لأن زر «لوحة الإدارة» في الإعدادات يجلس
+    // أسفل ثلاث طبقات من المكوّنات ولا يصل إلى هذا المكوّن مباشرة.
+    if (adminState === 'admin' && showAdminDashboard) return <AdminApp session={session} />;
+    return (
+      <AuthenticatedApp
+        key={session.user.id}
+        session={session}
+        onOpenAdmin={adminState === 'admin' ? () => setShowAdminDashboard(true) : undefined}
+      />
+    );
   }
   if (isSupabaseConfigured && !offlineUsage) {
     return (
@@ -358,20 +420,37 @@ function Application() {
       />
     );
   }
-  return <AppContent accountEmail={undefined} onSignOut={undefined} syncState={null} onSyncNow={undefined} />;
-}
-
-/** Full-screen holding state for the moment between a session and its view. */
-function GateLoading({ message }: { message: string }) {
   return (
-    <div className="min-h-screen bg-surface-light dark:bg-surface-dark flex items-center justify-center">
-      <div className="text-center">
-        <div className="w-16 h-16 mx-auto mb-4 overflow-hidden rounded-2xl shadow-lg animate-pulse-soft">
-          <img src="/icon.svg" alt="قُرّة" className="h-full w-full" />
+    <>
+      <AppContent
+        accountEmail={undefined}
+        onSignOut={undefined}
+        syncState={null}
+        onSyncNow={undefined}
+        /* Without a backend there is nothing to sign up to, so the entry in Settings
+           is simply not offered rather than failing when pressed. */
+        onCreateAccount={isSupabaseConfigured ? () => setShowAuthForGuest(true) : undefined}
+      />
+      {/* An overlay, not a swap: Settings keeps its place underneath, so closing the
+          form returns the reader to the screen they opened it from. */}
+      {showAuthForGuest && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-surface-light dark:bg-surface-dark">
+          <AuthScreen
+            initialMode="sign-up"
+            onAuthenticated={() => {
+              // The listener above hands the session to `Application`, which re-renders
+              // into the signed-in app; closing first keeps the form from lingering
+              // over it for a beat. For an email-confirmation sign-up there is no
+              // session yet, so this is what puts the reader back in the app until the
+              // confirmation link arrives.
+              setShowAuthForGuest(false);
+            }}
+            onClose={() => setShowAuthForGuest(false)}
+            onContinueOffline={() => setShowAuthForGuest(false)}
+          />
         </div>
-        <p className="text-primary-600 dark:text-primary-300 text-sm">{message}</p>
-      </div>
-    </div>
+      )}
+    </>
   );
 }
 
@@ -408,12 +487,24 @@ function useSessionSync(userId: string) {
     };
   }, [userId]);
 
-  const handleSignOut = useCallback(async () => {
-    if (!supabase) return;
-    await synchronizeNow();
+  const handleSignOut = useCallback(async (options?: SignOutOptions): Promise<SignOutResult> => {
+    if (!supabase) return 'signed-out';
+    // The dialog promises the data is uploaded before the local copy goes, so the
+    // upload runs first — and a failure stops here rather than signing the reader out
+    // behind their back. The rows are still on this device; the screen below decides
+    // with them whether to continue without uploading.
+    if (!options?.skipUpload) {
+      try {
+        await synchronizeNow();
+      } catch (error) {
+        console.error('Sign-out upload failed:', error);
+        return 'upload-failed';
+      }
+    }
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
     await clearLocalUserData();
+    return 'signed-out';
   }, []);
 
   return { syncState, handleSignOut };
@@ -455,7 +546,7 @@ function AdminApp({ session }: { session: Session }) {
 
   return (
     <ErrorBoundary>
-      <Suspense fallback={<GateLoading message="جارٍ فتح لوحة الإدارة..." />}>
+      <Suspense fallback={<ScreenLoading />}>
         <AdminScreen
           accountEmail={session.user.email}
           onSignOut={handleSignOut}
@@ -469,13 +560,14 @@ function AdminApp({ session }: { session: Session }) {
 
 
 /**
- * Shown when cloud sync is failing or the device is offline.
+ * Shown when the device is offline and sync cannot run at all.
  *
- * Once the app stopped treating a failed first sync as fatal, a sync problem could
- * otherwise pass completely unnoticed — the only place sync status appeared was the
- * settings screen, so a user whose data had not reached the cloud would have no reason to
- * look. This says so plainly and says what is still true: everything works, and the
- * changes are waiting.
+ * A *failed* sync is deliberately not shown here. Sync retries on its own — on reconnect,
+ * on foreground, on the next local write — so a transient server or network failure used to
+ * raise and re-raise this banner every few seconds, which told the listener nothing they
+ * could act on and only shouted over the app. Failures are still reported where a listener
+ * would go looking for them, in Settings › الحساب والمزامنة السحابية. Being offline is the one
+ * state worth interrupting for, because it is the one the listener can fix.
  */
 function SyncNotice({
   syncState,
@@ -484,17 +576,13 @@ function SyncNotice({
   syncState: CloudSyncState | null;
   onSyncNow: (() => Promise<void>) | undefined;
 }) {
-  // Dismissal lasts for the session, the same as the update banner. Re-arming it on recovery
-  // looked tidier but needed a 'synced' state to key off, and sync goes error → syncing →
-  // error on every retry, so it re-armed mid-outage or not at all depending on whether a
-  // given attempt finished. A notice the user has read once does not need to come back.
-  const failing = syncState?.status === 'error' || syncState?.status === 'offline';
+  // Dismissal lasts for the session, the same as the update banner.
+  const offline = syncState?.status === 'offline';
   const [dismissed, setDismissed] = useState(false);
   const [retrying, setRetrying] = useState(false);
 
-  if (!failing || dismissed) return null;
+  if (!offline || dismissed) return null;
 
-  const offline = syncState?.status === 'offline';
   const retry = async () => {
     if (!onSyncNow) return;
     setRetrying(true);
@@ -513,13 +601,9 @@ function SyncNotice({
     >
       <CloudOff size={18} className="mt-0.5 shrink-0 text-gold-600 dark:text-gold-300" />
       <div className="flex-1">
-        <p className="font-semibold text-primary-900 dark:text-primary-50">
-          {offline ? 'لا يوجد اتصال بالإنترنت' : 'تعذّرت مزامنة بياناتك'}
-        </p>
+        <p className="font-semibold text-primary-900 dark:text-primary-50">لا يوجد اتصال بالإنترنت</p>
         <p className="mt-0.5 text-primary-800 dark:text-primary-100">
-          {offline
-            ? 'التطبيق يعمل ببياناته المحفوظة على الجهاز، وستُرفع تعديلاتك تلقائياً عند عودة الاتصال.'
-            : 'التطبيق يعمل ببياناته المحفوظة على الجهاز، وتعديلاتك لم تُرفع بعد إلى حسابك.'}
+          التطبيق يعمل ببياناته المحفوظة على الجهاز، وستُرفع تعديلاتك تلقائياً عند عودة الاتصال.
         </p>
         {onSyncNow && (
           <button
@@ -550,13 +634,16 @@ function AppContent({
   syncState,
   onSyncNow,
   onOpenAdmin,
+  onCreateAccount,
 }: {
   accountEmail: string | undefined;
-  onSignOut: (() => Promise<void>) | undefined;
+  onSignOut: ((options?: SignOutOptions) => Promise<SignOutResult>) | undefined;
   syncState: CloudSyncState | null;
   onSyncNow: (() => Promise<void>) | undefined;
   /** Only supplied for an allow-listed account — the way back to the dashboard. */
   onOpenAdmin?: (() => void) | undefined;
+  /** Supplied only to a guest: the way from Settings to creating an account. */
+  onCreateAccount?: (() => void) | undefined;
 }) {
   const { settings, loading, error: settingsError, save, reload: reloadSettings } = useSettings();
   const { themeMode, changeTheme, colorPalette, changeColorPalette } = useTheme();
@@ -565,6 +652,10 @@ function AppContent({
   navigateRef.current = navigate;
   const [onboarded, setOnboarded] = useState<boolean | null>(null);
   const { azanState, closeAzan } = useAzanTrigger(settings);
+  // A single boolean, so the engine's per-ayah patches while a surah sounds do not
+  // re-render this component — only the bar appearing or going away does.
+  const recitationVisible = useRecitationVisible();
+  const lectureActive = useLecturePlayer().current !== null;
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -663,6 +754,13 @@ function AppContent({
     document.documentElement.dataset.iconStyle = settings?.iconStyle ?? 'lucide';
   }, [settings?.iconStyle]);
 
+  // The text-scale hold, applied on every boot as well as on change: without the boot
+  // application the app would open at the system's scale and only settle once Settings
+  // was visited, which is the flash this switch exists to prevent.
+  useEffect(() => {
+    void applySystemFontScale(settings?.ignoreSystemFontScale === true);
+  }, [settings?.ignoreSystemFontScale]);
+
   // Which settings actually change what is armed on the device. Everything else
   // (font size, palette, icon style, tips…) must not pay for a queue rebuild:
   // the effect below used to key on the whole settings object, so every slider
@@ -677,10 +775,18 @@ function AppContent({
       settings.latitude,
       settings.longitude,
       settings.prePrayerReminder,
+      // The four daily content notifications (hadith, Qur'an message, Sunnah, Prophet
+      // ﷺ) are armed at exactly these hours. Leaving them out would let a row move a
+      // notification on screen while every alarm kept ringing at the old time.
+      settings.hadithNotificationTime,
+      settings.quranMessageTime,
+      settings.sunnahNotificationTime,
+      settings.prophetNotificationTime,
       settings.snoozeMinutes,
       settings.adhanSound,
       settings.adhanVoiceId,
       settings.notificationSound,
+      settings.notificationVoiceId,
       settings.randomDhikrEnabled,
       settings.randomDhikrCategory,
       settings.randomDhikrIntervalMinutes,
@@ -699,9 +805,11 @@ function AppContent({
   // the fingerprint goes from '' to its real value once settings arrive).
   useEffect(() => {
     if (!scheduleFingerprint) return;
-    generateDailyTasks();
-    markMissedTasks();
-    rescheduleAllNotifications();
+    void (async () => {
+      await generateDailyTasks();
+      await markMissedTasks();
+      await rescheduleAllNotifications();
+    })();
     // Initialize auto-backup system (latched inside — runs once per session).
     initAutoBackup();
   }, [scheduleFingerprint]);
@@ -826,9 +934,11 @@ function AppContent({
     let remove: (() => void) | undefined;
 
     CapApp.addListener('resume', () => {
-      generateDailyTasks();
-      markMissedTasks();
-      rescheduleAllNotifications();
+      void (async () => {
+        await generateDailyTasks();
+        await markMissedTasks();
+        await rescheduleAllNotifications();
+      })();
     })
       .then((handle) => {
         if (disposed) void handle.remove();
@@ -851,6 +961,11 @@ function AppContent({
     }
     localStorage.setItem(ONBOARDED_KEY, 'true');
     setOnboarded(true);
+    // The second attempt at the persist mark, and the one that counts: a cold-start
+    // request on a brand-new install is often declined for lack of engagement, while
+    // finishing this setup is the first real interaction the browser has seen. Silent
+    // either way — see storagePersistence.ts.
+    void ensurePersistentStorage();
     // The first session's own arming moment. The open-time attempt above ran
     // *before* the permission existed (onboarding asks for it mid-flow), and the
     // settings fingerprint need not move at all — keeping the default city
@@ -860,16 +975,7 @@ function AppContent({
   }, [save]);
 
   if (loading || onboarded === null) {
-    return (
-      <div className="min-h-screen bg-surface-light dark:bg-surface-dark flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 overflow-hidden rounded-2xl shadow-lg animate-pulse-soft">
-            <img src="/icon.svg" alt="قُرّة" className="h-full w-full" />
-          </div>
-          <p className="text-primary-600 dark:text-primary-300 text-sm">جارٍ التحميل...</p>
-        </div>
-      </div>
-    );
+    return <ScreenLoading />;
   }
 
   if (settingsError) {
@@ -906,10 +1012,24 @@ function AppContent({
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-surface-light dark:bg-surface-dark text-primary-900 dark:text-primary-50" dir="rtl">
-        <main className="min-h-screen min-h-dvh px-4 pt-4 pb-24 sm:px-6 md:pr-24 md:pl-8 md:pt-8 md:pb-8 lg:pr-32 xl:pr-36">
+      <div className="app-shell min-h-screen bg-surface-light dark:bg-surface-dark text-primary-900 dark:text-primary-50" dir="rtl">
+        <main className={`min-h-screen min-h-dvh px-4 pt-4 sm:px-6 md:pr-24 md:pl-8 md:pt-8 lg:pr-32 xl:pr-36 ${
+          /* Room for the tab bar — plus, on mobile, the recitation's mini bar stacked
+             on top of it; on desktop the mini bar floats near the bottom instead, so it
+             gets its own clearance rather than the tab bar's. Without this the last row
+             of a list sits under the player forever. */
+          recitationVisible || lectureActive ? 'pb-[9.5rem] md:pb-28' : 'pb-24 md:pb-8'
+        }`}>
           <div className="w-full max-w-md mx-auto sm:max-w-xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl 2xl:max-w-6xl">
             <SyncNotice syncState={syncState} onSyncNow={onSyncNow} />
+            {/* Hidden while the reader is on Settings: the very switch this points at is
+                already on that screen, so repeating the pitch there would be noise. */}
+            <DhikrReminderNotice
+              settings={settings}
+              onSaveSettings={save}
+              navigate={navigate}
+              hidden={screen === 'settings'}
+            />
             <Suspense fallback={<ScreenLoading />}>
               {/* Selecting the active tab again remounts its screen. */}
               {screen === 'home' && <HomeScreen key={`home-${resetNonce}`} settings={settings} navigate={navigate} />}
@@ -918,6 +1038,10 @@ function AppContent({
               {screen === 'prayer' && <PrayerScreen key={`prayer-${resetNonce}`} settings={settings} onSaveSettings={save} navigate={navigate} params={params} />}
               {screen === 'salah' && <PrayerGuideScreen key={`salah-${resetNonce}`} navigate={navigate} />}
               {screen === 'hadith' && <HadithScreen key={`hadith-${resetNonce}`} params={params} />}
+              {screen === 'sunnah' && <SunnahScreen key={`sunnah-${resetNonce}`} navigate={navigate} params={params} />}
+              {screen === 'prophet' && <ProphetScreen key={`prophet-${resetNonce}`} navigate={navigate} params={params} />}
+              {screen === 'huwaini' && <HuwainiScreen key={`huwaini-${resetNonce}`} navigate={navigate} />}
+              {screen === 'nawafil' && <NawafilScreen key={`nawafil-${resetNonce}`} settings={settings} params={params} />}
               {screen === 'progress' && <ProgressScreen key={`progress-${resetNonce}`} settings={settings} />}
               {/* Selecting the active tab again remounts its screen. A cloud
                   sync does not: it reloads settings, which re-render — the
@@ -928,6 +1052,7 @@ function AppContent({
                   key={`settings-${resetNonce}`}
                   settings={settings}
                   onSaveSettings={save}
+                  params={params}
                   themeMode={themeMode}
                   onChangeTheme={changeTheme}
                   colorPalette={colorPalette}
@@ -937,6 +1062,7 @@ function AppContent({
                   onSyncNow={onSyncNow}
                   onSignOut={onSignOut}
                   onOpenAdmin={onOpenAdmin}
+                  onCreateAccount={onCreateAccount}
                 />
               )}
               {screen === 'more' && <MoreScreen key={`more-${resetNonce}`} navigate={navigate} />}
@@ -961,6 +1087,9 @@ function AppContent({
           </div>
         </main>
         <BottomNav current={screen} onNavigate={navigate} />
+        {/* One player for whichever of the two engines holds the sound — recitation or
+            lecture — dormant until something has actually been started. */}
+        <AudioPlayer />
         {settings && (
           <AzanOverlayModal
             isOpen={azanState.isOpen}
@@ -969,6 +1098,7 @@ function AppContent({
             prayerTime={azanState.prayerTime}
             settings={settings}
             isPreview={azanState.isPreview}
+            isTest={azanState.isTest}
             fromNotification={azanState.fromNotification}
             onClose={closeAzan}
             onNavigateToAdhkar={() => navigate('adhkar')}
@@ -981,8 +1111,9 @@ function AppContent({
 
 function ScreenLoading() {
   return (
-    <div className="flex min-h-48 items-center justify-center" role="status">
-      <p className="text-sm text-primary-600 dark:text-primary-300">جارٍ تحميل الصفحة...</p>
+    <div className="flex min-h-24 items-center justify-center gap-2" role="status" aria-label="جارٍ التحميل">
+      <img src="/icons/icon-192.png" alt="" className="h-8 w-8 rounded-lg" />
+      <span className="text-xs text-primary-600 dark:text-primary-300">جارٍ التحميل...</span>
     </div>
   );
 }

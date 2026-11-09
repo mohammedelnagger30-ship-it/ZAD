@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { AUDIO_RECITERS, loadPreferredReciter, savePreferredReciter } from '@/data/audioReciters';
 import { getSurah } from '@/data/surahs';
-import { loadSurahAudio, type SurahAudioSource, type VerseTiming } from '@/utils/quranAudio';
+import { loadSurahAudio, type SurahAudioSource, type VerseTiming } from '@/utils/audio/quranAudio';
 import { isSurahEnd, type MushafPrefs, type VoiceScope } from '@/components/mushaf/readerConfig';
 
 interface UseAyahVoiceOptions {
@@ -10,6 +10,8 @@ interface UseAyahVoiceOptions {
   showAyah: (surahId: number, ayahNumber: number) => void;
   updatePrefs: (patch: Partial<MushafPrefs>) => void;
   voiceScope: VoiceScope;
+  /** Called when the followed ayah changes (e.g. sheikh advances to next ayah). */
+  onAyahChange?: (surahId: number, ayahNumber: number) => void;
 }
 
 export function useAyahVoice({
@@ -18,6 +20,7 @@ export function useAyahVoice({
   showAyah,
   updatePrefs,
   voiceScope,
+  onAyahChange,
 }: UseAyahVoiceOptions) {
   const [reciterId, setReciterId] = useState(loadPreferredReciter);
   const [voiceEngaged, setVoiceEngaged] = useState(false);
@@ -26,6 +29,8 @@ export function useAyahVoice({
   const [voicePhase, setVoicePhase] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [voicePlaying, setVoicePlaying] = useState(false);
   const [voiceTime, setVoiceTime] = useState({ current: 0, duration: 0 });
+  /** The ayah currently being read (followed), derived from audio position. */
+  const [currentFollowedAyah, setCurrentFollowedAyah] = useState<{ surahId: number; ayahNumber: number } | null>(null);
   const [playbackRate, setPlaybackRate] = useState(1);
   /** Total plays per ayah, including the first play. */
   const [repeatCount, setRepeatCount] = useState(1);
@@ -39,6 +44,8 @@ export function useAyahVoice({
   const voiceTimingRef = useRef<VerseTiming | null>(null);
   /** The blob URL's only handle — nothing else can release the file it maps to. */
   const voiceUrlRef = useRef<string | null>(null);
+  /** Last ayah reported via onAyahChange, to avoid duplicate callbacks. */
+  const lastReportedFollowedAyahRef = useRef<{ surahId: number; ayahNumber: number } | null>(null);
   const pauseVoice = useCallback(() => {
     voiceAudioRef.current?.pause();
     setVoicePlaying(false);
@@ -201,6 +208,21 @@ export function useAyahVoice({
         current: audio.currentTime,
         duration: Number.isFinite(audio.duration) ? audio.duration : 0,
       });
+      // Whole-surah file with no per-ayah timings: estimate current ayah proportionally.
+      const surahId = ayahChoice?.surahId;
+      if (surahId && voiceWholeFile && audio.duration > 0) {
+        const proportion = Math.min(1, audio.currentTime / audio.duration);
+        const surah = getSurah(surahId);
+        if (surah) {
+          const estimatedAyah = Math.max(1, Math.ceil(proportion * surah.ayahCount));
+          const last = lastReportedFollowedAyahRef.current;
+          if (!last || last.surahId !== surahId || last.ayahNumber !== estimatedAyah) {
+            lastReportedFollowedAyahRef.current = { surahId, ayahNumber: estimatedAyah };
+            setCurrentFollowedAyah({ surahId, ayahNumber: estimatedAyah });
+            onAyahChange?.(surahId, estimatedAyah);
+          }
+        }
+      }
       return;
     }
     const start = timing.startMs / 1000;
@@ -209,6 +231,45 @@ export function useAyahVoice({
       current: Math.min(end - start, Math.max(0, audio.currentTime - start)),
       duration: end - start,
     });
+
+    // Report which ayah is currently being read so the page can follow along.
+    const source = voiceSourceRef.current?.source;
+    const timings = source?.verseTimings;
+    const surahId = ayahChoice?.surahId;
+    if (surahId && timings && timings.length > 0 && audio.duration > 0) {
+      const currentMs = audio.currentTime * 1000;
+      let estimatedAyah: number | null = null;
+      for (const t of timings) {
+        if (currentMs >= t.startMs && currentMs < t.endMs) {
+          estimatedAyah = t.ayah;
+          break;
+        }
+      }
+      if (estimatedAyah === null && currentMs >= timings[timings.length - 1].endMs) {
+        estimatedAyah = timings[timings.length - 1].ayah;
+      }
+      if (estimatedAyah !== null) {
+        const last = lastReportedFollowedAyahRef.current;
+        if (!last || last.surahId !== surahId || last.ayahNumber !== estimatedAyah) {
+          lastReportedFollowedAyahRef.current = { surahId, ayahNumber: estimatedAyah };
+          setCurrentFollowedAyah({ surahId, ayahNumber: estimatedAyah });
+          onAyahChange?.(surahId, estimatedAyah);
+        }
+      }
+    } else if (surahId && voiceWholeFile && audio.duration > 0) {
+      const proportion = Math.min(1, audio.currentTime / audio.duration);
+      const surah = getSurah(surahId);
+      if (surah) {
+        const estimatedAyah = Math.max(1, Math.ceil(proportion * surah.ayahCount));
+        const last = lastReportedFollowedAyahRef.current;
+        if (!last || last.surahId !== surahId || last.ayahNumber !== estimatedAyah) {
+          lastReportedFollowedAyahRef.current = { surahId, ayahNumber: estimatedAyah };
+          setCurrentFollowedAyah({ surahId, ayahNumber: estimatedAyah });
+          onAyahChange?.(surahId, estimatedAyah);
+        }
+      }
+    }
+
     if (!atEnd && audio.currentTime < end) return;
     if (repeatRemainingRef.current > 0) {
       const source = voiceSourceRef.current?.source;
@@ -457,5 +518,9 @@ export function useAyahVoice({
     voicePrimaryLabel,
     voicePrimaryDisabled,
     voiceHint,
+    /** Whether the element is sounding right now — the reader marks the ayah it is on. */
+    voicePlaying,
+    /** The ayah currently being read (followed), derived from audio position. */
+    currentFollowedAyah,
   };
 }

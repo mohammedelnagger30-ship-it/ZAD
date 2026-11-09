@@ -1,10 +1,40 @@
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath, URL } from 'node:url';
 import { cssEngineCompat } from './scripts/css-engine-compat.ts';
 import pkg from './package.json' with { type: 'json' };
+
+/**
+ * Forces `Content-Type: text/html; charset=utf-8` on the dev-server HTML response.
+ * Vite's dev server omits the charset, so browsers on Arabic-system devices fall
+ * back to Windows-1256 and mangle every Arabic glyph ("سورة" → "ط³ظˆط±ط©").
+ * The `<meta charset>` tag is injected too late (Vite's refresh script precedes it),
+ * so the HTTP header must carry the encoding.
+ */
+function htmlCharsetPlugin(): Plugin {
+  return {
+    name: 'html-charset',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const setHeader = res.setHeader.bind(res);
+        res.setHeader = (name: string, value: string | number | readonly string[]) => {
+          if (
+            name.toLowerCase() === 'content-type' &&
+            typeof value === 'string' &&
+            value.startsWith('text/html') &&
+            !value.includes('charset')
+          ) {
+            value = value + '; charset=utf-8';
+          }
+          return setHeader(name, value);
+        };
+        next();
+      });
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -13,20 +43,34 @@ export default defineConfig(({ mode }) => {
     define: {
       'import.meta.env.VITE_APP_VERSION': JSON.stringify(env.VITE_APP_VERSION || pkg.version || '1.0.0'),
     },
+    server: {
+      // The desktop app's browser reaches the dev server through a proxy whose Host
+      // header is not literally "localhost", so Vite's host check would otherwise
+      // reject every request with 400. Allow all hosts in dev only.
+      allowedHosts: true,
+    },
     plugins: [
       react(),
       tailwindcss(),
       cssEngineCompat(),
+      htmlCharsetPlugin(),
       VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icon.svg', 'icons/*.png'],
+      // The plugin used to inject `navigator.serviceWorker.register` into the bundle,
+      // which also ran inside the Capacitor WebView. There it did harm: each install
+      // ships a new bundle, but a service worker from the previous one kept serving the
+      // old assets until the app had been opened twice, so a fix appeared to do nothing
+      // on the first launch. The app registers the worker itself — on the web only —
+      // and clears any leftover one on native (see src/main.tsx).
+      injectRegister: null,
+      includeAssets: ['icons/*.png'],
       manifest: {
         name: 'قُرّة',
         short_name: 'قُرّة',
         description: 'قُرّة — القرآن والصلاة والعبادة اليومية',
         dir: 'rtl',
         lang: 'ar',
-        theme_color: '#1f734e',
+        theme_color: '#0369a1',
         background_color: '#0f1a14',
         display: 'standalone',
         orientation: 'portrait',
@@ -63,7 +107,7 @@ export default defineConfig(({ mode }) => {
         // less and an unchanged file is not re-fetched on the next release —
         // workbox carries an unchanged precached entry over, but only if it is
         // precached in the first place.
-        globIgnores: ['**/quranText-*.js', '**/hadith/*.json'],
+        globIgnores: ['**/icon.svg', '**/quranText-*.js', '**/hadith/*.json'],
         // vite-plugin-pwa marks everything under assets/ as cache-bust-free, i.e. its URL
         // is taken as proof of its content — so a stylesheet rewritten under an unchanged
         // URL would never be re-fetched, and the old bytes would outlive the fix. A regex
@@ -140,6 +184,7 @@ export default defineConfig(({ mode }) => {
       exclude: ['lucide-react'],
     },
     build: {
+      target: ['es2019', 'chrome70'],
       rollupOptions: {
         output: {
           manualChunks(id) {

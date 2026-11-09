@@ -1,4 +1,4 @@
-import { supabase } from '@/utils/supabaseClient';
+import { supabase } from '@/utils/sync/supabaseClient';
 
 /**
  * The dashboard's whole read surface: one RPC (`admin_stats`), gated server-side
@@ -31,6 +31,27 @@ export interface AdminStats {
   daily: AdminDailyStat[];
 }
 
+export interface AdminUser {
+  id: string;
+  email: string | null;
+  createdAt: string | null;
+  lastSignInAt: string | null;
+  emailConfirmedAt: string | null;
+}
+
+export interface AdminUserPage {
+  total: number;
+  users: AdminUser[];
+}
+
+export interface AdminUserQuery {
+  search: string;
+  confirmed: boolean | null;
+  sort: 'created' | 'last_sign_in';
+  offset: number;
+  limit: number;
+}
+
 export class AdminStatsError extends Error {
   /** The signed-in account is not on the allow-list (or the RPC refused it). */
   readonly notAuthorized: boolean;
@@ -45,9 +66,50 @@ export class AdminStatsError extends Error {
   }
 }
 
+export class AdminUsersError extends Error {
+  readonly notAuthorized: boolean;
+  readonly missingRpc: boolean;
+
+  constructor(message: string, options: { notAuthorized?: boolean; missingRpc?: boolean } = {}) {
+    super(message);
+    this.name = 'AdminUsersError';
+    this.notAuthorized = options.notAuthorized ?? false;
+    this.missingRpc = options.missingRpc ?? false;
+  }
+}
+
 function asCount(value: unknown): number {
   const numeric = typeof value === 'string' ? Number(value) : value;
   return typeof numeric === 'number' && Number.isFinite(numeric) ? Math.max(0, Math.trunc(numeric)) : 0;
+}
+
+function asUser(value: unknown): AdminUser | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.id !== 'string') return null;
+  return {
+    id: record.id,
+    email: typeof record.email === 'string' ? record.email : null,
+    createdAt: asTimestamp(record.created_at),
+    lastSignInAt: asTimestamp(record.last_sign_in_at),
+    emailConfirmedAt: asTimestamp(record.email_confirmed_at),
+  };
+}
+
+export function normalizeAdminUserPage(value: unknown): AdminUserPage {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { total: 0, users: [] };
+  }
+  const record = value as Record<string, unknown>;
+  return {
+    total: asCount(record.total),
+    users: Array.isArray(record.users)
+      ? record.users.flatMap((user) => {
+          const normalized = asUser(user);
+          return normalized ? [normalized] : [];
+        })
+      : [],
+  };
 }
 
 function asTimestamp(value: unknown): string | null {
@@ -88,38 +150,34 @@ export function normalizeAdminStats(value: unknown): AdminStats {
   };
 }
 
-/** How long the admin gate waits before it stops waiting.
- *
- * `isAdminAccount` is documented to fail *closed* — a missing migration or a
- * dead network returns false and the account gets the ordinary app. That held
- * for a rejected request but not for one that never settles: supabase-js sends
- * no timeout of its own, so a captive portal or a black-holed TCP connection
- * left the signed-in user parked on «جارٍ فتح الحساب...» forever, on a build
- * that rendered instantly before the gate existed. The abort turns the hang
- * into the failure the comment already promised. */
-const ADMIN_CHECK_TIMEOUT_MS = 5_000;
+/** A slow admin check must not block normal app use; unavailable results are
+ * retried by the application and checked again when connectivity returns. */
+const ADMIN_CHECK_TIMEOUT_MS = 2_000;
 
-/** Is the signed-in account on `admin_emails`? False on any failure, so a
- * missing migration or a dead network leaves the app in its normal state
- * instead of wedging at a gate nobody can open. */
-export async function isAdminAccount(): Promise<boolean> {
-  if (!supabase) return false;
+export type AdminAccountStatus = 'admin' | 'user' | 'unavailable';
+
+/** Check the signed-in account against `admin_emails` without confusing a
+ * temporary network failure with a confirmed non-admin account. */
+export async function isAdminAccount(): Promise<AdminAccountStatus> {
+  if (!supabase) return 'unavailable';
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ADMIN_CHECK_TIMEOUT_MS);
   try {
     const { data, error } = await supabase.rpc('is_admin').abortSignal(controller.signal);
     if (error) {
       console.warn('Admin check unavailable:', error.message);
-      return false;
+      return 'unavailable';
     }
-    return data === true;
+    if (data === true) return 'admin';
+    if (data === false) return 'user';
+    console.warn('Admin check returned an unexpected response.');
+    return 'unavailable';
   } catch (cause) {
     const reason = cause instanceof Error ? cause.message : String(cause);
-    // An abort is the expected shape of a slow gate, not a fault worth a stack.
     console.warn(
-      /abort/i.test(reason) ? 'Admin check timed out — opening the ordinary app.' : 'Admin check unavailable: ' + reason,
+      /abort/i.test(reason) ? 'Admin check timed out; access will be checked again.' : 'Admin check unavailable: ' + reason,
     );
-    return false;
+    return 'unavailable';
   } finally {
     clearTimeout(timer);
   }
@@ -146,4 +204,33 @@ export async function fetchAdminStats(): Promise<AdminStats> {
   }
 
   return normalizeAdminStats(data);
+}
+
+export async function fetchAdminUsers(query: AdminUserQuery): Promise<AdminUserPage> {
+  if (!supabase) {
+    throw new AdminUsersError('الاتصال السحابي غير مُهيّأ.');
+  }
+
+  const { data, error } = await supabase.rpc('admin_user_directory', {
+    p_search: query.search.trim().slice(0, 128),
+    p_confirmed: query.confirmed,
+    p_sort: query.sort,
+    p_offset: Math.max(0, Math.min(Math.trunc(query.offset), 10_000)),
+    p_limit: Math.max(1, Math.min(Math.trunc(query.limit), 50)),
+  });
+  if (error) {
+    const message = error.message ?? '';
+    const notAuthorized = error.code === '42501' || /not authorized/i.test(message);
+    const missingRpc = error.code === 'PGRST202' || /function .*admin_user_directory/i.test(message);
+    throw new AdminUsersError(
+      notAuthorized
+        ? 'هذا الحساب غير مصرح له بعرض قائمة المستخدمين.'
+        : missingRpc
+          ? 'قائمة المستخدمين غير مفعّلة بعد. شغّل migration دليل المستخدمين في Supabase.'
+          : message || 'تعذّر جلب قائمة المستخدمين.',
+      { notAuthorized, missingRpc },
+    );
+  }
+
+  return normalizeAdminUserPage(data);
 }

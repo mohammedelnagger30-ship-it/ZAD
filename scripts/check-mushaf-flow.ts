@@ -37,11 +37,11 @@ import { getSurahWords } from '../src/data/mushafWords';
 import { splitBasmala } from '../src/utils/basmala';
 
 /**
- * Page count the column was calibrated to. The printed mushaf has 604; 18.2em lands at
- * 602, within 0.4%. If this number moves, the calibration was disturbed and someone should
- * look at the sweep in `build-mushaf-flow.ts` before accepting it.
+ * Page count the column was calibrated to. The printed mushaf has 604, and 18.08em lands
+ * on the same number. If this moves, the calibration was disturbed and someone should look
+ * at the sweep in `build-mushaf-flow.ts` before accepting it.
  */
-const EXPECTED_PAGES = 602;
+const EXPECTED_PAGES = 604;
 
 const SURAHS = Object.keys(quran).map(Number).sort((a, b) => a - b);
 

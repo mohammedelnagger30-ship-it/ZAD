@@ -14,6 +14,7 @@ import { statSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CACHE = join(ROOT, '.cache', 'content');
@@ -63,6 +64,11 @@ const TAFSIR = [
 
 const mb = (n: number) => n / 1048576;
 
+/** Hex SHA-256 of a file on disk — the integrity key the app checks at download. */
+function sha256File(path: string): string {
+  return createHash('sha256').update(readFileSync(path)).digest('hex');
+}
+
 function fail(msg: string): never {
   console.error(`\nFAILED: ${msg}`);
   console.error('Run `npm run data:fetch` and `npm run data:tafsir` first, and fetch the word-meanings dump:');
@@ -97,29 +103,32 @@ const hadithRows = HADITH.map((h) => {
   let usable = 0;
   for (const item of list) if ((item.text ?? item.arabic ?? '').trim()) usable++;
 
-  return { ...h, downloadBytes, count: usable };
+  return { ...h, downloadBytes, count: usable, sha256: sha256File(file) };
 });
 
 // ---- tafsir ----------------------------------------------------------------
 
 const tafsirRows = TAFSIR.map((t) => {
   const surahBytes: number[] = [0]; // 1-indexed
+  const surahSha256: string[] = ['']; // 1-indexed; '' = no cached payload to hash
   let ayahs = 0;
   let surahs = 0;
   for (let s = 1; s <= 114; s++) {
     const file = join(TAFSIR_CACHE, `${t.slug}-${s}.json`);
     if (!existsSync(file)) {
       surahBytes.push(0);
+      surahSha256.push('');
       continue;
     }
     const size = statSync(file).size;
     surahBytes.push(size);
+    surahSha256.push(sha256File(file));
     surahs++;
     ayahs += Object.keys(JSON.parse(readFileSync(file, 'utf8'))).length;
   }
   const total = surahBytes.reduce((a, b) => a + b, 0);
   if (surahs === 0) fail(`no tafsir cached for ${t.slug}`);
-  return { ...t, surahBytes, totalBytes: total, ayahs, surahs };
+  return { ...t, surahBytes, totalBytes: total, ayahs, surahs, surahSha256 };
 });
 
 // ---- word meanings ----------------------------------------------------------
@@ -186,6 +195,7 @@ for (let surah = 1; surah <= 114; surah++) {
 
 const meaningsDownloadBytes = statSync(MEANINGS_GZ).size;
 const meaningsStoredBytes = meaningsSurahBytes.reduce((a, b) => a + b, 0);
+const meaningsSha256 = sha256File(MEANINGS_GZ);
 
 // Short labels for the switcher in the word sheet. A book the table does not know
 // falls back to its full title rather than to a guess cut out of the middle of it.
@@ -223,6 +233,13 @@ export interface TafsirEdition {
   totalBytes: number;
   /** Per-surah download size in bytes, index 1..114. 0 means "not available". */
   surahBytes: number[];
+  /**
+   * Per-surah SHA-256 (hex) of the exact payload the size was measured from,
+   * index 1..114, '' where nothing was cached. The app checks it at download so
+   * a silent edit upstream is caught instead of stored. Absent when the
+   * catalogue was built without a tafsir cache.
+   */
+  surahSha256?: string[];
   /** Rough guidance shown before a heavy download. */
   weight: 'light' | 'medium' | 'heavy';
 }
@@ -235,6 +252,8 @@ export interface HadithBook {
   slug: string;
   count: number;
   downloadBytes: number;
+  /** SHA-256 (hex) of the collection payload, checked at download. */
+  sha256?: string;
   /**
    * True when the collection is bundled inside the app itself
    * (public/hadith/<slug>.json) and is copied onto the device on
@@ -264,6 +283,8 @@ export interface WordMeaningsSource {
   url: string;
   /** Upstream version stamp, so a stored copy can be recognised after an update. */
   version: string;
+  /** SHA-256 (hex) of the gzip dump as the server sends it, checked at download. */
+  sha256?: string;
   /** Bytes over the wire — the gzip file as the server sends it. */
   downloadBytes: number;
   /** Bytes once decompressed and split per surah: what the device actually stores. */
@@ -298,7 +319,8 @@ ${tafsirRows
     surahs: ${t.surahs},
     totalBytes: ${t.totalBytes},
     weight: TAFSIR_WEIGHT.${t.id},
-    surahBytes: [${t.surahBytes.join(', ')}],
+    surahBytes: [${t.surahBytes.join(', ')}],${t.surahSha256.some(Boolean) ? `
+    surahSha256: [${t.surahSha256.map((h) => `'${h}'`).join(', ')}],` : ''}
   },`,
   )
   .join('\n')}
@@ -315,6 +337,7 @@ ${hadithRows
     slug: '${h.slug}',
     count: ${h.count},
     downloadBytes: ${h.downloadBytes},
+    sha256: '${h.sha256}',
     bundled: ${h.bundled ?? false},
   },`,
   )
@@ -334,6 +357,7 @@ export const WORD_MEANINGS: WordMeaningsSource = {
   blurb: 'معاني غريب القرآن من كتب موثوقة (السراج، تذكرة الأريب، التبيان، كلمات القرآن).',
   url: 'https://quranpedia.net/dumps/meanings.json.gz',
   version: '${meaningsDump.license?.version ?? 'unknown'}',
+  sha256: '${meaningsSha256}',
   downloadBytes: ${meaningsDownloadBytes},
   storedBytes: ${meaningsStoredBytes},
   ayahs: ${meaningsAyahs},

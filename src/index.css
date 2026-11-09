@@ -203,39 +203,38 @@
 
 :root {
   --font-uidir: rtl;
-  /* Emerald — default professional palette. Deep green primary with refined emerald accent. */
-  --primary-50: 239 247 243;
-  --primary-100: 219 238 227;
-  --primary-200: 186 223 200;
-  --primary-300: 134 200 166;
-  --primary-400: 74 171 121;
-  --primary-500: 34 139 83;
-  --primary-600: 21 128 61;
-  --primary-700: 19 108 53;
-  --primary-800: 17 86 45;
-  --primary-900: 15 72 39;
-  --primary-950: 8 39 22;
-  --accent-50: 240 253 244;
-  --accent-100: 220 252 231;
-  --accent-200: 187 247 208;
-  --accent-300: 134 239 172;
-  --accent-400: 74 222 128;
-  --accent-500: 34 197 94;
-  --accent-600: 22 163 74;
-  --accent-700: 21 128 61;
-  --accent-800: 22 101 52;
-  --accent-900: 20 83 45;
-  --surface-light: 239 247 243;
-  --surface-dark: 15 26 20;
-  --surface-panel: color-mix(in srgb, rgb(var(--surface-light)) 72%, rgb(var(--primary-100)) 28%);
-  --surface-raised: color-mix(in srgb, rgb(var(--surface-light)) 42%, var(--color-white) 58%);
-  /* Deep, high-contrast brand gradient — emerald dominant, professional. */
-  --brand-from: #15803d;
-  --brand-to: #166534;
-  --brand-gradient: linear-gradient(135deg, #15803d 0%, #0f5c2c 55%, #14532d 100%);
-  --brand-glow: rgba(21, 128, 61, 0.32);
-  --brand-glow-strong: rgba(34, 197, 94, 0.18);
-  --brand-soft: #ecfdf5;
+  /* Qurra: forest green, warm paper, and aged gold. */
+  --primary-50: 244 249 245;
+  --primary-100: 226 239 229;
+  --primary-200: 196 220 202;
+  --primary-300: 153 193 166;
+  --primary-400: 91 155 116;
+  --primary-500: 42 119 79;
+  --primary-600: 22 91 57;
+  --primary-700: 18 73 47;
+  --primary-800: 13 54 36;
+  --primary-900: 9 39 27;
+  --primary-950: 5 25 17;
+  --accent-50: 255 253 245;
+  --accent-100: 254 248 225;
+  --accent-200: 252 238 180;
+  --accent-300: 247 220 120;
+  --accent-400: 236 195 60;
+  --accent-500: 212 165 32;
+  --accent-600: 185 140 22;
+  --accent-700: 150 110 15;
+  --accent-800: 118 85 12;
+  --accent-900: 88 62 10;
+  --surface-light: 254 253 250;
+  --surface-dark: 8 24 16;
+  --surface-panel: color-mix(in srgb, rgb(var(--surface-light)) 85%, rgb(var(--primary-100)) 15%);
+  --surface-raised: #ffffff;
+  --brand-from: #105936;
+  --brand-to: #f59e0b;
+  --brand-gradient: linear-gradient(135deg, #105936 0%, #177a4b 42%, #1fa363 70%, #f59e0b 100%);
+  --brand-glow: rgba(23, 122, 75, 0.36);
+  --brand-glow-strong: rgba(245, 158, 11, 0.38);
+  --brand-soft: #f3f8f4;
   /* Functional colors — unified and harmonious. */
   --func-primary: rgb(var(--primary-700));
   --func-primary-soft: rgb(var(--primary-50));
@@ -268,6 +267,71 @@ html.dark {
   --func-error-soft: rgb(var(--primary-950));
 }
 
+:root[data-palette='qurra'] {
+  --primary-50: 244 249 245;
+  --primary-100: 226 239 229;
+  --primary-200: 196 220 202;
+  --primary-300: 153 193 166;
+  --primary-400: 91 155 116;
+  --primary-500: 42 119 79;
+  --primary-600: 22 91 57;
+  --primary-700: 18 73 47;
+  --primary-800: 13 54 36;
+  --primary-900: 9 39 27;
+  --primary-950: 5 25 17;
+  /* Aged gold on ivory: the app's own signature rather than a borrowed theme. */
+  --accent-50: 255 253 245;
+  --accent-100: 254 248 225;
+  --accent-200: 252 238 180;
+  --accent-300: 247 220 120;
+  --accent-400: 236 195 60;
+  --accent-500: 212 165 32;
+  --accent-600: 185 140 22;
+  --accent-700: 150 110 15;
+  --accent-800: 118 85 12;
+  --accent-900: 88 62 10;
+  --surface-light: 254 253 250;
+  --surface-dark: 8 24 16;
+  --brand-from: #105936;
+  --brand-to: #f59e0b;
+  --brand-gradient: linear-gradient(135deg, #105936 0%, #177a4b 42%, #1fa363 70%, #f59e0b 100%);
+  --brand-glow: rgba(23, 122, 75, 0.36);
+  --brand-glow-strong: rgba(245, 158, 11, 0.38);
+  --brand-soft: #f3f8f4;
+}
+
+:root[data-palette='emerald'] {
+  --primary-50: 236 253 245;
+  --primary-100: 209 250 229;
+  --primary-200: 167 243 208;
+  --primary-300: 110 231 183;
+  --primary-400: 52 211 153;
+  --primary-500: 16 185 129;
+  --primary-600: 21 128 61;
+  --primary-700: 4 120 87;
+  --primary-800: 6 95 70;
+  --primary-900: 6 78 59;
+  --primary-950: 2 44 34;
+  --accent-50: 255 247 237;
+  --accent-100: 254 235 211;
+  --accent-200: 253 213 168;
+  --accent-300: 251 191 119;
+  --accent-400: 245 158 64;
+  --accent-500: 180 83 9;
+  --accent-600: 146 64 14;
+  --accent-700: 120 53 15;
+  --accent-800: 97 43 14;
+  --accent-900: 78 35 13;
+  --surface-light: 236 253 245;
+  --surface-dark: 8 27 18;
+  --brand-from: #15803d;
+  --brand-to: #b45309;
+  --brand-gradient: linear-gradient(135deg, var(--brand-from) 0%, color-mix(in oklch, var(--brand-from) 56%, var(--brand-to)) 52%, rgb(var(--primary-800)) 100%);
+  --brand-glow: rgba(21, 128, 61, 0.30);
+  --brand-glow-strong: rgba(180, 83, 9, 0.18);
+  --brand-soft: #ecfdf5;
+}
+
 :root[data-palette='ocean'] {
   --primary-50: 239 246 250;
   --primary-100: 219 236 244;
@@ -295,7 +359,7 @@ html.dark {
   --surface-dark: 12 21 27;
   --brand-from: #0369a1;
   --brand-to: #d97706;
-  --brand-gradient: linear-gradient(135deg, #0369a1 0%, #064a70 55%, #ae5e09 100%);
+  --brand-gradient: linear-gradient(125deg, var(--brand-from) 0%, color-mix(in oklch, var(--brand-from) 56%, var(--brand-to)) 52%, rgb(var(--primary-800)) 100%);
   --brand-glow: rgba(3, 105, 161, 0.30);
   --brand-glow-strong: rgba(217, 119, 6, 0.18);
   --brand-soft: #f0f9ff;
@@ -328,7 +392,7 @@ html.dark {
   --surface-dark: 24 17 27;
   --brand-from: #7e2f8e;
   --brand-to: #92400e;
-  --brand-gradient: linear-gradient(135deg, #7e2f8e 0%, #592265 55%, #753310 100%);
+  --brand-gradient: linear-gradient(125deg, var(--brand-from) 0%, color-mix(in oklch, var(--brand-from) 56%, var(--brand-to)) 52%, rgb(var(--primary-800)) 100%);
   --brand-glow: rgba(126, 47, 142, 0.30);
   --brand-glow-strong: rgba(146, 64, 14, 0.18);
   --brand-soft: #faf5ff;
@@ -361,7 +425,7 @@ html.dark {
   --surface-dark: 25 23 17;
   --brand-from: #854d0e;
   --brand-to: #0f766e;
-  --brand-gradient: linear-gradient(135deg, #854d0e 0%, #553212 55%, #0e627a 100%);
+  --brand-gradient: linear-gradient(125deg, var(--brand-from) 0%, color-mix(in oklch, var(--brand-from) 56%, var(--brand-to)) 52%, rgb(var(--primary-800)) 100%);
   --brand-glow: rgba(133, 77, 14, 0.30);
   --brand-glow-strong: rgba(15, 118, 148, 0.18);
   --brand-soft: #fbfaf3;
@@ -394,7 +458,7 @@ html.dark {
   --surface-dark: 19 23 16;
   --brand-from: #4d7c0f;
   --brand-to: #b91c1c;
-  --brand-gradient: linear-gradient(135deg, #4d7c0f 0%, #334f11 55%, #941919 100%);
+  --brand-gradient: linear-gradient(125deg, var(--brand-from) 0%, color-mix(in oklch, var(--brand-from) 56%, var(--brand-to)) 52%, rgb(var(--primary-800)) 100%);
   --brand-glow: rgba(77, 124, 15, 0.30);
   --brand-glow-strong: rgba(185, 28, 28, 0.18);
   --brand-soft: #f8faf2;
@@ -427,7 +491,7 @@ html.dark {
   --surface-dark: 27 17 20;
   --brand-from: #be185d;
   --brand-to: #059669;
-  --brand-gradient: linear-gradient(135deg, #be185d 0%, #851240 55%, #047857 100%);
+  --brand-gradient: linear-gradient(125deg, var(--brand-from) 0%, color-mix(in oklch, var(--brand-from) 56%, var(--brand-to)) 52%, rgb(var(--primary-800)) 100%);
   --brand-glow: rgba(190, 24, 93, 0.30);
   --brand-glow-strong: rgba(5, 150, 105, 0.18);
   --brand-soft: #fff1f3;
@@ -460,7 +524,7 @@ html.dark {
   --surface-dark: 10 16 26;
   --brand-from: #1e3a8a;
   --brand-to: #b45309;
-  --brand-gradient: linear-gradient(135deg, #1e3a8a 0%, #16275e 55%, #8e4e0e 100%);
+  --brand-gradient: linear-gradient(125deg, var(--brand-from) 0%, color-mix(in oklch, var(--brand-from) 56%, var(--brand-to)) 52%, rgb(var(--primary-800)) 100%);
   --brand-glow: rgba(30, 58, 138, 0.30);
   --brand-glow-strong: rgba(180, 83, 9, 0.18);
   --brand-soft: #eff6ff;
@@ -493,7 +557,7 @@ html.dark {
   --surface-dark: 26 12 16;
   --brand-from: #991b1b;
   --brand-to: #0891b2;
-  --brand-gradient: linear-gradient(135deg, #991b1b 0%, #661422 55%, #0d6266 100%);
+  --brand-gradient: linear-gradient(125deg, var(--brand-from) 0%, color-mix(in oklch, var(--brand-from) 56%, var(--brand-to)) 52%, rgb(var(--primary-800)) 100%);
   --brand-glow: rgba(153, 27, 27, 0.30);
   --brand-glow-strong: rgba(14, 116, 148, 0.18);
   --brand-soft: #fef2f2;
@@ -526,7 +590,7 @@ html.dark {
   --surface-dark: 24 22 14;
   --brand-from: #b45309;
   --brand-to: #2563eb;
-  --brand-gradient: linear-gradient(135deg, #b45309 0%, #73350f 55%, #1d4ed8 100%);
+  --brand-gradient: linear-gradient(125deg, var(--brand-from) 0%, color-mix(in oklch, var(--brand-from) 56%, var(--brand-to)) 52%, rgb(var(--primary-800)) 100%);
   --brand-glow: rgba(180, 83, 9, 0.30);
   --brand-glow-strong: rgba(37, 99, 235, 0.18);
   --brand-soft: #fffbeb;
@@ -559,7 +623,7 @@ html.dark {
   --surface-dark: 16 22 12;
   --brand-from: #14532d;
   --brand-to: #86198f;
-  --brand-gradient: linear-gradient(135deg, #14532d 0%, #0f3720 55%, #891573 100%);
+  --brand-gradient: linear-gradient(125deg, var(--brand-from) 0%, color-mix(in oklch, var(--brand-from) 56%, var(--brand-to)) 52%, rgb(var(--primary-800)) 100%);
   --brand-glow: rgba(20, 83, 45, 0.30);
   --brand-glow-strong: rgba(172, 25, 143, 0.18);
   --brand-soft: #f0fdf4;
@@ -592,7 +656,7 @@ html.dark {
   --surface-dark: 14 17 22;
   --brand-from: #334155;
   --brand-to: #c2410c;
-  --brand-gradient: linear-gradient(135deg, #334155 0%, #242e3b 55%, #9b3412 100%);
+  --brand-gradient: linear-gradient(125deg, var(--brand-from) 0%, color-mix(in oklch, var(--brand-from) 56%, var(--brand-to)) 52%, rgb(var(--primary-800)) 100%);
   --brand-glow: rgba(51, 65, 85, 0.30);
   --brand-glow-strong: rgba(194, 65, 12, 0.18);
   --brand-soft: #f1f3f6;
@@ -625,10 +689,144 @@ html.dark {
   --surface-dark: 20 16 32;
   --brand-from: #6d28d9;
   --brand-to: #15803d;
-  --brand-gradient: linear-gradient(135deg, #6d28d9 0%, #4d1c97 55%, #40660e 100%);
+  --brand-gradient: linear-gradient(125deg, var(--brand-from) 0%, color-mix(in oklch, var(--brand-from) 56%, var(--brand-to)) 52%, rgb(var(--primary-800)) 100%);
   --brand-glow: rgba(109, 40, 217, 0.30);
   --brand-glow-strong: rgba(21, 128, 61, 0.18);
   --brand-soft: #f5f3ff;
+}
+
+:root[data-palette='obsidian'] {
+  --primary-50: 241 245 247;
+  --primary-100: 224 232 237;
+  --primary-200: 195 210 220;
+  --primary-300: 156 183 199;
+  --primary-400: 111 149 170;
+  --primary-500: 66 112 139;
+  --primary-600: 31 41 55;
+  --primary-700: 24 33 46;
+  --primary-800: 19 27 38;
+  --primary-900: 15 22 32;
+  --primary-950: 8 13 20;
+  --accent-50: 240 253 250;
+  --accent-100: 204 251 241;
+  --accent-200: 153 246 228;
+  --accent-300: 94 234 212;
+  --accent-400: 45 212 191;
+  --accent-500: 17 94 89;
+  --accent-600: 14 78 74;
+  --accent-700: 14 65 62;
+  --accent-800: 15 54 52;
+  --accent-900: 16 44 43;
+  --surface-light: 243 246 249;
+  --surface-dark: 15 20 29;
+  --brand-from: #1f2937;
+  --brand-to: #115e59;
+  --brand-gradient: linear-gradient(125deg, #101820 0%, #1f2937 42%, #164e63 72%, #115e59 100%);
+  --brand-glow: rgba(17, 94, 89, 0.32);
+  --brand-glow-strong: rgba(45, 212, 191, 0.2);
+  --brand-soft: #f1f7f7;
+}
+
+:root[data-palette='nocturne'] {
+  --primary-50: 247 243 250;
+  --primary-100: 235 224 242;
+  --primary-200: 215 195 227;
+  --primary-300: 186 157 205;
+  --primary-400: 151 111 175;
+  --primary-500: 111 65 137;
+  --primary-600: 59 31 92;
+  --primary-700: 50 27 77;
+  --primary-800: 41 22 63;
+  --primary-900: 33 17 50;
+  --primary-950: 18 9 28;
+  --accent-50: 252 247 236;
+  --accent-100: 246 235 199;
+  --accent-200: 235 214 143;
+  --accent-300: 223 192 87;
+  --accent-400: 204 157 47;
+  --accent-500: 120 53 15;
+  --accent-600: 97 43 14;
+  --accent-700: 78 35 13;
+  --accent-800: 63 29 12;
+  --accent-900: 49 23 10;
+  --surface-light: 247 242 250;
+  --surface-dark: 21 15 28;
+  --brand-from: #3b1f5c;
+  --brand-to: #78350f;
+  --brand-gradient: linear-gradient(125deg, #1b1028 0%, #3b1f5c 44%, #592c73 72%, #713f12 100%);
+  --brand-glow: rgba(91, 44, 115, 0.34);
+  --brand-glow-strong: rgba(204, 157, 47, 0.2);
+  --brand-soft: #f7f2fa;
+}
+
+:root[data-palette='abyss'] {
+  --primary-50: 239 246 250;
+  --primary-100: 218 235 243;
+  --primary-200: 181 216 232;
+  --primary-300: 132 190 216;
+  --primary-400: 76 157 194;
+  --primary-500: 31 112 153;
+  --primary-600: 11 57 84;
+  --primary-700: 9 48 71;
+  --primary-800: 7 39 59;
+  --primary-900: 6 30 46;
+  --primary-950: 3 16 26;
+  --accent-50: 236 254 255;
+  --accent-100: 207 250 254;
+  --accent-200: 165 243 252;
+  --accent-300: 103 232 249;
+  --accent-400: 34 211 238;
+  --accent-500: 21 94 117;
+  --accent-600: 18 77 96;
+  --accent-700: 18 63 79;
+  --accent-800: 17 52 66;
+  --accent-900: 16 42 54;
+  --surface-light: 239 247 250;
+  --surface-dark: 8 20 29;
+  --brand-from: #0b3954;
+  --brand-to: #155e75;
+  --brand-gradient: linear-gradient(125deg, #061625 0%, #0b3954 44%, #075985 72%, #155e75 100%);
+  --brand-glow: rgba(21, 94, 117, 0.34);
+  --brand-glow-strong: rgba(34, 211, 238, 0.2);
+  --brand-soft: #eff7fa;
+}
+
+.app-shell {
+  isolation: isolate;
+  background-image:
+    radial-gradient(ellipse at 8% 0%, color-mix(in srgb, var(--brand-from) 10%, transparent), transparent 34rem),
+    radial-gradient(ellipse at 96% 28%, color-mix(in srgb, var(--brand-to) 9%, transparent), transparent 38rem);
+}
+
+.dark .app-shell {
+  background-image:
+    radial-gradient(ellipse at 8% 0%, color-mix(in srgb, var(--brand-from) 16%, transparent), transparent 34rem),
+    radial-gradient(ellipse at 96% 28%, color-mix(in srgb, var(--brand-to) 13%, transparent), transparent 38rem);
+}
+
+.app-card-surface {
+  background-image: linear-gradient(
+    135deg,
+    color-mix(in srgb, rgb(var(--primary-100)) 26%, transparent),
+    transparent 48%,
+    color-mix(in srgb, rgb(var(--accent-100)) 32%, transparent)
+  );
+}
+
+.app-accent-icon {
+  color: rgb(var(--accent-700));
+}
+
+.dark .app-accent-icon {
+  color: rgb(var(--accent-300));
+}
+
+.app-button-primary {
+  background-image: var(--brand-gradient);
+}
+
+.app-brand-panel {
+  background-image: var(--brand-gradient);
 }
 
 /*
@@ -663,11 +861,21 @@ html.dark {
   --panel: rgb(var(--surface-light));
   --line: rgb(var(--primary-100));
   --fg: rgb(var(--primary-900));
-  --fg-muted: rgb(120 108 88);
+  /* Muted text is the theme's own text, softened toward its own panel — never a
+     fixed grey, so a palette change reaches the hint and the field labels too. */
+  --fg-muted: color-mix(in srgb, var(--fg) 70%, var(--panel) 30%);
   --chip: rgb(var(--primary-50));
   --chip-fg: rgb(var(--primary-700));
-  --accent: rgb(var(--accent-500));
+  /* The one loud colour in the window — the active segment, the play button, the
+     seek fill — is the chosen palette's own primary, exactly as the reading shell
+     answers it, rather than the palette's unrelated secondary accent. */
+  --accent: rgb(var(--primary-600));
+  --accent-soft: rgb(var(--primary-50));
   --on-accent: #ffffff;
+  /* The fill of a field inside a sheet — the note box, a resting button. A step of
+     the palette rather than the app's warm paper white, so those controls are
+     dressed by the chosen theme like everything around them. */
+  --field: var(--surface-panel);
 }
 
 /* The app's dark theme, so a sheet raised outside the shell answers to it. */
@@ -675,10 +883,12 @@ html.dark {
   --panel: rgb(var(--surface-dark));
   --line: rgb(var(--primary-800));
   --fg: rgb(var(--primary-100));
-  --fg-muted: rgb(190 183 167);
+  --fg-muted: color-mix(in srgb, var(--fg) 70%, var(--panel) 30%);
   --chip: rgb(var(--primary-900));
   --chip-fg: rgb(var(--primary-200));
-  --accent: rgb(var(--accent-500));
+  --accent: rgb(var(--primary-500));
+  --accent-soft: rgb(var(--primary-900));
+  --field: rgb(var(--primary-900) / 0.55);
 }
 
 * {
@@ -807,10 +1017,36 @@ html.dark body {
      only to restate them for the whole page to agree with itself. */
   --selected-wash: rgba(15, 23, 42, 0.12);
   --bookmark-wash: rgba(15, 23, 42, 0.07);
+  /* The five «تمييز بلون» washes, declared under the ids `ayahHighlights.ts` names.
+     They have to exist here or nowhere: `highlightWash` hands back `var(--hl-<id>)`
+     with no fallback, and a custom property nobody declares makes the whole
+     `background` declaration invalid at computed-value time — so pressing a colour
+     used to strip the ayah of its wash entirely instead of painting it. Each sits
+     clear of both the plain bookmark (0.07) and the selection (0.12), so what the
+     reader pressed is what the reader sees, and clear of the ink (0.86 opacity of
+     #141414 stays legible over any of them).
+     Night restates them below the way it restates the other three. */
+  --hl-gold: rgba(207, 169, 92, 0.45);
+  --hl-green: rgba(52, 168, 115, 0.34);
+  --hl-blue: rgba(59, 130, 246, 0.3);
+  --hl-rose: rgba(244, 63, 94, 0.28);
+  --hl-violet: rgba(139, 92, 246, 0.3);
   --meaning-word: #946200;
-  --meaning-underline: rgba(148, 98, 0, 0.72);
+  --meaning-underline: rgba(148, 98, 0, 0.9);
   --frame-on: #ffffff;
   --spine: rgba(87, 83, 78, 0.11);
+  /* One sheen, one shadow and one inner hairline per sheet, so adding a paper is
+     restating three values rather than copying the whole page rule. */
+  --page-sheen:
+    radial-gradient(130% 78% at 50% 0%, rgba(255, 255, 255, 0.5), transparent 62%),
+    radial-gradient(110% 68% at 50% 100%, rgba(87, 83, 78, 0.06), transparent 64%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.2), transparent 32%);
+  --page-shadow:
+    0 32px 60px -32px rgba(15, 23, 42, 0.45),
+    0 10px 22px rgba(15, 23, 42, 0.1),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.6),
+    inset 0 0 0 2px rgba(87, 83, 78, 0.1);
+  --page-inner-rule: rgba(87, 83, 78, 0.2);
   --fs: 26px;
   /* The reader's default line height (its spacing formula at 100%), so a page that
      passes no spacing of its own — the surah view — typesets exactly as the reader. */
@@ -823,22 +1059,15 @@ html.dark body {
   border-radius: 1rem;
   color: var(--ink);
   background-color: var(--paper);
-  background-image:
-    radial-gradient(130% 78% at 50% 0%, rgba(255, 255, 255, 0.5), transparent 62%),
-    radial-gradient(110% 68% at 50% 100%, rgba(87, 83, 78, 0.06), transparent 64%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.2), transparent 32%);
-  box-shadow:
-    0 32px 60px -32px rgba(15, 23, 42, 0.45),
-    0 10px 22px rgba(15, 23, 42, 0.1),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.6),
-    inset 0 0 0 2px rgba(87, 83, 78, 0.1);
+  background-image: var(--page-sheen);
+  box-shadow: var(--page-shadow);
 }
 
 .mushaf-page::before {
   content: '';
   position: absolute;
   inset: 0.8rem 0.9rem 1rem 0.9rem;
-  border: 1px solid rgba(87, 83, 78, 0.2);
+  border: 1px solid var(--page-inner-rule);
   border-radius: 0.7rem;
   pointer-events: none;
 }
@@ -864,8 +1093,17 @@ html.dark body {
   --wash: rgba(207, 169, 92, 0.1);
   --selected-wash: rgba(207, 169, 92, 0.3);
   --bookmark-wash: rgba(207, 169, 92, 0.16);
+  /* The same five ids on the night sheet. They are a notch stronger than the day's
+     because the paper is darker and a wash that reads as colour on white reads as
+     smudge on #191510 — but each stops short of taking the light ink (#ede3cd)
+     under with it. */
+  --hl-gold: rgba(207, 169, 92, 0.38);
+  --hl-green: rgba(52, 168, 115, 0.34);
+  --hl-blue: rgba(96, 165, 250, 0.34);
+  --hl-rose: rgba(251, 113, 133, 0.32);
+  --hl-violet: rgba(167, 139, 250, 0.34);
   --meaning-word: #f2c66d;
-  --meaning-underline: rgba(242, 198, 109, 0.82);
+  --meaning-underline: rgba(242, 198, 109, 0.95);
   --frame-on: #171008;
   --spine: rgba(207, 169, 92, 0.12);
 
@@ -879,18 +1117,105 @@ html.dark body {
    * its fittings are one colour at different strengths, which is what makes the frame
    * and the page read as one object rather than a theme over a template.
    */
-  background-image:
+  --page-sheen:
     radial-gradient(130% 78% at 50% 0%, rgba(207, 169, 92, 0.1), transparent 62%),
     radial-gradient(110% 68% at 50% 100%, rgba(207, 169, 92, 0.05), transparent 64%),
     linear-gradient(180deg, rgba(237, 227, 205, 0.05), transparent 32%);
-  box-shadow:
+  --page-shadow:
     0 26px 55px -22px rgba(0, 0, 0, 0.85),
     0 3px 8px rgba(0, 0, 0, 0.45),
     inset 0 0 0 1px rgba(207, 169, 92, 0.22);
+  --page-inner-rule: rgba(207, 169, 92, 0.18);
 }
 
 .mushaf-page--night::before {
   border-color: rgba(207, 169, 92, 0.18);
+}
+
+/*
+ * Warm: the same printed page on an aged, slightly yellow sheet. The frame and the
+ * wording keep the brown-ink register of a manuscript rather than a tinted screen:
+ * nothing in the chrome around it is asked to change, so a warm page reads as paper
+ * chosen for the light, not as a theme.
+ */
+.mushaf-page--warm {
+  --paper: #f7efd8;
+  --ink: #2b2417;
+  --frame: #8a6a3a;
+  --frame-soft: rgba(138, 106, 58, 0.34);
+  --wash: rgba(138, 106, 58, 0.09);
+  --selected-wash: rgba(115, 84, 35, 0.15);
+  --bookmark-wash: rgba(138, 106, 58, 0.1);
+  --meaning-word: #8a5a00;
+  --meaning-underline: rgba(138, 90, 0, 0.9);
+  --frame-on: #fdf8e8;
+  --spine: rgba(138, 106, 58, 0.12);
+  --page-sheen:
+    radial-gradient(130% 78% at 50% 0%, rgba(255, 250, 232, 0.75), transparent 62%),
+    radial-gradient(110% 68% at 50% 100%, rgba(138, 106, 58, 0.08), transparent 64%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.25), transparent 34%);
+  --page-shadow:
+    0 32px 60px -32px rgba(76, 54, 20, 0.42),
+    0 10px 22px rgba(76, 54, 20, 0.12),
+    inset 0 0 0 1px rgba(255, 252, 240, 0.7),
+    inset 0 0 0 2px rgba(138, 106, 58, 0.12);
+  --page-inner-rule: rgba(138, 106, 58, 0.22);
+}
+
+/*
+ * Navy: night at sea. The page is a deep blue-black rather than a brown-black, with
+ * the same gold frame the night sheet wears — the classic pairing, and the reason
+ * this paper needs no new accent of its own.
+ */
+.mushaf-page--navy {
+  --paper: #101a2c;
+  --ink: #e9eef9;
+  --frame: #cfa95c;
+  --frame-soft: rgba(207, 169, 92, 0.38);
+  --wash: rgba(207, 169, 92, 0.1);
+  --selected-wash: rgba(207, 169, 92, 0.3);
+  --bookmark-wash: rgba(207, 169, 92, 0.16);
+  --meaning-word: #f2c66d;
+  --meaning-underline: rgba(242, 198, 109, 0.95);
+  --frame-on: #0b1424;
+  --spine: rgba(207, 169, 92, 0.12);
+  --page-sheen:
+    radial-gradient(130% 78% at 50% 0%, rgba(90, 140, 220, 0.16), transparent 62%),
+    radial-gradient(110% 68% at 50% 100%, rgba(207, 169, 92, 0.05), transparent 64%),
+    linear-gradient(180deg, rgba(233, 238, 249, 0.05), transparent 32%);
+  --page-shadow:
+    0 26px 55px -22px rgba(0, 0, 0, 0.85),
+    0 3px 8px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(207, 169, 92, 0.22);
+  --page-inner-rule: rgba(207, 169, 92, 0.2);
+}
+
+/*
+ * Black: the page with the lights off. Same gold frame, almost no sheen, and the
+ * deepest shadow of the four so the sheet sits on the dark rather than glowing
+ * above it.
+ */
+.mushaf-page--black {
+  --paper: #080808;
+  --ink: #efe9dc;
+  --frame: #c9a85e;
+  --frame-soft: rgba(201, 168, 94, 0.36);
+  --wash: rgba(201, 168, 94, 0.09);
+  --selected-wash: rgba(201, 168, 94, 0.28);
+  --bookmark-wash: rgba(201, 168, 94, 0.15);
+  --meaning-word: #f2c66d;
+  --meaning-underline: rgba(242, 198, 109, 0.95);
+  --frame-on: #050505;
+  --spine: rgba(201, 168, 94, 0.11);
+  --page-sheen:
+    radial-gradient(130% 78% at 50% 0%, rgba(201, 168, 94, 0.08), transparent 62%),
+    radial-gradient(110% 68% at 50% 100%, rgba(201, 168, 94, 0.04), transparent 64%),
+    linear-gradient(180deg, rgba(239, 233, 220, 0.03), transparent 32%);
+  --page-shadow:
+    0 26px 55px -22px rgba(0, 0, 0, 0.95),
+    0 3px 8px rgba(0, 0, 0, 0.6),
+    inset 0 0 0 1px rgba(201, 168, 94, 0.2);
+  --page-inner-rule: rgba(201, 168, 94, 0.18);
 }
 
 /* A restrained triple rule gives the page a printed, illuminated-manuscript edge. */
@@ -1079,19 +1404,76 @@ html.dark body {
  * to be the one that renders — leading with the Google "Amiri" broke the match whenever
  * the webfont arrived, and every measured break drifted.
  */
-.mushaf-body {
+.mushaf-body,
+.mushaf-line {
   position: relative;
   z-index: 1;
   font-family: 'Amiri Quran', 'Amiri', serif;
   font-size: var(--fs);
   line-height: var(--lh, 1.9);
+  /*
+   * The printed page is a column of a fixed measure (COLUMN_EM in mushafFlow.ts, handed in
+   * as `--mushaf-column`). Letting the paragraph stretch to the sheet width changes where
+   * the browser breaks lines and hands justification more slack to push into the gaps,
+   * which is exactly the wide, uneven spacing a printed mushaf never shows. Pinning the
+   * measure keeps the same words on the same line as the flow table, so justification only
+   * absorbs the few percent the table left behind. `margin-inline: auto` centres the
+   * column in whatever room the sheet gives it.
+   *
+   * `--word-extra` is the reader's word-spacing choice, added to the measure so it can
+   * survive justification (justification otherwise cancels `word-spacing` exactly).
+   */
+  width: calc(var(--mushaf-column, 18.08em) + var(--word-extra, 0em));
+  margin-inline: auto;
   text-align: justify;
-  text-align-last: center;
   text-justify: inter-word;
-  letter-spacing: var(--letter-gap, 0.01em);
+  letter-spacing: var(--letter-gap, 0);
   word-spacing: var(--word-gap, normal);
   color: var(--ink);
   text-shadow: 0 0 0 rgba(0, 0, 0, 0.02);
+}
+
+/*
+ * One line of the printed page, drawn from `getPageLines()`.
+ *
+ * Every line is its own block, so the browser never re-wraps the text and never gets to
+ * decide where a line ends — the flow table already did, against the same measure. The
+ * only slack justification has to distribute is what the table's own greedy fit left
+ * over, which is less than one word per line: the gaps stay even and narrow, the way a
+ * printed mushaf sets them. No block margins: the lines stack on the leading exactly.
+ */
+.mushaf-line {
+  margin-block: 0;
+  text-align-last: justify;
+}
+
+/*
+ * Above 100% the type is enlarged past the printed measure, so holding the printed line
+ * breaks would push the line outside the page. The block keeps the page's own column
+ * (100% of the content box, between the frame's margins) and lets the browser re-wrap it,
+ * so the larger text always stays inside the sheet. The final line is not stretched.
+ */
+.mushaf-line--flow {
+  width: 100%;
+  text-align-last: start;
+}
+
+/* The closing line of a surah is short by nature; stretching it across the column would
+   blow its few gaps wide open. A printed page lets it finish where it finishes. */
+.mushaf-line--surah-end {
+  text-align-last: center;
+}
+
+/* One surah ends and the next begins further down the same page: the closing ayah gets
+   clear paper before the new surah's band, so the two read as two surahs rather than two
+   verses of one. The band's own top margin is only a hair for every other case. */
+.mushaf-line--surah-end + .mushaf-banner {
+  margin-top: 1.5rem;
+}
+
+/* The continuous surah view (not the page-turner) keeps a centred last line. */
+.mushaf-body {
+  text-align-last: center;
 }
 
 /* The reader's page rules apply to every mushaf page — the surah view included — so the
@@ -1144,9 +1526,14 @@ html.dark body {
 }
 .mushaf-word--has-meaning {
   color: var(--meaning-word);
+  /* At mushaf sizes (26px and up) a 1px dotted rule falls below what a phone screen
+     resolves as dots and reads as a smudge under the word — the one clue that a gloss
+     sits behind this word. 2px at this offset keeps the row unmistakable without
+     crowding the line above it, and the underline colour is raised with it so the dots
+     are a definite colour rather than a hint of one. */
   text-decoration: underline dotted var(--meaning-underline);
-  text-underline-offset: 0.12em;
-  text-decoration-thickness: 1px;
+  text-underline-offset: 0.16em;
+  text-decoration-thickness: 2px;
 }
 .mushaf-word:focus-visible,
 button.mushaf-ayah-mark:focus-visible {
@@ -1155,22 +1542,37 @@ button.mushaf-ayah-mark:focus-visible {
 }
 
 /* Use the bundled Quran font's printed ayah-end sign so its numeral and ornament stay
-   together and scale with the page without changing the ayah's line rhythm. */
+   together and scale with the page without changing the ayah's line rhythm.
+
+   The button hugs the glyph. It used to be a fixed 1.45em circle, which left ~6px of
+   hollow ring on each side of the ornament at page size; add the space that already
+   separates one ayah from the next and every ayah began after a double-wide hole. A
+   printed mushaf leaves nothing but the ordinary word space there. Keeping the old
+   height keeps the glyph exactly where it sat — vertical-align: middle aligns the
+   box's midpoint, and the glyph stays centred in the box whatever its width. */
 button.mushaf-ayah-mark {
   position: relative;
   isolation: isolate;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: calc(var(--fs) * 1.45);
-  height: calc(var(--fs) * 1.45);
-  margin: 0 0.12em;
+  width: auto;
+  height: calc(var(--fs) * 1.05);
+  /*
+   * The flow table reserved exactly 1.15em for an end-of-ayah mark (AYAH_MARK_EM) while
+   * measuring every line. The bundled face draws the ornament at 1.279em, so leaving its
+   * advance at that width makes every line that carries a marker slightly wider than the
+   * measure it was broken against — and the last word of those lines wraps. Cancelling the
+   * extra in the side bearings (the ornament's ink is narrower than its advance) brings the
+   * mark back to the width the line breaks were computed for, without shrinking the glyph.
+   */
+  margin: 0 -0.065em;
   border: 0;
   border-radius: 50%;
   color: var(--frame);
   background: transparent;
   line-height: 1;
-  vertical-align: middle;
+  vertical-align: baseline;
   user-select: none;
   padding: 0;
   font-family: inherit;
@@ -1212,13 +1614,14 @@ span.mushaf-ayah-mark {
   display: inline-block;
   color: inherit;
   font-family: 'Amiri Quran', 'Amiri', serif;
-  font-size: calc(var(--fs) * 0.8);
-  font-weight: 400;
+  font-size: var(--fs);
+  font-weight: 500;
   line-height: 1;
   white-space: nowrap;
   direction: rtl;
   unicode-bidi: isolate;
-  transform: translateY(-0.02em);
+  vertical-align: baseline;
+  transform: translateY(0);
   text-shadow: 0 0.5px 0 var(--paper);
 }
 
@@ -1318,14 +1721,18 @@ button.mushaf-ayah-mark:focus-visible {
   background: var(--frame-soft);
 }
 
+/* The prostration sign a printed mushaf sets after the ayah: the ۩ rosette in the
+   mushaf's own face, inline with the text — never a word set beneath the page. Cairo
+   and the generic faces draw that codepoint as a bare arch, so Amiri Quran has to be
+   the one that leads, exactly as it does for the ayah around it. */
 .mushaf-sajdah {
-  margin: 0 0 0.7rem;
-  font-family: 'Cairo', sans-serif;
-  font-size: 0.62rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-align: center;
-  color: var(--frame);
+  display: inline;
+  margin: 0 0.08em;
+  font: inherit;
+  color: inherit;
+  user-select: none;
+  direction: rtl;
+  unicode-bidi: isolate;
 }
 
 /* The folio is set into the lower frame, with enough clear paper above it for the text. */
@@ -1383,6 +1790,7 @@ button.mushaf-ayah-mark:focus-visible {
   --on-accent: #ffffff;
   --chip: rgb(var(--primary-50));
   --chip-fg: rgb(var(--primary-700));
+  --field: rgb(var(--primary-50));
   /* The marked star and the dot it leaves in the jump grid are a step of the page's
      own frame rather than a colour of their own: graphite in day, gold after dark. */
   --gold: #57534e;
@@ -1419,6 +1827,7 @@ button.mushaf-ayah-mark:focus-visible {
   --accent-soft: rgb(var(--primary-900));
   --chip: rgb(var(--primary-900));
   --chip-fg: rgb(var(--primary-200));
+  --field: rgb(var(--primary-900) / 0.55);
   --hover: rgb(255 255 255 / 0.06);
 }
 
@@ -1442,6 +1851,7 @@ button.mushaf-ayah-mark:focus-visible {
   --on-accent: #171008;
   --chip: #1f1b14;
   --chip-fg: #e5d9b8;
+  --field: #282218;
   --gold: #d9b56a;
   --on-gold: #171008;
   --raised: #282218;
@@ -1449,6 +1859,79 @@ button.mushaf-ayah-mark:focus-visible {
   --scroll-thumb: rgb(207 169 92 / 0.3);
   --scroll-thumb-hover: rgb(207 169 92 / 0.5);
   --hover: rgb(207 169 92 / 0.12);
+}
+
+/*
+ * Warm paper is a day sheet even when the app itself is dark: the reader asked for
+ * paper, not for the app's theme, so the chrome around it stays in the same warm
+ * light register. The second selector outruns `.dark … [data-mode='day']`, which
+ * would otherwise repaint the chrome dark under a light sheet.
+ */
+.mushaf-shell[data-paper='warm'],
+.dark .mushaf-shell[data-paper='warm'] {
+  color-scheme: light;
+  --surface: #f3ecda;
+  --panel: #fffaf0;
+  --line: #e4d7b8;
+  --fg: #3a2f1b;
+  --fg-muted: #7d6f52;
+  --accent: #8a6a3a;
+  --accent-soft: #f2e6c9;
+  --on-accent: #fffaf0;
+  --chip: #f2e8cf;
+  --chip-fg: #6b5227;
+  --field: #f7efdb;
+  --gold: #8a6a3a;
+  --on-gold: #fffaf0;
+  --raised: var(--panel);
+  --selection: rgb(138 106 58 / 0.28);
+  --scroll-thumb: rgb(138 106 58 / 0.3);
+  --scroll-thumb-hover: rgb(138 106 58 / 0.5);
+  --hover: rgb(138 106 58 / 0.1);
+}
+
+.mushaf-shell[data-paper='navy'] {
+  color-scheme: dark;
+  --surface: #070d18;
+  --panel: #0d1626;
+  --line: #1e2c44;
+  --fg: #e6ecf8;
+  --fg-muted: #93a3bd;
+  --accent: #cfa95c;
+  --accent-soft: #1a2538;
+  --on-accent: #171008;
+  --chip: #131f33;
+  --chip-fg: #dbe5f7;
+  --field: #1a2740;
+  --gold: #d9b56a;
+  --on-gold: #171008;
+  --raised: #1a2740;
+  --selection: rgb(207 169 92 / 0.34);
+  --scroll-thumb: rgb(207 169 92 / 0.3);
+  --scroll-thumb-hover: rgb(207 169 92 / 0.5);
+  --hover: rgb(207 169 92 / 0.12);
+}
+
+.mushaf-shell[data-paper='black'] {
+  color-scheme: dark;
+  --surface: #050505;
+  --panel: #101010;
+  --line: #242424;
+  --fg: #ece7dc;
+  --fg-muted: #9d958a;
+  --accent: #c9a85e;
+  --accent-soft: #1f1c15;
+  --on-accent: #151109;
+  --chip: #171717;
+  --chip-fg: #e0d8c6;
+  --field: #1c1c1c;
+  --gold: #d3b26b;
+  --on-gold: #151109;
+  --raised: #1c1c1c;
+  --selection: rgb(201 168 94 / 0.32);
+  --scroll-thumb: rgb(201 168 94 / 0.3);
+  --scroll-thumb-hover: rgb(201 168 94 / 0.5);
+  --hover: rgb(201 168 94 / 0.12);
 }
 
 .mushaf-shell button:focus-visible,
@@ -1586,6 +2069,7 @@ button.mushaf-ayah-mark:focus-visible {
      its own scroll as it does; the browser's anchoring would correct it a second time. */
   overflow-anchor: none;
 }
+
 
 /*
  * Both ways of travelling lay the same sheet down: one column of type. The turn is the
@@ -2164,11 +2648,11 @@ button.mushaf-ayah-mark:focus-visible {
   align-items: center;
   gap: 0.2rem;
   /* Tall enough that the segment reads as a control, not a label. */
-  padding: 0.75rem 0.4rem;
+  padding: 0.85rem 0.45rem;
   border-radius: 1rem;
   background: var(--chip);
   color: var(--chip-fg);
-  font-size: 0.76rem;
+  font-size: 0.8rem;
   font-weight: 700;
   transition:
     background-color 0.18s ease,
@@ -2183,6 +2667,246 @@ button.mushaf-ayah-mark:focus-visible {
 .mushaf-seg__item[aria-pressed='true'] {
   background: var(--accent);
   color: var(--on-accent);
+}
+
+.mushaf-highlight-picker {
+  margin-top: 0.75rem;
+}
+
+.mushaf-highlight-picker__label {
+  margin-bottom: 0.5rem;
+  color: var(--fg-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.mushaf-highlight-picker__colors {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.mushaf-highlight-picker__swatch {
+  width: 2rem;
+  height: 2rem;
+  border: 2px solid var(--paper);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--line);
+  transition: transform 140ms ease, box-shadow 140ms ease;
+}
+
+.mushaf-highlight-picker__swatch[aria-pressed='true'] {
+  transform: scale(1.12);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.mushaf-highlight-picker__swatch:focus-visible,
+.mushaf-highlight-picker__clear:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.mushaf-highlight-picker__clear {
+  min-height: 2rem;
+  padding: 0.25rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--fg);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.mushaf-highlight-picker__clear[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* Four papers in one row: the swatch is the choice, the word is the name. */
+.mushaf-paper-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.mushaf-paper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.6rem 0.25rem;
+  border-radius: 1rem;
+  background: var(--chip);
+  color: var(--chip-fg);
+  font-size: 0.72rem;
+  font-weight: 700;
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.1s ease;
+}
+
+.mushaf-paper:active {
+  transform: scale(0.97);
+}
+
+.mushaf-paper[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.mushaf-paper__swatch {
+  display: block;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid rgb(0 0 0 / 0.18);
+  border-radius: 0.5rem;
+  box-shadow:
+    inset 0 0 0 3px rgb(255 255 255 / 0.28),
+    inset 0 1px 2px rgb(255 255 255 / 0.5),
+    0 1px 2px rgb(0 0 0 / 0.12);
+}
+
+.mushaf-paper__swatch--white {
+  background: #ffffff;
+}
+
+.mushaf-paper__swatch--warm {
+  background: linear-gradient(160deg, #fbf5e3, #efe2c2);
+}
+
+.mushaf-paper__swatch--navy {
+  border-color: rgb(207 169 92 / 0.5);
+  background: linear-gradient(160deg, #18273f, #0c1524);
+}
+
+.mushaf-paper__swatch--black {
+  border-color: rgb(201 168 94 / 0.5);
+  background: linear-gradient(160deg, #161616, #050505);
+}
+
+/* The header's one-tap paper switch: the current sheet as a small round swatch. */
+.mushaf-paper-dot {
+  display: block;
+  width: 1.05rem;
+  height: 1.05rem;
+  border: 1px solid rgb(0 0 0 / 0.28);
+  border-radius: 50%;
+  box-shadow:
+    inset 0 1px 1px rgb(255 255 255 / 0.45),
+    0 1px 2px rgb(0 0 0 / 0.18);
+}
+
+.mushaf-paper-dot--white {
+  background: #ffffff;
+}
+
+.mushaf-paper-dot--warm {
+  background: linear-gradient(160deg, #fbf5e3, #efe2c2);
+}
+
+.mushaf-paper-dot--navy {
+  border-color: rgb(207 169 92 / 0.6);
+  background: linear-gradient(160deg, #18273f, #0c1524);
+}
+
+.mushaf-paper-dot--black {
+  border-color: rgb(201 168 94 / 0.6);
+  background: linear-gradient(160deg, #161616, #050505);
+}
+
+/* ============================================================
+   Smart day card (Home) — a time-of-day reminder that speaks the
+   language of the prayers rather than the clock.
+   ============================================================ */
+.smart-day-card--morning {
+  --smart-accent: rgb(var(--primary-600));
+  --smart-accent-strong: rgb(var(--primary-800));
+  --smart-accent-soft: rgb(var(--primary-600) / 0.12);
+  --smart-on-accent: #ffffff;
+}
+.smart-day-card--midday {
+  --smart-accent: rgb(var(--accent-500));
+  --smart-accent-strong: rgb(var(--accent-600));
+  --smart-accent-soft: rgb(var(--accent-500) / 0.12);
+  --smart-on-accent: #ffffff;
+}
+.smart-day-card--evening {
+  --smart-accent: rgb(var(--primary-800));
+  --smart-accent-strong: rgb(var(--primary-900));
+  --smart-accent-soft: rgb(var(--primary-800) / 0.12);
+  --smart-on-accent: #ffffff;
+}
+
+.dark .smart-day-card--morning,
+.dark .smart-day-card--midday,
+.dark .smart-day-card--evening {
+  --smart-on-accent: #0b1220;
+}
+
+.smart-day-card__pattern {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.55;
+  mask-image: radial-gradient(120% 100% at 100% 0%, #000 0%, transparent 72%);
+  -webkit-mask-image: radial-gradient(120% 100% at 100% 0%, #000 0%, transparent 72%);
+  background-image:
+    repeating-linear-gradient(45deg, transparent 0 10px, var(--smart-accent-soft) 10px 11px),
+    repeating-linear-gradient(-45deg, transparent 0 10px, var(--smart-accent-soft) 10px 11px);
+}
+
+.smart-day-card__icon {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex-shrink: 0;
+  border-radius: 0.9rem;
+  background: var(--smart-accent-soft);
+  color: var(--smart-accent-strong);
+}
+
+.smart-day-card__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  background: var(--smart-accent-soft);
+  color: var(--smart-accent-strong);
+  font-weight: 800;
+}
+
+.smart-day-card__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: 0.85rem;
+  padding: 0.55rem 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  transition:
+    transform 0.1s ease,
+    box-shadow 0.18s ease,
+    background-color 0.18s ease;
+}
+
+.smart-day-card__action:active {
+  transform: scale(0.97);
+}
+
+.smart-day-card__action--primary {
+  background: var(--smart-accent);
+  color: var(--smart-on-accent);
+  box-shadow: 0 10px 20px -12px var(--smart-accent);
+}
+
+.smart-day-card__action--secondary {
+  background: var(--smart-accent-soft);
+  color: var(--smart-accent-strong);
 }
 
 /* What the chosen way of travelling does, so the pair above is not a guess. */
@@ -2342,30 +3066,99 @@ button.mushaf-ayah-mark:focus-visible {
 .mushaf-voice__track strong {
   overflow: hidden;
   color: var(--fg);
-  font-size: 0.82rem;
+  font-size: 0.9rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .mushaf-voice__track small {
   color: var(--fg-muted);
-  font-size: 0.72rem;
+  font-size: 0.8rem;
 }
 
 .mushaf-voice__status {
   flex: 0 0 auto;
   margin-inline-start: auto;
-  padding: 0.25rem 0.5rem;
+  padding: 0.3rem 0.6rem;
   border-radius: 999px;
   background: var(--chip);
   color: var(--chip-fg);
-  font-size: 0.63rem;
+  font-size: 0.7rem;
   font-weight: 700;
 }
 
 .mushaf-voice__status.is-loading {
   background: var(--accent-soft);
   color: var(--fg);
+}
+
+.mushaf-voice__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.75rem;
+  background: linear-gradient(135deg, var(--accent-soft) 0%, transparent 50%);
+  border: 1px solid var(--voice-frame-soft);
+}
+
+.mushaf-voice__info {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.mushaf-voice__icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.mushaf-voice__details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.mushaf-voice__surah {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.mushaf-voice__ayah {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.mushaf-voice__ayah-display {
+  font-family: 'Amiri', serif;
+  font-size: 1.5rem;
+  line-height: 2;
+  text-align: center;
+  color: var(--fg);
+  padding: 0.8rem 1rem;
+  margin: 0.5rem 0;
+  border-radius: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--voice-frame-soft);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.04);
+}
+
+.mushaf-voice__reciter-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--fg-muted);
+  padding: 0.4rem 0.7rem;
+  border-radius: 0.5rem;
+  background: var(--chip);
+  margin: 0.3rem 0 0.5rem 0;
+  width: fit-content;
 }
 
 .mushaf-voice__scope {
@@ -2379,7 +3172,7 @@ button.mushaf-ayah-mark:focus-visible {
   --frame: var(--voice-frame);
   --frame-soft: var(--voice-frame-soft);
   --wash: var(--accent-soft);
-  margin: 0;
+  margin: 0 0 0.8rem;
   padding: 0.45rem 0.25rem;
   text-align: justify;
   text-align-last: center;
@@ -2393,7 +3186,7 @@ button.mushaf-ayah-mark:focus-visible {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.76rem;
+  font-size: 0.82rem;
   font-weight: 600;
   color: var(--fg-muted);
 }
@@ -2536,13 +3329,13 @@ button.mushaf-ayah-mark:focus-visible {
   min-width: 0;
   gap: 0.32rem;
   color: var(--fg-muted);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 700;
 }
 
 .mushaf-voice__settings .mushaf-select {
   width: 100%;
-  font-size: 0.72rem;
+  font-size: 0.8rem;
 }
 
 .mushaf-voice__repeat-note {
@@ -2550,6 +3343,203 @@ button.mushaf-ayah-mark:focus-visible {
   color: var(--fg-muted);
   font-size: 0.7rem;
   text-align: center;
+}
+
+/* ── Voice panel: professional header ── */
+.mushaf-voice__header {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.9rem 0.9rem 0.7rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  margin-bottom: 0.8rem;
+}
+
+.mushaf-voice__icon {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  flex: 0 0 auto;
+  border-radius: 0.9rem;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.mushaf-voice__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.mushaf-voice__surah {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--fg);
+  line-height: 1.2;
+}
+
+.mushaf-voice__ayah-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.mushaf-voice__ayah-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--fg-muted);
+}
+
+.mushaf-voice__ayah-number {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.mushaf-voice__follow-badge {
+  flex: 0 0 auto;
+  font-size: 0.62rem;
+  font-weight: 800;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.mushaf-voice__mode-badge {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--chip-fg);
+  font-size: 0.7rem;
+  font-weight: 700;
+  border: 1px solid var(--line);
+}
+
+.mushaf-voice__mode-label {
+  font-size: 0.7rem;
+}
+
+/* ── Ayah text card ── */
+.mushaf-voice__ayah-card {
+  margin: 0 0 0.8rem;
+  padding: 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--surface);
+}
+
+.mushaf-verse {
+  font-family: 'Amiri', serif;
+  font-size: 1.35rem;
+  line-height: 1.9;
+  color: var(--ink);
+  text-align: right;
+  margin-bottom: 0.4rem;
+  direction: rtl;
+}
+
+.mushaf-verse-meta {
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  text-align: right;
+}
+
+/* ── Reciter row ── */
+.mushaf-voice__reciter-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.8rem;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--surface);
+}
+
+.mushaf-voice__reciter-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--fg-muted);
+  flex: 0 0 auto;
+}
+
+.mushaf-voice__reciter-value {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.mushaf-voice__reciter-select {
+  display: grid;
+  gap: 0.32rem;
+  margin: 0 0 0.8rem;
+}
+
+.mushaf-voice__reciter-select > span {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--fg-muted);
+}
+
+/* ── Segment active state ── */
+.mushaf-seg__item--active {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* ── Next ayah button ── */
+.mushaf-voice__next {
+  display: grid;
+  place-items: center;
+  width: 2.65rem;
+  height: 2.65rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--chip);
+  color: var(--chip-fg);
+  transition: background-color 0.18s ease, opacity 0.18s ease, transform 0.1s ease;
+}
+
+.mushaf-voice__next:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.mushaf-voice__next:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+/* ── Settings grid ── */
+.mushaf-voice__settings-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.6rem;
+  margin: 0.5rem 0 0;
+}
+
+@media (min-width: 640px) {
+  .mushaf-voice__settings-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.mushaf-voice__setting {
+  display: grid;
+  gap: 0.32rem;
+}
+
+.mushaf-voice__setting > span {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--fg-muted);
 }
 
 .mushaf-select {
@@ -2664,4 +3654,305 @@ button.mushaf-ayah-mark:focus-visible {
 /* Smooth transitions */
 .transition-smooth {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ===========================================================================
+   صفحة الشيخ — a hall, not a list
+   ---------------------------------------------------------------------------
+   The catalogue is eight hundred recordings by one man, and a page that opened
+   with a plain stack of rows would read like a database. These rules give the
+   page a frontispiece — a patterned panel that names the الشيخ the way a book
+   does on its cover — and turn each course and series into a spine-wrapped
+   card whose cover is drawn from a fixed palette, so no two collections look
+   alike and none of them need an image file to say so.
+
+   The palette below is derived from the same raw triplets the theme uses, so a
+   reader who picks the green or the plum scheme gets covers tinted to match.
+   Everything is declared on :root because the raw tokens (--primary-600 and
+   friends) hold bare "r g b" triples and are only meaningful inside rgb().
+   =========================================================================== */
+
+/* The frontispiece. Layered gradients draw the panel; a tiled SVG renders the
+   repeating star-and-cross lattice a printed cover would carry. Both are pure
+   CSS, so the page opens instantly and works with no network at all.
+
+   Every colour here is written as channels plus an alpha — `rgb(var(--x) / .5)`
+   — rather than with color-mix. The Capacitor WebView on the reference tablet is
+   Chrome 101, which has no color-mix at all and drops such a declaration whole;
+   the channel form it does understand, and it follows the palette switcher just
+   the same. */
+.scholar-hero {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid rgb(var(--accent-600) / 0.32);
+  border-radius: 2rem;
+  background:
+    radial-gradient(120% 90% at 50% -20%, rgb(var(--accent-500) / 0.15), transparent 62%),
+    linear-gradient(160deg, rgb(var(--accent-100) / 0.45) 0%, rgb(var(--surface-light)) 58%);
+  box-shadow:
+    0 1px 0 rgb(var(--accent-600) / 0.14) inset,
+    0 18px 40px -24px rgb(15 23 42 / 0.35);
+}
+
+.scholar-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Cg fill='none' stroke='%23a16207' stroke-width='1' stroke-opacity='0.28'%3E%3Cpath d='M32 2 L62 32 L32 62 L2 32 Z'/%3E%3Cpath d='M32 20 L44 32 L32 44 L20 32 Z'/%3E%3Ccircle cx='32' cy='32' r='3'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 64px 64px;
+  -webkit-mask-image: radial-gradient(130% 110% at 50% 0%, #000 0%, transparent 72%);
+  mask-image: radial-gradient(130% 110% at 50% 0%, #000 0%, transparent 72%);
+}
+
+.dark .scholar-hero {
+  background:
+    radial-gradient(120% 90% at 50% -20%, rgb(var(--accent-500) / 0.2), transparent 62%),
+    linear-gradient(160deg, rgb(var(--primary-800) / 0.75) 0%, rgb(var(--surface-dark)) 62%);
+  box-shadow:
+    0 1px 0 rgb(var(--accent-500) / 0.18) inset,
+    0 18px 40px -24px rgb(0 0 0 / 0.7);
+}
+
+/* The medallion that crowns the panel: a rounded frame with a thin double ring
+   around the icon, standing in for a calligraphed roundel. */
+.scholar-hero__medallion {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 5rem;
+  height: 5rem;
+  margin-inline: auto;
+  border-radius: 1.6rem;
+  color: #fff;
+  background: linear-gradient(150deg, rgb(var(--accent-500)), rgb(var(--primary-800)));
+  box-shadow: 0 10px 24px -10px rgb(var(--primary-800) / 0.7);
+}
+
+.scholar-hero__medallion::after {
+  content: '';
+  position: absolute;
+  inset: -0.4rem;
+  border: 1px solid rgb(var(--accent-500) / 0.45);
+  border-radius: 1.95rem;
+}
+
+/* The name, and the small caps line beneath it. Display face, generous size,
+   and a short rule between the two so the panel reads as a title page. */
+.scholar-hero__name {
+  font-family: var(--font-display);
+  font-size: clamp(1.7rem, 5.2vw, 2.4rem);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.scholar-hero__rule {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  color: rgb(var(--accent-700));
+}
+
+.scholar-hero__rule::before,
+.scholar-hero__rule::after {
+  content: '';
+  height: 1px;
+  width: clamp(1.5rem, 12vw, 4rem);
+  background: linear-gradient(to var(--dir, left), transparent, currentColor);
+}
+
+.scholar-hero__rule::after {
+  --dir: right;
+}
+
+/* One figure in the hero's row of counters. Each sits in its own soft tile so
+   the numbers read as a single instrument panel rather than loose text. */
+.scholar-stat {
+  border: 1px solid rgb(var(--accent-500) / 0.24);
+  border-radius: 1.1rem;
+  background: rgb(var(--surface-light) / 0.7);
+  padding: 0.65rem 0.5rem;
+  text-align: center;
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+
+.dark .scholar-stat {
+  background: rgb(var(--surface-dark) / 0.7);
+}
+
+.scholar-stat:hover {
+  transform: translateY(-2px);
+  border-color: rgb(var(--accent-500) / 0.5);
+}
+
+.scholar-stat__value {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: rgb(var(--primary-800));
+}
+
+.dark .scholar-stat__value {
+  color: rgb(var(--accent-300));
+}
+
+/* ---------------------------------------------------------------------------
+   The dashboard's four counters
+   ---------------------------------------------------------------------------
+   These sit below the hero, on the progress section, and they carry their own
+   colour rather than the page's: each one is filled with its accent gradient,
+   which is what makes the row read as a panel of instruments instead of four
+   more bordered cards. Text is white throughout, and the tint behind it is an
+   inset wash so the fill never competes with the figure it is carrying.
+
+   Written with the channel-alpha form — `rgb(var(--x) / .4)` — for the same
+   reason as the hero above: the reference tablet's WebView is Chrome 101, which
+   has no color-mix at all and would drop such a declaration whole.
+   --------------------------------------------------------------------------- */
+
+.huwaini-stat {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.25rem;
+  padding: 0.9rem 0.75rem;
+  color: #fff;
+  text-align: center;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.25),
+    0 10px 24px -16px rgb(15 23 42 / 0.55);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.huwaini-stat:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.3),
+    0 16px 30px -16px rgb(15 23 42 / 0.6);
+}
+
+/* A soft highlight in the corner, so the fill has a light source. */
+.huwaini-stat__glow {
+  position: absolute;
+  inset-block-start: -2rem;
+  inset-inline-end: -2rem;
+  width: 6rem;
+  height: 6rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.16);
+  pointer-events: none;
+}
+
+.huwaini-stat__icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  margin-inline: auto;
+  margin-block-end: 0.5rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.2);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.25);
+}
+
+.huwaini-stat__value {
+  position: relative;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.huwaini-stat__unit {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+.huwaini-stat__label {
+  position: relative;
+  margin-block-start: 0.15rem;
+  font-size: 0.6875rem;
+  opacity: 0.9;
+}
+
+/* ---------------------------------------------------------------------------
+   A course or series, wrapped like a spine
+   ---------------------------------------------------------------------------
+   The cover is a fixed gradient chosen from the collection's own id, so the
+   same course keeps the same colour every visit and across devices. The tile
+   sits in a padded well with an inset highlight, which is what gives it the
+   build of a bound volume rather than a flat swatch. */
+
+.collection-card {
+  overflow: hidden;
+  border-radius: 1.5rem;
+  border: 1px solid rgb(var(--accent-600) / 0.22);
+  background: linear-gradient(180deg, rgb(var(--accent-100) / 0.35) 0%, rgb(var(--surface-light)) 42%);
+  box-shadow: 0 12px 30px -22px rgb(15 23 42 / 0.4);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.collection-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 38px -22px rgb(15 23 42 / 0.5);
+}
+
+.dark .collection-card {
+  background: linear-gradient(180deg, rgb(var(--primary-800) / 0.55) 0%, rgb(var(--surface-dark)) 46%);
+  box-shadow: 0 12px 30px -22px rgb(0 0 0 / 0.75);
+}
+
+.collection-card__cover {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 3.4rem;
+  height: 3.4rem;
+  flex: 0 0 auto;
+  border-radius: 1.05rem;
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.35),
+    0 8px 18px -10px rgb(15 23 42 / 0.6);
+}
+
+/* A faint medial line across the cover, the way a spine carries a title panel. */
+.collection-card__cover::after {
+  content: '';
+  position: absolute;
+  inset-inline: 22%;
+  top: 50%;
+  height: 1px;
+  background: rgb(255 255 255 / 0.4);
+}
+
+/* The cover palette. Six pairings, picked by hashing the id, all built from the
+   theme's own tokens so they follow the colour the reader chose. */
+.collection-cover--a { background: linear-gradient(150deg, rgb(var(--primary-600)), rgb(var(--primary-800))); }
+.collection-cover--b { background: linear-gradient(150deg, rgb(var(--accent-500)), rgb(var(--primary-700))); }
+.collection-cover--c { background: linear-gradient(150deg, rgb(var(--primary-700)), rgb(var(--accent-700))); }
+.collection-cover--d { background: linear-gradient(150deg, rgb(var(--primary-500)), rgb(var(--primary-700))); }
+.collection-cover--e { background: linear-gradient(150deg, rgb(var(--accent-600)), rgb(var(--primary-800))); }
+.collection-cover--f { background: linear-gradient(150deg, rgb(var(--primary-800)), rgb(var(--accent-600))); }
+
+/* The thin progress rule under a collection's head. */
+.collection-card__progress {
+  height: 0.3rem;
+  border-radius: 999px;
+  background: rgb(var(--accent-500) / 0.18);
+  overflow: hidden;
+}
+
+.collection-card__progress > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(to left, rgb(var(--primary-600)), rgb(var(--accent-500)));
+  transition: width 0.5s ease;
 }

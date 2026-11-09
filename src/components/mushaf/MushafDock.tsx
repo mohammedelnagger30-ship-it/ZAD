@@ -11,6 +11,8 @@ interface MushafDockProps {
   zoomOut: () => void;
   zoomIn: () => void;
   zoomPercent: number;
+  zoomInDisabled?: boolean;
+  zoomOutDisabled?: boolean;
   prefs: MushafPrefs;
 }
 
@@ -23,6 +25,8 @@ export function MushafDock({
   zoomOut,
   zoomIn,
   zoomPercent,
+  zoomInDisabled,
+  zoomOutDisabled,
   prefs,
 }: MushafDockProps) {
   return (
@@ -39,11 +43,11 @@ export function MushafDock({
           </button>
 
           <div className="mushaf-zoom">
-            <button onClick={zoomOut} disabled={prefs.zoom <= ZOOM_MIN} aria-label="تصغير الصفحة">
+            <button onClick={zoomOut} disabled={zoomOutDisabled ?? prefs.zoom <= ZOOM_MIN} aria-label="تصغير الصفحة">
               <ZoomOut size={15} />
             </button>
             <span className="mushaf-zoom__value">{toArabicNumber(zoomPercent)}%</span>
-            <button onClick={zoomIn} disabled={prefs.zoom >= ZOOM_MAX} aria-label="تكبير الصفحة">
+            <button onClick={zoomIn} disabled={zoomInDisabled ?? prefs.zoom >= ZOOM_MAX} aria-label="تكبير الصفحة">
               <ZoomIn size={15} />
             </button>
           </div>

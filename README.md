@@ -120,7 +120,7 @@ npm run typecheck  # Type checking
 ### Prerequisites
 - [Node.js](https://nodejs.org/) 22+
 - [Android Studio](https://developer.android.com/studio) with Android SDK
-- Java JDK 17+
+- Java JDK 21+ (what Capacitor 8 and the CI workflow use)
 
 ### Steps
 
@@ -192,6 +192,7 @@ When Supabase is configured and a user signs in, account data is synchronized re
 2. Run these in the Supabase SQL Editor before signing in, in order:
    - `supabase/migrations/20261005000000_user_record_sync.sql` — the sync tables, RLS and the owner-scoped write RPC.
    - `supabase/migrations/20261005010000_sync_adhkar_state.sql` — adds the adhkar counters to the synced set. A device running an older build must not meet a record it cannot name, so run this before that build is replaced.
+   - `supabase/migrations/20261019000000_sync_khatmah_hifz_reviews.sql` — adds the reading plan (`khatmah`) and the memorisation schedule (`hifzReviews`) to the synced set, so both follow the account across devices instead of restarting per device. Same rule as above: run it before that build ships.
 3. Keep Row Level Security enabled. The migrations restrict reads to the authenticated owner and permit writes only through an authenticated, owner-scoped RPC.
 4. Configure email confirmation and redirect URLs in Supabase Auth for the deployed web app if email confirmation is enabled.
 
@@ -218,7 +219,7 @@ Releases are cut on demand, not by pushing to `main`. The `Android APK release` 
 
 1. Create the stable release key once with `powershell -ExecutionPolicy Bypass -File scripts\create-release-key.ps1`. Back up both ignored files `android\app\zad-release.jks` and `android\app\keystore.properties` securely. Never replace or lose this key.
 2. Authenticate `gh` with `gh auth login`, then run `powershell -ExecutionPolicy Bypass -File scripts\configure-github-release-secrets.ps1`. It uploads signing secrets and the Supabase build configuration without printing their values.
-3. Push completed changes to `main`; each push creates a new APK release. Use tags or the manual workflow only when you need to choose a specific version.
+3. Push completed changes to `main`. CI runs there, but nothing is published: a release happens only when you push a `vMAJOR.MINOR.PATCH` tag or start the workflow manually from the GitHub Actions tab with a version.
 
 The existing distributed APKs are debug-signed and cannot be upgraded in place with the new release key. Users must back up their app data, uninstall the old build once, and install the first release APK. Every later release signed with this preserved key can be installed as an update without removing app data.
 
@@ -260,17 +261,14 @@ Tests are located alongside their source files in `__tests__/` directories:
 
 ### Code Style
 
-- The project uses **ESLint** for linting and **Prettier** for formatting.
-- Run `npx prettier --write .` to format all files.
-- Arabic text is used for UI labels; keep all user-facing strings in `src/i18n.ts`.
+- The project uses **ESLint** for linting (`npm run lint`). There is no formatter installed; keep the surrounding style by hand.
+- Arabic text is used for UI labels, written inline in the component that shows it — there is no string table. Keep a label next to the markup it belongs to, and keep user-facing wording in Arabic.
 
 ## CI / CD
 
-This project uses **GitHub Actions** for continuous integration. On every push and pull request to `main`/`master`:
+This project uses **GitHub Actions** for continuous integration. On every push and pull request to `main`/`master`, two jobs run:
 
-1. Dependencies are installed (`npm ci`)
-2. Linting runs (`npm run lint`)
-3. Tests run (`npm test`)
-4. The app is built (`npm run build`)
+1. **Web (verify)** on `windows-latest`, against Node 22 and 24: `npm ci`, then the whole `npm run verify` chain — typecheck, lint, unit tests, the Quran text/data/page/flow/icon/timezone content checks, the production build, and the PWA precache asset audit. The Windows runner is deliberate: `check:icons` reads the generated PNGs through PowerShell + System.Drawing, so `verify` does not run on Linux or macOS.
+2. **Android (assembleRelease)** on `ubuntu-latest`: `npm run build`, `npx cap sync android`, then `./android/gradlew assembleRelease`, so R8 and the manifest are exercised on every push. No keystore is configured there, so that APK comes out unsigned — the job exists to fail loudly, not to publish.
 
 See [`.github/workflows/ci.yml`](.github/workflows/ci.yml) for details.

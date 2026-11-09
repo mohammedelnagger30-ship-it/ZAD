@@ -10,7 +10,7 @@ import {
   isCalibrated,
   tallyHeading,
   type CalibrationTally,
-} from '@/utils/qiblaCalibration';
+} from '@/utils/prayer/qiblaCalibration';
 
 interface QiblaCompassProps {
   /** Qibla bearing in degrees clockwise from true north. */
@@ -27,7 +27,7 @@ interface QiblaCompassProps {
 const ALIGN_TOLERANCE_DEG = 6;
 
 /*
- * The wizard's criteria live in `@/utils/qiblaCalibration` — the two bars, what
+ * The wizard's criteria live in `@/utils/prayer/qiblaCalibration` — the two bars, what
  * counts towards them, and the proof that neither alone is enough.
  */
 

@@ -2,7 +2,7 @@ import { SURAHS, toArabicNumber } from '@/data/surahs';
 import { ADHKAR_CATEGORIES } from '@/data/adhkar';
 import { GRADE_INFO } from '@/data/hadithCollections';
 import { arabicQueryTerms, normalizeArabic } from '@/utils/arabic';
-import { searchAyahs, type AyahSearchResult } from '@/utils/ayahSearch';
+import { searchAyahs, type AyahSearchResult } from '@/utils/quran/ayahSearch';
 import { searchInstalledHadiths, type SearchHit } from '@/utils/hadithService';
 import { searchInstalledTafsir, type TafsirSearchHit } from '@/utils/tafsirService';
 import type { ScreenName } from '@/hooks/useApp';

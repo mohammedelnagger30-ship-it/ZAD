@@ -15,7 +15,7 @@ import {
   writeLastDeviceTimeZone,
   TIME_ZONE_ADOPTION_EVENT,
   type TimeZoneAdoptionIO,
-} from '@/utils/timeZoneTravel';
+} from '@/utils/prayer/timeZoneTravel';
 
 type Fix = { latitude: number; longitude: number };
 

@@ -1,19 +1,25 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Search, Heart, BookText, X, ChevronLeft, ChevronRight, Filter, AlertTriangle, Library, Loader2, Download, Copy } from 'lucide-react';
-import { Card, Badge, EmptyState } from '@/components/ui';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Search, Heart, BookText, X, ChevronLeft, ChevronRight, Filter, AlertTriangle, Library, Loader2, Download, Copy, Check, Share2 } from 'lucide-react';
+import { Card, Badge, EmptyState, PageHeader } from '@/components/ui';
+import { SCREEN_METADATA } from '@/navigation/screenMetadata';
+import { HadithSharh } from '@/components/HadithSharh';
 import { ContentLibrary } from '@/screens/ContentLibrary';
 import {
   GRADE_INFO,
   getHadithCollection,
+  hadithOfDay,
   installedCollections,
   searchInstalledHadiths,
   type HadithCollection,
   type HadithRecord,
 } from '@/data/hadiths';
+import { carriesDistinctiveTerms, countMatches } from '@/utils/hadithService';
+import { arabicQueryTerms, stripTashkeel } from '@/utils/arabic';
 import { HADITH_BOOKS, HADITH_OF_DAY_BOOK, getHadithBook } from '@/data/contentCatalog';
 import type { HadithGrade } from '@/data/hadithCollections';
 import { toArabicNumber } from '@/data/surahs';
 import { db } from '@/db/database';
+import { prepareContentShare, shareContentCard, type PreparedAyahShare } from '@/utils/shareCard';
 
 type ViewMode = 'search' | 'browse' | 'detail' | 'manager';
 const SEARCH_PAGE_SIZE = 50;
@@ -84,11 +90,21 @@ export function HadithScreen({ params }: HadithScreenProps) {
   const [searchPage, setSearchPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
+  const [shareNotice, setShareNotice] = useState<string | null>(null);
+  const [preparedSelectedShare, setPreparedSelectedShare] = useState<{
+    hadithId: string;
+    prepared: PreparedAyahShare | null;
+  } | null>(null);
+  const [sharingHadith, setSharingHadith] = useState(false);
   const [copiedHadithId, setCopiedHadithId] = useState<string | null>(null);
   const [detailReturnView, setDetailReturnView] = useState<ViewMode>('search');
+  // The query whose results are in `hits`. Distinguishes "search done, nothing found"
+  // from "debounce still pending", which keeps a deep-link fallback from firing early.
+  const [completedQuery, setCompletedQuery] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    const ranFor = query;
     const run = async () => {
       setSearching(true);
       setSearchError(null);
@@ -109,7 +125,10 @@ export function HadithScreen({ params }: HadithScreenProps) {
           setSearchError(error instanceof Error ? error.message : 'تعذّر البحث في كتب الحديث المحمّلة');
         }
       } finally {
-        if (!cancelled) setSearching(false);
+        if (!cancelled) {
+          setCompletedQuery(ranFor);
+          setSearching(false);
+        }
       }
     };
     const timer = setTimeout(run, query.trim() ? 220 : 0);
@@ -146,6 +165,116 @@ export function HadithScreen({ params }: HadithScreenProps) {
     })();
   }, [deepLinkId]);
 
+  // "Hadith of the day" deep link — the notification that quotes a hadith's opening
+  // words. Unlike a bookmark or a search hit it cannot carry an id: the hadith is
+  // derived from the day of the year over whichever collection is on the device, and
+  // the scheduler cannot know that. It resolves the same entry the home card shows,
+  // through the same path, so the tap lands on exactly the hadith that was announced.
+  const deepLinkHadithOfDay = params?.hadithOfDay === true;
+  useEffect(() => {
+    if (!deepLinkHadithOfDay) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const installed = await installedCollections();
+        const id = installed.has(HADITH_OF_DAY_BOOK) ? HADITH_OF_DAY_BOOK : [...installed].sort()[0];
+        await getHadithCollection(id ?? HADITH_OF_DAY_BOOK);
+        if (cancelled) return;
+        const record = hadithOfDay();
+        if (!record) return;
+        setSelected(record);
+        setDetailReturnView('search');
+        setViewMode('detail');
+      } catch {
+        // The collection is not on the device; the empty state explains how to get it.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [deepLinkHadithOfDay]);
+
+  // Deep-link by search term: other screens ("سنن عن النبي") quote a hadith fragment and
+  // want a tap to land on the full text here. Depends on the query string itself, for the
+  // same reason as `deepLinkId` above.
+  //
+  // A citation is a paraphrase more often than a verbatim excerpt — "من توضأ فأحسن وضوءه"
+  // against a source that reads "فَأَحْسَنَ الْوُضُوءَ" — and the index matches every term,
+  // so a literal quote can find nothing. Candidates therefore fall back to the most
+  // distinctive words of the quote (the longest ones), never to the generic openers like
+  // "من" that a drop-from-the-end trim would have kept.
+  const deepLinkQuery = typeof params?.query === 'string' ? params.query.trim() : null;
+  const deepLinkCandidates = useMemo(() => {
+    if (!deepLinkQuery) return [];
+    const byLength = [...arabicQueryTerms(deepLinkQuery)].sort((a, b) => b.length - a.length);
+    const candidates = [deepLinkQuery];
+    if (byLength.length >= 2) candidates.push(byLength.slice(0, 2).join(' '));
+    if (byLength.length >= 1) candidates.push(byLength[0]);
+    return [...new Set(candidates)];
+  }, [deepLinkQuery]);
+  const [deepLinkStage, setDeepLinkStage] = useState(0);
+  useEffect(() => {
+    if (!deepLinkQuery) return;
+    setDeepLinkStage(0);
+    setCompletedQuery(null);
+    setQuery(deepLinkQuery);
+    setShowFavoritesOnly(false);
+    setCollectionFilter('all');
+    setSahihOnly(false);
+    setSearchPage(1);
+    setViewMode('search');
+  }, [deepLinkQuery]);
+
+  // Empty result? Try the next candidate. Only after the search for the current candidate
+  // has actually finished (`completedQuery`), otherwise the debounce window reads as "no
+  // results" and the walk skips ahead. A search that finished on a query outside the
+  // candidate list can only be the user's own typing — that stops the walk.
+  useEffect(() => {
+    if (!deepLinkQuery || searching) return;
+    if (completedQuery !== deepLinkCandidates[deepLinkStage]) {
+      if (completedQuery !== null && completedQuery === query && !deepLinkCandidates.includes(query)) {
+        setDeepLinkStage(deepLinkCandidates.length);
+      }
+      return;
+    }
+    if (hits.length > 0) return;
+    const next = deepLinkStage + 1;
+    if (next >= deepLinkCandidates.length) return;
+    setDeepLinkStage(next);
+    setCompletedQuery(null);
+    setQuery(deepLinkCandidates[next]);
+    setSearchPage(1);
+  }, [deepLinkQuery, deepLinkCandidates, deepLinkStage, searching, hits, query, completedQuery]);
+
+  // Once results are in, open the closest one instead of leaving the user in a list.
+  // Candidates are ranked on the whole original quote, and opening needs at least two of
+  // its words in the hadith — and, past that, every long one: two shared fillers are a
+  // keyword collision, not an identification, and the list stays for the user to pick.
+  // State resets when the screen unmounts, so tapping the same citation again reopens it.
+  const [openedDeepLink, setOpenedDeepLink] = useState<string | null>(null);
+  useEffect(() => {
+    if (!deepLinkQuery || searching || hits.length === 0) return;
+    if (completedQuery !== query) return;
+    if (openedDeepLink === deepLinkQuery) return;
+    // Only the quotation itself identifies a hadith. The shorter candidates are what
+    // give the list something to show when a citation turns out to be a paraphrase —
+    // opening on one of them is opening on a guess, and the guess that got measured
+    // here opened «لشيء» (21 unrelated narrations) on the urination-in-the-mosque
+    // hadith when the citation was Anas's «ما قال لشيء كُنتُه…». So a candidate
+    // shorter than the quote may inform the list, never the detail view.
+    if (query !== deepLinkQuery) return;
+    if (arabicQueryTerms(deepLinkQuery).length < 2) return;
+    const best = hits.reduce((top, hit) => (
+      countMatches(hit, deepLinkQuery) > countMatches(top, deepLinkQuery) ? hit : top
+    ), hits[0]);
+    if (countMatches(best, deepLinkQuery) < 2) return;
+    if (!carriesDistinctiveTerms(best, deepLinkQuery)) return;
+    setOpenedDeepLink(deepLinkQuery);
+    setSelected(best);
+    setDetailReturnView('search');
+    setViewMode('detail');
+  }, [deepLinkQuery, searching, hits, openedDeepLink, completedQuery, query]);
+
   // ---- browse ----
   const openCollection = useCallback(async (id: string) => {
     setBrowseCollection(id);
@@ -167,10 +296,47 @@ export function HadithScreen({ params }: HadithScreenProps) {
   const copyHadith = async (hadith: HadithRecord) => {
     setCopyError(null);
     try {
-      await navigator.clipboard.writeText(hadith.text);
+      // Copy without tashkeel for cleaner text
+      const textWithoutTashkeel = stripTashkeel(hadith.text);
+      await navigator.clipboard.writeText(textWithoutTashkeel);
       setCopiedHadithId(hadith.id);
     } catch {
       setCopyError('تعذّر نسخ الحديث. تحقق من إذن الحافظة وحاول مرة أخرى.');
+    }
+  };
+
+  useEffect(() => {
+    if (!selected || viewMode !== 'detail') return;
+    let active = true;
+    void prepareContentShare({
+      type: 'hadith',
+      text: selected.text,
+      reference: `${selected.collectionTitle} — رقم ${toArabicNumber(selected.arabicNumber)}`,
+    }).then((prepared) => {
+      if (active) setPreparedSelectedShare({ hadithId: selected.id, prepared });
+    });
+    return () => {
+      active = false;
+    };
+  }, [selected, viewMode]);
+
+  const shareHadith = async (hadith: HadithRecord) => {
+    setShareNotice(null);
+    setSharingHadith(true);
+    try {
+      const outcome = await shareContentCard({
+        type: 'hadith',
+        text: hadith.text,
+        reference: `${hadith.collectionTitle} — رقم ${toArabicNumber(hadith.arabicNumber)}`,
+      }, preparedSelectedShare?.hadithId === hadith.id
+        ? preparedSelectedShare.prepared
+        : undefined);
+      if (outcome === 'failed') setShareNotice('تعذّرت مشاركة صورة الحديث. استخدم زر النسخ لإرسال نصه.');
+    } catch (error) {
+      console.error('Hadith sharing failed:', error);
+      setShareNotice('تعذّرت مشاركة الحديث الآن. حاول مرة أخرى.');
+    } finally {
+      setSharingHadith(false);
     }
   };
 
@@ -260,13 +426,27 @@ export function HadithScreen({ params }: HadithScreenProps) {
             <div className="flex flex-wrap items-center gap-2 border-t border-primary-100 pt-3 dark:border-primary-800">
               <button
                 onClick={() => void copyHadith(selected)}
-                className="inline-flex items-center gap-2 rounded-lg bg-primary-50 px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-100 dark:bg-primary-800/50 dark:text-primary-200 dark:hover:bg-primary-800"
+                aria-label={copiedHadithId === selected.id ? 'تم نسخ الحديث' : 'نسخ نص الحديث'}
+                title={copiedHadithId === selected.id ? 'تم نسخ الحديث' : 'نسخ نص الحديث'}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-primary-50 text-primary-700 transition-colors hover:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:bg-primary-800/50 dark:text-primary-200 dark:hover:bg-primary-800"
               >
-                <Copy size={16} />
-                {copiedHadithId === selected.id ? 'تم النسخ' : 'نسخ نص الحديث'}
+                {copiedHadithId === selected.id ? <Check size={18} /> : <Copy size={18} />}
+              </button>
+              <button
+                onClick={() => void shareHadith(selected)}
+                disabled={sharingHadith}
+                aria-label="مشاركة الحديث كصورة"
+                aria-busy={sharingHadith}
+                title="مشاركة الحديث كصورة"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-gold-100 text-gold-800 transition-colors hover:bg-gold-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 disabled:opacity-60 dark:bg-gold-900/30 dark:text-gold-300 dark:hover:bg-gold-900/50"
+              >
+                {sharingHadith ? <Loader2 size={16} className="animate-spin" /> : <Share2 size={16} />}
               </button>
               {copyError && <p role="alert" className="text-xs text-error-600 dark:text-error-300">{copyError}</p>}
+              {shareNotice && <p role="status" className="text-xs text-primary-700 dark:text-primary-300">{shareNotice}</p>}
             </div>
+
+            <HadithSharh hadithId={selected.id} text={selected.text} />
 
             <div className="border-t border-primary-100 dark:border-primary-800 pt-3 space-y-1">
               {selected.sectionTitle && (
@@ -521,11 +701,11 @@ export function HadithScreen({ params }: HadithScreenProps) {
   // ---- search (default) ----
   return (
     <div className="space-y-4 pb-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-primary-800 dark:text-primary-100">
-          مكتبة الأحاديث
-        </h1>
-        <div className="flex items-center gap-2">
+      <PageHeader
+        title="مكتبة الأحاديث"
+        icon={<SCREEN_METADATA.hadith.icon size={20} />}
+        actions={
+          <div className="flex items-center gap-2">
           <button
             onClick={() => setViewMode('browse')}
             className="w-10 h-10 rounded-lg bg-primary-100 dark:bg-primary-800 flex items-center justify-center text-primary-600 dark:text-gold-400"
@@ -542,8 +722,9 @@ export function HadithScreen({ params }: HadithScreenProps) {
           >
             <Library size={20} />
           </button>
-        </div>
-      </div>
+          </div>
+        }
+      />
 
       <Card className="border-primary-100 bg-primary-50/70 dark:border-primary-800 dark:bg-primary-900/50">
         <div className="flex items-start gap-3">

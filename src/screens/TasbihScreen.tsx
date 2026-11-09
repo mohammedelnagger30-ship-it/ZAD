@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { RotateCcw, Vibrate, Volume2, VolumeX, Sparkles, Check, Flame, Trophy, Layers } from 'lucide-react';
-import { Button, Card } from '@/components/ui';
+import { RotateCcw, Vibrate, Volume2, VolumeX, Check, Flame, Trophy, Layers, Target } from 'lucide-react';
+import { Button, Card, PageHeader } from '@/components/ui';
 import { todayKey } from '@/utils/dateUtils';
+import { SCREEN_METADATA } from '@/navigation/screenMetadata';
 
 const TASBIH_PRESETS = [
   { label: 'سبحان الله', text: 'سُبْحَانَ اللَّهِ', target: 33 },
@@ -228,20 +229,12 @@ export function TasbihScreen({ params }: { params?: Record<string, unknown> } = 
       dir="rtl"
       onClick={fullScreenTap ? handleTap : undefined}
     >
-      {/* Top Title Bar & Settings Buttons */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-primary-900 dark:text-primary-50 flex items-center gap-2">
-            <Sparkles className="text-amber-500 animate-pulse" size={24} />
-            المسبحة الإلكترونية
-          </h1>
-          <p className="text-xs text-primary-700/80 dark:text-primary-300 mt-0.5">
-            تسبيح تفاعلي واهتزاز عالي الدقة بدون إنترنت
-          </p>
-        </div>
-
-        {/* Haptic & Sound Quick Controls */}
-        <div className="flex items-center gap-1.5 rounded-2xl bg-primary-50 p-1 dark:bg-primary-900/60 border border-primary-200/60 dark:border-primary-800/60">
+      <PageHeader
+        title="المسبحة الإلكترونية"
+        description="تسبيح تفاعلي واهتزاز عالي الدقة بدون إنترنت"
+        icon={<SCREEN_METADATA.tasbih.icon size={20} />}
+        actions={
+          <div className="flex items-center gap-1.5 rounded-2xl border border-primary-200/60 bg-primary-50 p-1 dark:border-primary-800/60 dark:bg-primary-900/60">
           <button
             type="button"
             onClick={(e) => {
@@ -275,8 +268,9 @@ export function TasbihScreen({ params }: { params?: Record<string, unknown> } = 
           >
             {soundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
           </button>
-        </div>
-      </div>
+          </div>
+        }
+      />
 
       {/* Preset Dhikr Selector Horizontal Strip */}
       <div className="flex gap-2 overflow-x-auto pb-1.5 -mx-4 px-4 scrollbar-hide md:mx-0 md:px-0">
@@ -437,7 +431,7 @@ export function TasbihScreen({ params }: { params?: Record<string, unknown> } = 
 
           <div className="px-2">
             <div className="flex items-center justify-center gap-1 text-primary-600 dark:text-gold-400 mb-1">
-              <Sparkles size={16} />
+              <Target size={16} />
             </div>
             <p className="text-xl font-extrabold text-primary-900 dark:text-primary-50">{Math.round(progress * 100)}%</p>
             <p className="text-[0.6875rem] font-semibold text-gray-500 dark:text-gray-400">التقدم بالدورة</p>

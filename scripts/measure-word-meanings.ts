@@ -10,7 +10,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
-import { alignAyahMeanings } from '../src/utils/wordMeaningsService';
+import { alignAyahMeanings } from '../src/utils/quran/wordMeaningsService';
 import { WORD_MEANINGS } from '../src/data/contentCatalog';
 import { getAyah } from '../src/data/quranText';
 import { splitBasmala } from '../src/utils/basmala';

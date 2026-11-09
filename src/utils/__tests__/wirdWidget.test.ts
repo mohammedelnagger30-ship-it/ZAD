@@ -15,7 +15,7 @@ import {
   composeWirdPrayers,
   composeWirdTasks,
   type WirdTaskRow,
-} from '@/utils/wirdWidget';
+} from '@/utils/quran/wirdWidget';
 
 const hifz = (portion: string, status = 'pending'): WirdTaskRow => ({
   type: 'hifz',

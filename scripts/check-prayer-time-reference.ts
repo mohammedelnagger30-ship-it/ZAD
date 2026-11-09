@@ -3,7 +3,7 @@ import {
   calculatePrayerTimes,
   isEgyptianLocation,
   zoneOffsetMs,
-} from '../src/utils/prayerTimes';
+} from '../src/utils/prayer/prayerTimes';
 
 const EGYPT_TIME_ZONE = 'Africa/Cairo';
 const MAX_DRIFT_SECONDS = 60;

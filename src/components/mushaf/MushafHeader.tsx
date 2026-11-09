@@ -1,6 +1,10 @@
-import { Bookmark, Moon, SlidersHorizontal, Sun, X } from 'lucide-react';
+import { Bookmark, Layers, SlidersHorizontal, X } from 'lucide-react';
 import { toArabicNumber } from '@/data/surahs';
-import { type MushafPrefs, type SheetName } from '@/components/mushaf/readerConfig';
+import {
+  PAPERS,
+  type MushafPrefs,
+  type SheetName,
+} from '@/components/mushaf/readerConfig';
 
 interface MushafHeaderProps {
   onClose: () => void;
@@ -8,9 +12,10 @@ interface MushafHeaderProps {
   currentJuz: number;
   currentHizb: number;
   currentPage: number;
+  openJuzPicker: () => void;
   isBookmarked: boolean;
   toggleBookmark: (page: number) => void;
-  mode: MushafPrefs['mode'];
+  paper: MushafPrefs['paper'];
   updatePrefs: (patch: Partial<MushafPrefs>) => void;
   sheet: SheetName | null;
   setSheet: (sheet: SheetName | null) => void;
@@ -24,13 +29,20 @@ export function MushafHeader({
   currentJuz,
   currentHizb,
   currentPage,
+  openJuzPicker,
   isBookmarked,
   toggleBookmark,
-  mode,
+  paper,
   updatePrefs,
   sheet,
   setSheet,
 }: MushafHeaderProps) {
+  const paperIndex = Math.max(
+    0,
+    PAPERS.findIndex((candidate) => candidate.id === paper),
+  );
+  const currentPaper = PAPERS[paperIndex];
+  const nextPaper = PAPERS[(paperIndex + 1) % PAPERS.length];
   return (
     <>
       {/* ── Above the page: who you are reading ─────────────────────────── */}
@@ -43,9 +55,20 @@ export function MushafHeader({
           <p className="mushaf-heading__title">
             {surahsOnPage.length > 0 ? surahsOnPage.map((s) => s.name).join(' · ') : `الجزء ${toArabicNumber(currentJuz)}`}
           </p>
-          <p className="mushaf-heading__meta">
-            الجزء {toArabicNumber(currentJuz)} · الحزب {toArabicNumber(currentHizb)}
-          </p>
+          <div className="mushaf-heading__meta flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={openJuzPicker}
+              aria-label={`الانتقال إلى الجزء ${toArabicNumber(currentJuz)}`}
+              title="اختر جزءًا للقراءة"
+              className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 font-semibold text-primary-700 transition-colors hover:bg-primary-100 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-primary-200 dark:hover:bg-primary-800"
+            >
+              <Layers size={12} aria-hidden="true" />
+              الجزء {toArabicNumber(currentJuz)}
+            </button>
+            <span aria-hidden="true">·</span>
+            <span>الحزب {toArabicNumber(currentHizb)}</span>
+          </div>
         </div>
 
         <div className="mushaf-actions">
@@ -60,11 +83,11 @@ export function MushafHeader({
           </button>
           <button
             className="mushaf-iconbtn"
-            onClick={() => updatePrefs({ mode: mode === 'night' ? 'day' : 'night' })}
-            aria-label={mode === 'night' ? 'الوضع النهاري' : 'الوضع الليلي'}
-            aria-pressed={mode === 'night'}
+            onClick={() => updatePrefs({ paper: nextPaper.id })}
+            aria-label={`تغيير لون الورق — الحالي ${currentPaper.label}`}
+            title={`الورق: ${currentPaper.label}. اضغط للتبديل إلى ${nextPaper.label}`}
           >
-            {mode === 'night' ? <Sun size={17} /> : <Moon size={17} />}
+            <span className={`mushaf-paper-dot mushaf-paper-dot--${currentPaper.id}`} aria-hidden="true" />
           </button>
           <button
             className="mushaf-iconbtn"

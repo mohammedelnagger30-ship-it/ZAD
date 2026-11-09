@@ -13,16 +13,16 @@ import {
   subscribeToContent,
   type AudioTrackInfo,
 } from '@/utils/contentStore';
-import { exportAudioTrack } from '@/utils/audioFileExport';
+import { exportAudioTrack } from '@/utils/audio/audioFileExport';
 import {
   getRecitationState,
   setTrack,
   stop,
   subscribeRecitation,
   toggleSurah,
-} from '@/utils/recitationEngine';
+} from '@/utils/audio/recitationEngine';
 import { useConfirm } from '@/hooks/useConfirm';
-import { downloadSurahAudio } from '@/utils/quranAudio';
+import { downloadSurahAudio } from '@/utils/audio/quranAudio';
 import {
   allSurahIds,
   countSurahs,
@@ -221,7 +221,9 @@ export function AudioDownloadManager() {
       await reloadStatus();
     } catch (cause) {
       // The queue collects its own failures, so anything that reaches here is
-      // the store or the status refresh, not one surah.
+      // the store or the status refresh, not one surah. An abort (the reader
+      // cancelled the batch) is not a failure.
+      if (cause instanceof Error && cause.name === 'AbortError') return;
       setError(cause instanceof Error ? cause.message : 'تعذّر تنزيل التلاوات');
     } finally {
       if (batchControllerRef.current === controller) batchControllerRef.current = null;

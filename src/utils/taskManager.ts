@@ -211,6 +211,53 @@ export async function unsnoozeTask(taskId: number): Promise<void> {
   });
 }
 
+export function taskNavigationParams(task: DailyTask): Record<string, unknown> | null {
+  if (task.portion.startsWith('surah:')) {
+    const [, idText, range] = task.portion.split(':');
+    const surahId = Number(idText);
+    if (!Number.isFinite(surahId)) return null;
+    const surah = getSurah(surahId);
+    if (!surah) return null;
+    let ayah = 1;
+    if (range) {
+      const [from] = range.split('-');
+      const parsed = Number(from);
+      if (Number.isFinite(parsed) && parsed >= 1) ayah = Math.min(surah.ayahCount, parsed);
+    }
+    return { openSurahId: surahId, openAyah: ayah };
+  }
+  if (task.portion.startsWith('juz:')) {
+    const juz = JUZ_INFO.find((item) => item.id === Number(task.portion.slice('juz:'.length)));
+    if (!juz) return null;
+    return { openPage: juz.startPage };
+  }
+  if (task.portion.startsWith('page:')) {
+    const page = Number(task.portion.slice('page:'.length));
+    if (!Number.isFinite(page)) return null;
+    return { openPage: page };
+  }
+  return null;
+}
+
+export function taskTargetLabel(task: DailyTask): string {
+  if (task.portion.startsWith('surah:')) {
+    const [, , range] = task.portion.split(':');
+    if (range) {
+      const [from] = range.split('-');
+      return `آية ${from}`;
+    }
+    return 'من البداية';
+  }
+  if (task.portion.startsWith('juz:')) {
+    const juz = JUZ_INFO.find((item) => item.id === Number(task.portion.slice('juz:'.length)));
+    return juz ? `صفحة ${juz.startPage}` : '';
+  }
+  if (task.portion.startsWith('page:')) {
+    return `صفحة ${task.portion.slice('page:'.length)}`;
+  }
+  return '';
+}
+
 export async function markMissedTasks(): Promise<void> {
   const dateKey = todayKey();
   const now = trustedNowMs();
