@@ -500,6 +500,17 @@ export function MushafReader({
     if (orientation === 'horizontal') scrollRef.current?.scrollTo({ top: 0 });
   }, [currentPage, orientation]);
 
+  // Enlarging the type changes the height of every sheet, so the stack's scroll offset
+  // would land the reader on a different page after the reflow. Put them back on the page
+  // they were reading before the change.
+  const previousZoomRef = useRef(prefs.zoom);
+  useLayoutEffect(() => {
+    if (previousZoomRef.current === prefs.zoom) return;
+    previousZoomRef.current = prefs.zoom;
+    if (orientation === 'vertical') scrollToLeaf(currentPageRef.current);
+    else scrollRef.current?.scrollTo({ top: 0 });
+  }, [prefs.zoom, orientation, scrollToLeaf]);
+
   /**
    * A pressed ayah asks a question of its own: does the reader want what it means,
    * or how it sounds, and in how much of the book — this one ayah, or the surah
@@ -815,19 +826,17 @@ export function MushafReader({
   // at a tablet size while the reader's saved size stays the size the reader asked for.
   const viewportStep = useViewportStep();
   const viewportWidth = useViewportWidth();
-  // The printed column must fit the sheet: the font size is capped so the 18em measure
-  // never overflows the page. Zoom and a free font-size knob would break that, so the
-  // mushaf stays at its designed size (responsive to the screen, not to a zoom gesture).
+  // The printed column must fit the sheet: the font size starts at the fitted size
+  // (largest that fits), so the 18em measure never reflows at rest. Zoom multiplies that
+  // size; when the larger measure would leave the sheet — which it does above 100% on a
+  // phone, where the fitted size already fills it — the page reflows inside the frame.
+  // The printed line breaks therefore stay exact for every zoom level that still fits.
+  const columnWidth = mushafTextColumnWidth(viewportWidth);
   const pageMeasureEm = COLUMN_EM + Math.max(0, prefs.wordSpacing) * MAX_LINE_WORD_GAPS;
-  const zoomCap = mushafTextColumnWidth(viewportWidth) / pageMeasureEm;
-  // The fitted size is the largest font that fits the sheet at rest. Zoom scales from
-  // that fitted size (so zooming out actually shrinks even on a phone, where the fitted
-  // size already fills the sheet) and is clamped to the fitted size (no overflow).
+  const zoomCap = columnWidth / pageMeasureEm;
   const fittedFontSize = Math.min(settings.fontSize * viewportStep, zoomCap);
-  const effectiveFontSize = Math.round(
-    Math.min(fittedFontSize * prefs.zoom * prefs.readingScale, zoomCap) * 100,
-  ) / 100;
-  const canZoomIn = effectiveFontSize < zoomCap - 0.5;
+  const effectiveFontSize = Math.round(fittedFontSize * prefs.zoom * 100) / 100;
+  const reflow = effectiveFontSize * pageMeasureEm > columnWidth + 0.5;
   const paper = prefs.paper;
   const nightPaper = isDarkPaper(paper);
   /** The ayah under discussion, held on the page while either of its sheets is open. */
@@ -919,6 +928,7 @@ export function MushafReader({
                 paper={paper}
                 lineHeight={1.9 + (prefs.lineSpacing - 1) * 0.55}
                 wordSpacing={prefs.wordSpacing}
+                reflow={reflow}
                 wordMeaningsInstalled={wordMeaningsInstalled}
                 onAyahPress={handleAyahPress}
                 onWordPress={handleWordPress}
@@ -941,6 +951,7 @@ export function MushafReader({
               paper={paper}
               lineHeight={1.9 + (prefs.lineSpacing - 1) * 0.55}
               wordSpacing={prefs.wordSpacing}
+              reflow={reflow}
               wordMeaningsInstalled={wordMeaningsInstalled}
               onAyahPress={handleAyahPress}
               onWordPress={handleWordPress}
@@ -973,7 +984,7 @@ export function MushafReader({
         zoomOut={zoomOut}
         zoomIn={zoomIn}
         zoomPercent={zoomPercent}
-        zoomInDisabled={!canZoomIn}
+        zoomInDisabled={prefs.zoom >= ZOOM_MAX}
         zoomOutDisabled={prefs.zoom <= ZOOM_MIN}
         prefs={prefs}
       />
@@ -1061,6 +1072,7 @@ interface MushafLeafProps {
   paper: MushafPaper;
   lineHeight: number;
   wordSpacing: number;
+  reflow?: boolean;
   /** Whether the meanings pack is on the device — decides what a pressed word can offer. */
   wordMeaningsInstalled: boolean;
   onAyahPress: (surahId: number, ayahNumber: number) => void;

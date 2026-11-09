@@ -1,7 +1,6 @@
 import type { CSSProperties } from 'react';
 import { Pause, Play, RotateCcw } from 'lucide-react';
 import { getSurah, toArabicNumber } from '@/data/surahs';
-import { getAyah } from '@/data/quranText';
 import { AUDIO_RECITERS } from '@/data/audioReciters';
 import { type VoiceScope } from '@/components/mushaf/readerConfig';
 
@@ -68,10 +67,6 @@ export function AyahVoicePanel({
   voicePrimaryLabel,
   voiceError,
 }: AyahVoicePanelProps) {
-  const ayahWords = ayahChoice
-    ? getAyah(ayahChoice.surahId, ayahChoice.ayahNumber)?.text.split(' ') ?? []
-    : [];
-
   return (
     <section className="mushaf-voice" aria-label="مشغل التلاوة">
       <div className="mushaf-voice__now-playing" aria-live="polite">
@@ -86,24 +81,6 @@ export function AyahVoicePanel({
           {voicePhase === 'loading' ? 'جارٍ التحضير' : voicePhase === 'error' ? 'تعذّر التشغيل' : 'تلاوة'}
         </span>
       </div>
-
-      <p className="mushaf-body mushaf-voice__ayah" dir="rtl">
-        {ayahWords.slice(0, -1).map((word, index) => (
-          <span key={index}>{word} </span>
-        ))}
-        {ayahWords.length > 0 && (
-          <span className="mushaf-ayah-tail">
-            {ayahWords[ayahWords.length - 1]}
-            <span
-              className="mushaf-ayah-mark"
-              role="img"
-              aria-label={`الآية ${toArabicNumber(ayahChoice?.ayahNumber ?? 1)}`}
-            >
-              {toArabicNumber(ayahChoice?.ayahNumber ?? 1)}
-            </span>
-          </span>
-        )}
-      </p>
 
       {!voiceWholeFile && (
         <div className="mushaf-seg mushaf-voice__scope" role="group" aria-label="نطاق التلاوة">

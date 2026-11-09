@@ -18,7 +18,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { ReactElement, RefObject } from 'react';
-import { getAyahs } from '@/data/quranText';
 
 import { AyahVoiceSheet } from '@/components/mushaf/AyahVoiceSheet';
 
@@ -96,9 +95,8 @@ describe('AyahVoiceSheet recitation transport', () => {
     container.remove();
   });
 
-  it('shows the selected ayah text when its actions are open', () => {
-    const selectedAyah = getAyahs(1, 1, 1)[0]!;
-    expect(container.querySelector('.mushaf-voice__ayah')?.textContent).toBe(selectedAyah.text);
+  it('does not show the selected ayah text when its actions are open', () => {
+    expect(container.querySelector('.mushaf-voice__ayah')).toBeNull();
     expect(container.querySelector('.mushaf-sheet__juz')).toBeNull();
     expect(container.textContent).toContain('التفسير');
     expect(container.textContent).toContain('التلاوة');

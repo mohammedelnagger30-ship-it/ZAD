@@ -1424,7 +1424,6 @@ html.dark body {
    * survive justification (justification otherwise cancels `word-spacing` exactly).
    */
   width: calc(var(--mushaf-column, 18.08em) + var(--word-extra, 0em));
-  max-width: 100%;
   margin-inline: auto;
   text-align: justify;
   text-justify: inter-word;
@@ -1446,6 +1445,17 @@ html.dark body {
 .mushaf-line {
   margin-block: 0;
   text-align-last: justify;
+}
+
+/*
+ * Above 100% the type is enlarged past the printed measure, so holding the printed line
+ * breaks would push the line outside the page. The block keeps the page's own column
+ * (100% of the content box, between the frame's margins) and lets the browser re-wrap it,
+ * so the larger text always stays inside the sheet. The final line is not stretched.
+ */
+.mushaf-line--flow {
+  width: 100%;
+  text-align-last: start;
 }
 
 /* The closing line of a surah is short by nature; stretching it across the column would

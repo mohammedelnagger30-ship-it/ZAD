@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Bookmark } from 'lucide-react';
 import { getSurah, getJuzForPage, toArabicNumber } from '@/data/surahs';
 import { getHizbForPage, SAJDAH_AYAHS } from '@/data/mushafPages';
-import { getPageLines, COLUMN_EM } from '@/data/mushafFlow';
+import { getPageLines, COLUMN_EM, type FlowLine } from '@/data/mushafFlow';
 import { getSurahWords } from '@/data/mushafWords';
 import { highlightWash } from '@/utils/quran/ayahHighlights';
 import { getSurahWordMeanings } from '@/utils/quran/wordMeaningsService';
@@ -18,6 +18,16 @@ interface PageAyah {
   ayahNumber: number;
   text: string;
 }
+
+/**
+ * One printable block of the page. At rest a text block is exactly one printed line; when
+ * the reader has enlarged the type past the printed measure, consecutive lines of the same
+ * surah merge into one block and the browser re-wraps it inside the sheet.
+ */
+type PageRenderGroup =
+  | { kind: 'text'; lines: FlowLine[] }
+  | { kind: 'heading'; line: FlowLine }
+  | { kind: 'basmala'; line: FlowLine };
 
 interface MushafWordButtonProps {
   ayah: PageAyah;
@@ -69,6 +79,12 @@ export interface MushafPageProps {
   lineHeight?: number;
   letterSpacing?: number;
   wordSpacing?: number;
+  /**
+   * Type has been enlarged past the printed measure, so the page reflows its words
+   * inside the sheet instead of holding the printed line breaks. Above 100% zoom this
+   * is what keeps the larger text inside the page frame.
+   */
+  reflow?: boolean;
   wordMeaningsInstalled?: boolean;
   onAyahPress?: (surahId: number, ayahNumber: number) => void;
   /**
@@ -125,6 +141,11 @@ export function MushafFrameDecoration() {
  * line breaks — and therefore the gaps between words — identical to the printed page.
  * The browser only has a few percent of slack left to distribute, which is why the text
  * fills the column evenly instead of stretching a handful of words across it.
+ *
+ * `reflow` is the one exception, and only above 100%: type larger than the printed
+ * measure cannot stay inside the sheet while keeping those breaks, so the page re-wraps
+ * itself in the same column, with the same face and justification, and never spills over
+ * the frame.
  */
 export function MushafPage({
   page,
@@ -136,6 +157,7 @@ export function MushafPage({
   lineHeight = 1.9,
   letterSpacing = 0,
   wordSpacing = 0,
+  reflow = false,
   wordMeaningsInstalled = false,
   onAyahPress,
   onWordPress,
@@ -146,6 +168,38 @@ export function MushafPage({
   const hizb = getHizbForPage(page);
 
   const lines = useMemo(() => getPageLines(page), [page]);
+
+  /**
+   * At the printed size each flow line is its own paragraph, which is what keeps the
+   * printed breaks. Once zoom enlarges the type past the sheet's measure, those lines
+   * would run outside the frame, so consecutive lines of one surah become one paragraph
+   * and the browser re-wraps them inside the page's own column.
+   */
+  const renderGroups = useMemo(() => {
+    const groups: PageRenderGroup[] = [];
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+      if (line.kind === 'heading' || line.kind === 'basmala') {
+        groups.push({ kind: line.kind, line });
+        continue;
+      }
+      const textLines = [line];
+      if (reflow) {
+        let next = i + 1;
+        while (
+          next < lines.length &&
+          lines[next].kind === 'text' &&
+          lines[next].surahId === line.surahId
+        ) {
+          textLines.push(lines[next]);
+          next += 1;
+        }
+        i = next - 1;
+      }
+      groups.push({ kind: 'text', lines: textLines });
+    }
+    return groups;
+  }, [lines, reflow]);
 
   const surahIds = useMemo(
     () => [...new Set(lines.map((line) => line.surahId))],
@@ -304,12 +358,12 @@ export function MushafPage({
         <span>الحزب {toArabicNumber(hizb)}</span>
       </div>
 
-      {lines.map((line, lineIndex) => {
-        if (line.kind === 'heading') {
-          const surah = getSurah(line.surahId);
+      {renderGroups.map((group, groupIndex) => {
+        if (group.kind === 'heading') {
+          const surah = getSurah(group.line.surahId);
           if (!surah) return null;
           return (
-            <div key={`heading-${lineIndex}`} className="mushaf-banner">
+            <div key={`heading-${groupIndex}`} className="mushaf-banner">
               <div className="mushaf-banner__name">سورة {surah.name}</div>
               <div className="mushaf-banner__meta">
                 {surah.revelationType === 'meccan' ? 'مكية' : 'مدنية'} ·{' '}
@@ -319,10 +373,11 @@ export function MushafPage({
           );
         }
 
-        if (line.kind === 'basmala') {
+        if (group.kind === 'basmala') {
+          const line = group.line;
           const words = getSurahWords(line.surahId).slice(line.from, line.from + line.count);
           return (
-            <p key={`basmala-${lineIndex}`} className="mushaf-basmala">
+            <p key={`basmala-${groupIndex}`} className="mushaf-basmala">
               <span className="mushaf-basmala__rule" aria-hidden="true" />
               {words.map((word) => word.text).join(' ')}
               <span className="mushaf-basmala__rule" aria-hidden="true" />
@@ -330,27 +385,36 @@ export function MushafPage({
           );
         }
 
+        const line = group.lines[0];
         const surah = getSurah(line.surahId);
         const surahName = surah?.name ?? '';
         const surahWords = getSurahWords(line.surahId);
-        const words = surahWords.slice(line.from, line.from + line.count);
         const indexes = wordIndexBySurah.get(line.surahId);
-        const endsSurah = line.from + line.count >= surahWords.length;
+        const lastLine = group.lines[group.lines.length - 1];
+        const endsSurah = lastLine.from + lastLine.count >= surahWords.length;
 
         // Consecutive words of the same ayah are drawn as one run so the highlight wash
         // covers the spaces between them, the way the old whole-ayah span did.
         const runs: { ayah: number; items: { text: string; globalIndex: number; endsAyah: boolean }[] }[] = [];
-        for (let i = 0; i < words.length; i++) {
-          const globalIndex = line.from + i;
-          const word = words[i];
-          const last = runs[runs.length - 1];
-          const item = { text: word.text, globalIndex, endsAyah: word.endsAyah };
-          if (last && last.ayah === word.ayah) last.items.push(item);
-          else runs.push({ ayah: word.ayah, items: [item] });
+        for (const textLine of group.lines) {
+          for (let i = 0; i < textLine.count; i++) {
+            const globalIndex = textLine.from + i;
+            const word = surahWords[globalIndex];
+            if (!word) continue;
+            const last = runs[runs.length - 1];
+            const item = { text: word.text, globalIndex, endsAyah: word.endsAyah };
+            if (last && last.ayah === word.ayah) last.items.push(item);
+            else runs.push({ ayah: word.ayah, items: [item] });
+          }
         }
 
         return (
-          <p className={`mushaf-line${endsSurah ? ' mushaf-line--surah-end' : ''}`} key={`line-${lineIndex}`}>
+          <p
+            className={`mushaf-line${reflow ? ' mushaf-line--flow' : ''}${
+              endsSurah ? ' mushaf-line--surah-end' : ''
+            }`}
+            key={`text-${groupIndex}`}
+          >
             {runs.map((run, runIndex) => {
               const key = `${line.surahId}:${run.ayah}`;
               const isActive =
@@ -366,7 +430,7 @@ export function MushafPage({
               return (
                 <span className="mushaf-ayah" style={ayahStyle} key={`${key}-${runIndex}`}>
                   {run.items.map(({ text, globalIndex, endsAyah }, itemIndex) => {
-                    const isLastItemOfLine = isLastRun && itemIndex === run.items.length - 1;
+                    const isLastWordOfGroup = isLastRun && itemIndex === run.items.length - 1;
                     const wordIndex = indexes?.[globalIndex] ?? 0;
                     const ayah: PageAyah = {
                       surahId: line.surahId,
@@ -403,7 +467,7 @@ export function MushafPage({
                             )}
                           </>
                         )}
-                        {!isLastItemOfLine && ' '}
+                        {!isLastWordOfGroup && ' '}
                       </span>
                     );
                   })}
