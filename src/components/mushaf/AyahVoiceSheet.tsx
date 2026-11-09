@@ -4,7 +4,6 @@ import { Sheet } from '@/components/mushaf/Sheet';
 import { getSurah, toArabicNumber } from '@/data/surahs';
 import { type VoiceScope } from '@/components/mushaf/readerConfig';
 import { AyahVoicePanel } from '@/components/mushaf/AyahVoicePanel';
-import { HIGHLIGHT_COLORS } from '@/utils/quran/ayahHighlights';
 
 interface AyahVoiceSheetProps {
   ayahChoice: { surahId: number; ayahNumber: number } | null;
@@ -34,8 +33,6 @@ interface AyahVoiceSheetProps {
   setVoicePlaying: (playing: boolean) => void;
   handleVoiceTime: () => void;
   handleVoiceEnded: () => void;
-  highlightColor?: string;
-  onPickHighlightColor?: (colorId: string | null) => void;
   /** Currently followed ayah (null when not following). */
   followedAyah: { surahId: number; ayahNumber: number } | null;
   /**
@@ -78,8 +75,6 @@ export function AyahVoiceSheet({
   setVoicePlaying,
   handleVoiceTime,
   handleVoiceEnded,
-  highlightColor,
-  onPickHighlightColor,
   followedAyah,
   extra,
 }: AyahVoiceSheetProps) {
@@ -103,36 +98,6 @@ export function AyahVoiceSheet({
               <span>التلاوة</span>
             </button>
           </div>
-          {onPickHighlightColor && (
-            <div className="mushaf-highlight-picker">
-              <p className="mushaf-highlight-picker__label">تمييز الآية بلون</p>
-              <div className="mushaf-highlight-picker__colors" role="group" aria-label="لون تمييز الآية">
-                {HIGHLIGHT_COLORS.map((color) => {
-                  const active = highlightColor === color.id;
-                  return (
-                    <button
-                      key={color.id}
-                      type="button"
-                      aria-pressed={active}
-                      aria-label={`تمييز بلون ${color.labelAr}`}
-                      title={color.labelAr}
-                      className="mushaf-highlight-picker__swatch"
-                      style={{ background: color.swatch }}
-                      onClick={() => onPickHighlightColor(active ? null : color.id)}
-                    />
-                  );
-                })}
-                <button
-                  type="button"
-                  aria-pressed={!highlightColor}
-                  className="mushaf-highlight-picker__clear"
-                  onClick={() => onPickHighlightColor(null)}
-                >
-                  بلا لون
-                </button>
-              </div>
-            </div>
-          )}
           {!voiceEngaged && <p className="mushaf-hint">{voiceHint}</p>}
 
           {voiceEngaged && (

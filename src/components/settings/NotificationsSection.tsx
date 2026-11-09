@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Bell, BellRing, Download, Play, Sparkles, Square, Trash2, Volume2 } from 'lucide-react';
+import { Bell, BellRing, Download, Play, Sparkles, Square, Trash2, Volume2, AlertTriangle, Shield, TestTube } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Card, Button, ToggleRow } from '@/components/ui';
 import { TimeOptionButton } from '@/components/TimeOptionButton';
@@ -30,6 +30,7 @@ import {
 import { rescheduleAllNotifications, adhanChannelId } from '@/utils/notificationScheduler';
 import { armTestAdhanAlarm } from '@/utils/adhanOverlay';
 import { canScheduleExactAlarms, hasNotificationPermission, NOTIFICATION_WARNING_EVENT, requestExactAlarms, requestNotificationPermission } from '@/utils/notifications';
+import { LocalNotifications } from '@capacitor/local-notifications';
 import { type Settings } from '@/db/database';
 
 interface NotificationsSectionProps {
@@ -64,6 +65,8 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
   const [adhanNotice, setAdhanNotice] = useState('');
   const adhanAbortRef = useRef<AbortController | null>(null);
   const [dhikrPermissionStatus, setDhikrPermissionStatus] = useState('');
+  const [batteryOptimizationBlocked, setBatteryOptimizationBlocked] = useState(false);
+  const [testNotificationSent, setTestNotificationSent] = useState(false);
 
   /**
    * State of the exact-alarm permission that makes the adhan sound at the prayer
@@ -96,6 +99,52 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
       alive = false;
       window.removeEventListener(NOTIFICATION_WARNING_EVENT, onWarning);
     };
+  }, []);
+
+  // Check battery optimization status on mount
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    // This is a simplified check - real battery optimization detection requires native code
+    // For now, we'll show a warning if exact alarms are denied (often related to battery optimization)
+    if (exactAlarmNotice === 'denied') {
+      setBatteryOptimizationBlocked(true);
+    }
+  }, [exactAlarmNotice]);
+
+  /**
+   * Send a test notification to verify notifications are working
+   */
+  const sendTestNotification = useCallback(async () => {
+    if (!Capacitor.isNativePlatform()) {
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('تجربة إشعار قُرّة', {
+          body: 'إذا رأيت هذا الإشعار، فإن الإشعارات تعمل بشكل صحيح! ✅',
+          icon: '/ic_qaf_notification.png',
+        });
+        setTestNotificationSent(true);
+        setTimeout(() => setTestNotificationSent(false), 3000);
+      }
+      return;
+    }
+
+    try {
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            id: 999999,
+            title: 'تجربة إشعار قُرّة',
+            body: 'إذا رأيت هذا الإشعار، فإن الإشعارات تعمل بشكل صحيح! ✅',
+            schedule: { at: new Date(Date.now() + 1000) },
+            smallIcon: 'ic_qaf_notification',
+            largeIcon: 'ic_notification_large',
+          },
+        ],
+      });
+      setTestNotificationSent(true);
+      setTimeout(() => setTestNotificationSent(false), 3000);
+    } catch (error) {
+      console.error('Failed to send test notification:', error);
+    }
   }, []);
 
   /**
@@ -482,42 +531,83 @@ export function NotificationsSection({ settings, onSaveSettings }: Notifications
       <section id="settings-notifications" className="space-y-2">
         <SectionTitle icon={<Bell size={20} />} title="التنبيهات وصوت الأذان" />
         <Card className="border border-primary-200/80 dark:border-primary-800/80 shadow-md space-y-4">
+          {/* Test Notification Button */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <TestTube size={18} className="text-primary-600 dark:text-primary-400" />
+              <span className="text-sm font-semibold text-primary-900 dark:text-primary-100">اختبار الإشعارات</span>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={sendTestNotification}
+              disabled={testNotificationSent}
+              className="font-semibold"
+            >
+              {testNotificationSent ? 'تم الإرسال ✅' : 'إرسال تجربة'}
+            </Button>
+          </div>
+
+          {/* Battery Optimization Warning */}
+          {batteryOptimizationBlocked && (
+            <div className="space-y-2 rounded-2xl border border-red-300 bg-red-50 p-3.5 dark:border-red-700 dark:bg-red-900/30">
+              <div className="flex items-start gap-2">
+                <Shield size={18} className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-xs font-semibold leading-relaxed text-red-800 dark:text-red-200">
+                    تحسين البطارية قد يمنع الإشعارات من العمل
+                  </p>
+                  <p className="text-xs mt-1 text-red-700 dark:text-red-300">
+                    افتح إعدادات الهاتف → التطبيقات → قُرّة → البطارية، واختر "بدون قيود" لضمان وصول الإشعارات.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {exactAlarmNotice !== '' && (
             <div className="space-y-2 rounded-2xl border border-amber-300 bg-amber-50 p-3.5 dark:border-amber-700 dark:bg-amber-900/30">
-              <p className="text-xs font-semibold leading-relaxed text-amber-800 dark:text-amber-200">
-                {exactAlarmNotice === 'denied'
-                  ? 'تنبيهات الأذان الدقيقة موقوفة من إعدادات الجهاز — الأذان قد يتأخر دقائق أثناء السكون.'
-                  : exactAlarmNotice === 'inexact'
-                    ? 'شُغّلت تنبيهات هذا الدور بنظام تقريبي — الأذان قد يتأخر دقائق أثناء السكون.'
-                    : exactAlarmNotice === 'channel-failed'
-                      ? 'تعذّر تجهيز قناة صوت الأذان؛ أبقينا التنبيهات السابقة كما هي لتجنب جدولة أذان صامت.'
-                      : exactAlarmNotice === 'channel-silent'
-                        ? 'قناة صوت الأذان كانت بلا صوت على هذا الهاتف، فتم إصلاحها وتجهيزها من جديد — الصوت سيعود في التنبيه القادم.'
-                        : 'تعذّرت جدولة تنبيهات هذا الدور، وعادت التنبيهات السابقة إلى مكانها؛ ستُعاد المحاولة عند فتح التطبيق.'}
-              </p>
-              {exactAlarmNotice === 'channel-failed' || exactAlarmNotice === 'channel-silent' ? (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => void rescheduleAllNotifications()}
-                  className="font-semibold text-xs"
-                >
-                  إعادة محاولة تجهيز التنبيهات
-                </Button>
-              ) : exactAlarmNotice !== 'failed' ? (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={async () => {
-                    const granted = await requestExactAlarms();
-                    setExactAlarmNotice(granted ? '' : 'denied');
-                    if (granted) await rescheduleAllNotifications();
-                  }}
-                  className="font-semibold text-xs"
-                >
-                  فتح إعدادات تنبيهات الأذان الدقيقة
-                </Button>
-              ) : null}
+              <div className="flex items-start gap-2">
+                <AlertTriangle size={18} className="text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-xs font-semibold leading-relaxed text-amber-800 dark:text-amber-200">
+                    {exactAlarmNotice === 'denied'
+                      ? 'تنبيهات الأذان الدقيقة موقوفة من إعدادات الجهاز — الأذان قد يتأخر دقائق أثناء السكون.'
+                      : exactAlarmNotice === 'inexact'
+                        ? 'شُغّلت تنبيهات هذا الدور بنظام تقريبي — الأذان قد يتأخر دقائق أثناء السكون.'
+                        : exactAlarmNotice === 'channel-failed'
+                          ? 'تعذّر تجهيز قناة صوت الأذان؛ أبقينا التنبيهات السابقة كما هي لتجنب جدولة أذان صامت.'
+                          : exactAlarmNotice === 'channel-silent'
+                            ? 'قناة صوت الأذان كانت بلا صوت على هذا الهاتف، فتم إصلاحها وتجهيزها من جديد — الصوت سيعود في التنبيه القادم.'
+                            : 'تعذّرت جدولة تنبيهات هذا الدور، وعادت التنبيهات السابقة إلى مكانها؛ ستُعاد المحاولة عند فتح التطبيق.'}
+                  </p>
+                  {exactAlarmNotice === 'channel-failed' || exactAlarmNotice === 'channel-silent' ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => void rescheduleAllNotifications()}
+                      className="font-semibold text-xs mt-2"
+                    >
+                      إعادة محاولة تجهيز التنبيهات
+                    </Button>
+                  ) : exactAlarmNotice !== 'failed' ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={async () => {
+                        const granted = await requestExactAlarms();
+                        if (granted) {
+                          setExactAlarmNotice('');
+                          await rescheduleAllNotifications();
+                        }
+                      }}
+                      className="font-semibold text-xs mt-2"
+                    >
+                      تفعيل التنبيهات الدقيقة
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
             </div>
           )}
 

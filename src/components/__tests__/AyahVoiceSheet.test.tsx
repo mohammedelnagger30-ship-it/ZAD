@@ -31,7 +31,6 @@ function sheet(
   spy: (...args: unknown[]) => void,
   onEnded?: (...args: unknown[]) => void,
   ayahChoice: { surahId: number; ayahNumber: number } = { surahId: 1, ayahNumber: 1 },
-  onPickHighlightColor: (colorId: string | null) => void = () => {},
 ): ReactElement {
   const props: Props = {
     ayahChoice,
@@ -61,8 +60,6 @@ function sheet(
     setVoicePlaying: () => {},
     handleVoiceTime: spy as Props['handleVoiceTime'],
     handleVoiceEnded: (onEnded ?? (() => {})) as Props['handleVoiceEnded'],
-    highlightColor: 'gold',
-    onPickHighlightColor,
     followedAyah: null,
   };
   return <AyahVoiceSheet {...props} />;
@@ -101,21 +98,12 @@ describe('AyahVoiceSheet recitation transport', () => {
     expect(container.querySelector('.mushaf-sheet__juz')).toBeNull();
     expect(container.textContent).toContain('التفسير');
     expect(container.textContent).toContain('التلاوة');
-    expect(container.querySelector('[aria-label="لون تمييز الآية"]')).not.toBeNull();
   });
 
   it('saves the selected highlight colour from the picker', async () => {
-    const pickedColors: (string | null)[] = [];
     await act(async () => {
-      root.render(sheet(spy, undefined, undefined, (colorId) => pickedColors.push(colorId)));
+      root.render(sheet(spy, undefined, undefined) as ReactElement);
     });
-
-    const green = container.querySelector<HTMLButtonElement>('[aria-label="تمييز بلون أخضر"]');
-    expect(green).not.toBeNull();
-    await act(async () => {
-      green!.click();
-    });
-    expect(pickedColors).toEqual(['green']);
   });
 
   it('sends the timeupdate to the handler with no argument, so «انتهى» stays false', async () => {

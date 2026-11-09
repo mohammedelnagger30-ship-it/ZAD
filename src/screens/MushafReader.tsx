@@ -55,7 +55,6 @@ interface MushafReaderProps {
   /** Reported on every turn, so the caller can reopen the reader where it was left. */
   onPageChange?: (page: number) => void;
   ayahHighlights: ReadonlyMap<string, string>;
-  onPickAyahHighlight: (surahId: number, ayahNumber: number, colorId: string | null) => void;
 }
 
 
@@ -65,7 +64,6 @@ export function MushafReader({
   onClose,
   onPageChange,
   ayahHighlights,
-  onPickAyahHighlight,
 }: MushafReaderProps) {
   const totalPages = getTotalPages();
   const startPage = Math.min(totalPages, Math.max(1, Math.round(initialPage) || 1));
@@ -1056,10 +1054,6 @@ export function MushafReader({
         setVoicePlaying={setVoicePlaying}
         handleVoiceTime={handleVoiceTime}
         handleVoiceEnded={handleVoiceEnded}
-        highlightColor={ayahChoice ? ayahHighlights.get(`${ayahChoice.surahId}:${ayahChoice.ayahNumber}`) : undefined}
-        onPickHighlightColor={(colorId) => {
-          if (ayahChoice) onPickAyahHighlight(ayahChoice.surahId, ayahChoice.ayahNumber, colorId);
-        }}
         followedAyah={currentFollowedAyah}
       />
 
