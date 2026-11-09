@@ -56,7 +56,6 @@ export function AyahVoicePanel({
   followedAyah,
 }: AyahVoicePanelProps) {
   const surah = getSurah(ayahChoice?.surahId ?? 1);
-  const reciter = AUDIO_RECITERS.find((r) => r.id === reciterId);
   const currentAyahNumber = followedAyah?.ayahNumber ?? ayahChoice?.ayahNumber ?? 1;
 
   let currentAyahText: string | null = null;
@@ -112,11 +111,6 @@ export function AyahVoicePanel({
           </div>
         </div>
       )}
-
-      <div className="mushaf-voice__reciter-row">
-        <span className="mushaf-voice__reciter-label">القارئ</span>
-        <span className="mushaf-voice__reciter-value">{reciter?.name ?? ''}</span>
-      </div>
 
       {!voiceWholeFile && (
         <div className="mushaf-seg mushaf-voice__scope" role="group" aria-label="نطاق التلاوة">
