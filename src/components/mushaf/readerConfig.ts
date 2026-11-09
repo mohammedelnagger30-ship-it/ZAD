@@ -10,8 +10,8 @@ import { getSurah } from '@/data/surahs';
  */
 
 export const ZOOM_STEP = 0.1;
-export const ZOOM_MIN = 0.8;
-export const ZOOM_MAX = 2;
+export const ZOOM_MIN = 0.9;
+export const ZOOM_MAX = 1.2;
 export const AUTO_SCROLL_MIN = 2;
 export const AUTO_SCROLL_MAX = 80;
 /** Pages are the smallest useful jump target; below this the text stops being readable. */

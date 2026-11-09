@@ -1,10 +1,40 @@
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath, URL } from 'node:url';
 import { cssEngineCompat } from './scripts/css-engine-compat.ts';
 import pkg from './package.json' with { type: 'json' };
+
+/**
+ * Forces `Content-Type: text/html; charset=utf-8` on the dev-server HTML response.
+ * Vite's dev server omits the charset, so browsers on Arabic-system devices fall
+ * back to Windows-1256 and mangle every Arabic glyph ("سورة" → "ط³ظˆط±ط©").
+ * The `<meta charset>` tag is injected too late (Vite's refresh script precedes it),
+ * so the HTTP header must carry the encoding.
+ */
+function htmlCharsetPlugin(): Plugin {
+  return {
+    name: 'html-charset',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const setHeader = res.setHeader.bind(res);
+        res.setHeader = (name: string, value: string | number | readonly string[]) => {
+          if (
+            name.toLowerCase() === 'content-type' &&
+            typeof value === 'string' &&
+            value.startsWith('text/html') &&
+            !value.includes('charset')
+          ) {
+            value = value + '; charset=utf-8';
+          }
+          return setHeader(name, value);
+        };
+        next();
+      });
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -23,6 +53,7 @@ export default defineConfig(({ mode }) => {
       react(),
       tailwindcss(),
       cssEngineCompat(),
+      htmlCharsetPlugin(),
       VitePWA({
       registerType: 'autoUpdate',
       // The plugin used to inject `navigator.serviceWorker.register` into the bundle,

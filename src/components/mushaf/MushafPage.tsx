@@ -79,11 +79,6 @@ export interface MushafPageProps {
   lineHeight?: number;
   letterSpacing?: number;
   wordSpacing?: number;
-  /**
-   * Type has been enlarged past the printed measure, so the page reflows its words
-   * inside the sheet instead of holding the printed line breaks. Above 100% zoom this
-   * is what keeps the larger text inside the page frame.
-   */
   reflow?: boolean;
   wordMeaningsInstalled?: boolean;
   onAyahPress?: (surahId: number, ayahNumber: number) => void;
@@ -141,11 +136,6 @@ export function MushafFrameDecoration() {
  * line breaks — and therefore the gaps between words — identical to the printed page.
  * The browser only has a few percent of slack left to distribute, which is why the text
  * fills the column evenly instead of stretching a handful of words across it.
- *
- * `reflow` is the one exception, and only above 100%: type larger than the printed
- * measure cannot stay inside the sheet while keeping those breaks, so the page re-wraps
- * itself in the same column, with the same face and justification, and never spills over
- * the frame.
  */
 export function MushafPage({
   page,
@@ -364,10 +354,10 @@ export function MushafPage({
           if (!surah) return null;
           return (
             <div key={`heading-${groupIndex}`} className="mushaf-banner">
-              <div className="mushaf-banner__name">سورة {surah.name}</div>
+              <div className="mushaf-banner__name">ط³ظˆط±ط© {surah.name}</div>
               <div className="mushaf-banner__meta">
-                {surah.revelationType === 'meccan' ? 'مكية' : 'مدنية'} ·{' '}
-                {toArabicNumber(surah.ayahCount)} آية
+                {surah.revelationType === 'meccan' ? 'ظ…ظƒظٹط©' : 'ظ…ط¯ظ†ظٹط©'} آ·{' '}
+                {toArabicNumber(surah.ayahCount)} ط¢ظٹط©
               </div>
             </div>
           );
@@ -452,7 +442,7 @@ export function MushafPage({
                             <button
                               type="button"
                               className="mushaf-ayah-mark"
-                              aria-label={`خيارات الآية ${toArabicNumber(run.ayah)} من سورة ${surahName}`}
+                              aria-label={`ط®ظٹط§ط±ط§طھ ط§ظ„ط¢ظٹط© ${toArabicNumber(run.ayah)} ظ…ظ† ط³ظˆط±ط© ${surahName}`}
                               onClick={() => onAyahPress?.(line.surahId, run.ayah)}
                             >
                               <span className="mushaf-ayah-mark__glyph" aria-hidden="true">
@@ -461,8 +451,8 @@ export function MushafPage({
                               </span>
                             </button>
                             {SAJDAH_AYAHS_KEYS.has(`${line.surahId}:${run.ayah}`) && (
-                              <span className="mushaf-sajdah" role="img" aria-label="آية السجدة">
-                                ۩
+                              <span className="mushaf-sajdah" role="img" aria-label="ط¢ظٹط© ط§ظ„ط³ط¬ط¯ط©">
+                                غ©
                               </span>
                             )}
                           </>

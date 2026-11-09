@@ -99,6 +99,14 @@ export const AUDIO_RECITERS: AudioReciter[] = [
   { id: 'ea-yaser-salamah', name: 'ياسر سلامة', source: everyayah('Yaser_Salamah_128kbps') },
   { id: 'ea-akram-alaqimy', name: 'أكرم العلقمي', source: everyayah('Akram_AlAlaqimy_128kbps') },
 
+  // محمد اللحيدان — تسجيل كامل، ملف واحد لكل سورة على archive.org (`001.mp3` = الفاتحة).
+  // لا توجد توقيتات آيات منشورة لهذا التسجيل، فيُشغَّل سورةً كاملة (ملف واحد) بلا تقطيع للآيات.
+  {
+    id: 'ea-al-luhaidan',
+    name: 'محمد اللحيدان',
+    source: { kind: 'archive-surah', item: 'al_luhaidan' },
+  },
+
 ];
 
 export function getAudioReciter(id: string): AudioReciter | undefined {

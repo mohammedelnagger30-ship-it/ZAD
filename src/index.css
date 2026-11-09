@@ -2070,6 +2070,7 @@ button.mushaf-ayah-mark:focus-visible {
   overflow-anchor: none;
 }
 
+
 /*
  * Both ways of travelling lay the same sheet down: one column of type. The turn is the
  * single sheet of horizontal mode, the leaf the same sheet standing in the stack.
@@ -2647,11 +2648,11 @@ button.mushaf-ayah-mark:focus-visible {
   align-items: center;
   gap: 0.2rem;
   /* Tall enough that the segment reads as a control, not a label. */
-  padding: 0.75rem 0.4rem;
+  padding: 0.85rem 0.45rem;
   border-radius: 1rem;
   background: var(--chip);
   color: var(--chip-fg);
-  font-size: 0.76rem;
+  font-size: 0.8rem;
   font-weight: 700;
   transition:
     background-color 0.18s ease,
@@ -3065,24 +3066,24 @@ button.mushaf-ayah-mark:focus-visible {
 .mushaf-voice__track strong {
   overflow: hidden;
   color: var(--fg);
-  font-size: 0.82rem;
+  font-size: 0.9rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .mushaf-voice__track small {
   color: var(--fg-muted);
-  font-size: 0.72rem;
+  font-size: 0.8rem;
 }
 
 .mushaf-voice__status {
   flex: 0 0 auto;
   margin-inline-start: auto;
-  padding: 0.25rem 0.5rem;
+  padding: 0.3rem 0.6rem;
   border-radius: 999px;
   background: var(--chip);
   color: var(--chip-fg);
-  font-size: 0.63rem;
+  font-size: 0.7rem;
   font-weight: 700;
 }
 
@@ -3116,7 +3117,7 @@ button.mushaf-ayah-mark:focus-visible {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.76rem;
+  font-size: 0.82rem;
   font-weight: 600;
   color: var(--fg-muted);
 }
@@ -3259,13 +3260,13 @@ button.mushaf-ayah-mark:focus-visible {
   min-width: 0;
   gap: 0.32rem;
   color: var(--fg-muted);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 700;
 }
 
 .mushaf-voice__settings .mushaf-select {
   width: 100%;
-  font-size: 0.72rem;
+  font-size: 0.8rem;
 }
 
 .mushaf-voice__repeat-note {

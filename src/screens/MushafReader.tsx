@@ -874,6 +874,7 @@ export function MushafReader({
       className="mushaf-shell"
       data-mode={nightPaper ? 'night' : 'day'}
       data-paper={paper}
+      data-zoomed={prefs.zoom > 1 ? 'true' : 'false'}
       onTouchStartCapture={() => {
         if (autoScrollActive) setAutoScrollTouchPaused(true);
       }}
@@ -928,7 +929,7 @@ export function MushafReader({
                 paper={paper}
                 lineHeight={1.9 + (prefs.lineSpacing - 1) * 0.55}
                 wordSpacing={prefs.wordSpacing}
-                reflow={reflow}
+                 reflow={reflow}
                 wordMeaningsInstalled={wordMeaningsInstalled}
                 onAyahPress={handleAyahPress}
                 onWordPress={handleWordPress}
@@ -951,7 +952,7 @@ export function MushafReader({
               paper={paper}
               lineHeight={1.9 + (prefs.lineSpacing - 1) * 0.55}
               wordSpacing={prefs.wordSpacing}
-              reflow={reflow}
+                 reflow={reflow}
               wordMeaningsInstalled={wordMeaningsInstalled}
               onAyahPress={handleAyahPress}
               onWordPress={handleWordPress}
