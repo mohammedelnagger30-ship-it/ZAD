@@ -354,10 +354,10 @@ export function MushafPage({
           if (!surah) return null;
           return (
             <div key={`heading-${groupIndex}`} className="mushaf-banner">
-              <div className="mushaf-banner__name">ط³ظˆط±ط© {surah.name}</div>
+              <div className="mushaf-banner__name">سورة {surah.name}</div>
               <div className="mushaf-banner__meta">
-                {surah.revelationType === 'meccan' ? 'ظ…ظƒظٹط©' : 'ظ…ط¯ظ†ظٹط©'} آ·{' '}
-                {toArabicNumber(surah.ayahCount)} ط¢ظٹط©
+                {surah.revelationType === 'meccan' ? 'مكية' : 'مدنية'} آ·{' '}
+                {toArabicNumber(surah.ayahCount)} آية
               </div>
             </div>
           );
@@ -442,7 +442,7 @@ export function MushafPage({
                             <button
                               type="button"
                               className="mushaf-ayah-mark"
-                              aria-label={`ط®ظٹط§ط±ط§طھ ط§ظ„ط¢ظٹط© ${toArabicNumber(run.ayah)} ظ…ظ† ط³ظˆط±ط© ${surahName}`}
+                              aria-label={`خيارات الآية ${toArabicNumber(run.ayah)} من سورة ${surahName}`}
                               onClick={() => onAyahPress?.(line.surahId, run.ayah)}
                             >
                               <span className="mushaf-ayah-mark__glyph" aria-hidden="true">
@@ -451,7 +451,7 @@ export function MushafPage({
                               </span>
                             </button>
                             {SAJDAH_AYAHS_KEYS.has(`${line.surahId}:${run.ayah}`) && (
-                              <span className="mushaf-sajdah" role="img" aria-label="ط¢ظٹط© ط§ظ„ط³ط¬ط¯ط©">
+                              <span className="mushaf-sajdah" role="img" aria-label="آية السجدة">
                                 غ©
                               </span>
                             )}

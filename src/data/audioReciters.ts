@@ -95,7 +95,13 @@ export const AUDIO_RECITERS: AudioReciter[] = [
   { id: 'ea-ahmed-neana', name: 'أحمد نعينع', source: everyayah('Ahmed_Neana_128kbps') },
   { id: 'ea-salaah-bukhatir', name: 'صلاح بوخاطر', source: everyayah('Salaah_AbdulRahman_Bukhatir_128kbps') },
   { id: 'ea-muhsin-qasim', name: 'محسن القاسم', source: everyayah('Muhsin_Al_Qasim_192kbps') },
-  { id: 'ea-aziz-alili', name: 'عزيز عليلي', source: everyayah('aziz_alili_128kbps') },
+  // عزيز عليلي — تسجيل كامل، ملف واحد لكل سورة على archive.org (`001.mp3` = الفاتحة).
+  // لا توجد توقيتات آيات منشورة لهذا التسجيل، فيُشغَّل سورةً كاملة (ملف واحد) بلا تقطيع للآيات.
+  {
+    id: 'ea-aziz-alili',
+    name: 'عزيز عليلي',
+    source: { kind: 'archive-surah', item: 'aziz_alili' },
+  },
   { id: 'ea-yaser-salamah', name: 'ياسر سلامة', source: everyayah('Yaser_Salamah_128kbps') },
   { id: 'ea-akram-alaqimy', name: 'أكرم العلقمي', source: everyayah('Akram_AlAlaqimy_128kbps') },
 

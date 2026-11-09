@@ -63,6 +63,7 @@ function sheet(
     handleVoiceEnded: (onEnded ?? (() => {})) as Props['handleVoiceEnded'],
     highlightColor: 'gold',
     onPickHighlightColor,
+    followedAyah: null,
   };
   return <AyahVoiceSheet {...props} />;
 }

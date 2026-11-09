@@ -560,7 +560,17 @@ export function MushafReader({
     voicePrimaryDisabled,
     voiceHint,
     voiceWholeFile,
-  } = useAyahVoice({ ayahChoice, setAyahChoice, showAyah, updatePrefs, voiceScope });
+    currentFollowedAyah,
+  } = useAyahVoice({
+    ayahChoice,
+    setAyahChoice,
+    showAyah,
+    updatePrefs,
+    voiceScope,
+    onAyahChange: (surahId, ayahNumber) => {
+      showAyah(surahId, ayahNumber);
+    },
+  });
   const handleAyahPress = useCallback(
     (surahId: number, ayahNumber: number) => {
       setAyahChoice({ surahId, ayahNumber });
@@ -1050,6 +1060,7 @@ export function MushafReader({
         onPickHighlightColor={(colorId) => {
           if (ayahChoice) onPickAyahHighlight(ayahChoice.surahId, ayahChoice.ayahNumber, colorId);
         }}
+        followedAyah={currentFollowedAyah}
       />
 
       {/* Rendered last so it stacks over the reader's own sheets. */}

@@ -40,7 +40,7 @@ import { toArabicNumber } from '@/data/surahs';
 import { ADHKAR_CATEGORIES, type AdhkarCategory, type Dhikr } from '@/data/adhkar';
 import { todayKey, getDayNameShort, getLast7Days } from '@/utils/dateUtils';
 import { trustedNow } from '@/utils/clock';
-import { normalizeArabic } from '@/utils/arabic';
+import { normalizeArabic, stripTashkeel } from '@/utils/arabic';
 import { normalizeCompletedDays, recordCompletedDay } from '@/utils/adhkarDays';
 import { shareContentCard } from '@/utils/shareCard';
 
@@ -466,7 +466,9 @@ export function AdhkarScreen({ params }: AdhkarScreenProps = {}) {
 
   const copyDhikr = async (dhikr: Dhikr) => {
     try {
-      await navigator.clipboard.writeText(`${dhikr.text}\n${dhikr.reference}`);
+      // Copy without tashkeel for cleaner text
+      const textWithoutTashkeel = stripTashkeel(dhikr.text);
+      await navigator.clipboard.writeText(`${textWithoutTashkeel}\n${dhikr.reference}`);
       setNotice('تم نسخ الذكر ومرجعه');
     } catch {
       setNotice('تعذّر النسخ. تحقق من إذن الحافظة وحاول مرة أخرى.');

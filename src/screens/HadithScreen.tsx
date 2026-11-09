@@ -14,7 +14,7 @@ import {
   type HadithRecord,
 } from '@/data/hadiths';
 import { carriesDistinctiveTerms, countMatches } from '@/utils/hadithService';
-import { arabicQueryTerms } from '@/utils/arabic';
+import { arabicQueryTerms, stripTashkeel } from '@/utils/arabic';
 import { HADITH_BOOKS, HADITH_OF_DAY_BOOK, getHadithBook } from '@/data/contentCatalog';
 import type { HadithGrade } from '@/data/hadithCollections';
 import { toArabicNumber } from '@/data/surahs';
@@ -296,7 +296,9 @@ export function HadithScreen({ params }: HadithScreenProps) {
   const copyHadith = async (hadith: HadithRecord) => {
     setCopyError(null);
     try {
-      await navigator.clipboard.writeText(hadith.text);
+      // Copy without tashkeel for cleaner text
+      const textWithoutTashkeel = stripTashkeel(hadith.text);
+      await navigator.clipboard.writeText(textWithoutTashkeel);
       setCopiedHadithId(hadith.id);
     } catch {
       setCopyError('تعذّر نسخ الحديث. تحقق من إذن الحافظة وحاول مرة أخرى.');

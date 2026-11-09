@@ -36,6 +36,8 @@ interface AyahVoiceSheetProps {
   handleVoiceEnded: () => void;
   highlightColor?: string;
   onPickHighlightColor?: (colorId: string | null) => void;
+  /** Currently followed ayah (null when not following). */
+  followedAyah: { surahId: number; ayahNumber: number } | null;
   /**
    * Anything else this screen keeps with an ayah, drawn under the recitation.
    *
@@ -78,6 +80,7 @@ export function AyahVoiceSheet({
   handleVoiceEnded,
   highlightColor,
   onPickHighlightColor,
+  followedAyah,
   extra,
 }: AyahVoiceSheetProps) {
   return (
@@ -152,6 +155,7 @@ export function AyahVoiceSheet({
               voicePrimaryDisabled={voicePrimaryDisabled}
               voicePrimaryLabel={voicePrimaryLabel}
               voiceError={voiceError}
+              followedAyah={followedAyah}
             />
           )}
 

@@ -536,7 +536,17 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
     voicePrimaryDisabled,
     voiceHint,
     voicePlaying,
-  } = useAyahVoice({ ayahChoice, setAyahChoice, showAyah, updatePrefs: patchVoiceScope, voiceScope });
+    currentFollowedAyah,
+  } = useAyahVoice({
+    ayahChoice,
+    setAyahChoice,
+    showAyah,
+    updatePrefs: patchVoiceScope,
+    voiceScope,
+    onAyahChange: (surahId, ayahNumber) => {
+      showAyah(surahId, ayahNumber);
+    },
+  });
 
   /**
    * The pressed ayah: set it, and start the question from silence.
@@ -1076,6 +1086,7 @@ export function QuranScreen({ settings, params }: QuranScreenProps) {
                     />
                   ) : null
                 }
+                followedAyah={currentFollowedAyah}
               />
             </>
           );

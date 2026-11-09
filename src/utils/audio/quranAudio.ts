@@ -303,7 +303,7 @@ async function buildPerAyahSurah(
 
   let received = 0;
   let total = 0;
-  const buffers = await mapPool(ayahs, 6, async (ayah) => {
+  const buffers = await mapPool(ayahs, 12, async (ayah) => {
     throwIfAborted(signal);
     // One dropped request among these hundreds no longer costs the whole surah:
     // the fetch retries the failures that can change, and only a file the
@@ -326,7 +326,7 @@ async function buildPerAyahSurah(
   // Timings come from the audio itself: each stitched segment's length is its
   // decoded duration. A file that refuses to decode falls back to the byte
   // rate of its decoded siblings rather than failing the whole surah.
-  const settled = await mapPool(buffers, 6, async (buffer) => {
+  const settled = await mapPool(buffers, 12, async (buffer) => {
     throwIfAborted(signal);
     try {
       return { ok: true as const, seconds: await measureMp3Duration(buffer.slice().buffer) };
