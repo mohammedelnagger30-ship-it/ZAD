@@ -1,0 +1,31 @@
+// Gradle init script used by the release build on CI.
+//
+// Maven Central answers some artifact downloads with a redirect to GitHub's release
+// assets. When that CDN is unhealthy the build dies with a 504 while fetching, for
+// example, kotlin-compiler-embeddable, even though the same artifact is perfectly
+// available. Google publishes an official mirror of Maven Central
+// (https://maven-central.storage-download.googleapis.com/maven2/); point the two
+// Maven Central URLs at that mirror and skip the redirect entirely.
+//
+// Only repo.maven.apache.org and repo1.maven.org are rewritten. google(),
+// plugins.gradle.org, flatDir and any project-local repository are left alone.
+
+import org.gradle.api.artifacts.dsl.RepositoryHandler
+import org.gradle.api.artifacts.repositories.MavenArtifactRepository
+
+def MIRROR_URL = 'https://maven-central.storage-download.googleapis.com/maven2/'
+def CENTRAL_HOSTS = ['repo.maven.apache.org', 'repo1.maven.org']
+
+def useMirror = { RepositoryHandler repositories ->
+    repositories.withType(MavenArtifactRepository).configureEach { repository ->
+        def host = repository.url.host
+        if (host && CENTRAL_HOSTS.contains(host)) {
+            repository.url = MIRROR_URL
+        }
+    }
+}
+
+gradle.beforeProject { project ->
+    useMirror(project.buildscript.repositories)
+    useMirror(project.repositories)
+}

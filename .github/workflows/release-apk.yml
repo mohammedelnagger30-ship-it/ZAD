@@ -140,9 +140,12 @@ jobs:
           ZAD_KEYSTORE_PASSWORD: ${{ secrets.ZAD_KEYSTORE_PASSWORD }}
           ZAD_KEY_ALIAS: ${{ secrets.ZAD_KEY_ALIAS }}
           ZAD_KEY_PASSWORD: ${{ secrets.ZAD_KEY_PASSWORD }}
+        # Maven Central redirects some artifacts to GitHub release assets, and that CDN
+        # intermittently answers 504. The init script resolves those from Google's mirror.
         run: |
           cd android
           bash ./gradlew assembleRelease \
+            -I ci/maven-central-mirror.gradle \
             -PVERSION_CODE="${{ steps.release.outputs.version_code }}" \
             -PVERSION_NAME="${{ steps.release.outputs.version }}"
 
