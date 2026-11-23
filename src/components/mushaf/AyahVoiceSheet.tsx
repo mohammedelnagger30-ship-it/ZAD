@@ -145,6 +145,7 @@ export function AyahVoiceSheet({
             preload="auto"
             onPlay={() => setVoicePlaying(true)}
             onPause={() => setVoicePlaying(false)}
+            onLoadedMetadata={() => handleVoiceTime()}
             onTimeUpdate={() => handleVoiceTime()}
             onEnded={handleVoiceEnded}
           />

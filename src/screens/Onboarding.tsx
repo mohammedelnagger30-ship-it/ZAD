@@ -21,7 +21,6 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   const [selectedCity, setSelectedCity] = useState<string>('القاهرة');
   const [citySearch, setCitySearch] = useState('');
   const [notifGranted, setNotifGranted] = useState(false);
-  const [requesting, setRequesting] = useState(false);
   const [notificationError, setNotificationError] = useState<string | null>(null);
   const [showAllPalettes, setShowAllPalettes] = useState(false);
   // Whether the device still holds the adhan back via battery optimisation. Read on
@@ -99,36 +98,29 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           ? ['🔋 أضف التطبيق إلى قائمة الاستثناء ليُرنّ الأذان والتطبيق مغلق']
           : []),
       ],
-      action: async () => {
+      action: () => {
         setNotificationError(null);
-        setRequesting(true);
-        try {
-          const granted = await requestNotificationPermission();
-          setNotifGranted(granted);
-          // The permission alone does not let the adhan ring while the phone sleeps:
-          // battery optimisation still freezes the exact alarms. Surface that now,
-          // while the reader is already granting adhan reliability, so the page opens
-          // only on the devices that actually need it (checked, not assumed).
-          if (granted && Capacitor.isNativePlatform()) {
-            try {
-              const protection = await getProtectionStatus();
-              if (protection && !protection.ignoringBatteryOptimizations) {
-                setBatteryRestricted(true);
-                await openProtectionSettings('battery');
-              }
-            } catch {
-              // Protection probe is best-effort; never block onboarding on it.
+        // Leave this step on the tap, not when the permission promise settles. The
+        // system dialog owns its own time and some OEM skins answer the plugin late
+        // (or never), which used to leave the button stuck on «جارٍ الطلب...» for
+        // 10–20 s after the reader had already pressed «سماح». Ask in the background
+        // and fold the answer into the label/protection state whenever it arrives.
+        setStep((current) => current + 1);
+        void (async () => {
+          try {
+            const granted = await requestNotificationPermission();
+            setNotifGranted(granted);
+            if (!granted || !Capacitor.isNativePlatform()) return;
+            const protection = await getProtectionStatus();
+            if (protection && !protection.ignoringBatteryOptimizations) {
+              setBatteryRestricted(true);
             }
+          } catch (error) {
+            setNotificationError(error instanceof Error ? error.message : 'تعذّر طلب إذن الإشعارات.');
           }
-          setStep((current) => current + 1);
-        } catch (error) {
-          setNotificationError(error instanceof Error ? error.message : 'تعذّر طلب إذن الإشعارات.');
-          setStep((current) => current + 1);
-        } finally {
-          setRequesting(false);
-        }
+        })();
       },
-      actionLabel: requesting ? 'جارٍ الطلب...' : notifGranted ? 'تم التفعيل - متابعة' : 'السماح بالتنبيهات',
+      actionLabel: notifGranted ? 'تم التفعيل - متابعة' : 'السماح بالتنبيهات',
     },
     // Color Palette
     {
@@ -371,17 +363,26 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             )}
           </div>
           {current.extra}
-          {notificationError && step === 3 && (
+          {notificationError && step > 1 && (
             <p className="mb-4 text-sm text-red-600 dark:text-red-300" role="alert">
-              {notificationError} يمكنك المتابعة وتفعيلها لاحقاً من الإعدادات.
+              {notificationError} يمكنك تفعيلها لاحقاً من الإعدادات.
             </p>
+          )}
+          {batteryRestricted && step > 1 && (
+            <button
+              type="button"
+              onClick={() => void openProtectionSettings('battery')}
+              className="mb-4 w-full rounded-xl border px-3 py-2.5 text-xs font-semibold"
+              style={{ borderColor: 'var(--brand-from)', color: 'var(--brand-from)' }}
+            >
+              🔋 استثناء البطارية مطلوب ليُرنّ الأذان والتطبيق مغلق — اضغط هنا
+            </button>
           )}
           <Button
             fullWidth
             size="lg"
             variant="primary"
             onClick={current.action}
-            disabled={requesting}
             className="shadow-lg"
             style={{
               background: 'var(--brand-gradient)'

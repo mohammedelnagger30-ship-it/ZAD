@@ -105,7 +105,8 @@ public class AdhanOverlayReceiver extends BroadcastReceiver {
     /** The alarm and its instant agree — the ordinary case. */
     private static final long ON_TIME = 0L;
 
-    private static final int COLOR_BRAND = 0xFF1F734E;
+    /** Silver, matching the hollow-Qaf notification icon (not the green launcher mark). */
+    private static final int COLOR_BRAND = 0xFFE2E8E8;
 
     @Override
     public void onReceive(Context context, Intent intent) {

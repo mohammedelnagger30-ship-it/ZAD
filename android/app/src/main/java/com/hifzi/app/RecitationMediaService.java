@@ -428,7 +428,7 @@ public class RecitationMediaService extends Service {
             .setSmallIcon(R.drawable.ic_qaf_notification)
             .setLargeIcon(BitmapFactory.decodeResource(
                 getResources(), R.drawable.ic_notification_large))
-            .setColor(0xFF1F734E)
+            .setColor(0xFFE2E8E8)
             .setContentTitle(title.isEmpty() ? getString(R.string.app_name) : title)
             .setContentText(artist)
             .setContentIntent(contentIntent())

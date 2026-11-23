@@ -160,14 +160,19 @@ const PROPHET_NOTIFICATION_EXCLUDED_SECTIONS = new Set(['names', 'birth', 'famil
 const CONTENT_NOTIFICATION_DAYS = 4;
 
 /**
- * The identity every notification carries: a white Mushaf glyph for the
- * status bar, the full-colour Qurra logo beside the notification content,
- * and the app name as sub-text so grouped notifications stay recognisable.
+ * The identity every notification carries: the hollow Qaf for the status bar and
+ * beside the notification content (silver, not the full-colour launcher artwork),
+ * plus the app name as sub-text so grouped notifications stay recognisable.
+ *
+ * Both icons are bitmap PNGs generated from the traced letter by
+ * `scripts/make_notification_icons.py`. A VectorDrawable works on some devices but
+ * Xiaomi/MIUI resolves it to the launcher icon instead, which is why the small icon
+ * ships at every density and the vector is kept only as the shape source.
  */
 export const NOTIFICATION_BRAND = {
   smallIcon: 'ic_qaf_notification',
   largeIcon: 'ic_notification_large',
-  iconColor: '#FFFFFF',
+  iconColor: '#E2E8E8',
   summaryText: 'قُرّة',
 } as const;
 

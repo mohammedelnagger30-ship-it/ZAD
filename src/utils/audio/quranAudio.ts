@@ -20,6 +20,14 @@ export interface SurahAudioSource {
   url: string;
   blob: Blob | null;
   verseTimings: VerseTiming[];
+  /**
+   * Per-ayah reciters (EveryAyah / the annotated mushaf) are streamed one file
+   * at a time instead of stitching a whole surah before the first sound. When
+   * present, `url` points at `singleAyah` and any other ayah is played by
+   * asking this builder for its own URL.
+   */
+  ayahUrl?: (ayah: number) => string;
+  singleAyah?: number;
 }
 
 interface ChapterAudioResponse {
@@ -255,7 +263,17 @@ async function fetchWithRetry(
     throwIfAborted(signal);
     let response: Response;
     try {
-      response = await fetch(url, { signal, mode: 'cors', redirect: 'follow' });
+      // كل طلب Fetch له مهلة 15 ثانية حتى لا يعلق إلى ما لا نهاية لو停ست الخادم الاستجابة.
+      const fetchController = new AbortController();
+      const fetchTimeout = setTimeout(() => fetchController.abort(), 15_000);
+      const abort = () => fetchController.abort();
+      signal?.addEventListener('abort', abort, { once: true });
+      try {
+        response = await fetch(url, { signal: fetchController.signal, mode: 'cors', redirect: 'follow' });
+      } finally {
+        clearTimeout(fetchTimeout);
+        signal?.removeEventListener('abort', abort);
+      }
     } catch (cause) {
       // An abort is the reader leaving, not the server refusing: stop at once.
       if ((cause as Error).name === 'AbortError') throw cause;
@@ -364,6 +382,7 @@ export async function loadSurahAudio(
   reciterId: string,
   surahId: number,
   signal?: AbortSignal,
+  ayah?: number,
 ): Promise<SurahAudioSource> {
   const reciter = getAudioReciter(reciterId);
   if (!reciter) throw new Error('القارئ المطلوب غير معروف');
@@ -376,26 +395,31 @@ export async function loadSurahAudio(
     };
   }
 
-  if (reciter.source.kind === 'per-ayah') {
+  if (reciter.source.kind === 'per-ayah' || reciter.source.kind === 'everyayah') {
     const src = reciter.source;
-    const stitched = await buildPerAyahSurah(
-      (s, a) => perAyahFileUrl(src.item, s, a),
-      surahId,
-      signal,
-    );
-    return {
-      url: URL.createObjectURL(stitched.blob),
-      blob: stitched.blob,
-      verseTimings: stitched.verseTimings,
-    };
-  }
-  if (reciter.source.kind === 'everyayah') {
-    const src = reciter.source;
-    const stitched = await buildPerAyahSurah(
-      (s, a) => everyayahFileUrl(src.folder, s, a),
-      surahId,
-      signal,
-    );
+    const urlForAyah =
+      src.kind === 'per-ayah'
+        ? (s: number, a: number) => perAyahFileUrl(src.item, s, a)
+        : (s: number, a: number) => everyayahFileUrl(src.folder, s, a);
+    // Online playback opens one ayah at a time. Downloading and decoding every
+    // file in a surah before the first sound is what left the reader spinning on
+    // «جاري التجهيز» for minutes — especially in Al-Baqarah (286 files).
+    if (ayah !== undefined) {
+      const surah = getSurah(surahId);
+      if (!surah || ayah < 1 || ayah > surah.ayahCount) {
+        throw new Error('الآية المطلوبة غير موجودة في هذه السورة');
+      }
+      return {
+        url: urlForAyah(surahId, ayah),
+        blob: null,
+        verseTimings: [],
+        ayahUrl: (a) => urlForAyah(surahId, a),
+        singleAyah: ayah,
+      };
+    }
+    // Offline downloads still need one whole file per surah; that path is
+    // unchanged and keeps the measured verse timings.
+    const stitched = await buildPerAyahSurah(urlForAyah, surahId, signal);
     return {
       url: URL.createObjectURL(stitched.blob),
       blob: stitched.blob,

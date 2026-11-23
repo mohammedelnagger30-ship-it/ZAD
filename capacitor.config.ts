@@ -15,6 +15,8 @@ const config: CapacitorConfig = {
   plugins: {
     LocalNotifications: {
       smallIcon: 'ic_qaf_notification',
+      // Silver tint for the hollow-Qaf small icon, matching the large icon.
+      iconColor: '#E2E8E8',
       // Default sound for notifications that do not pick one. Must be a file that
       // actually exists (public/audio + android res/raw): `adhan.mp3` never shipped,
       // so the default silently resolved to nothing.

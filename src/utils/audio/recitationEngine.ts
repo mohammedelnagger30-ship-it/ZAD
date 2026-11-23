@@ -190,6 +190,8 @@ let sourceRef: SurahAudioSource | null = null;
 let sourceUrlRef: string | null = null;
 let loadInFlightRef: Promise<SurahAudioSource | null> | null = null;
 let loadControllerRef: AbortController | null = null;
+/** Which ayah the in-flight load is preparing (per-ayah reciters only). */
+let loadAyahRef: number | null = null;
 let activeAyahRef: number | null = null;
 let continuousRef = false;
 let verseEndRef: number | null = null;
@@ -302,6 +304,22 @@ function handleTimeUpdate(): void {
 
 function handleEnded(): void {
   const prepared = sourceRef;
+  // A streamed ayah ends with its own file. In a surah listen the next ayah is
+  // a different file, so it is fetched on demand instead of preloading a surah.
+  if (prepared?.singleAyah) {
+    if (!continuousRef) {
+      stop();
+      return;
+    }
+    const next = (activeAyahRef ?? prepared.singleAyah) + 1;
+    const surah = state.surahId === null ? undefined : getSurah(state.surahId);
+    if (surah && next <= surah.ayahCount) {
+      void playAyahEnsured(next, true);
+    } else {
+      advanceToNextSurah();
+    }
+    return;
+  }
   // A whole-file recording simply stops at its end; only a timed
   // continuous play walks on to the next ayah by itself.
   if (!continuousRef || !prepared || prepared.verseTimings.length === 0) {
@@ -329,14 +347,24 @@ function handleEnded(): void {
 
 function handleAudioError(): void {
   const prepared = sourceRef;
-  if (continuousRef && state.isPlaying && prepared) {
-    // Try to recover from errors in continuous mode
-    const nextAyah = activeAyahRef ? activeAyahRef + 1 : 1;
-    if (nextAyah <= prepared.verseTimings.length) {
-      playAyah(nextAyah, true);
+  if (!continuousRef || !state.isPlaying || !prepared) return;
+  // A streamed ayah has no timing table; the surah's ayah count is the bound.
+  if (prepared.singleAyah) {
+    const next = (activeAyahRef ?? prepared.singleAyah) + 1;
+    const surah = state.surahId === null ? undefined : getSurah(state.surahId);
+    if (surah && next <= surah.ayahCount) {
+      void playAyahEnsured(next, true);
     } else {
       stop();
     }
+    return;
+  }
+  // Try to recover from errors in continuous mode
+  const nextAyah = activeAyahRef ? activeAyahRef + 1 : 1;
+  if (nextAyah <= prepared.verseTimings.length) {
+    playAyah(nextAyah, true);
+  } else {
+    stop();
   }
 }
 
@@ -465,6 +493,7 @@ function abortLoad(): void {
   loadControllerRef?.abort();
   loadControllerRef = null;
   loadInFlightRef = null;
+  loadAyahRef = null;
 }
 
 /** Drops the prepared source, releasing its object URL if it had one. */
@@ -485,20 +514,28 @@ function releaseSource(): void {
  * the fetch happens behind «جار تجهيز التلاوة...» and a failure can only appear
  * after the person pressed play themselves.
  */
-export function ensureSource(): Promise<SurahAudioSource | null> {
-  if (sourceRef) return Promise.resolve(sourceRef);
-  if (loadInFlightRef) return loadInFlightRef;
+export function ensureSource(ayah = state.selectedAyah ?? 1): Promise<SurahAudioSource | null> {
+  if (sourceRef) {
+    if (!sourceRef.singleAyah || sourceRef.singleAyah === ayah) {
+      return Promise.resolve(sourceRef);
+    }
+    // A streamed ayah is a different file; the cached one cannot play it.
+    releaseSource();
+  }
+  if (loadInFlightRef && loadAyahRef === ayah) return loadInFlightRef;
+  if (loadInFlightRef) abortLoad();
 
   const { surahId, reciterId } = state;
   if (surahId === null || !reciterId) return Promise.resolve(null);
 
   const controller = new AbortController();
   loadControllerRef = controller;
+  loadAyahRef = ayah;
   patch({ sourceLoading: true });
 
   const load = (async (): Promise<SurahAudioSource | null> => {
     try {
-      const nextSource = await loadSurahAudio(reciterId, surahId, controller.signal);
+      const nextSource = await loadSurahAudio(reciterId, surahId, controller.signal, ayah);
       if (controller.signal.aborted || loadControllerRef !== controller) {
         // The surah or reciter changed while this fetch was running.
         if (nextSource.blob) URL.revokeObjectURL(nextSource.url);
@@ -526,6 +563,7 @@ export function ensureSource(): Promise<SurahAudioSource | null> {
       if (loadControllerRef === controller) {
         loadControllerRef = null;
         loadInFlightRef = null;
+        loadAyahRef = null;
         patch({ sourceLoading: false });
       }
     }
@@ -540,6 +578,34 @@ export function playAyah(ayah: number, continuous = false): void {
   const prepared = sourceRef;
   const audio = audioElement;
   if (!prepared || !audio) return;
+
+  // Per-ayah reciters: one small MP3 for this ayah, streamed straight from the
+  // source. `ended` is the ayah boundary, so this needs no surah-wide timings
+  // and — crucially — no wait while hundreds of files are stitched together.
+  if (prepared.singleAyah && prepared.ayahUrl) {
+    const url = prepared.ayahUrl(ayah);
+    const changed = audio.src !== url;
+    if (changed) audio.src = url;
+    if (changed || audio.ended) audio.currentTime = 0;
+    audio.playbackRate = state.playbackRate;
+    activeAyahRef = ayah;
+    continuousRef = continuous;
+    currentTimingRef = null;
+    verseEndRef = null;
+    patch({ activeAyah: ayah, selectedAyah: ayah, error: null });
+    syncProgressFromAudio(audio);
+    reportProgressFromAudio();
+    audio
+      .play()
+      .then(() => markPlaying())
+      .catch((cause: unknown) => {
+        patch({
+          isPlaying: false,
+          error: cause instanceof Error ? cause.message : 'تعذّر تشغيل التلاوة',
+        });
+      });
+    return;
+  }
 
   // A recording with no verse timings (the children-repetition muallim)
   // plays as one whole surah file: any ayah press starts it from the top.
@@ -614,7 +680,7 @@ export function playAyah(ayah: number, continuous = false): void {
 
 /** Prepare the audio if needed, then hand over to `playAyah`; null aborts silently. */
 export async function playAyahEnsured(ayah: number, continuous = false): Promise<void> {
-  const prepared = await ensureSource();
+  const prepared = await ensureSource(ayah);
   if (!prepared) return;
   playAyah(ayah, continuous);
 }
@@ -628,7 +694,7 @@ export async function startSelectedAyah(): Promise<void> {
     return;
   }
 
-  const prepared = await ensureSource();
+  const prepared = await ensureSource(ayah);
   if (!prepared) return;
   repeatRemainingRef = state.repeatCount;
   playAyah(ayah, false);
@@ -637,7 +703,7 @@ export async function startSelectedAyah(): Promise<void> {
 export async function replayAyah(): Promise<void> {
   const ayah = activeAyahRef ?? state.selectedAyah;
   if (ayah === null) return;
-  const prepared = await ensureSource();
+  const prepared = await ensureSource(ayah);
   if (!prepared) return;
   repeatRemainingRef = state.repeatCount;
   playAyah(ayah, false);
@@ -651,7 +717,11 @@ export async function toggleSurah(): Promise<void> {
     return;
   }
 
-  if (activeAyahRef !== null && continuousRef) {
+  if (
+    activeAyahRef !== null &&
+    continuousRef &&
+    (!sourceRef?.singleAyah || sourceRef.singleAyah === activeAyahRef)
+  ) {
     audio
       .play()
       .then(() => markPlaying())
@@ -659,10 +729,11 @@ export async function toggleSurah(): Promise<void> {
     return;
   }
 
-  const prepared = await ensureSource();
+  const ayah = state.selectedAyah || 1;
+  const prepared = await ensureSource(ayah);
   if (!prepared) return;
   repeatRemainingRef = 1;
-  playAyah(state.selectedAyah || 1, true);
+  playAyah(ayah, true);
 }
 
 /**
@@ -855,7 +926,7 @@ export async function playNextSurah(): Promise<void> {
  */
 export async function playPreviousSurah(): Promise<void> {
   const audio = audioElement;
-  if (audio && audio.currentTime > RESTART_THRESHOLD_SECONDS) {
+  if (audio && !sourceRef?.singleAyah && audio.currentTime > RESTART_THRESHOLD_SECONDS) {
     restartCurrentSurah();
     return;
   }
@@ -874,6 +945,23 @@ function restartCurrentSurah(): void {
   const prepared = sourceRef;
   const audio = audioElement;
   if (!prepared || !audio) return;
+
+  if (prepared.singleAyah) {
+    if (state.isPlaying) {
+      repeatRemainingRef = 1;
+      void playAyahEnsured(1, true);
+      return;
+    }
+    audio.currentTime = 0;
+    activeAyahRef = 1;
+    continuousRef = true;
+    currentTimingRef = null;
+    verseEndRef = null;
+    patch({ activeAyah: 1, selectedAyah: 1 });
+    syncProgressFromAudio(audio);
+    reportProgressFromAudio();
+    return;
+  }
 
   const first = prepared.verseTimings[0];
   if (state.isPlaying) {
@@ -1001,7 +1089,24 @@ function registerSession(): void {
  */
 function stepAyah(delta: number): void {
   const prepared = sourceRef;
-  if (!prepared || prepared.verseTimings.length === 0) return;
+  if (!prepared) return;
+  if (prepared.singleAyah) {
+    const surah = state.surahId === null ? undefined : getSurah(state.surahId);
+    const current = activeAyahRef ?? prepared.singleAyah;
+    if (!surah) return;
+    const next = Math.min(surah.ayahCount, Math.max(1, current + delta));
+    if (next === current) return;
+    if (state.isPlaying) {
+      void playAyahEnsured(next, continuousRef);
+    } else {
+      patch({ activeAyah: next, selectedAyah: next });
+      activeAyahRef = next;
+      // The next file is loaded when play is pressed; there is no needle to
+      // move inside a file that has not been fetched yet.
+    }
+    return;
+  }
+  if (prepared.verseTimings.length === 0) return;
 
   const firstAyah = prepared.verseTimings[0].ayah;
   const lastAyah = prepared.verseTimings[prepared.verseTimings.length - 1].ayah;

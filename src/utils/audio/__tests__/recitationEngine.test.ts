@@ -13,7 +13,14 @@ const loadSurahAudioMock = jest.fn<
     reciterId: string,
     surahId: number,
     signal?: AbortSignal,
-  ) => Promise<{ url: string; blob: Blob | null; verseTimings: { ayah: number; startMs: number; endMs: number }[] }>
+    ayah?: number,
+  ) => Promise<{
+    url: string;
+    blob: Blob | null;
+    verseTimings: { ayah: number; startMs: number; endMs: number }[];
+    singleAyah?: number;
+    ayahUrl?: (ayah: number) => string;
+  }>
 >();
 jest.unstable_mockModule('@/utils/audio/quranAudio', () => ({ loadSurahAudio: loadSurahAudioMock }));
 
@@ -431,5 +438,60 @@ describe('recitationEngine surah navigation', () => {
     engine.stop();
 
     expect(isRecitationSheetOpen()).toBe(false);
+  });
+});
+
+/**
+ * Per-ayah reciters (EveryAyah / the annotated mushaf) must not stitch a whole
+ * surah before the first sound — that was the «جاري التجهيز» spinner that never
+ * ended in Al-Baqarah. One file per ayah is loaded on demand instead.
+ */
+describe('recitationEngine streamed ayahs', () => {
+  let playSpy: ReturnType<typeof jest.spyOn>;
+  let pauseSpy: ReturnType<typeof jest.spyOn>;
+
+  beforeEach(() => {
+    playSpy = jest
+      .spyOn(HTMLMediaElement.prototype, 'play')
+      .mockImplementation(() => Promise.resolve());
+    pauseSpy = jest.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+    engine.stop();
+    // A real track change is the only way to drop a source left by the earlier
+    // describes: `setTrack` is deliberately a no-op for the same track.
+    engine.setTrack({ ...FATIHA, reciterId: 'stream-reset' });
+    engine.selectAyah(1);
+    loadSurahAudioMock.mockImplementation(async (_reciter, _surah, _signal, ayah = 1) => {
+      const urlFor = (a: number) => `https://example.test/001${String(a).padStart(3, '0')}.mp3`;
+      return { url: urlFor(ayah), blob: null, verseTimings: [], singleAyah: ayah, ayahUrl: urlFor };
+    });
+    engine.setTrack(FATIHA);
+  });
+
+  afterEach(() => {
+    playSpy.mockRestore();
+    pauseSpy.mockRestore();
+  });
+
+  it('starts from one file instead of waiting for a stitched surah', async () => {
+    await engine.toggleSurah();
+    await flush();
+
+    expect(loadSurahAudioMock).toHaveBeenCalledWith('mishary', 1, expect.anything(), 1);
+    expect(recitationAudio().src).toBe('https://example.test/001001.mp3');
+    expect(engine.getRecitationState().isPlaying).toBe(true);
+  });
+
+  it('loads the next ayah on demand when a streamed ayah ends', async () => {
+    await engine.toggleSurah();
+    await flush();
+    loadSurahAudioMock.mockClear();
+
+    recitationAudio().dispatchEvent(new Event('ended'));
+    await flush();
+
+    expect(loadSurahAudioMock).toHaveBeenCalledWith('mishary', 1, expect.anything(), 2);
+    expect(recitationAudio().src).toBe('https://example.test/001002.mp3');
+    expect(engine.getRecitationState().activeAyah).toBe(2);
+    expect(engine.getRecitationState().isPlaying).toBe(true);
   });
 });

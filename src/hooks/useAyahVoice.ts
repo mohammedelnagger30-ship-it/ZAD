@@ -39,8 +39,9 @@ export function useAyahVoice({
   const [voiceDone, setVoiceDone] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const voiceAudioRef = useRef<HTMLAudioElement>(null);
-  /** The surah's file, held once per reciter and read for every ayah in it. */
-  const voiceSourceRef = useRef<{ surahId: number; source: SurahAudioSource } | null>(null);
+  /** The surah's file, held once per reciter and read for every ayah in it.
+   *  Per-ayah streams hold only the ayah named here. */
+  const voiceSourceRef = useRef<{ surahId: number; ayah: number; source: SurahAudioSource } | null>(null);
   const voiceTimingRef = useRef<VerseTiming | null>(null);
   /** The blob URL's only handle — nothing else can release the file it maps to. */
   const voiceUrlRef = useRef<string | null>(null);
@@ -49,6 +50,16 @@ export function useAyahVoice({
   const pauseVoice = useCallback(() => {
     voiceAudioRef.current?.pause();
     setVoicePlaying(false);
+  }, []);
+
+  /** A load still in flight, cancelled when the sheet closes or the voice changes. */
+  const loadControllerRef = useRef<AbortController | null>(null);
+  const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelLoad = useCallback(() => {
+    if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
+    loadTimeoutRef.current = null;
+    loadControllerRef.current?.abort();
+    loadControllerRef.current = null;
   }, []);
 
   /** The file is held only for as long as the ayah is being asked about. */
@@ -64,9 +75,10 @@ export function useAyahVoice({
     // document is not paused for us — stop it while it can still be reached.
     pauseVoice();
     releaseVoice();
+    cancelLoad();
     setVoiceWholeFile(false);
     setAyahChoice(null);
-  }, [pauseVoice, releaseVoice, setAyahChoice]);
+  }, [pauseVoice, releaseVoice, cancelLoad, setAyahChoice]);
 
   /**
    * One ayah at a time, out of the surah's own file: playback opens at the
@@ -79,6 +91,39 @@ export function useAyahVoice({
     if (!audio) {
       setVoicePhase('error');
       setVoiceError('تعذّر تشغيل التلاوة — أعد المحاولة.');
+      return;
+    }
+    // Per-ayah reciters stream one small MP3 at a time: no surah-wide stitching,
+    // no 300-request wait before the first sound. The element's own `ended`
+    // event is the ayah boundary, so there are no verse timings to consult.
+    if (source.singleAyah && source.ayahUrl) {
+      voiceTimingRef.current = null;
+      const url = source.ayahUrl(ayah);
+      const changed = audio.src !== url;
+      if (changed) audio.src = url;
+      audio.playbackRate = playbackRate;
+      if (restart || audio.ended || changed) audio.currentTime = 0;
+      setVoiceTime({ current: 0, duration: Number.isFinite(audio.duration) ? audio.duration : 0 });
+      const play = () => {
+        audio.play().catch(() => {
+          setVoicePhase('error');
+          setVoiceError('تعذّر تشغيل التلاوة — أعد المحاولة.');
+        });
+      };
+      if (audio.readyState >= 2) {
+        play();
+      } else {
+        const onCanPlay = () => {
+          audio.removeEventListener('canplay', onCanPlay);
+          play();
+        };
+        audio.addEventListener('canplay', onCanPlay, { once: true });
+        setTimeout(() => {
+          audio.removeEventListener('canplay', onCanPlay);
+          play();
+        }, 1_000);
+      }
+      setVoiceDone(false);
       return;
     }
     // A recording with no verse timings (the children-repetition muallim)
@@ -115,10 +160,28 @@ export function useAyahVoice({
       audio.currentTime = start;
     }
     setVoiceTime({ current: Math.max(0, audio.currentTime - start), duration: end - start });
-    audio.play().catch(() => {
-      setVoicePhase('error');
-      setVoiceError('تعذّر تشغيل التلاوة — أعد المحاولة.');
-    });
+    // Wait for the audio to be ready before playing, so we don't hit a silent
+    // failure when the source URL changed but the decoder hasn't caught up.
+    const play = () => {
+      audio.play().catch(() => {
+        setVoicePhase('error');
+        setVoiceError('تعذّر تشغيل التلاوة — أعد المحاولة.');
+      });
+    };
+    if (audio.readyState >= 2) {
+      play();
+    } else {
+      const onCanPlay = () => {
+        audio.removeEventListener('canplay', onCanPlay);
+        play();
+      };
+      audio.addEventListener('canplay', onCanPlay, { once: true });
+      // Fallback: if canplay never fires, try playing anyway after a short delay.
+      setTimeout(() => {
+        audio.removeEventListener('canplay', onCanPlay);
+        play();
+      }, 1_000);
+    }
     setVoiceDone(false);
   }, [playbackRate]);
 
@@ -134,36 +197,59 @@ export function useAyahVoice({
       // now, not back at the top — and the scope only says where it is to stop:
       // at this ayah's end, or at the surah's.
       const ayah = ayahNumber ?? ayahChoice.ayahNumber;
+      const surahId = ayahChoice.surahId;
       const cached = voiceSourceRef.current;
-      if (cached && cached.surahId === ayahChoice.surahId) {
+      if (
+        cached &&
+        cached.surahId === surahId &&
+        (!cached.source.singleAyah || cached.source.singleAyah === ayah)
+      ) {
         setVoicePhase('ready');
         playAyahFrom(cached.source, ayah);
         return;
       }
-      const { surahId } = ayahChoice;
+      cancelLoad();
+      const controller = new AbortController();
+      loadControllerRef.current = controller;
+      loadTimeoutRef.current = setTimeout(() => controller.abort(), 45_000);
       setVoicePhase('loading');
       setVoiceError(null);
       repeatRemainingRef.current = repeatCount - 1;
-      void loadSurahAudio(reciter, surahId)
+
+      void loadSurahAudio(reciter, surahId, controller.signal, ayah)
         .then((source) => {
-          // The reader may have closed the sheet while the file was on its way.
+          if (controller.signal.aborted || loadControllerRef.current !== controller) {
+            if (source.blob) URL.revokeObjectURL(source.url);
+            return;
+          }
           if (!voiceAudioRef.current) {
             if (source.blob) URL.revokeObjectURL(source.url);
             return;
           }
           releaseVoice();
           if (source.blob) voiceUrlRef.current = source.url;
-          voiceSourceRef.current = { surahId, source };
-          setVoiceWholeFile(source.verseTimings.length === 0);
+          voiceSourceRef.current = { surahId, ayah, source };
+          setVoiceWholeFile(source.verseTimings.length === 0 && !source.singleAyah);
           setVoicePhase('ready');
           playAyahFrom(source, ayah);
         })
         .catch((cause: unknown) => {
+          if (controller.signal.aborted || loadControllerRef.current !== controller) return;
           setVoicePhase('error');
-          setVoiceError(cause instanceof Error ? cause.message : 'تعذّر تجهيز التلاوة.');
+          setVoiceError(
+            (cause as Error).name === 'AbortError'
+              ? 'توقّف تجهيز التلاوة — تحقّق من الإنترنت وحاول مجددًا.'
+              : cause instanceof Error
+                ? cause.message
+                : 'تعذّر تجهيز التلاوة.',
+          );
+          releaseVoice();
+        })
+        .finally(() => {
+          if (loadControllerRef.current === controller) cancelLoad();
         });
     },
-    [ayahChoice, reciterId, playAyahFrom, releaseVoice, repeatCount],
+    [ayahChoice, reciterId, playAyahFrom, releaseVoice, repeatCount, cancelLoad],
   );
 
   /**
@@ -204,10 +290,31 @@ export function useAyahVoice({
     const timing = voiceTimingRef.current;
     if (!audio) return;
     if (!timing) {
+      const source = voiceSourceRef.current?.source;
       setVoiceTime({
         current: audio.currentTime,
         duration: Number.isFinite(audio.duration) ? audio.duration : 0,
       });
+      // A streamed single ayah has no surah-wide timings: its own `ended` event
+      // is the boundary, where the same repeat / next-ayah rules apply.
+      if (source?.singleAyah) {
+        if (!atEnd) return;
+        const ayah = source.singleAyah;
+        if (repeatRemainingRef.current > 0) {
+          repeatRemainingRef.current -= 1;
+          playAyahFrom(source, ayah, true);
+          return;
+        }
+        const choice = ayahChoice;
+        const surah = choice ? getSurah(choice.surahId) : undefined;
+        if (voiceScope === 'surah' && choice && surah && ayah < surah.ayahCount) {
+          advanceAyah(choice.surahId, ayah + 1);
+          startVoice(reciterId, ayah + 1);
+          return;
+        }
+        finishVoice();
+        return;
+      }
       // Whole-surah file with no per-ayah timings: estimate current ayah proportionally.
       const surahId = ayahChoice?.surahId;
       if (surahId && voiceWholeFile && audio.duration > 0) {
@@ -288,11 +395,14 @@ export function useAyahVoice({
       return;
     }
     finishVoice();
-  }, [finishVoice, advanceAyah, ayahChoice, voiceScope, playAyahFrom]);
+  }, [finishVoice, advanceAyah, ayahChoice, voiceScope, playAyahFrom, startVoice, reciterId]);
 
   const handleVoiceEnded = useCallback(() => {
-    if (voiceTimingRef.current) handleVoiceTime(true);
-    else finishVoice();
+    if (voiceTimingRef.current || voiceSourceRef.current?.source.singleAyah) {
+      handleVoiceTime(true);
+      return;
+    }
+    finishVoice();
   }, [finishVoice, handleVoiceTime]);
 
   /**
@@ -310,7 +420,11 @@ export function useAyahVoice({
     setVoiceDone(false);
     repeatRemainingRef.current = repeatCount - 1;
     const cached = voiceSourceRef.current;
-    if (cached && cached.surahId === choice.surahId) {
+    if (
+      cached &&
+      cached.surahId === choice.surahId &&
+      (!cached.source.singleAyah || cached.source.singleAyah === next)
+    ) {
       playAyahFrom(cached.source, next);
       return;
     }
@@ -408,6 +522,7 @@ export function useAyahVoice({
     if (nextReciterId === reciterId) return;
     pauseVoice();
     releaseVoice();
+    cancelLoad();
     setReciterId(nextReciterId);
     savePreferredReciter(nextReciterId);
     repeatRemainingRef.current = repeatCount - 1;
@@ -425,7 +540,8 @@ export function useAyahVoice({
     setVoiceError(null);
     setVoiceTime({ current: 0, duration: 0 });
     repeatRemainingRef.current = repeatCount - 1;
-  }, [repeatCount]);
+    cancelLoad();
+  }, [repeatCount, cancelLoad]);
 
   const handleVoiceRate = (rate: number) => {
     setPlaybackRate(rate);

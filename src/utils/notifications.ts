@@ -110,11 +110,13 @@ export function preserveActiveSnooze(notification: LocalNotificationSchema): boo
  *
  * On a number of Android builds the system shows no notification-permission dialog at
  * all, or shows one and never delivers the plugin's result back to the WebView —
- * `requestPermissions()` then stays pending forever. Callers await it while showing a
- * «جارٍ التفعيل...» state, so an unanswered request used to freeze the onboarding
- * screen indefinitely.
+ * `requestPermissions()` then stays pending forever. Onboarding no longer blocks on
+ * that promise, but a request that never settles would still keep its fallback check
+ * alive. It used to be 10 s for the request *and* another 10 s for the fallback check:
+ * up to 20 s of work for one tap. One 4.5 s budget for the whole flow closes it promptly
+ * while giving the system dialog enough time to answer in the normal case.
  */
-export const NOTIFICATION_PERMISSION_TIMEOUT_MS = 10_000;
+export const NOTIFICATION_PERMISSION_TIMEOUT_MS = 4_500;
 
 /**
  * Resolves `null` once `promise` has not settled within `ms`, instead of waiting forever.
@@ -144,16 +146,18 @@ export async function requestNotificationPermission(): Promise<boolean> {
     }
     return false;
   }
+  const deadline = Date.now() + NOTIFICATION_PERMISSION_TIMEOUT_MS;
   const granted = await settleWithin(
     LocalNotifications.requestPermissions().then((perm) => perm.display === 'granted'),
     NOTIFICATION_PERMISSION_TIMEOUT_MS,
   );
   if (granted !== null) return granted;
   // The request went unanswered (some OEM skins swallow the dialog or its result).
-  // Report whatever the system state actually is, so the flow keeps moving and the
-  // user can re-ask from Settings, rather than hanging on «جارٍ التفعيل...».
+  // Read the real system state with whatever is left of the *same* budget — never a
+  // second full timeout — so one tap cannot leave 20 s of pending work behind.
+  const remaining = Math.max(250, deadline - Date.now());
   try {
-    return (await settleWithin(hasNotificationPermission(), NOTIFICATION_PERMISSION_TIMEOUT_MS)) ?? false;
+    return (await settleWithin(hasNotificationPermission(), remaining)) ?? false;
   } catch {
     return false;
   }
