@@ -9,10 +9,23 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.media.AudioAttributes;
+import android.media.AudioManager;
+import android.net.Uri;
+import android.os.Build;
+import android.text.format.DateFormat;
 import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
+import androidx.core.content.FileProvider;
+
+import java.io.File;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+import java.util.TimeZone;
 
 /**
  * Fires at a prayer time: posts the adhan notification and opens the adhan page itself —
@@ -34,6 +47,14 @@ import androidx.core.app.NotificationManagerCompat;
  * so it replaces the old scheduled sound notification entirely: one card, one adhan, and
  * the page itself. If the app process happens to be alive, the plugin is also told the
  * prayer arrived so the page opens without waiting for a tap.
+ *
+ * The alarm carries the prayer's <b>true</b> instant, so this receiver can also judge
+ * whether it is still that instant. A phone that deferred the alarm (Doze, an OEM
+ * cleaner, exact alarms revoked so the batch went out inexact) used to ring the adhan
+ * whenever it finally woke up — which is the «أذان العصر رنّ وقت المغرب» report. Past
+ * {@link #MISFIRED_AFTER_MS} the moment is history: the caller gets a plain «تأخّر
+ * التنبيه» card instead of a call to prayer nobody is being called to, and the adhan page
+ * stays down rather than claiming «الآن» for a prayer long finished.
  */
 public class AdhanOverlayReceiver extends BroadcastReceiver {
     private static final String TAG = "AdhanOverlayReceiver";
@@ -45,8 +66,54 @@ public class AdhanOverlayReceiver extends BroadcastReceiver {
     static final String EXTRA_PRAYER_KEY = "prayerKey";
     static final String EXTRA_PRAYER_NAME = "prayerName";
     static final String EXTRA_TIME = "time";
+    static final String EXTRA_TYPE = "type";
+    /**
+     * The channel's sound, when the alarm knows it: a bundled res/raw name for a stock
+     * voice ({@code adhan_makkah_masjid.mp3}), or an absolute path for one the reader
+     * downloaded. {@link #ensureChannel} needs it because a channel minted without a
+     * sound stays silent forever — Android fixes a channel's sound at creation and
+     * refuses every later attempt to add one, so the fallback channel this method
+     * creates used to ring nothing at all on a phone whose app data was cleared.
+     */
+    static final String EXTRA_SOUND = "sound";
+    /** Absolute path of a downloaded voice — the FileProvider route, see {@link #ensureChannel}. */
+    static final String EXTRA_SOUND_PATH = "soundPath";
+    /** Whether the prayer channel itself rang. Never inferred from a service start. */
+    static final String EXTRA_RINGING = "ringing";
+    /**
+     * The native alarm-stream speaker was armed because the channel could not ring.
+     * The page checks its real playback state before deciding whether to speak too —
+     * starting a foreground service is not proof that a voice actually played.
+     */
+    static final String EXTRA_NATIVE_PLAYBACK = "nativePlayback";
 
-    private static final int COLOR_BRAND = 0xFF1F734E;
+    /**
+     * How far outside its own instant an alarm may still be treated as <i>the</i> call.
+     *
+     * Mirrors {@code NATIVE_OPEN_MAX_LATE_MS} on the JS side. A full-screen takeover
+     * lands at the instant itself and a cold start adds seconds, so an alarm that only
+     * surfaced minutes later is history, not a moment: a phone that only woke up at
+     * Maghrib must not call Asr as though it were happening now.
+     * Inside the window the ring is kept — Doze and an OEM deferring an alarm by a
+     * minute or two is ordinary, and a slightly late adhan is still the adhan.
+     */
+    static final long MISFIRED_AFTER_MS = 15 * 60_000L;
+
+    /**
+     * Channel of the «تأخّر التنبيه» card. It is deliberately not the adhan's channel:
+     * this card reports that an alarm was late, it is not itself a call to prayer, so it
+     * must not sing the adhan and must not take the screen over.
+     */
+    static final String LATE_CHANNEL_ID = "prayer-late";
+
+    private static final String LATE_CHANNEL_NAME = "تنبيه متأخّر";
+    private static final String LATE_CHANNEL_SOUND = "notification";
+
+    /** The alarm and its instant agree — the ordinary case. */
+    private static final long ON_TIME = 0L;
+
+    /** Silver, matching the hollow-Qaf notification icon (not the green launcher mark). */
+    private static final int COLOR_BRAND = 0xFFE2E8E8;
 
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -65,9 +132,46 @@ public class AdhanOverlayReceiver extends BroadcastReceiver {
             return;
         }
 
-        ensureChannel(context, channelId);
+        // The instant the alarm names and the instant the device is in must still agree.
+        // When they do not, this is not the call: it is a report about an alarm that came
+        // too late (an OEM deferral, inexact alarms, a clock that moved), and it is
+        // reported as such below instead of being sung and taken over the screen with.
+        final long misfiredBy = misfireByMs(time);
+        if (misfiredBy != ON_TIME) {
+            Log.w(TAG, "Adhan alarm arrived " + misfiredBy + " ms off its instant - reported, not called.");
+            postMisfiredNotice(context, id, prayerName, time, misfiredBy);
+            return;
+        }
 
-        Intent launch = buildLaunchIntent(context, prayerKey, prayerName, time);
+        final String sound = intent.getStringExtra(EXTRA_SOUND);
+        final String soundPath = intent.getStringExtra(EXTRA_SOUND_PATH);
+        ensureChannel(context, channelId, sound, soundPath);
+
+        // The reader asked for no adhan at all on the silent channel. A channel that
+        // cannot ring for any *other* reason (a broken FileProvider grant, DND on an
+        // old channel, an OEM refusing notify()) is different: that is exactly when a
+        // native speaker has to take over.
+        final boolean wantsSound = !"prayer-muted".equals(channelId)
+            && (hasText(sound) || hasText(soundPath));
+        final boolean channelCanRing = notificationsCanRing(context, channelId);
+
+        // The ringing verdict must be known *before* the PendingIntent is made: a
+        // FLAG_IMMUTABLE PendingIntent snapshots its extras at creation, so adding the
+        // flag later (as this receiver used to) lost it on every Android 10+ full-screen
+        // takeover — the only path a closed phone actually uses.
+        boolean nativePlayback = false;
+        if (!channelCanRing && wantsSound) {
+            nativePlayback = AdhanPlaybackService.play(context, sound, soundPath, title);
+        }
+        // `ringing` describes the *channel only*. A started service is not proof that a
+        // voice played, so the page is told separately that a native speaker was armed
+        // and checks its real state before deciding to stay quiet.
+        final boolean ringing = channelCanRing;
+
+        // Read the type from the alarm intent (defaults to "prayer")
+        final String type = intent.getStringExtra(EXTRA_TYPE);
+        Intent launch = buildLaunchIntent(
+            context, prayerKey, prayerName, time, type, ringing, nativePlayback);
 
         // Tapping the card and the full-screen takeover open the very same page; both
         // carry the prayer so the overlay can show the right one.
@@ -79,7 +183,7 @@ public class AdhanOverlayReceiver extends BroadcastReceiver {
         );
 
         Notification notification = new NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(R.drawable.ic_qaf_notification)
             .setLargeIcon(BitmapFactory.decodeResource(
                 context.getResources(), R.drawable.ic_notification_large))
             .setColor(COLOR_BRAND)
@@ -95,15 +199,19 @@ public class AdhanOverlayReceiver extends BroadcastReceiver {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build();
 
+        boolean posted = true;
         try {
             NotificationManagerCompat.from(context).notify(id, notification);
         } catch (RuntimeException e) {
-            // MIUI has been known to throw here (channel/app-op quirks); without the
-            // card there is no adhan sound either, so opening a page that believes the
-            // notification is ringing would leave the prayer in silence — the page
-            // then waits for the next open instead, as it always has.
+            // MIUI and relatives have been known to throw here (channel/app-op quirks).
+            // The alarm still stands, so the page is opened below regardless — and the
+            // native speaker below keeps the call audible. Bailing out here used to
+            // leave a foreground app with neither card nor page.
+            posted = false;
             Log.e(TAG, "Could not post the adhan notification", e);
-            return;
+        }
+        if (!posted && wantsSound && !nativePlayback) {
+            nativePlayback = AdhanPlaybackService.play(context, sound, soundPath, title);
         }
 
         // Direct launch (works up to Android 9, where a background app may start its own
@@ -124,34 +232,379 @@ public class AdhanOverlayReceiver extends BroadcastReceiver {
         data.put("prayerKey", prayerKey);
         if (prayerName != null) data.put("prayerName", prayerName);
         if (time != null) data.put("time", time);
+        data.put("type", type != null ? type : "prayer");
+        // The two verdicts stay apart on purpose: the page only stays quiet on a
+        // channel verdict, and confirms a native fallback actually reached audio before
+        // giving up its own speaker.
+        data.put("ringing", ringing);
+        data.put("nativePlayback", nativePlayback);
         AdhanOverlay.dispatchReceived(data);
     }
 
     private static Intent buildLaunchIntent(
-        Context context, String prayerKey, String prayerName, String time
+        Context context, String prayerKey, String prayerName, String time, String type,
+        boolean ringing, boolean nativePlayback
     ) {
         Intent launch = new Intent(context, MainActivity.class);
         launch.setAction(AdhanOverlay.ACTION_ADHAN);
         launch.putExtra(EXTRA_PRAYER_KEY, prayerKey);
         if (prayerName != null) launch.putExtra(EXTRA_PRAYER_NAME, prayerName);
         if (time != null) launch.putExtra(EXTRA_TIME, time);
+        if (type != null) launch.putExtra(EXTRA_TYPE, type);
+        // Part of the intent from the very start: the full-screen PendingIntent made from
+        // it below is immutable and keeps only the extras present at this moment.
+        launch.putExtra(EXTRA_RINGING, ringing);
+        launch.putExtra(EXTRA_NATIVE_PLAYBACK, nativePlayback);
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP
             | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         return launch;
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isEmpty();
+    }
+
+    /**
+     * Whether a notification on this channel can actually be heard.
+     *
+     * `notify()` above reports success even when the app's notifications are switched off
+     * or the channel itself is muted — the system drops the card without a word. Only the
+     * device can answer that, and the answer decides whether the page speaks.
+     *
+     * A channel with no sound is the other half of that answer, and it used to be missed
+     * entirely: the app may have created the channel before its sound existed (or the
+     * reader may have muted it in the system settings). Such a card is posted and never
+     * heard — and a page told "it is ringing" would stand silent over a prayer nobody
+     * heard, which is the reported «فيه صفحة ومفيش أذان» exactly.
+     */
+    private static boolean notificationsCanRing(Context context, String channelId) {
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return false;
+        // Channels do not exist before Android 8; notifications on those versions always
+        // ring unless the app-level switch above is off.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return true;
+        NotificationManager manager =
+            (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager == null) return true;
+        NotificationChannel channel = manager.getNotificationChannel(channelId);
+        if (channel == null) return true;
+        if (channel.getImportance() == NotificationManager.IMPORTANCE_NONE) return false;
+        // `prayer-muted` carries no sound by design — the reader silenced the adhan — and
+        // so reports that nothing is ringing, which is exactly what it means.
+        if (channel.getSound() == null) return false;
+
+        // Vibrate silences the notification stream but not the alarm stream. A channel
+        // on USAGE_ALARM therefore still sounds; one on USAGE_NOTIFICATION does not,
+        // which is exactly why the connected phone showed a silent page. DND is stricter:
+        // only a channel allowed to bypass it can ring there. The app cannot grant that
+        // bypass by itself on every ROM, so when it is absent the native alarm-stream
+        // speaker takes over rather than leaving the call in silence.
+        AudioAttributes attributes = channel.getAudioAttributes();
+        boolean alarmUsage = attributes != null
+            && attributes.getUsage() == AudioAttributes.USAGE_ALARM;
+        if (isDndActive(context)) return alarmUsage && channel.canBypassDnd();
+        if (isRingerSilent(context)) return alarmUsage;
+        return true;
+    }
+
+    private static boolean isRingerSilent(Context context) {
+        AudioManager audio = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+        return audio != null && audio.getRingerMode() != AudioManager.RINGER_MODE_NORMAL;
+    }
+
+    private static boolean isDndActive(Context context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false;
+        NotificationManager manager =
+            (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager == null) return false;
+        try {
+            return manager.getCurrentInterruptionFilter()
+                != NotificationManager.INTERRUPTION_FILTER_ALL;
+        } catch (SecurityException e) {
+            // Unknown is not a reason to silence the adhan: the alarm usage still
+            // gets the call through on every normal and alarm-only DND setting.
+            return false;
+        }
+    }
+
+    private static boolean channelUsesAlarm(NotificationChannel channel) {
+        AudioAttributes attributes = channel.getAudioAttributes();
+        return attributes != null && attributes.getUsage() == AudioAttributes.USAGE_ALARM;
+    }
+
+    private static boolean isAdhanChannel(String channelId) {
+        return channelId != null && channelId.startsWith("prayer-")
+            && !"prayer-muted".equals(channelId) && !"prayer-reminder".equals(channelId)
+            && !"prayer-late".equals(channelId);
+    }
+
+    /**
+     * How far the alarm's instant sits from the device's own clock, in milliseconds:
+     * positive when the alarm came late, negative when it came early, and
+     * {@link #ON_TIME} while the two still agree (or the payload carries no readable
+     * instant — an older build, which must keep working rather than go silent).
+     */
+    private static long misfireByMs(String time) {
+        long instant = parseInstant(time);
+        if (instant == 0L) return ON_TIME;
+        long by = System.currentTimeMillis() - instant;
+        return Math.abs(by) > MISFIRED_AFTER_MS ? by : ON_TIME;
+    }
+
+    /** The ISO-8601 instant the JS side sends (`Date#toISOString`), or 0 when unreadable. */
+    private static long parseInstant(String time) {
+        if (time == null || time.isEmpty()) return 0L;
+        try {
+            SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
+            format.setTimeZone(TimeZone.getTimeZone("UTC"));
+            format.setLenient(false);
+            Date parsed = format.parse(time);
+            return parsed != null ? parsed.getTime() : 0L;
+        } catch (ParseException e) {
+            return 0L;
+        }
+    }
+
+    /** «قبل دقيقة واحدة» / «بعد ٣ دقائق» / «بعد ٢٠ دقيقة» — the way the delay is read aloud. */
+    private static String delayWording(long minutes) {
+        if (minutes <= 1L) return "بدقيقة واحدة";
+        if (minutes <= 10L) return "بـ" + minutes + " دقائق";
+        return "بـ" + minutes + " دقيقة";
+    }
+
+    /**
+     * Report an alarm that arrived outside its own window.
+     *
+     * A plain card, no adhan and no takeover: the prayer has already been called and
+     * answered by the time the phone woke up, so what the reader needs now is to know
+     * that the alert was late — not a call to a prayer that has passed, and not a page
+     * standing over the lock screen claiming «حَانَ الآنْ» for it.
+     */
+    private static void postMisfiredNotice(
+        Context context, int id, String prayerName, String time, long misfiredBy
+    ) {
+        ensureLateChannel(context);
+
+        boolean late = misfiredBy > 0L;
+        long minutes = Math.max(1L, Math.abs(misfiredBy) / 60_000L);
+        String name = prayerName != null ? prayerName : "الصلاة";
+        String when = formatInstant(context, time);
+
+        String title = late
+            ? "تأخّر تنبيه صلاة " + name
+            : "خرج تنبيه صلاة " + name + " عن ميعاده";
+        String text = "وصل التنبيه " + delayWording(minutes) + (late ? " من موعده" : " قبل موعده")
+            + (when != null ? " — كان موعدها " + when : "");
+
+        Notification notification = new NotificationCompat.Builder(context, LATE_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_qaf_notification)
+            .setLargeIcon(BitmapFactory.decodeResource(
+                context.getResources(), R.drawable.ic_notification_large))
+            .setColor(COLOR_BRAND)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(new NotificationCompat.BigTextStyle().bigText(text))
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setContentIntent(openAppIntent(context, id))
+            .setAutoCancel(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .build();
+        try {
+            NotificationManagerCompat.from(context).notify(lateRequestId(id), notification);
+        } catch (RuntimeException e) {
+            Log.e(TAG, "Could not post the late-adhan notice", e);
+        }
+    }
+
+    /**
+     * A request code of its own, so this report can never replace (or be replaced by)
+     * the prayer card still standing under the same notification id.
+     *
+     * The reserved million is laid out in three parts, and it used to be laid out in
+     * one — with a collision in the middle of it:
+     *
+     * <ul>
+     *   <li>{@code 8_000_001 … 8_499_998} — the late notices of the prayers;</li>
+     *   <li>{@code 8_500_000 … 8_999_998} — the late notices of the communities;</li>
+     *   <li>{@code 8_999_999} — the self-test's own card.</li>
+     * </ul>
+     *
+     * The two notices used to share a single slot number — a late iqamah notice and a
+     * late prayer notice for the same slot computed the <em>same</em> id, so whichever
+     * arrived last erased the other, and one of the two prayers was reported as late
+     * while the other was not reported at all.
+     */
+    private static int lateRequestId(int id) {
+        int category = id / 1_000_000;
+        int slot = id % 1_000_000;
+        // 1 (prayer) → the lower half, 6 (iqamah) → the upper one.
+        long half = (category == 1 ? 0L : 1L) * 500_000L;
+        return (int) (8_000_001L + half + (slot % 499_998));
+    }
+
+    /** Opening the app from this card — no takeover, the reader gets there in their own time. */
+    private static PendingIntent openAppIntent(Context context, int id) {
+        Intent launch = new Intent(context, MainActivity.class);
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP
+            | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        return PendingIntent.getActivity(
+            context, lateRequestId(id), launch,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+    }
+
+    /** The «تأخّر التنبيه» channel: an ordinary, audible card — nothing like the adhan's. */
+    private static void ensureLateChannel(Context context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+        NotificationManager manager =
+            (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager == null || manager.getNotificationChannel(LATE_CHANNEL_ID) != null) return;
+
+        NotificationChannel channel = new NotificationChannel(
+            LATE_CHANNEL_ID, LATE_CHANNEL_NAME, NotificationManager.IMPORTANCE_DEFAULT);
+        channel.setDescription("يُعرض عند تأخّر تنبيه الصلاة عن ميعاده");
+        channel.enableVibration(true);
+        channel.setLockscreenVisibility(android.app.Notification.VISIBILITY_PUBLIC);
+        int sound = context.getResources()
+            .getIdentifier(LATE_CHANNEL_SOUND, "raw", context.getPackageName());
+        if (sound != 0) {
+            channel.setSound(
+                Uri.parse("android.resource://" + context.getPackageName() + "/" + sound),
+                new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build());
+        }
+        manager.createNotificationChannel(channel);
+    }
+
+    /** The instant the alarm names, as the reader's clock shows it, or null when unknown. */
+    private static String formatInstant(Context context, String time) {
+        long instant = parseInstant(time);
+        if (instant == 0L) return null;
+        return DateFormat.getTimeFormat(context).format(new Date(instant));
     }
 
     /**
      * The channels are created by the JS scheduler; this only guards the cold corner
      * where one is missing (a cleared app data set before the next open), so the
      * notification is never dropped for an unknown channel.
+     *
+     * It used to mint that fallback channel <b>without a sound</b>, which Android then
+     * makes permanent: a channel's sound is fixed at creation and every later attempt to
+     * add one is ignored. So the very fallback meant to keep the adhan audible on a
+     * freshly-cleared phone produced a card that arrived in silence — the reported
+     * «التنبيه بيوصل من غير صوت» — and no amount of later re-arming could undo it. The
+     * alarm now carries the sound, so this channel is born ringing.
+     *
+     * The same test repairs the other half of that bug: a channel an earlier build minted
+     * silently and that is still on the books. It is deleted and rebuilt with the sound —
+     * the only route Android allows. The reader's own per-channel preferences are lost
+     * with it, which is the price of a channel that could not ring at all. A channel the
+     * alarm names no sound for («مواقيت الصلاة — دون صوت») is deliberately silent and is
+     * left exactly as it is.
      */
-    private static void ensureChannel(Context context, String channelId) {
+    private static void ensureChannel(
+        Context context, String channelId, String sound, String soundPath
+    ) {
+        // Channels arrived with Android 8; older versions ring from the notification's
+        // own sound, so there is nothing to create (and calling the API there is fatal).
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         NotificationManager manager =
             (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (manager == null || manager.getNotificationChannel(channelId) != null) return;
+        if (manager == null) return;
+
+        Uri soundUri = channelSoundUri(context, sound, soundPath);
+
+        NotificationChannel existing = manager.getNotificationChannel(channelId);
+        if (existing != null) {
+            // The reader silenced this channel themselves in the system settings. That
+            // is a choice, not a bug, and rebuilding the channel would quietly overrule
+            // it — so it is left exactly as it is, and the adhan page speaks the call
+            // instead (see `notificationsCanRing`).
+            if (existing.getImportance() == NotificationManager.IMPORTANCE_NONE) return;
+            boolean adhan = isAdhanChannel(channelId);
+            boolean needsRebuild = existing.getSound() == null
+                || (adhan && !channelUsesAlarm(existing));
+            if (!needsRebuild) return;
+            // Silent — or born on the ordinary notification stream before the alarm
+            // usage was added — means every prayer reaches the reader as a mute card.
+            // Android fixes both properties at creation, so delete/recreate is the only
+            // way back (and the native speaker covers this very first alarm).
+            Log.w(TAG, "Prayer channel " + channelId + " cannot ring - recreating it.");
+            manager.deleteNotificationChannel(channelId);
+        }
+
         NotificationChannel channel = new NotificationChannel(
             channelId, "تنبيهات الصلاة", NotificationManager.IMPORTANCE_HIGH);
         channel.enableVibration(true);
+        channel.setLockscreenVisibility(android.app.Notification.VISIBILITY_PUBLIC);
+        AudioAttributes.Builder attributes = new AudioAttributes.Builder()
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION);
+        if (isAdhanChannel(channelId)) {
+            // The adhan is a clock, not a message. Alarm usage keeps it audible while
+            // the phone is on Vibrate, and the bypass keeps it audible under DND — the
+            // exact state the connected tablet was in when the page arrived in silence.
+            attributes.setUsage(AudioAttributes.USAGE_ALARM);
+            channel.setBypassDnd(true);
+        } else {
+            attributes.setUsage(AudioAttributes.USAGE_NOTIFICATION);
+        }
+        if (soundUri != null) channel.setSound(soundUri, attributes.build());
         manager.createNotificationChannel(channel);
+    }
+
+    /**
+     * The sound an alarm names, as a channel can hold it: a bundled voice resolves from
+     * {@code res/raw}, a downloaded one through the app's {@code FileProvider} — and the
+     * grant the system needs to read that file, since it is the system that plays it.
+     */
+    private static Uri channelSoundUri(Context context, String sound, String soundPath) {
+        if (sound != null && !sound.isEmpty()) {
+            String name = sound.contains(".") ? sound.substring(0, sound.lastIndexOf('.')) : sound;
+            int res = context.getResources()
+                .getIdentifier(name, "raw", context.getPackageName());
+            if (res == 0) {
+                Log.w(TAG, "Adhan sound resource not found: " + sound);
+                return null;
+            }
+            return Uri.parse("android.resource://" + context.getPackageName() + "/" + res);
+        }
+        if (soundPath != null && !soundPath.isEmpty()) {
+            File file = new File(soundPath);
+            if (!file.isFile() || file.length() == 0L) {
+                Log.w(TAG, "Downloaded adhan sound missing: " + soundPath);
+                return null;
+            }
+            try {
+                Uri uri = FileProvider.getUriForFile(
+                    context, context.getPackageName() + ".fileprovider", file);
+                grantUriReadToSoundPlayers(context, uri);
+                return uri;
+            } catch (IllegalArgumentException e) {
+                Log.e(TAG, "Downloaded adhan sound is outside the FileProvider paths", e);
+                return null;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Let the system's own audio service open a stored voice. A FileProvider URI is
+     * readable only by whoever holds a grant, and the file is opened by the <i>system</i>
+     * when the channel rings, not by this app — so without this the card is posted and
+     * stays silent.
+     */
+    private static void grantUriReadToSoundPlayers(Context context, Uri uri) {
+        // Which package opens a channel sound differs by ROM: AOSP uses "android",
+        // Samsung/MIUI use SystemUI. Granting only one of them is how a downloaded
+        // voice rang on one phone and stayed silent — with a card but no adhan — on
+        // another. Both are best-effort; the native speaker covers a refused grant.
+        String[] players = { "android", "com.android.systemui", context.getPackageName() };
+        for (String player : players) {
+            try {
+                context.grantUriPermission(player, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            } catch (RuntimeException e) {
+                Log.w(TAG, "Could not grant a read grant for the adhan sound", e);
+            }
+        }
     }
 }

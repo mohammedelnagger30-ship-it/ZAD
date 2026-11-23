@@ -1,4 +1,10 @@
-"""Prepares the Qurra launcher artwork: scripts/assets/icon-prepared.png.
+"""DEPRECATED — retired with the mockup artwork.
+
+The current icon-prepared.png no longer comes from this script: it is
+scripts/assets/icon-source-v2.png resized to 1024 (see make-icons.ps1).
+This file stays only for the old mockup pipeline (icon-source.jpg).
+
+Prepares the Qurra launcher artwork: scripts/assets/icon-prepared.png.
 
 The source artwork (scripts/assets/icon-source.jpg) is a soft-shadowed
 mockup of the mark: a deep-green squircle field holding a pointed gold

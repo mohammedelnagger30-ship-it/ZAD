@@ -1,6 +1,6 @@
 import { Search, X, ChevronLeft } from 'lucide-react';
 import { toArabicNumber } from '@/data/surahs';
-import { type AyahSearchOutcome } from '@/utils/ayahSearch';
+import { type AyahSearchOutcome } from '@/utils/quran/ayahSearch';
 
 interface AyahSearchPanelProps {
   ayahQuery: string;

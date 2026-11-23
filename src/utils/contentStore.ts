@@ -1,5 +1,5 @@
-// Downloadable content store — tafsir, hadith text, word meanings and Quran audio kept
-// on the device.
+// Downloadable content store — tafsir, hadith text, hadith explanations, word
+// meanings and Quran audio kept on the device.
 //
 // The Quran text is bundled with the app (see `data/quranText.ts`), and so is
 // the essential hadith collection, صحيح مسلم (see `public/hadith/`, read by
@@ -16,9 +16,9 @@ import Dexie, { type Table } from 'dexie';
 
 /** One cached file. `text` holds the raw JSON exactly as downloaded. */
 export interface ContentFile {
-  /** `tafsir:<edition>:<surah>`, `hadith:<collection>` or `meanings:<source>:<surah>`. */
+  /** `tafsir:<edition>:<surah>`, `hadith:<collection>`, `meanings:<source>:<surah>` or `sharh:<hadeethenc id>`. */
   key: string;
-  kind: 'tafsir' | 'hadith' | 'meanings';
+  kind: 'tafsir' | 'hadith' | 'meanings' | 'sharh';
   /** Edition or collection id, without the kind prefix. */
   group: string;
   /** Surah number for tafsir files; 0 for whole-collection files. */
@@ -85,6 +85,41 @@ const encoder = new TextEncoder();
 
 function byteLength(text: string): number {
   return encoder.encode(text).length;
+}
+
+/**
+ * Hex SHA-256 of raw bytes, or `null` when WebCrypto is unavailable.
+ *
+ * `crypto.subtle` only exists in a secure context (https, localhost, or the
+ * Capacitor webview, which the app always runs in). On a plain-http dev server
+ * it is absent, and there the honest answer is "cannot verify" rather than
+ * pretending a check happened — so callers treat `null` as "no hash available"
+ * and carry on, which is what keeps an integrity failure from becoming a
+ * download failure on an environment that simply lacks the primitive.
+ */
+export async function sha256Hex(bytes: Uint8Array): Promise<string | null> {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) return null;
+  try {
+    const digest = await subtle.digest('SHA-256', bytes as BufferSource);
+    return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True when `bytes` matches `expected`, false when it does not, and `null` when
+ * no verdict is possible (no WebCrypto, or the digest failed). The three-way
+ * result is what lets a caller distinguish "corrupt — reject" from "cannot
+ * check — accept", which is the difference between a safe degradation and a
+ * false alarm.
+ */
+export async function matchesSha256(bytes: Uint8Array, expected: string | undefined): Promise<boolean | null> {
+  if (!expected) return null;
+  const actual = await sha256Hex(bytes);
+  if (actual === null) return null;
+  return actual === expected.toLowerCase();
 }
 
 export function tafsirKey(editionId: string, surah: number): string {
@@ -176,7 +211,7 @@ export function notifyContentChanged(): void {
 // ---------------------------------------------------------------------------
 
 /** All cached files for a kind, newest first. */
-export async function listFiles(kind?: 'tafsir' | 'hadith' | 'meanings'): Promise<ContentFile[]> {
+export async function listFiles(kind?: 'tafsir' | 'hadith' | 'meanings' | 'sharh'): Promise<ContentFile[]> {
   if (!isContentStoreAvailable()) return [];
   const all = kind
     ? await database().files.where('kind').equals(kind).toArray()
@@ -226,7 +261,7 @@ export async function isDownloaded(key: string): Promise<boolean> {
 export async function writeText(
   key: string,
   text: string,
-  meta: { kind: 'tafsir' | 'hadith' | 'meanings'; group: string; surah: number },
+  meta: { kind: 'tafsir' | 'hadith' | 'meanings' | 'sharh'; group: string; surah: number },
 ): Promise<number> {
   const bytes = byteLength(text);
   await database().files.put({
@@ -244,7 +279,7 @@ export async function writeText(
 
 /** Removes every cached file of one group (an edition, a collection or a source). */
 export async function removeGroup(
-  kind: 'tafsir' | 'hadith' | 'meanings',
+  kind: 'tafsir' | 'hadith' | 'meanings' | 'sharh',
   group: string,
 ): Promise<number> {
   if (!isContentStoreAvailable()) return 0;
@@ -398,6 +433,7 @@ export async function downloadAndStore(
   meta: { kind: 'tafsir' | 'hadith'; group: string; surah: number },
   onProgress?: (progress: DownloadProgress) => void,
   signal?: AbortSignal,
+  expectedSha256?: string,
 ): Promise<number> {
   let response: Response;
   try {
@@ -417,8 +453,9 @@ export async function downloadAndStore(
 
   // Without a stream there is no progress to report; fall back to a single read.
   if (!response.body) {
-    const text = await response.text();
-    return writeText(key, text, meta);
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    await assertIntegrity(bytes, expectedSha256);
+    return writeText(key, new TextDecoder('utf-8').decode(bytes), meta);
   }
 
   const declared = Number(response.headers.get('content-length') ?? 0);
@@ -450,11 +487,28 @@ export async function downloadAndStore(
     offset += chunk.length;
   }
 
+  // Checked against the raw bytes exactly as they arrived, before decoding or
+  // storing: a payload that does not match the catalogue's hash is rejected
+  // here rather than written to the device, so a silent upstream edit becomes a
+  // visible error instead of a cache the app trusts from then on.
+  await assertIntegrity(joined, expectedSha256);
+
   const text = new TextDecoder('utf-8').decode(joined);
   if (!text.trim()) throw new ContentDownloadError('الملف المنزَّل فارغ');
 
   onProgress?.({ received, total: declared || received });
   return writeText(key, text, meta);
+}
+
+/** Rejects bytes that fail the expected hash. No expected hash (or no WebCrypto) = no-op. */
+async function assertIntegrity(bytes: Uint8Array, expectedSha256: string | undefined): Promise<void> {
+  if (!expectedSha256) return;
+  const ok = await matchesSha256(bytes, expectedSha256);
+  if (ok === false) {
+    throw new ContentDownloadError('المحتوى المنزَّل غير مطابق للمصدر — أُلغي التحميل');
+  }
+  // `ok === null` means WebCrypto is unavailable; the content is still usable,
+  // so it proceeds rather than blocking a download over a missing primitive.
 }
 
 /**
@@ -469,6 +523,7 @@ export async function downloadBinary(
   url: string,
   onProgress?: (progress: DownloadProgress) => void,
   signal?: AbortSignal,
+  expectedSha256?: string,
 ): Promise<Uint8Array> {
   let response: Response;
   try {
@@ -524,6 +579,7 @@ export async function downloadBinary(
     joined.set(chunk, offset);
     offset += chunk.length;
   }
+  await assertIntegrity(joined, expectedSha256);
   return joined;
 }
 

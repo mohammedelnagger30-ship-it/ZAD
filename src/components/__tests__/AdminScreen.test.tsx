@@ -16,13 +16,16 @@ interface RpcAnswer {
 }
 
 let answer: RpcAnswer = { data: null, error: null };
+let usersAnswer: RpcAnswer = { data: null, error: null };
 
-jest.unstable_mockModule('@/utils/supabaseClient', () => ({
-  supabase: { rpc: () => Promise.resolve(answer) },
+jest.unstable_mockModule('@/utils/sync/supabaseClient', () => ({
+  supabase: {
+    rpc: (name: string) => Promise.resolve(name === 'admin_user_directory' ? usersAnswer : answer),
+  },
   isSupabaseConfigured: true,
 }));
 
-const { AdminScreen } = await import('@/components/AdminScreen');
+const { AdminScreen } = await import('@/screens/AdminScreen');
 
 const STATS_PAYLOAD = {
   total_users: 1234,
@@ -42,6 +45,26 @@ const STATS_PAYLOAD = {
   ],
 };
 
+const USERS_PAYLOAD = {
+  total: 2,
+  users: [
+    {
+      id: 'user-1',
+      email: 'reader@example.com',
+      created_at: '2026-11-01T10:00:00Z',
+      last_sign_in_at: '2026-11-05T12:30:00Z',
+      email_confirmed_at: '2026-11-01T10:05:00Z',
+    },
+    {
+      id: 'user-2',
+      email: 'new-reader@example.com',
+      created_at: '2026-11-06T09:00:00Z',
+      last_sign_in_at: null,
+      email_confirmed_at: null,
+    },
+  ],
+};
+
 describe('AdminScreen', () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -53,6 +76,9 @@ describe('AdminScreen', () => {
     await act(async () => {
       root.render(element);
     });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    });
     return container;
   }
 
@@ -61,6 +87,7 @@ describe('AdminScreen', () => {
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     answer = { data: STATS_PAYLOAD, error: null };
+    usersAnswer = { data: USERS_PAYLOAD, error: null };
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -90,6 +117,20 @@ describe('AdminScreen', () => {
     expect(text()).toContain('300');
     expect(text()).toContain('بدون حساب — 7 أيام');
     expect(text()).toContain('فتحات بدون حساب — 7 أيام');
+  });
+
+  it('shows searchable account emails, confirmation state, and account activity', async () => {
+    await render();
+
+    expect(text()).toContain('دليل المستخدمين');
+    expect(text()).toContain('reader@example.com');
+    expect(text()).toContain('new-reader@example.com');
+    expect(text()).toContain('بريد مؤكد');
+    expect(text()).toContain('بانتظار التأكيد');
+    expect(text()).toContain('تاريخ التسجيل');
+    expect(text()).toContain('آخر دخول');
+    expect(container.querySelector('input[aria-label="ابحث بالبريد الإلكتروني"]')).not.toBeNull();
+    expect(container.querySelector('#admin-user-confirmation')).not.toBeNull();
   });
 
   it('draws one pair of bars per reported day', async () => {
@@ -128,5 +169,69 @@ describe('AdminScreen', () => {
     expect(button).toBeDefined();
     button?.click();
     expect(openApp).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders navigation tabs and switches views', async () => {
+    await render();
+
+    expect(text()).toContain('لوحة التحكم الشاملة');
+    expect(text()).toContain('التحليلات والمؤشرات');
+    expect(text()).toContain('دليل المستخدمين');
+    expect(text()).toContain('صحة النظام والمزامنة');
+    expect(text()).toContain('أدوات المشرف');
+
+    // Switch to system health tab
+    const systemTab = Array.from(container.querySelectorAll('button[role="tab"]')).find((b) =>
+      b.textContent?.includes('صحة النظام والمزامنة'),
+    );
+    expect(systemTab).toBeDefined();
+    await act(async () => {
+      (systemTab as HTMLElement)?.click();
+    });
+
+    expect(text()).toContain('صحة المنظومة والمزامنة');
+    expect(text()).toContain('جداول المزامنة السحابية النشطة');
+    expect(text()).toContain('settings');
+    expect(text()).toContain('hifzProgress');
+  });
+
+  it('opens user details modal when a user row is clicked and closes it', async () => {
+    await render();
+
+    const userRow = Array.from(container.querySelectorAll('li')).find((row) =>
+      row.textContent?.includes('reader@example.com'),
+    );
+    expect(userRow).toBeDefined();
+
+    await act(async () => {
+      (userRow as HTMLElement)?.click();
+    });
+
+    expect(text()).toContain('تفاصيل الحساب');
+    expect(text()).toContain('معلومات الحساب المسجل في المنظومة');
+    expect(text()).toContain('user-1');
+
+    // Close modal
+    const closeBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.trim() === 'إغلاق',
+    );
+    expect(closeBtn).toBeDefined();
+    await act(async () => {
+      closeBtn?.click();
+    });
+
+    expect(text()).not.toContain('معلومات الحساب المسجل في المنظومة');
+  });
+
+  it('provides CSV export button and auto-refresh selector', async () => {
+    await render();
+
+    const exportBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('تصدير CSV'),
+    );
+    expect(exportBtn).toBeDefined();
+
+    const autoRefreshSelect = container.querySelector('#auto-refresh-select');
+    expect(autoRefreshSelect).not.toBeNull();
   });
 });

@@ -1,10 +1,16 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Bookmark } from 'lucide-react';
-import { getSurah, getSurahsForPage, getJuzForPage, toArabicNumber } from '@/data/surahs';
-import { getPageMeta, getHizbForPage } from '@/data/mushafPages';
-import { getAyahs } from '@/data/quranText';
-import { splitBasmala } from '@/utils/basmala';
-import { getSurahWordMeanings } from '@/utils/wordMeaningsService';
+import { getSurah, getJuzForPage, toArabicNumber } from '@/data/surahs';
+import { getHizbForPage, SAJDAH_AYAHS } from '@/data/mushafPages';
+import { getPageLines, COLUMN_EM, type FlowLine } from '@/data/mushafFlow';
+import { getSurahWords } from '@/data/mushafWords';
+import { highlightWash } from '@/utils/quran/ayahHighlights';
+import { getSurahWordMeanings } from '@/utils/quran/wordMeaningsService';
+import { loadBundledMeaningIndex, type WordMeaningIndex } from '@/utils/quran/wordMeaningIndex';
+import { isDarkPaper, MAX_LINE_WORD_GAPS, type MushafPaper } from '@/components/mushaf/readerConfig';
+
+/** `${surahId}:${ayah}` for every ayah a printed mushaf sets the prostration sign after. */
+const SAJDAH_AYAHS_KEYS = new Set(SAJDAH_AYAHS.map(({ surahId, ayah }) => `${surahId}:${ayah}`));
 
 interface PageAyah {
   surahId: number;
@@ -13,7 +19,15 @@ interface PageAyah {
   text: string;
 }
 
-const EMPTY_WORD_MEANINGS = new Map<string, Set<number>>();
+/**
+ * One printable block of the page. At rest a text block is exactly one printed line; when
+ * the reader has enlarged the type past the printed measure, consecutive lines of the same
+ * surah merge into one block and the browser re-wraps it inside the sheet.
+ */
+type PageRenderGroup =
+  | { kind: 'text'; lines: FlowLine[] }
+  | { kind: 'heading'; line: FlowLine }
+  | { kind: 'basmala'; line: FlowLine };
 
 interface MushafWordButtonProps {
   ayah: PageAyah;
@@ -23,8 +37,17 @@ interface MushafWordButtonProps {
   onWordPress?: MushafPageProps['onWordPress'];
 }
 
+/**
+ * One word of the page.
+ *
+ * A word that carries a gloss is marked, and that is all this component does about it.
+ * The gloss itself is never printed here: a mushaf with a sentence set under every
+ * unusual word is a glossary, and there are hundreds of such words on a page — the text
+ * stops being readable at all. The mark says the meaning exists; the press opens it.
+ */
 function MushafWordButton({ ayah, word, wordIndex, meaningWords, onWordPress }: MushafWordButtonProps) {
-  const hasMeaning = meaningWords.get(`${ayah.surahId}:${ayah.ayahNumber}`)?.has(wordIndex) ?? false;
+  const key = `${ayah.surahId}:${ayah.ayahNumber}`;
+  const hasMeaning = meaningWords.get(key)?.has(wordIndex) ?? false;
   const action = hasMeaning ? 'اضغط لمعرفة معنى الكلمة' : 'اضغط لخيارات الآية';
   return (
     <button
@@ -32,22 +55,12 @@ function MushafWordButton({ ayah, word, wordIndex, meaningWords, onWordPress }: 
       className={`mushaf-word${hasMeaning ? ' mushaf-word--has-meaning' : ''}`}
       aria-label={`${action}: ${word} في سورة ${ayah.surahName}، الآية ${toArabicNumber(ayah.ayahNumber)}`}
       title={action}
-      onClick={() => onWordPress?.(ayah.surahId, ayah.ayahNumber, word, wordIndex + 1)}
+      onClick={() => onWordPress?.(ayah.surahId, ayah.ayahNumber, word, wordIndex + 1, hasMeaning)}
     >
       {word}
     </button>
   );
 }
-
-/**
- * The page body is split at every surah opening so a heading can interrupt the flow,
- * the way a heading does on a printed page. Text segments stay one continuous justified
- * block each — justification needs inline content, and a block element per ayah would
- * leave every ayah on its own ragged line.
- */
-type Segment =
-  | { kind: 'text'; key: string; ayahs: PageAyah[] }
-  | { kind: 'heading'; key: string; surahId: number; basmala: string | null };
 
 export interface MushafPageProps {
   page: number;
@@ -55,16 +68,38 @@ export interface MushafPageProps {
   bookmarked?: boolean;
   /** Resolved Quran font size in px; the reader's zoom is folded in before this point. */
   fontSize: number;
-  night: boolean;
+  /** Which sheet to print on. Defaults to white. */
+  paper?: MushafPaper;
+  /**
+   * The legacy light/dark switch, kept for the callers that predate the paper
+   * picker. When `paper` is given it wins; otherwise night prints the black sheet.
+   */
+  night?: boolean;
   /** Reader default: its spacing formula at 100%. */
   lineHeight?: number;
   letterSpacing?: number;
   wordSpacing?: number;
+  reflow?: boolean;
   wordMeaningsInstalled?: boolean;
   onAyahPress?: (surahId: number, ayahNumber: number) => void;
-  onWordPress?: (surahId: number, ayahNumber: number, word: string, wordPosition: number) => void;
+  /**
+   * A word has been pressed. `hasMeaning` is the page's own answer — it comes from the
+   * index that ships with the app, so the reader is told at once that this word was
+   * worth pressing rather than having to query the downloaded dump before it can decide
+   * what the tap was for. That query is what used to turn a press on a marked word into
+   * the ayah's options sheet for any reader who had never been to the content library.
+   */
+  onWordPress?: (
+    surahId: number,
+    ayahNumber: number,
+    word: string,
+    wordPosition: number,
+    hasMeaning: boolean,
+  ) => void;
   /** The ayah currently selected in the reader, so the page can highlight it. */
   activeAyah?: { surahId: number; ayahNumber: number } | null;
+  /** Saved highlight ids keyed by `surahId:ayahNumber`. */
+  ayahHighlights?: ReadonlyMap<string, string>;
 }
 
 /** An eight-pointed illuminated rosette used to finish the page-frame corners. */
@@ -94,85 +129,116 @@ export function MushafFrameDecoration() {
   );
 }
 
+/**
+ * A printed mushaf page is a fixed object: fifteen lines, each holding the exact words
+ * the flow table measured for it. Rendering the page from `getPageLines` (rather than
+ * dumping every ayah into one paragraph and letting the browser wrap) is what keeps the
+ * line breaks — and therefore the gaps between words — identical to the printed page.
+ * The browser only has a few percent of slack left to distribute, which is why the text
+ * fills the column evenly instead of stretching a handful of words across it.
+ */
 export function MushafPage({
   page,
   readingPosition = false,
   bookmarked = false,
   fontSize,
-  night,
+  paper,
+  night = false,
   lineHeight = 1.9,
-  letterSpacing = 0.01,
+  letterSpacing = 0,
   wordSpacing = 0,
+  reflow = false,
   wordMeaningsInstalled = false,
   onAyahPress,
   onWordPress,
   activeAyah,
+  ayahHighlights,
 }: MushafPageProps) {
-  const pageMeta = getPageMeta(page);
   const juz = getJuzForPage(page);
   const hizb = getHizbForPage(page);
 
-  const segments = useMemo<Segment[]>(() => {
-    const surahs = getSurahsForPage(page);
-    const ayahs: PageAyah[] = [];
-    for (const surah of surahs) {
-      for (const a of getAyahs(surah.id, 1, surah.ayahCount)) {
-        if (a.page === page) {
-          ayahs.push({
-            surahId: surah.id,
-            surahName: surah.name,
-            ayahNumber: a.ayahNumber,
-            text: a.text,
-          });
-        }
-      }
-    }
+  const lines = useMemo(() => getPageLines(page), [page]);
 
-    const out: Segment[] = [];
-    let bucket: PageAyah[] = [];
-    const flush = () => {
-      if (bucket.length) out.push({ kind: 'text', key: `t${out.length}`, ayahs: bucket });
-      bucket = [];
-    };
-
-    for (const ayah of ayahs) {
-      // Tanzil folds the basmala into ayah 1, so every surah opening needs its heading
-      // and its basmala lifted out, or the page would show both twice.
-      if (ayah.ayahNumber === 1) {
-        const { basmala, rest } = splitBasmala(ayah.text);
-        // Al-Fatihah's ayah 1 *is* the basmala. Lifting it would leave the page with a
-        // header and no text, so keep it inline as the ayah itself.
-        const hoisted = basmala !== null && rest.length > 0;
-        flush();
-        out.push({
-          kind: 'heading',
-          key: `h${ayah.surahId}`,
-          surahId: ayah.surahId,
-          basmala: hoisted ? basmala : null,
-        });
-        bucket.push({ ...ayah, text: hoisted ? rest : ayah.text });
+  /**
+   * At the printed size each flow line is its own paragraph, which is what keeps the
+   * printed breaks. Once zoom enlarges the type past the sheet's measure, those lines
+   * would run outside the frame, so consecutive lines of one surah become one paragraph
+   * and the browser re-wraps them inside the page's own column.
+   */
+  const renderGroups = useMemo(() => {
+    const groups: PageRenderGroup[] = [];
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+      if (line.kind === 'heading' || line.kind === 'basmala') {
+        groups.push({ kind: line.kind, line });
         continue;
       }
-      bucket.push(ayah);
+      const textLines = [line];
+      if (reflow) {
+        let next = i + 1;
+        while (
+          next < lines.length &&
+          lines[next].kind === 'text' &&
+          lines[next].surahId === line.surahId
+        ) {
+          textLines.push(lines[next]);
+          next += 1;
+        }
+        i = next - 1;
+      }
+      groups.push({ kind: 'text', lines: textLines });
     }
-    flush();
-    return out;
-  }, [page]);
+    return groups;
+  }, [lines, reflow]);
+
+  const surahIds = useMemo(
+    () => [...new Set(lines.map((line) => line.surahId))],
+    [lines],
+  );
+
+  // Word offset into its surah's list → index of the word inside its own ayah. The
+  // meaning index is stored against that per-ayah position, so a word drawn from the
+  // flow table still finds its gloss.
+  const wordIndexBySurah = useMemo(() => {
+    const map = new Map<number, number[]>();
+    for (const surahId of surahIds) {
+      const words = getSurahWords(surahId);
+      const indexes = new Array<number>(words.length);
+      let ayah = -1;
+      let run = 0;
+      for (let i = 0; i < words.length; i++) {
+        if (words[i].ayah !== ayah) {
+          ayah = words[i].ayah;
+          run = 0;
+        }
+        indexes[i] = run++;
+      }
+      map.set(surahId, indexes);
+    }
+    return map;
+  }, [surahIds]);
 
   const [loadedMeaningData, setLoadedMeaningData] = useState<{
     page: number;
     words: Map<string, Set<number>>;
   }>({ page: 0, words: new Map() });
-  const surahIds = useMemo(
-    () => [
-      ...new Set(
-        segments.flatMap((segment) =>
-          segment.kind === 'text' ? segment.ayahs.map((ayah) => ayah.surahId) : [],
-        ),
-      ),
-    ],
-    [segments],
-  );
+
+  // The bundled index is the marker source that does not depend on `wordMeaningsInstalled`,
+  // so it is asked for on every mount regardless of what the reader has downloaded. Later
+  // mounts join the same request, and a mount after it lands starts with the answer
+  // already in hand.
+  const [bundledIndex, setBundledIndex] = useState<WordMeaningIndex | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadBundledMeaningIndex().then((index) => {
+      if (cancelled) return;
+      setBundledIndex(index);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!wordMeaningsInstalled) return;
@@ -199,20 +265,63 @@ export function MushafPage({
     };
   }, [page, surahIds, wordMeaningsInstalled]);
 
-  const meaningWords =
-    wordMeaningsInstalled && loadedMeaningData.page === page
-      ? loadedMeaningData.words
-      : EMPTY_WORD_MEANINGS;
+  /** Every `surahId:ayah` that actually appears on this page's lines. */
+  const ayahKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const line of lines) {
+      if (line.kind !== 'text') continue;
+      const words = getSurahWords(line.surahId).slice(line.from, line.from + line.count);
+      for (const word of words) {
+        if (word.ayah > 0) keys.add(`${line.surahId}:${word.ayah}`);
+      }
+    }
+    return [...keys];
+  }, [lines]);
+
+  // Best available answer, unioned: the bundled index for every reader, widened with
+  // whatever the installed dump knows that this build's copy does not. The gate on
+  // `wordMeaningsInstalled` is gone from here — a reader who has never opened the
+  // Content Library still gets every marker, which is the whole reason the index ships
+  // with the app. The dump stays in the merge only because it can be newer than the
+  // build, and because it is still what supplies the gloss the sheet reads out.
+  const meaningWords = useMemo(() => {
+    const merged = new Map<string, Set<number>>();
+    if (bundledIndex) {
+      for (const key of ayahKeys) {
+        const hits = bundledIndex[key];
+        if (hits && hits.length > 0) merged.set(key, new Set(hits));
+      }
+    }
+    if (wordMeaningsInstalled && loadedMeaningData.page === page) {
+      for (const [key, wordIndexes] of loadedMeaningData.words) merged.set(key, wordIndexes);
+    }
+    return merged;
+  }, [bundledIndex, ayahKeys, page, loadedMeaningData, wordMeaningsInstalled]);
 
   const pageStyle = {
     '--fs': `${fontSize}px`,
     '--lh': `${lineHeight}`,
+    /* The measure the flow table broke every line against. Taking it from the same
+       constant means the CSS column and the line breaks can never drift apart. */
+    '--mushaf-column': `${COLUMN_EM}em`,
     '--letter-gap': `${letterSpacing}em`,
-    '--word-gap': wordSpacing === 0 ? 'normal' : `${wordSpacing}em`,
+    /*
+     * Word spacing under a fixed measure is normally invisible: justification removes
+     * exactly what `word-spacing` adds. So the reader's choice also widens the measure by
+     * the most gaps any line can hold, which lets the extra space survive justification.
+     * Negative choices stay a no-op — narrowing the measure would re-wrap the fixed lines.
+     */
+    '--word-gap': `${Math.max(0, wordSpacing)}em`,
+    '--word-extra': `${Math.max(0, wordSpacing) * MAX_LINE_WORD_GAPS}em`,
   } as CSSProperties;
 
+  const resolvedPaper: MushafPaper = paper ?? (night ? 'black' : 'white');
+  const paperClass = ` mushaf-page--${resolvedPaper}${
+    isDarkPaper(resolvedPaper) ? ' mushaf-page--night' : ''
+  }`;
+
   return (
-    <div className={`mushaf-page${night ? ' mushaf-page--night' : ''}`} style={pageStyle}>
+    <div className={`mushaf-page${paperClass}`} style={pageStyle}>
       {/* Ornamental frame. Decorative only, so it is hidden from assistive tech. */}
       <MushafFrameDecoration />
       {readingPosition && (
@@ -239,75 +348,119 @@ export function MushafPage({
         <span>الحزب {toArabicNumber(hizb)}</span>
       </div>
 
-      {pageMeta?.isSajdah && <p className="mushaf-sajdah">۩ سجدة</p>}
-
-      {segments.map((segment) => {
-        if (segment.kind === 'heading') {
-          const surah = getSurah(segment.surahId);
+      {renderGroups.map((group, groupIndex) => {
+        if (group.kind === 'heading') {
+          const surah = getSurah(group.line.surahId);
           if (!surah) return null;
           return (
-            <div key={segment.key}>
-              <div className="mushaf-banner">
-                <div className="mushaf-banner__name">سورة {surah.name}</div>
-                <div className="mushaf-banner__meta">
-                  {surah.revelationType === 'meccan' ? 'مكية' : 'مدنية'} · {toArabicNumber(surah.ayahCount)} آية
-                </div>
+            <div key={`heading-${groupIndex}`} className="mushaf-banner">
+              <div className="mushaf-banner__name">سورة {surah.name}</div>
+              <div className="mushaf-banner__meta">
+                {surah.revelationType === 'meccan' ? 'مكية' : 'مدنية'} آ·{' '}
+                {toArabicNumber(surah.ayahCount)} آية
               </div>
-              {segment.basmala && (
-                <p className="mushaf-basmala">
-                  <span className="mushaf-basmala__rule" aria-hidden="true" />
-                  {segment.basmala}
-                  <span className="mushaf-basmala__rule" aria-hidden="true" />
-                </p>
-              )}
             </div>
           );
         }
+
+        if (group.kind === 'basmala') {
+          const line = group.line;
+          const words = getSurahWords(line.surahId).slice(line.from, line.from + line.count);
+          return (
+            <p key={`basmala-${groupIndex}`} className="mushaf-basmala">
+              <span className="mushaf-basmala__rule" aria-hidden="true" />
+              {words.map((word) => word.text).join(' ')}
+              <span className="mushaf-basmala__rule" aria-hidden="true" />
+            </p>
+          );
+        }
+
+        const line = group.lines[0];
+        const surah = getSurah(line.surahId);
+        const surahName = surah?.name ?? '';
+        const surahWords = getSurahWords(line.surahId);
+        const indexes = wordIndexBySurah.get(line.surahId);
+        const lastLine = group.lines[group.lines.length - 1];
+        const endsSurah = lastLine.from + lastLine.count >= surahWords.length;
+
+        // Consecutive words of the same ayah are drawn as one run so the highlight wash
+        // covers the spaces between them, the way the old whole-ayah span did.
+        const runs: { ayah: number; items: { text: string; globalIndex: number; endsAyah: boolean }[] }[] = [];
+        for (const textLine of group.lines) {
+          for (let i = 0; i < textLine.count; i++) {
+            const globalIndex = textLine.from + i;
+            const word = surahWords[globalIndex];
+            if (!word) continue;
+            const last = runs[runs.length - 1];
+            const item = { text: word.text, globalIndex, endsAyah: word.endsAyah };
+            if (last && last.ayah === word.ayah) last.items.push(item);
+            else runs.push({ ayah: word.ayah, items: [item] });
+          }
+        }
+
         return (
-          <p className="mushaf-body" key={segment.key}>
-            {segment.ayahs.map((ayah) => {
+          <p
+            className={`mushaf-line${reflow ? ' mushaf-line--flow' : ''}${
+              endsSurah ? ' mushaf-line--surah-end' : ''
+            }`}
+            key={`text-${groupIndex}`}
+          >
+            {runs.map((run, runIndex) => {
+              const key = `${line.surahId}:${run.ayah}`;
               const isActive =
-                activeAyah?.surahId === ayah.surahId && activeAyah?.ayahNumber === ayah.ayahNumber;
-              // The last word carries the medallion inside one unbreakable tail, so the
-              // two are always cut from the line together.
-              const words = ayah.text.split(' ');
+                activeAyah?.surahId === line.surahId && activeAyah?.ayahNumber === run.ayah;
+              const highlightColor = ayahHighlights?.get(key);
+              const highlight = highlightWash(highlightColor);
+              const ayahStyle = highlight
+                ? { background: `linear-gradient(to bottom, transparent 24%, ${highlight} 24%)` }
+                : isActive
+                  ? { background: 'linear-gradient(to bottom, transparent 24%, var(--wash) 24%)' }
+                  : undefined;
+              const isLastRun = runIndex === runs.length - 1;
               return (
-                <span key={`${ayah.surahId}:${ayah.ayahNumber}`}>
-                  <span
-                    className="mushaf-ayah"
-                    style={isActive ? { background: 'var(--wash)' } : undefined}
-                  >
-                    {words.slice(0, -1).map((word, index) => (
-                      <span key={index}>
+                <span className="mushaf-ayah" style={ayahStyle} key={`${key}-${runIndex}`}>
+                  {run.items.map(({ text, globalIndex, endsAyah }, itemIndex) => {
+                    const isLastWordOfGroup = isLastRun && itemIndex === run.items.length - 1;
+                    const wordIndex = indexes?.[globalIndex] ?? 0;
+                    const ayah: PageAyah = {
+                      surahId: line.surahId,
+                      surahName,
+                      ayahNumber: run.ayah,
+                      text: '',
+                    };
+                    return (
+                      <span key={globalIndex} className={endsAyah ? 'mushaf-ayah-tail' : undefined}>
                         <MushafWordButton
                           ayah={ayah}
-                          word={word}
-                          wordIndex={index}
+                          word={text}
+                          wordIndex={wordIndex}
                           meaningWords={meaningWords}
                           onWordPress={onWordPress}
-                        />{' '}
+                        />
+                        {endsAyah && run.ayah > 0 && (
+                          <>
+                            <button
+                              type="button"
+                              className="mushaf-ayah-mark"
+                              aria-label={`خيارات الآية ${toArabicNumber(run.ayah)} من سورة ${surahName}`}
+                              onClick={() => onAyahPress?.(line.surahId, run.ayah)}
+                            >
+                              <span className="mushaf-ayah-mark__glyph" aria-hidden="true">
+                                {'\u06DD'}
+                                {toArabicNumber(run.ayah)}
+                              </span>
+                            </button>
+                            {SAJDAH_AYAHS_KEYS.has(`${line.surahId}:${run.ayah}`) && (
+                              <span className="mushaf-sajdah" role="img" aria-label="آية السجدة">
+                                غ©
+                              </span>
+                            )}
+                          </>
+                        )}
+                        {!isLastWordOfGroup && ' '}
                       </span>
-                    ))}
-                    <span className="mushaf-ayah-tail">
-                      <MushafWordButton
-                        ayah={ayah}
-                        word={words[words.length - 1]}
-                        wordIndex={words.length - 1}
-                        meaningWords={meaningWords}
-                        onWordPress={onWordPress}
-                      />
-                      <button
-                        type="button"
-                        className="mushaf-ayah-mark"
-                        aria-label={`خيارات الآية ${toArabicNumber(ayah.ayahNumber)} من سورة ${ayah.surahName}`}
-                        onClick={() => onAyahPress?.(ayah.surahId, ayah.ayahNumber)}
-                      >
-                        <span className="mushaf-ayah-mark__glyph" aria-hidden="true">
-                          {'\u06DD'}{toArabicNumber(ayah.ayahNumber)}
-                        </span>
-                      </button>
-                    </span>
-                  </span>{' '}
+                    );
+                  })}
                 </span>
               );
             })}
@@ -315,7 +468,7 @@ export function MushafPage({
         );
       })}
 
-      {segments.length === 0 && (
+      {lines.length === 0 && (
         <p className="mushaf-body" style={{ textAlign: 'center' }}>
           نص الصفحة غير متوفر حالياً
         </p>

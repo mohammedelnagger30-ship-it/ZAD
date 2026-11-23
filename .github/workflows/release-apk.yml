@@ -72,13 +72,11 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          # versionCode must increase with every release so Android
-          # accepts in-app updates. Derive it from the version itself
-          # (MAJOR*1e6 + MINOR*1e3 + PATCH): GITHUB_RUN_NUMBER restarts
-          # low and is already below the codes shipped to devices,
-          # which made every CI release fail as a "downgrade".
+          # Keep the versionCode monotonic with the existing Android scheme:
+          # MAJOR*1e6 + MINOR*1e4 + PATCH. The previous 1e3 minor multiplier
+          # produced a code lower than the shipped 2.1.0 code (2010000).
           IFS='.' read -r major minor patch <<< "$version"
-          version_code=$((major * 1000000 + minor * 1000 + patch))
+          version_code=$((major * 1000000 + minor * 10000 + patch))
           echo "version_code=$version_code" >> "$GITHUB_OUTPUT"
 
       - name: Validate release configuration

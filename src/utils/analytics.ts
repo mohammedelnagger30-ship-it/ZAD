@@ -1,4 +1,4 @@
-import { supabase } from '@/utils/supabaseClient';
+import { supabase } from '@/utils/sync/supabaseClient';
 
 /**
  * Anonymous usage reporting: "who opened the app today?" with no names attached.

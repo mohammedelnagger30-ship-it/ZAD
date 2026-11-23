@@ -79,7 +79,7 @@ check('An-Naba opens in juz 30', byId(78).juzStart, 30);
 // Al-Fatihah is short, so its last ayah and Al-Baqarah's first share page 1 — the same thing
 // happens in the printed mushaf, and it is why page 1 must report both surahs.
 check('surahs on page 1', getSurahsForPage(1).map((s) => s.name), ['الفاتحة', 'البقرة']);
-check('surahs on the last page', getSurahsForPage(TOTAL_QURAN_PAGES).map((s) => s.name), ['الفلق', 'الناس']);
+check('surahs on the last page', getSurahsForPage(TOTAL_QURAN_PAGES).map((s) => s.name), ['الناس']);
 check('surahs in juz 30', getSurahsByJuz(30).length > 30, true);
 check('surahs in juz 1 includes Al-Fatihah', getSurahsByJuz(1)[0].name, 'الفاتحة');
 

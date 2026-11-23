@@ -16,7 +16,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { jest } from '@jest/globals';
 
 import type { SelectedQuranWord } from '@/components/mushaf/WordAnalysisSheet';
-import type { WordMeaningHit } from '@/utils/wordMeaningsService';
+import type { WordMeaningHit } from '@/utils/quran/wordMeaningsService';
 
 const lookup = jest.fn<
   (surah: number, ayah: number, wordPosition: number) => Promise<WordMeaningHit[]>
@@ -26,7 +26,7 @@ jest.unstable_mockModule('@/hooks/useContent', () => ({
   useWordMeanings: () => ({ installed: true, loading: false }),
 }));
 
-jest.unstable_mockModule('@/utils/wordMeaningsService', () => ({
+jest.unstable_mockModule('@/utils/quran/wordMeaningsService', () => ({
   DEFAULT_WORD_MEANINGS_BOOK: 491,
   downloadWordMeanings: jest.fn(),
   getWordMeanings: lookup,

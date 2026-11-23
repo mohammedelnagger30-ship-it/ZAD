@@ -8,11 +8,11 @@
  * in the real typeface. Those widths are measured once, offline, by Chromium's shaper
  * (`measure-word-widths.mjs`) and read from `build/word-widths.json`.
  *
- * ── Why the column is 18.2 em ───────────────────────────────────────────────────────
+ * ── Why the column is 18.08 em ──────────────────────────────────────────────────────
  * The printed mushaf hands us a calibration point we cannot otherwise get: 604 pages of
- * 15 lines = 9,060 lines. Sweeping the column width over the real text, 18.2em
- * reproduces that page count to within 0.5% while leaving a line at 8-9 words — where a
- * mushaf line sits — and only a few percent of slack for justification to absorb.
+ * 15 lines = 9,060 lines. Sweeping the column width over the real text, 18.08em reproduces
+ * that page count exactly while leaving a line at 8-9 words — where a mushaf line sits —
+ * and only a few percent of slack for justification to absorb.
  *
  * ── Why the output is a table ───────────────────────────────────────────────────────
  * Runtime line-breaking would put the 19k-entry width table in the bundle and would have
@@ -36,22 +36,22 @@ import {
 const REF_PX = 100;
 
 /**
- * Column width as a multiple of the font size: 1820px at the 100px reference.
+ * Column width as a multiple of the font size: 1808px at the 100px reference.
  *
  * Calibrated, not guessed. The printed mushaf gives a number we cannot otherwise get —
  * 604 pages of 15 lines — so the column was swept over the real text and the width that
  * reproduces that page count was taken:
  *
- *     17.4em -> 629 pages, 8.47 words/line
- *     18.2em -> 601 pages, 8.87 words/line   <- chosen
- *     19.0em -> ~575 pages, 9.3  words/line
+ *     17.4em  -> 627 pages, 8.47 words/line
+ *     18.08em -> 604 pages, 8.81 words/line   <- chosen
+ *     19.0em  -> 573 pages, 9.29 words/line
  *
- * 18.2em lands within 0.5% of the printed page count while keeping a line at 8-9 words,
+ * 18.08em lands exactly on the printed page count while keeping a line at 8-9 words,
  * which is where a mushaf line sits, and leaves justification only a few percent of slack
  * to absorb. Changing this moves every page boundary in the app, so it stays a deliberate,
  * visible edit — and `check:flow` fails loudly if the page count drifts.
  */
-const COLUMN_EM = Number(process.env.COL_EM ?? '18.2');
+const COLUMN_EM = Number(process.env.COL_EM ?? '18.08');
 
 /** Lines per page. The printed Madani mushaf is 15. */
 export const LINES_PER_PAGE = 15;
@@ -59,9 +59,12 @@ export const LINES_PER_PAGE = 15;
 /**
  * Room reserved for an ayah-end marker, in em.
  *
- * The marker is a drawn ring, not glyphs, so it cannot be measured from the font. 1.15em
- * is the ring plus its side margins at the size the reader draws it. It must be reserved
- * once per ayah on the line, or lines holding several ayah ends overflow and get clipped.
+ * The marker is the `۝` glyph plus the ayah's digits, drawn at the same size as the text.
+ * 1.15em is the advance the line breaks were computed against. The bundled face gives that
+ * glyph a 1.279em advance, so the renderer trims the extra from the marker's side bearings
+ * (`button.mushaf-ayah-mark` has a negative inline margin) instead of shrinking the glyph —
+ * see `MushafPage`/`index.css`. It must be reserved once per ayah on the line, or lines
+ * holding several ayah ends overflow and get clipped.
  */
 const AYAH_MARK_EM = Number(process.env.MARK_EM ?? '1.15');
 
@@ -157,6 +160,8 @@ for (const surahId of surahIds) {
   // concatenating the same pieces.
   const words: string[] = [];
   const isAyahStart: number[] = []; // word indices at which a new ayah begins
+  /** Where the text lines begin: past the basmala when that got a line of its own. */
+  let textStart = 0;
 
   const first = splitBasmala(ayahs[0] ?? '');
   const basmalaIsItsOwnLine = first.basmala !== null && first.rest.length > 0;
@@ -165,6 +170,7 @@ for (const surahId of surahIds) {
     for (const w of first.basmala!.split(' ').filter(Boolean)) words.push(w);
     lines.push({ kind: KIND_BASMALA, surahId, count: words.length });
     isAyahStart.push(words.length);
+    textStart = words.length;
   } else if (!first.basmala) {
     isAyahStart.push(0);
   } else {
@@ -183,6 +189,13 @@ for (const surahId of surahIds) {
 
   ayahWordStart.push(...isAyahStart);
 
+  // The basmala, when it got a line of its own above, is already placed. The greedy fill
+  // must therefore start *after* it: starting at 0 would pour the four basmala words into
+  // the first text line while the emitted line offsets still began past them, shifting
+  // every later line of the surah four words forward and overflowing the column. Those
+  // four words are still measured here so the word audit counts them.
+  for (let k = 0; k < textStart; k++) wordWidth(words[k]);
+
   // Greedy fill. `width` is everything the line has committed to — word ink, the spaces
   // between words, and the markers of any ayah that ended on it. The next word has to fit
   // with its own trailing marker, since a word that ends an ayah brings a mark with it.
@@ -191,7 +204,7 @@ for (const surahId of surahIds) {
   let width = 0;
   let count = 0;
 
-  for (let i = 0; i < words.length; i++) {
+  for (let i = textStart; i < words.length; i++) {
     const w = wordWidth(words[i]);
     const endsAyah = i + 1 === words.length || ayahStarts.has(i + 1);
     const need = (count === 0 ? 0 : SPACE) + w + (endsAyah ? MARK : 0);
@@ -592,7 +605,7 @@ const counts = textLines.map((l) => l.count);
 const mean = counts.reduce((s, n) => s + n, 0) / counts.length;
 const median = [...counts].sort((a, b) => a - b)[Math.floor(counts.length / 2)];
 
-console.log(`column        ${COLUMN_EM}em (${REF_COL}px @ ${REF_PX}px)`);
+console.log(`column        ${COLUMN_EM}em (${Math.round(REF_COL)}px @ ${REF_PX}px)`);
 console.log(`words placed  ${wordsPlaced.toLocaleString('en-US')} of ${widthTable.wordCount.toLocaleString('en-US')}`);
 console.log(`lines         ${lines.length.toLocaleString('en-US')} (${lines.filter((l) => l.kind === KIND_HEADING).length} headings, ${lines.filter((l) => l.kind === KIND_BASMALA).length} basmalas)`);
 console.log(`pages         ${pageCount}  (printed mushaf: 604)`);

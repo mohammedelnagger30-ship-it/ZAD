@@ -1,4 +1,4 @@
-import { Layout, Sparkles, Bell } from 'lucide-react';
+import { Layout, Sparkles, Bell, Type } from 'lucide-react';
 import { Card, SectionHeader, ToggleRow } from '@/components/ui';
 import type { Settings } from '@/db/database';
 
@@ -76,6 +76,25 @@ export function UISettingsSection({ settings, onSaveSettings }: UISettingsSectio
           value={settings.customBadgesEnabled !== false}
           onChange={(value) => onSaveSettings({ customBadgesEnabled: value })}
         />
+
+        {/* The text-scale hold. Placed here rather than under a font section because it
+            is not a size the reader picks — it is a refusal of a size the *device* picks,
+            and its whole symptom is visual: «الوضع البسيط» reflows the layout. */}
+        <ToggleRow
+          label="ثبات حجم الواجهة"
+          description="يمنع «الوضع البسيط» وتكبير خط النظام من تغيير شكل التطبيق"
+          icon={
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-100 dark:bg-primary-800">
+              <Type size={20} className="text-primary-600 dark:text-gold-400" />
+            </span>
+          }
+          value={settings.ignoreSystemFontScale === true}
+          onChange={(value) => onSaveSettings({ ignoreSystemFontScale: value })}
+        />
+        <p className="-mt-3 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+          فعّل هذا إذا كنت قد كبّبت خطوط الهاتف أو فعّلت «الوضع البسيط»، فتبدو واجهة التطبيق مشوّهة أو متداخلة.
+          التفعيل يُعيد الواجهة إلى حجمها الأصلي مهما كانت إعدادات النظام. أما حجم نص المصحف فيُضبط من قسم «حجم خط المصحف» في الأعلى.
+        </p>
       </div>
     </Card>
   );

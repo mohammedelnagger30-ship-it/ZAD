@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import type { Settings } from '@/db/database';
-import { syncWirdWidget } from '@/utils/wirdWidget';
+import { syncWirdWidget } from '@/utils/quran/wirdWidget';
 
 /**
  * Keeps the launcher's home-screen widget fed.

@@ -283,6 +283,28 @@ export function countMatches(hadith: HadithRecord, query: string): number {
   return terms.filter((term) => haystack.includes(term)).length;
 }
 
+/**
+ * Whether `hadith` carries every long term of `query` — the terms that name a narration
+ * rather than merely fill it.
+ *
+ * Length stands in for rarity here: «ما» and «لم» occur in almost every text in the
+ * library, so finding two of them together identifies nothing, while «كنته» or «الوضوء»
+ * identify a specific one. Without this, a tap on Anas's «ما قال لشيء كُنتُه ولا قال
+ * لشيء لم أفعله: أف» counted six shared words against the narration of the man who
+ * urinated in the mosque — same words, different hadith — and opened it.
+ *
+ * It also settles the case where the quoted source is not installed. الترمذي cannot be
+ * opened on a device holding only مسلم, the distinctive term never appears, and the
+ * caller keeps its results list instead of guessing. No distinctive term at all (a short
+ * citation) leaves the older word-count test in charge.
+ */
+export function carriesDistinctiveTerms(hadith: HadithRecord, query: string): boolean {
+  const distinctive = arabicQueryTerms(query).filter((term) => term.length >= 5);
+  if (distinctive.length === 0) return true;
+  const haystack = normalizeArabic(`${hadith.text} ${hadith.sectionTitle}`);
+  return distinctive.every((term) => haystack.includes(term));
+}
+
 /** Collections currently parsed in memory, newest use first. */
 export async function installedCollectionList(): Promise<HadithCollection[]> {
   const ids = await installedCollections();
@@ -409,6 +431,7 @@ export async function getHadithCollection(
         { kind: 'hadith', group: id, surah: 0 },
         onProgress,
         signal,
+        book.sha256,
       );
       stored = true;
       break;
@@ -458,14 +481,12 @@ export function clearHadithMemory(): void {
  * day" that is weak or fabricated would be misleading, so an ungraded pool is only used
  * when nothing has been graded.
  */
-function hadithOfDayFrom(hadiths: HadithRecord[]): HadithRecord | null {
+export function hadithOfDayFrom(hadiths: HadithRecord[], date = new Date()): HadithRecord | null {
   if (hadiths.length === 0) return null;
   const dayOfYear = Math.floor(
-    (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000,
+    (date.getTime() - new Date(date.getFullYear(), 0, 0).getTime()) / 86400000,
   );
-  const base = hadiths.filter((h) => h.collectionId === HADITH_OF_DAY_BOOK);
-  const candidates = base.length > 0 ? base : hadiths;
-  const sahih = candidates.filter((h) => h.grades.includes('sahih'));
-  const pool = sahih.length > 0 ? sahih : candidates;
+  const sahih = hadiths.filter((h) => h.grades.includes('sahih'));
+  const pool = sahih.length > 0 ? sahih : hadiths;
   return pool[dayOfYear % pool.length];
 }

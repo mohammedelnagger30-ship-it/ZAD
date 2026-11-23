@@ -82,10 +82,13 @@ check('all ayahs have a monotonic printed page inside 1..604', invalidPrintedAya
 check('all 604 printed pages contain at least one ayah start', printedPagesSeen.size, PRINTED_TOTAL_PAGES);
 
 // ---- one page count, everywhere ----
+// Our pagination is its own (the flow table breaks lines), but it was calibrated to the
+// printed mushaf and now lands on the same 604 pages, so the reader, the surah table and
+// the flow must all agree on that number.
 check('the reader, the surah table and the flow agree on the page count', [
   TOTAL_QURAN_PAGES,
   TOTAL_PAGES,
-], [602, 602]);
+], [PRINTED_TOTAL_PAGES, PRINTED_TOTAL_PAGES]);
 
 // ---- surah ranges are inside the mushaf and never run backwards ----
 const ranges = SURAHS.map((s) => [s.pageStart, getSurahEndPage(s)] as const);

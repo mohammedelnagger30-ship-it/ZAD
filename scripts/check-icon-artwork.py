@@ -1,36 +1,30 @@
-"""Sanity-checks the generated artwork: samples pixels where each
-shape should be, so a silent geometry bug can't slip through."""
+"""Sanity-checks the generated artwork: samples pixels where the mark
+and the field should be, so a silent geometry bug can't slip through."""
 from PIL import Image
 
-im = Image.open("scripts/assets/icon-prepared.png").convert("RGB")
+im = Image.open("scripts/assets/android-brand-source.png").convert("RGB")
+width, height = im.size
 
 # (label, x, y, what we expect to see)
 samples = [
-    ("arch apex",      512, 320, "gold"),
-    ("arch left foot", 352, 730, "gold"),
-    ("arch right foot", 672, 730, "gold"),
-    ("crescent body",  480, 494, "gold"),
-    ("crescent bite",  527, 459, "green field"),
-    ("book pages",     512, 650, "ivory"),
-    ("book spine",     512, 640, "gold line"),
-    ("field corner",   100, 100, "dark green"),
-    ("field top",      512, 100, "mid green"),
-    ("gap arch/book",  512, 550, "green field"),
+    ("logo center", (round(width * 0.60), round(height * 0.48)), "green logo"),
+    ("logo highlight", (round(width * 0.50), round(height * 0.63)), "gold accent"),
+    ("background", (round(width * 0.05), round(height * 0.05)), "dark green"),
 ]
 
 
 def classify(rgb):
     r, g, b = rgb
-    if r > 200 and g > 200 and b > 170:
-        return "ivory"
-    if r > 140 and g > 110 and b < 140 and r > b + 40:
-        return "gold"
-    if g > r and g > b:
-        return "green field"
+    if g > 42 and g > r * 1.5 and g > b * 1.3 and g < 130:
+        return "green logo"
+    if r < 35 and g < 42 and b < 40:
+        return "dark green"
+    if r > 180 and g > 130 and r - b > 15:
+        return "gold accent"
     return "other"
 
 
-for label, x, y, want in samples:
+for label, (x, y), want in samples:
     rgb = im.getpixel((x, y))
     got = classify(rgb)
     ok = "OK " if got == want else "?? "

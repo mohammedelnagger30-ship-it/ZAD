@@ -5,7 +5,7 @@ import {
   getNextPrayer,
   getPrayerTimeZone,
   type PrayerTimeAdjustments,
-} from '@/utils/prayerTimes';
+} from '@/utils/prayer/prayerTimes';
 import { trustedNow } from '@/utils/clock';
 import { countdownTickDelayMs } from '@/utils/countdown';
 

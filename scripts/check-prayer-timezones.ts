@@ -7,7 +7,7 @@ import {
   getCalcMethod,
   getDateInTimeZone,
   getNextPrayer,
-} from '../src/utils/prayerTimes';
+} from '../src/utils/prayer/prayerTimes';
 
 // The device zone is deliberately far from every city under test. Any code path that
 // reads a prayer time through the device clock instead of treating adhan's `Date` as an

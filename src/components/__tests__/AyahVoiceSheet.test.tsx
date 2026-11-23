@@ -27,9 +27,13 @@ type Props = Parameters<typeof AyahVoiceSheet>[0];
 const REF: { current: HTMLAudioElement | null } = { current: null };
 
 /** أقصر ورقةٍ تُظهر عنصر الصوت: لا يُشترى فيها تفعيلُ الأصوات، إذ ليس في الأمر صوت. */
-function sheet(spy: (...args: unknown[]) => void, onEnded?: (...args: unknown[]) => void): ReactElement {
+function sheet(
+  spy: (...args: unknown[]) => void,
+  onEnded?: (...args: unknown[]) => void,
+  ayahChoice: { surahId: number; ayahNumber: number } = { surahId: 1, ayahNumber: 1 },
+): ReactElement {
   const props: Props = {
-    ayahChoice: { surahId: 1, ayahNumber: 1 },
+    ayahChoice,
     closeAyahChoice: () => {},
     ayahPanelRef: { current: null },
     setTafsirAyah: () => {},
@@ -56,6 +60,7 @@ function sheet(spy: (...args: unknown[]) => void, onEnded?: (...args: unknown[])
     setVoicePlaying: () => {},
     handleVoiceTime: spy as Props['handleVoiceTime'],
     handleVoiceEnded: (onEnded ?? (() => {})) as Props['handleVoiceEnded'],
+    followedAyah: null,
   };
   return <AyahVoiceSheet {...props} />;
 }
@@ -86,6 +91,19 @@ describe('AyahVoiceSheet recitation transport', () => {
       root.unmount();
     });
     container.remove();
+  });
+
+  it('does not show the selected ayah text when its actions are open', () => {
+    expect(container.querySelector('.mushaf-voice__ayah')).toBeNull();
+    expect(container.querySelector('.mushaf-sheet__juz')).toBeNull();
+    expect(container.textContent).toContain('التفسير');
+    expect(container.textContent).toContain('التلاوة');
+  });
+
+  it('saves the selected highlight colour from the picker', async () => {
+    await act(async () => {
+      root.render(sheet(spy, undefined, undefined) as ReactElement);
+    });
   });
 
   it('sends the timeupdate to the handler with no argument, so «انتهى» stays false', async () => {

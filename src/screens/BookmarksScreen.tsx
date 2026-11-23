@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Bookmark, Trash2, BookOpen, FileDown, FileText, Share2, Copy, ArrowUpRight } from 'lucide-react';
+import { Bookmark, Trash2, BookOpen, FileDown, FileText, Share2, Copy, ArrowUpRight, Loader2 } from 'lucide-react';
 import { db, type Bookmark as BookmarkType, type PageBookmark } from '@/db/database';
 import { getSurah, toArabicNumber } from '@/data/surahs';
 import { getAyah } from '@/data/quranText';
-import { Card, EmptyState, Badge } from '@/components/ui';
+import { Card, EmptyState, Badge, PageHeader } from '@/components/ui';
+import { SCREEN_METADATA } from '@/navigation/screenMetadata';
 import { useSnackbar } from '@/hooks/useSnackbar';
 import { buildBookmarksExport } from '@/utils/bookmarkExport';
+import { getHighlightColor } from '@/utils/quran/ayahHighlights';
 import { shareAyahCard, shareTextOrCopy } from '@/utils/shareCard';
 import type { ScreenName, NavParams } from '@/hooks/useApp';
 
@@ -33,6 +35,7 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
   const [pageBookmarks, setPageBookmarks] = useState<PageBookmark[]>([]);
   const [loading, setLoading] = useState(true);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [sharingKey, setSharingKey] = useState<string | null>(null);
   /** True while the whole collection sits on the clipboard after «تصدير». */
   const [exported, setExported] = useState(false);
   const { show, snackbar } = useSnackbar();
@@ -104,23 +107,29 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
   /**
    * Shares the ayah as a picture, with the words behind it.
    *
-   * The card is drawn first and the system sheet takes the image; a device
-   * that will not take an image gets the text instead, and one with no sheet
-   * at all gets the clipboard and the very same «تم النسخ» the copy button
-   * shows. Those two cases are the only ones that leave the ayah stuck on the
-   * phone, so they are the only ones that say anything on screen.
+   * The image share action never changes into a text copy; copying has its
+   * own button on each saved ayah.
    */
   const shareAyah = async (bm: AyahBookmarkRow) => {
-    if (!bm.text || !bm.surahName) return;
-    const outcome = await shareAyahCard({
-      surahId: bm.surahId,
-      ayahText: bm.text,
-      surahName: bm.surahName,
-      ayahNumber: bm.ayahNumber,
-    });
-    if (outcome !== 'copied') return;
-    setCopiedKey(ayahKey(bm));
-    setTimeout(() => setCopiedKey(null), 2500);
+    if (!bm.text || !bm.surahName || sharingKey) return;
+    const key = ayahKey(bm);
+    setSharingKey(key);
+    try {
+      const outcome = await shareAyahCard({
+        surahId: bm.surahId,
+        ayahText: bm.text,
+        surahName: bm.surahName,
+        ayahNumber: bm.ayahNumber,
+      });
+      if (outcome === 'failed') {
+        show({ message: 'تعذّرت مشاركة صورة الآية. استخدم زر النسخ لإرسال نصها.' });
+      }
+    } catch (error) {
+      console.error('Failed to share bookmarked ayah:', error);
+      show({ message: 'تعذّرت مشاركة الآية الآن. حاول مرة أخرى.' });
+    } finally {
+      setSharingKey(null);
+    }
   };
 
   /**
@@ -171,6 +180,7 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
       surahId: bm.surahId,
       ayahNumber: bm.ayahNumber,
       note: bm.note,
+      color: bm.color,
       createdAt: bm.createdAt,
     };
     await db.bookmarks.delete(bm.id);
@@ -223,31 +233,28 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
 
   return (
     <div className="space-y-5 pb-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-primary-100 pb-3 dark:border-primary-800">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-primary-900 md:text-3xl dark:text-primary-50">
-            <Bookmark size={24} className="text-primary-600 dark:text-gold-400" />
-            محفوظاتي
-          </h1>
-          <p className="mt-0.5 text-xs text-primary-700/80 dark:text-primary-300">
-            {total > 0
-              ? `${toArabicNumber(total)} علامة محفوظة — عود إليها في أي وقت`
-              : 'الآيات والصفحات التي علّمتها للرجوع إليها لاحقًا'}
-          </p>
-        </div>
-        {total > 0 && (
-          <button
-            type="button"
-            onClick={() => void exportAll()}
-            aria-live="polite"
-            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary-200 bg-white px-4 text-sm font-bold text-primary-700 transition-colors hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:border-primary-700 dark:bg-primary-900/50 dark:text-gold-300 dark:hover:bg-primary-800"
-          >
-            <FileDown size={16} />
-            {exported ? 'نُسخ كنص' : 'تصدير كنص'}
-          </button>
-        )}
-      </div>
+      <PageHeader
+        title="محفوظاتي"
+        description={
+          total > 0
+            ? `${toArabicNumber(total)} علامة محفوظة — عود إليها في أي وقت`
+            : 'الآيات والصفحات التي علّمتها للرجوع إليها لاحقًا'
+        }
+        icon={<SCREEN_METADATA.bookmarks.icon size={20} />}
+        actions={
+          total > 0 ? (
+            <button
+              type="button"
+              onClick={() => void exportAll()}
+              aria-live="polite"
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary-200 bg-panel px-4 text-sm font-bold text-primary-700 transition-colors hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:border-primary-700 dark:bg-primary-900/50 dark:text-gold-300 dark:hover:bg-primary-800"
+            >
+              <FileDown size={16} />
+              {exported ? 'نُسخ كنص' : 'تصدير كنص'}
+            </button>
+          ) : undefined
+        }
+      />
 
       {total === 0 && (
         <EmptyState
@@ -294,9 +301,16 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
                       <button
                         type="button"
                         onClick={() => openAyah(bm)}
-                        className="block w-full text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:focus-visible:ring-gold-400 rounded-xl"
+                        className="flex w-full items-start gap-2 text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:focus-visible:ring-gold-400 rounded-xl"
                         aria-label={`فتح ${surah?.name} الآية ${toArabicNumber(bm.ayahNumber)} في القارئ`}
                       >
+                        {bm.color && (
+                          <span
+                            className="mt-2.5 inline-block h-3 w-3 shrink-0 rounded-full border border-black/10 dark:border-white/20"
+                            style={{ background: getHighlightColor(bm.color)?.swatch }}
+                            aria-hidden="true"
+                          />
+                        )}
                         <p className="font-['Amiri_Quran',_serif] text-lg leading-loose text-primary-900 dark:text-primary-50">
                           {bm.text ?? '—'}
                           <span className="mushaf-ayah-mark mr-1.5 align-middle" aria-hidden="true">
@@ -304,6 +318,11 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
                           </span>
                         </p>
                       </button>
+                      {bm.note && (
+                        <p className="whitespace-pre-wrap rounded-xl bg-primary-50/80 px-3 py-2 text-sm leading-relaxed text-primary-800 dark:bg-primary-900/40 dark:text-primary-100">
+                          {bm.note}
+                        </p>
+                      )}
                       <div className="flex flex-wrap items-center gap-2">
                         {bm.page !== undefined && (
                           <Badge variant="gold">صفحة {toArabicNumber(bm.page)}</Badge>
@@ -326,11 +345,15 @@ export function BookmarksScreen({ navigate }: BookmarksScreenProps) {
                         </button>
                         <button
                           type="button"
-                          onClick={() => shareAyah(bm)}
-                          aria-label="مشاركة الآية"
+                          onClick={() => void shareAyah(bm)}
+                          disabled={sharingKey !== null}
+                          aria-label={sharingKey === ayahKey(bm) ? 'جارٍ تجهيز صورة الآية' : 'مشاركة الآية كصورة'}
+                          aria-busy={sharingKey === ayahKey(bm)}
                           className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-primary-50 hover:text-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-gray-400 dark:hover:bg-primary-800/40 dark:hover:text-gold-300"
                         >
-                          <Share2 size={16} />
+                          {sharingKey === ayahKey(bm)
+                            ? <Loader2 size={16} className="animate-spin" />
+                            : <Share2 size={16} />}
                         </button>
                         <button
                           type="button"

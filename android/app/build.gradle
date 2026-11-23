@@ -1,9 +1,7 @@
-import java.io.StringReader
-
 apply plugin: 'com.android.application'
 
 def appVersionCode = (rootProject.findProperty('VERSION_CODE') ?: '1').toString().toInteger()
-def appVersionName = (rootProject.findProperty('VERSION_NAME') ?: '1.23.1').toString()
+def appVersionName = (rootProject.findProperty('VERSION_NAME') ?: '1.24.0').toString()
 
 android {
     namespace = "com.hifzi.app"
@@ -22,14 +20,14 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
-    def signingProperties = new Properties()
+    def signingProperties = new java.util.Properties()
     def signingPropertiesFile = file('keystore.properties')
     if (signingPropertiesFile.exists()) {
         def signingPropertiesText = signingPropertiesFile.getText('UTF-8')
         if (signingPropertiesText.startsWith('\uFEFF')) {
             signingPropertiesText = signingPropertiesText.substring(1)
         }
-        signingProperties.load(new StringReader(signingPropertiesText))
+        signingProperties.load(new java.io.StringReader(signingPropertiesText))
     }
     // Use app-release.jks consistently for all releases to ensure updates work
     def releaseKeystorePath = System.getenv('ZAD_KEYSTORE_PATH') ?: signingProperties.getProperty('storeFile') ?: 'app-release.jks'
@@ -103,6 +101,6 @@ try {
     if (servicesJSON.text) {
         apply plugin: 'com.google.gms.google-services'
     }
-} catch(Exception e) {
+} catch (Exception ignored) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
 }

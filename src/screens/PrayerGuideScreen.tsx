@@ -110,7 +110,7 @@ function MovementCard({ item }: { item: PrayerGuideStep }) {
         <div className="-m-1 flex shrink-0 items-center justify-center">
           <PrayerPosture
             posture={item.posture}
-            className="h-24 w-24 text-primary-800/75 dark:text-[#cfa95c]/85 md:h-32 md:w-32"
+            className="h-20 w-20 text-primary-800/75 dark:text-[#cfa95c]/85 md:h-28 md:w-28"
             accentClassName="text-gold-600 dark:text-[#cfa95c]"
           />
         </div>
@@ -199,7 +199,7 @@ export function PrayerGuideScreen({ navigate }: PrayerGuideScreenProps) {
       </button>
 
       {/* Hero */}
-      <section className="relative isolate overflow-hidden rounded-[2rem] bg-linear-to-br from-primary-600 via-primary-700 to-primary-900 p-6 text-white shadow-2xl dark:from-primary-900 dark:via-primary-950 dark:to-primary-950">
+      <section className="app-brand-panel relative isolate overflow-hidden rounded-[2rem] bg-linear-to-br from-primary-600 via-primary-700 to-primary-900 p-6 text-white shadow-2xl dark:from-primary-900 dark:via-primary-950 dark:to-primary-950">
         <div className="pointer-events-none absolute -right-20 -top-20 -z-10 h-64 w-64 rounded-full border-4 border-white/5" />
         <div className="pointer-events-none absolute -left-16 top-16 -z-10 h-40 w-40 rounded-full border-4 border-white/5" />
         <div className="pointer-events-none absolute bottom-0 left-1/3 -z-10 h-44 w-44 rounded-full border-4 border-white/5" />

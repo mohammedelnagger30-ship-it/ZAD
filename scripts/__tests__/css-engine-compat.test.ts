@@ -1,6 +1,8 @@
 import {
   oklchToRgb,
+  oklabToRgb,
   replaceOklchLiterals,
+  replaceOklabLiterals,
   rewriteRangeMediaQueries,
   addTranslateFallbacks,
   flattenColorMix,
@@ -46,6 +48,36 @@ describe('css engine compat', () => {
     it('leaves a stylesheet without oklch untouched', () => {
       const css = ':root{--color-gold-400:#f0c83a}';
       expect(replaceOklchLiterals(css)).toBe(css);
+    });
+  });
+
+  describe('oklab → sRGB', () => {
+    it('converts the pure-white end of the lightness axis', () => {
+      expect(oklabToRgb(1, 0, 0)).toEqual([255, 255, 255]);
+    });
+
+    it('converts a colour to the hex it was authored from', () => {
+      // #16a34a, as Tailwind writes it out for the accent scale.
+      expect(oklabToRgb(0.627052, -0.145969, 0.0869672)).toEqual([22, 163, 74]);
+    });
+
+    it('rewrites a literal the theme emits for an alpha utility', () => {
+      const out = replaceOklabLiterals('.a{background-color:oklab(62.7052% -.145969 .0869672/.25)}');
+      expect(out).toBe('.a{background-color:rgb(22 163 74 / 0.25)}');
+    });
+
+    it('reads a percentage alpha as a fraction', () => {
+      expect(replaceOklabLiterals('.a{color:oklab(50% .1 -.1/90%)}')).toBe('.a{color:rgb(129 69 154 / 0.9)}');
+    });
+
+    it('leaves a component it cannot express alone', () => {
+      const css = '.a{color:oklab(50% 1e999 0)}';
+      expect(replaceOklabLiterals(css)).toBe(css);
+    });
+
+    it('leaves a stylesheet without oklab untouched', () => {
+      const css = ':root{--color-gold-400:#f0c83a}';
+      expect(replaceOklabLiterals(css)).toBe(css);
     });
   });
 
@@ -118,6 +150,15 @@ describe('css engine compat', () => {
     it('does not touch a background-position or any other declaration', () => {
       const css = '.a{background-position:translate:0}';
       expect(addTranslateFallbacks(css)).toBe(css);
+    });
+
+    it('is not fooled by an escaped apostrophe in a selector', () => {
+      // Tailwind escapes the brackets and quotes in class names like `font-['Amiri_Quran',serif]`;
+      // an engine reads a class name, and so must the scanner.
+      const css = ".font-\\[Amiri_Quran\\'\\,_serif\\]{font-family:Amiri Quran,serif}.after{translate:1rem 0}";
+      const out = addTranslateFallbacks(css);
+      expect(out).toContain('@supports not (translate:1px){.after{transform:translate(1rem,0px)}}');
+      expect((out.match(/\{/g) ?? []).length).toBe((out.match(/\}/g) ?? []).length);
     });
   });
 

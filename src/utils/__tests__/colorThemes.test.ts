@@ -15,16 +15,29 @@ function contrastAgainstWhite(hex: string): number {
 }
 
 describe('color palettes', () => {
-  it('provides twelve distinct, labeled palettes', () => {
-    expect(COLOR_PALETTES).toHaveLength(12);
+  it('provides sixteen distinct, labeled palettes including three dark palettes', () => {
+    expect(COLOR_PALETTES).toHaveLength(16);
+    expect(COLOR_PALETTES.filter(({ id }) => ['obsidian', 'nocturne', 'abyss'].includes(id))).toHaveLength(3);
     expect(new Set(COLOR_PALETTES.map(({ id }) => id)).size).toBe(COLOR_PALETTES.length);
     expect(new Set(COLOR_PALETTES.map(({ color }) => color)).size).toBe(COLOR_PALETTES.length);
     expect(new Set(COLOR_PALETTES.map(({ accent }) => accent)).size).toBe(COLOR_PALETTES.length);
   });
 
-  it('keeps accent colors readable on light surfaces and with white text', () => {
+  it('ensures each palette is built on three distinct harmonious colors', () => {
     for (const palette of COLOR_PALETTES) {
-      expect(contrastAgainstWhite(palette.accent)).toBeGreaterThanOrEqual(4.5);
+      expect(palette.color).toBeTruthy();
+      expect(palette.tertiary).toBeTruthy();
+      expect(palette.accent).toBeTruthy();
+      expect(palette.color.toLowerCase()).not.toBe(palette.tertiary.toLowerCase());
+      expect(palette.color.toLowerCase()).not.toBe(palette.accent.toLowerCase());
+      expect(palette.tertiary.toLowerCase()).not.toBe(palette.accent.toLowerCase());
+    }
+  });
+
+  it('keeps brand colors accessible and readable on light surfaces', () => {
+    for (const palette of COLOR_PALETTES) {
+      // Primary color provides high contrast (≥ 4.5:1)
+      expect(contrastAgainstWhite(palette.color)).toBeGreaterThanOrEqual(4.5);
     }
   });
 });

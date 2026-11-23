@@ -38,8 +38,8 @@ function Ground() {
 function Head({ cx, cy, r, facing }: { cx: number; cy: number; r: number; facing: 'left' | 'downleft' }) {
   const nose =
     facing === 'left'
-      ? `M${cx - r + 1} ${cy - 3.2} L${cx - r - 4.6} ${cy + 1.2} L${cx - r + 1.6} ${cy + 5.4} Z`
-      : `M${cx - r * 0.95} ${cy + r * 0.28} L${cx - r * 0.92} ${cy + r * 0.86} L${cx - r * 0.32} ${cy + r * 0.97} Z`;
+      ? `M${cx - r + 1.5} ${cy - 2.2} L${cx - r - 2.8} ${cy + 1} L${cx - r + 1.5} ${cy + 4.2} Z`
+      : `M${cx - r * 0.97} ${cy + r * 0.32} L${cx - r * 0.94} ${cy + r * 0.78} L${cx - r * 0.4} ${cy + r * 0.88} Z`;
   return (
     <g>
       <circle cx={cx} cy={cy} r={r} fill="currentColor" stroke="none" />

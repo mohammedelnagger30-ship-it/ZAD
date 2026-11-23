@@ -12,7 +12,7 @@ import {
   AlertTriangle,
   WifiOff,
 } from 'lucide-react';
-import { Card, Badge } from '@/components/ui';
+import { Card, Badge, PageHeader } from '@/components/ui';
 import {
   formatBytes,
   HADITH_BOOKS,
@@ -24,7 +24,7 @@ import {
 } from '@/data/contentCatalog';
 import { downloadTafsirEdition, deleteTafsirEdition } from '@/utils/tafsirService';
 import { downloadHadithCollection, deleteHadithCollection } from '@/utils/hadithService';
-import { downloadWordMeanings, deleteWordMeanings } from '@/utils/wordMeaningsService';
+import { downloadWordMeanings, deleteWordMeanings } from '@/utils/quran/wordMeaningsService';
 import { removeAll } from '@/utils/contentStore';
 import { toArabicNumber, TOTAL_QURAN_AYAHS } from '@/data/surahs';
 import { useHadithBookStatus, useInstalledContent, useTafsirEditionStatus } from '@/hooks/useContent';
@@ -213,27 +213,20 @@ export function ContentLibrary({
     installed.wordMeanings ||
     Object.values(installed.tafsir).some((s) => s.size > 0) ||
     Object.values(installed.audio).some((surahs) => surahs.size > 0);
+  const ActiveSectionIcon =
+    activeSection === 'audio'
+      ? Music2
+      : activeSection === 'tafsir'
+        ? BookOpen
+        : activeSection === 'meanings'
+          ? BookMarked
+          : BookText;
 
   return (
     <div className="space-y-5 pb-4">
-      <div className="flex items-center justify-between">
-        {showTitle ? (
-          <h1 className="text-2xl font-bold text-primary-800 dark:text-primary-100 md:text-3xl">
-            {sectionTitles[activeSection]}
-          </h1>
-        ) : (
-          <span />
-        )}
-        {activeSection === 'audio' ? (
-          <Music2 size={28} className="text-primary-600 dark:text-gold-400" />
-        ) : activeSection === 'tafsir' ? (
-          <BookOpen size={28} className="text-primary-600 dark:text-gold-400" />
-        ) : activeSection === 'meanings' ? (
-          <BookMarked size={28} className="text-primary-600 dark:text-gold-400" />
-        ) : (
-          <BookText size={28} className="text-primary-600 dark:text-gold-400" />
-        )}
-      </div>
+      {showTitle && (
+        <PageHeader title={sectionTitles[activeSection]} icon={<ActiveSectionIcon size={20} />} />
+      )}
 
       <div className="grid grid-cols-2 gap-1.5 rounded-2xl bg-primary-50 p-1.5 dark:bg-primary-900/50 sm:grid-cols-4" role="tablist" aria-label="أقسام مكتبة المحتوى">
         {([

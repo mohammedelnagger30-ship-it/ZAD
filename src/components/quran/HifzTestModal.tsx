@@ -4,7 +4,7 @@ import { Card } from '@/components/ui';
 import { useOverlayDismiss } from '@/hooks/useOverlayDismiss';
 import { toArabicNumber, type SurahMeta } from '@/data/surahs';
 import { getAyah } from '@/data/quranText';
-import { ensureSource, playAyah, stop } from '@/utils/recitationEngine';
+import { ensureSource, playAyah, stop } from '@/utils/audio/recitationEngine';
 import {
   buildListenQuestion,
   buildQuizQuestion,
@@ -233,7 +233,7 @@ export function HifzTestModal({ surah, fromAyah, toAyah, onClose }: HifzTestModa
    */
   const playQuestionAyah = useCallback(async () => {
     if (question?.type !== 'recall') return;
-    const loaded = await ensureSource();
+    const loaded = await ensureSource(question.ayahNumber);
     if (!loaded) {
       // The engine carries the reason; all this needs is to say the question
       // could not be heard rather than leaving a dead button.

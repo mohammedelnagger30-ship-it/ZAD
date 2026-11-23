@@ -62,16 +62,16 @@ export function useSettings() {
 }
 
 export function useTheme() {
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
-  const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>('dark');
-  const [colorPalette, setColorPalette] = useState<ColorPalette>('ocean');
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>('light');
+  const [colorPalette, setColorPalette] = useState<ColorPalette>('qurra');
 
   useEffect(() => {
     const loadTheme = async () => {
       try {
         const s = await getSettings();
         setThemeMode(s.theme);
-        const palette = COLOR_PALETTES.find((item) => item.id === s.colorPalette)?.id ?? 'ocean';
+        const palette = COLOR_PALETTES.find((item) => item.id === s.colorPalette)?.id ?? 'qurra';
         setColorPalette(palette);
         document.documentElement.dataset.palette = palette;
         try {
@@ -81,7 +81,7 @@ export function useTheme() {
         }
         document.querySelector('meta[name="theme-color"]')?.setAttribute(
           'content',
-          COLOR_PALETTES.find((item) => item.id === palette)?.color ?? '#1f734e',
+          COLOR_PALETTES.find((item) => item.id === palette)?.color ?? '#165b39',
         );
         applyTheme(s.theme);
       } catch {
@@ -140,7 +140,7 @@ export function useTheme() {
       // Storage unavailable: only the pre-paint mirror is lost.
     }
     const themeColor = COLOR_PALETTES.find((item) => item.id === palette)?.color;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor ?? '#1f734e');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor ?? '#165b39');
   };
 
   return { theme, themeMode, changeTheme, colorPalette, changeColorPalette };
@@ -154,6 +154,10 @@ const SCREEN_NAMES = [
   'prayer',
   'salah',
   'hadith',
+  'sunnah',
+  'nawafil',
+  'prophet',
+  'huwaini',
   'library',
   'progress',
   'settings',
@@ -240,6 +244,8 @@ export function useNavigation() {
     }
   }, [history, params, paramsByScreen, screen]);
 
+  const TAB_ROOTS: ScreenName[] = ['home', 'quran', 'prayer', 'hadith', 'more'];
+
   const navigate = (target: ScreenName, p: NavParams = {}) => {
     setParamsByScreen((current) => ({ ...current, [target]: p }));
     window.scrollTo(0, 0);
@@ -247,11 +253,25 @@ export function useNavigation() {
       setResetNonce((n) => n + 1);
       return;
     }
-    setHistory((current) => (current[current.length - 1] === target ? current : [...current, target]));
+    setHistory((current) => {
+      const currentRoot = current[current.length - 1];
+      // Switching between top-level tabs replaces the root rather than stacking,
+      // so the back button leaves the app instead of walking through every tab.
+      if (TAB_ROOTS.includes(target) && TAB_ROOTS.includes(currentRoot)) {
+        return [target];
+      }
+      return current[current.length - 1] === target ? current : [...current, target];
+    });
   };
 
   const goBack = () => {
+    if (history.length <= 1) {
+      if (screen === 'home') return false;
+      setHistory(['home']);
+      return true;
+    }
     setHistory((current) => (current.length <= 1 ? current : current.slice(0, -1)));
+    return true;
   };
 
   return { screen, params, navigate, resetNonce, goBack, history };

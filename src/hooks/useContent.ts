@@ -14,7 +14,7 @@ import {
   tafsirSurahsInStore,
   type StorageSummary,
 } from '@/utils/contentStore';
-import { isWordMeaningsInstalled } from '@/utils/wordMeaningsService';
+import { isWordMeaningsInstalled } from '@/utils/quran/wordMeaningsService';
 import { TAFSIR_EDITIONS, HADITH_BOOKS } from '@/data/contentCatalog';
 import { AUDIO_RECITERS } from '@/data/audioReciters';
 

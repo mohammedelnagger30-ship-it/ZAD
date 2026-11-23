@@ -13,6 +13,9 @@ interface CardProps {
  * `cursor-pointer` div has neither focus nor an accessible role.
  */
 export function Card({ children, className = '', onClick, noPadding }: CardProps) {
+  const hasGradientBackground = className
+    .split(/\s+/)
+    .some((name) => name.startsWith('bg-linear-') || name.startsWith('bg-gradient-to-'));
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!onClick) return;
     // Enter and Space are the two keys a native <button> would respond to. Space must
@@ -31,6 +34,7 @@ export function Card({ children, className = '', onClick, noPadding }: CardProps
       tabIndex={onClick ? 0 : undefined}
       className={`
         bg-panel dark:bg-raised
+        ${hasGradientBackground ? '' : 'app-card-surface'}
         rounded-2xl shadow-sm
         border border-primary-100/80 dark:border-primary-800/60
         transition-smooth
@@ -52,11 +56,54 @@ interface SectionHeaderProps {
   action?: ReactNode;
 }
 
+interface PageHeaderProps {
+  title: string;
+  description?: string;
+  icon?: ReactNode;
+  actions?: ReactNode;
+  eyebrow?: string;
+}
+
+export function PageHeader({ title, description, icon, actions, eyebrow }: PageHeaderProps) {
+  return (
+    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-primary-100 pb-3.5 dark:border-primary-800/80">
+      <div className="flex min-w-0 items-center gap-3">
+        {icon && <IconWell>{icon}</IconWell>}
+        <div className="min-w-0">
+          {eyebrow && (
+            <p className="mb-0.5 text-xs font-semibold tracking-wide text-primary-600 dark:text-gold-300">
+              {eyebrow}
+            </p>
+          )}
+          <h1 className="text-xl font-bold text-primary-900 dark:text-primary-50 sm:text-2xl">{title}</h1>
+          {description && (
+            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-primary-700/75 dark:text-primary-300/80">
+              {description}
+            </p>
+          )}
+        </div>
+      </div>
+      {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+    </header>
+  );
+}
+
+export function IconWell({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-700 dark:bg-primary-900/60 dark:text-gold-300 ${className}`}
+    >
+      {children}
+    </span>
+  );
+}
+
 export function SectionHeader({ title, icon, action }: SectionHeaderProps) {
   return (
     <div className="flex items-center justify-between mb-3">
       <div className="flex items-center gap-2">
-        {icon && <span className="text-primary-600 dark:text-gold-400">{icon}</span>}
+        {icon && <span className="app-accent-icon">{icon}</span>}
         <h2 className="text-lg md:text-xl font-bold text-primary-800 dark:text-primary-100">{title}</h2>
       </div>
       {/* The action arrives as a bare text link; grow the BUTTON itself to a
@@ -90,7 +137,7 @@ export function Button({
   style,
 }: ButtonProps) {
   const variants: Record<string, string> = {
-    primary: 'bg-primary-600 hover:bg-primary-700 text-white shadow-sm',
+    primary: 'app-button-primary bg-primary-600 hover:bg-primary-700 text-white shadow-sm',
     secondary: 'bg-primary-100 hover:bg-primary-200 dark:bg-primary-800 dark:hover:bg-primary-700 text-primary-700 dark:text-primary-100',
     // These four sit on bright fills — gold-500, success-500, warning-500,
     // error-500 — and white on them measures 2.38, 2.28, 2.15 and 3.76:1, all

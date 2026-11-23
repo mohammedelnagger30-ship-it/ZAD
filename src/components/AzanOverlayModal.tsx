@@ -2,17 +2,28 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Play, Volume2, VolumeX, CheckCircle2, Bell, BookOpen, X, Sparkles, Clock, MapPin } from 'lucide-react';
 import type { Settings } from '@/db/database';
 import { getAdhanSound } from '@/data/adhanSounds';
-import { resolveAdhanPlayUrl } from '@/utils/adhanStore';
-import { formatTime12h, getDateInTimeZone, getIqamahTime, getPrayerTimeZone } from '@/utils/prayerTimes';
-import { confirmPrayer, PRAYER_LABELS_AR, type PrayerKey } from '@/utils/prayerTracker';
+import {
+  downloadedAdhanVoiceIds,
+  ensureAdhanVoicesLoaded,
+  resolveAdhanPlayUrl,
+  usableAdhanSound,
+} from '@/utils/adhanStore';
+import { formatTime12h, getDateInTimeZone, getIqamahTime, getPrayerTimeZone } from '@/utils/prayer/prayerTimes';
+import { confirmPrayer, PRAYER_LABELS_AR, type PrayerKey } from '@/utils/prayer/prayerTracker';
 import { formatDateKey, formatArabicDate, getHijriDate } from '@/utils/dateUtils';
 import { notificationId } from '@/utils/notifications';
 import { NOTIFICATION_BRAND } from '@/utils/notificationScheduler';
 import { trustedNow } from '@/utils/clock';
-import { setAdhanKeepScreenOn } from '@/utils/adhanOverlay';
+import {
+  getAdhanPlaybackStatus,
+  setAdhanKeepScreenOn,
+  stopAdhanPlayback,
+} from '@/utils/adhanOverlay';
 import { useOverlayDismiss } from '@/hooks/useOverlayDismiss';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
+import { useTheme } from '@/hooks/useApp';
+import { COLOR_PALETTES } from '@/utils/colorThemes';
 
 export interface AzanOverlayProps {
   isOpen: boolean;
@@ -22,11 +33,32 @@ export interface AzanOverlayProps {
   settings: Settings;
   isPreview?: boolean;
   /**
-   * Opened by the native adhan notification. The notification posts at the prayer
+   * This page is the «اختبار الأذان» self-test.
+   *
+   * The page stays silent for it whatever the channel did — a page that played its own
+   * copy would report a working adhan on a phone whose channel is dead, which is the
+   * one failure the test exists to catch. The replay button stays visible, so the
+   * reader can tell a dead channel from a dead page.
+   */
+  isTest?: boolean;
+  /**
+   * Opened by the native adhan/iqamah notification. The notification posts at the
    * instant itself and rings from its own channel, so the page must not start a second
-   * copy of the adhan on top of it (see `SYSTEM_RING_WINDOW_MS`).
+   * copy of the call on top of it (see `SYSTEM_RING_WINDOW_MS`).
    */
   fromNotification?: boolean;
+  /**
+   * The native verdict on whether an adhan is already sounding. Undefined on older
+   * notification paths, which posted through the ringing channel; false means the
+   * channel and the native speaker both failed and this page must speak.
+   */
+  ringing?: boolean;
+  /**
+   * The native alarm-stream speaker was armed because the channel could not ring.
+   * The page verifies its real playback state before trusting this: starting a service
+   * is not the same as a voice actually reaching the speaker.
+   */
+  nativePlayback?: boolean;
   onClose: () => void;
   onNavigateToAdhkar?: () => void;
 }
@@ -53,10 +85,53 @@ const AFTER_AZAN_DUAA = {
 const SYSTEM_RING_WINDOW_MS = 4 * 60_000;
 
 /**
+ * A native event may arrive a few seconds before the trusted clock reaches the prayer.
+ * Without a lower bound such a page was treated as "the channel is still ringing" and
+ * stayed silent — a future instant must never suppress this page's own speaker.
+ */
+const SYSTEM_SKEW_MS = 60_000;
+
+/**
  * Hard cap on holding the screen awake with the adhan page open: the page normally
  * releases it on close, this only covers a page left open by itself.
  */
 const KEEP_SCREEN_ON_MAX_MS = 5 * 60_000;
+
+/**
+ * How long the "first touch starts it" retry stays armed after auto-play was refused.
+ *
+ * A takeover can open while nobody holds the phone (over the lock screen, screen on in
+ * a pocket), and the WebView then needs a gesture before it will make a sound. That
+ * retry is the right answer for the moment — but not hours later: the first touch of a
+ * person picking the phone up at Asr must not start a Dhuhr that never rang. Past this
+ * window the visible fallback button remains the deliberate way in.
+ */
+const BLOCKED_RETRY_MAX_MS = 2 * 60_000;
+
+/**
+ * Confirm that the native fallback really reached audio.
+ *
+ * The receiver used to turn "a foreground service was started" into a `ringing: true`
+ * verdict and freeze it into an immutable PendingIntent. A voice that then failed to
+ * open left a silent page over a silent prayer. The page now asks the service itself;
+ * while the player is still preparing it waits briefly (a downloaded voice can take a
+ * moment) before deciding it must speak for itself.
+ */
+async function nativeAdhanIsPlaying(isCancelled: () => boolean): Promise<boolean> {
+  const deadline = Date.now() + 3_000;
+  while (!isCancelled()) {
+    let status;
+    try {
+      status = await getAdhanPlaybackStatus();
+    } catch {
+      return false;
+    }
+    if (status.playing) return true;
+    if (!status.preparing || Date.now() >= deadline) return false;
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 120));
+  }
+  return false;
+}
 
 export function AzanOverlayModal({
   isOpen,
@@ -65,27 +140,91 @@ export function AzanOverlayModal({
   prayerTime,
   settings,
   isPreview = false,
+  isTest = false,
   fromNotification = false,
+  ringing,
+  nativePlayback,
   onClose,
   onNavigateToAdhkar,
 }: AzanOverlayProps) {
+  const theme = useTheme();
+  let colorPalette = theme?.colorPalette;
+  if (!colorPalette) {
+    try {
+      colorPalette = (localStorage.getItem('zad:palette') ?? 'ocean') as typeof colorPalette;
+    } catch {
+      colorPalette = 'ocean';
+    }
+  }
+  const themeMode = theme?.themeMode || 'light';
+  const palette = COLOR_PALETTES.find((p) => p.id === colorPalette) ?? COLOR_PALETTES[0];
+  const primary = palette.color;
+  const accent = palette.accent;
   const [isPlaying, setIsPlaying] = useState(false);
-  /** The WebView refused to start the adhan without a gesture — fallback control. */
+  /** The WebView refused to start the adhan/iqamah without a gesture — fallback control. */
   const [blocked, setBlocked] = useState(false);
-  /** The prayer notification is ringing right now; the page's own audio stays out. */
+  /** The voice file could not be loaded at all — show a real error, not «starting…». */
+  const [audioError, setAudioError] = useState(false);
+  /** The notification is ringing right now; the page's own audio stays out. */
   const [systemRinging, setSystemRinging] = useState(false);
+  /**
+   * A «اختبار الأذان» page: the channel is being tested, so this page stays quiet too —
+   * but the replay button stays visible, which is how a dead channel gets told apart
+   * from a dead page.
+   */
+  const [selfTestQuiet, setSelfTestQuiet] = useState(false);
   const [ended, setEnded] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [snoozed, setSnoozed] = useState(false);
   const [showDuaa, setShowDuaa] = useState(true);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  // Back on Android dismisses the adhan page. Before this, back during the
-  // adhan exited the app entirely — silencing the call mid-flight.
+  /** True while the modal is mounted — guards setState / callbacks fired by timers. */
+  const mountedRef = useRef(true);
+  /** Timers that outlive the modal (snooze reminders, web fallback) — cleared on unmount. */
+  const pendingTimeouts = useRef<number[]>([]);
+  const clearPending = () => {
+    pendingTimeouts.current.forEach((t) => clearTimeout(t));
+    pendingTimeouts.current = [];
+  };
+  // Back on Android dismisses the page. Before this, back during the
+  // call exited the app entirely — silencing the call mid-flight.
   useOverlayDismiss(isOpen, onClose);
 
+  // Keep the mounted flag honest and tear down any timers we armed when the
+  // modal unmounts — a 10-minute snooze timer must not fire setState on a gone page.
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      clearPending();
+    };
+  }, []);
+
   const displayName = prayerName || PRAYER_LABELS_AR[prayerKey] || 'الصلاة';
+  // Whether this open may make noise at all.
+  const soundEnabled = settings.adhanSound;
+
+  // The chosen voice is what the card shows; the playable one may fall back to the
+  // bundled default if a downloaded file vanished. The scheduler makes the same choice
+  // for the notification channel, so the page and the channel cannot disagree.
   const adhanSound = getAdhanSound(settings.adhanVoiceId);
+  const [playVoice, setPlayVoice] = useState(adhanSound);
+  useEffect(() => {
+    let alive = true;
+    void ensureAdhanVoicesLoaded().then(() => {
+      if (alive) {
+        setPlayVoice(usableAdhanSound(settings.adhanVoiceId, downloadedAdhanVoiceIds()));
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [settings.adhanVoiceId]);
+
+  const selectedSound = playVoice;
+  const selectedPlayUrl = `/audio/${selectedSound.file}`;
+
   /**
    * Where the recording lives. A bundled voice is in the package, so its URL is known
    * at once; a downloaded one is answered by the store, and the play effect below waits
@@ -96,18 +235,29 @@ export function AzanOverlayModal({
   );
 
   useEffect(() => {
-    if (adhanSound.bundled) {
-      setAudioUrl(`/audio/${adhanSound.file}`);
+    if (selectedSound.bundled) {
+      setAudioUrl(selectedPlayUrl);
       return;
     }
     let alive = true;
-    void resolveAdhanPlayUrl(adhanSound).then((url) => {
-      if (alive) setAudioUrl(url);
-    });
+    void resolveAdhanPlayUrl(selectedSound)
+      .then((url) => {
+        if (alive) setAudioUrl(url);
+      })
+      .catch((err: unknown) => {
+        console.warn('Could not resolve the adhan voice file:', err);
+        if (alive) {
+          // Last resort: a shipped voice always exists in the APK, even when a
+          // downloaded one has gone missing from disk.
+          const fallback = usableAdhanSound(settings.adhanVoiceId, new Set());
+          setPlayVoice(fallback);
+          setAudioUrl(`/audio/${fallback.file}`);
+        }
+      });
     return () => {
       alive = false;
     };
-  }, [adhanSound]);
+  }, [selectedSound, selectedPlayUrl, settings.adhanVoiceId]);
 
   const timeZone = getPrayerTimeZone(settings.timeZone, settings.cityName);
   const displayTime = prayerTime
@@ -130,7 +280,9 @@ export function AzanOverlayModal({
       }
       setIsPlaying(false);
       setBlocked(false);
+      setAudioError(false);
       setSystemRinging(false);
+      setSelfTestQuiet(false);
       setEnded(false);
       setConfirmed(false);
       setSnoozed(false);
@@ -143,7 +295,11 @@ export function AzanOverlayModal({
     const audio = new Audio(audioUrl);
     audioRef.current = audio;
     audio.loop = false;
+    audio.volume = 1;
+    audio.muted = false;
+    setIsMuted(false);
     setBlocked(false);
+    setAudioError(false);
     setSystemRinging(false);
     setEnded(false);
 
@@ -151,12 +307,29 @@ export function AzanOverlayModal({
       setIsPlaying(false);
       setEnded(true);
     };
+    const handleError = () => {
+      // A file that will not load must not leave the page claiming «يبدأ صوت الأذان».
+      console.warn('The adhan audio element could not load its voice');
+      setIsPlaying(false);
+      setAudioError(true);
+    };
     audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('error', handleError);
+
+    let retryTimer: number | undefined;
+
+    const stopFirstTouchRetry = () => {
+      window.removeEventListener('pointerdown', startOnFirstTouch, true);
+      window.removeEventListener('keydown', startOnFirstTouch, true);
+      if (retryTimer !== undefined) {
+        window.clearTimeout(retryTimer);
+        retryTimer = undefined;
+      }
+    };
 
     // Fired only by the retry path below (a first touch, or the fallback control).
     const startOnFirstTouch = () => {
-      window.removeEventListener('pointerdown', startOnFirstTouch, true);
-      window.removeEventListener('keydown', startOnFirstTouch, true);
+      stopFirstTouchRetry();
       start();
     };
 
@@ -170,42 +343,92 @@ export function AzanOverlayModal({
         .catch((err: unknown) => {
           // The WebView refused to start on its own. Arm a retry on the first touch, so
           // the adhan begins the moment the screen is touched instead of waiting for a
-          // button hunt — and keep that button visible as the very last resort.
+          // button hunt — and keep that button visible as the very last resort. The
+          // retry is time-boxed (see BLOCKED_RETRY_MAX_MS) so it cannot detonate on a
+          // touch that comes hours later.
           console.warn('Audio auto-play failed (user interaction required):', err);
           setIsPlaying(false);
           setBlocked(true);
           window.addEventListener('pointerdown', startOnFirstTouch, true);
           window.addEventListener('keydown', startOnFirstTouch, true);
+          retryTimer = window.setTimeout(stopFirstTouchRetry, BLOCKED_RETRY_MAX_MS);
         });
     };
 
     /*
-     * The prayer notification is posted at the instant itself and rings from its own
+     * The prayer/iqamah notification is posted at the instant itself and rings from its own
      * channel, so a page arriving together with it stays quiet — two copies of the
-     * adhan would overlap. Every other opening (preview, the in-app timer, a tap on
+     * call would overlap. Every other opening (preview, the in-app timer, a tap on
      * the notification long after the prayer) arrives to silence: this page is the
      * speaker then.
      */
-    const systemRingingNow =
-      fromNotification &&
-      !isPreview &&
-      prayerTime != null &&
-      trustedNow().getTime() - prayerTime.getTime() < SYSTEM_RING_WINDOW_MS;
+    const age = prayerTime != null
+      ? trustedNow().getTime() - prayerTime.getTime()
+      : Number.NaN;
+    const inRingWindow =
+      Number.isFinite(age) &&
+      age >= -SYSTEM_SKEW_MS &&
+      age < SYSTEM_RING_WINDOW_MS;
 
-    if (systemRingingNow) {
-      setSystemRinging(true);
-    } else if (settings.adhanSound || isPreview) {
-      start();
-    }
+    /*
+     * `ringing` now describes the *channel only*. When it is false the native alarm-stream
+     * speaker may have been armed instead — but a started service is not proof of sound.
+     * The page queries the player before giving up its own voice. The query also covers a
+     * race where `notify()` failed after the immutable PendingIntent was created: the
+     * frozen payload can still say `nativePlayback: false` while the service is playing.
+     */
+    const needsNativeCheck =
+      fromNotification && inRingWindow &&
+      (nativePlayback === true || ringing === false);
+
+    let cancelled = false;
+
+    void (async () => {
+      const nativePlaying = needsNativeCheck
+        ? await nativeAdhanIsPlaying(() => cancelled)
+        : false;
+      if (cancelled) return;
+
+      // A «اختبار الأذان» page is a probe of the *other* speakers, not of itself. It must
+      // stay quiet whatever verdict arrived — a test that passes because this page sang
+      // would say nothing about the channel or the native fallback being tested, which
+      // is the one thing the reader opened it to learn. Keyed on the test itself, before
+      // any ringing/preview branch, so no combination of flags can start a page copy.
+      // The replay button stays visible for telling a dead channel from a dead page.
+      if (isTest) {
+        setSystemRinging(false);
+        setSelfTestQuiet(true);
+        return;
+      }
+
+      // `undefined` only reaches us from the older local-notification path, whose card
+      // posted through the (ringing) channel, so it keeps the old behaviour. A native
+      // fallback that really reached audio counts as ringing, whatever the frozen launch
+      // payload said.
+      const systemRingingNow =
+        fromNotification && !isPreview && inRingWindow &&
+        (ringing !== false || nativePlaying);
+
+      if (systemRingingNow) {
+        setSystemRinging(true);
+        setSelfTestQuiet(false);
+      } else if (soundEnabled || isPreview) {
+        start();
+      }
+    })();
 
     return () => {
+      cancelled = true;
       audio.removeEventListener('ended', handleEnded);
-      window.removeEventListener('pointerdown', startOnFirstTouch, true);
-      window.removeEventListener('keydown', startOnFirstTouch, true);
+      audio.removeEventListener('error', handleError);
+      stopFirstTouchRetry();
       audio.pause();
       audioRef.current = null;
     };
-  }, [isOpen, audioUrl, settings.adhanSound, isPreview, fromNotification, prayerTime]);
+  }, [
+    isOpen, audioUrl, soundEnabled, isPreview, isTest, fromNotification,
+    ringing, nativePlayback, prayerTime,
+  ]);
 
   /*
    * The takeover wakes the screen at prayer time, but Android's screen timeout would
@@ -225,35 +448,73 @@ export function AzanOverlayModal({
     };
   }, [isOpen]);
 
-  /** Fallback control, rendered only when auto-start was refused. */
-  const startAudio = useCallback(() => {
+  /**
+   * Play (or replay) this page's own copy of the call.
+   *
+   * Always offered, not only when auto-play was refused. The page is the one place a
+   * reader can hear the adhan again after a phone came out of Doze with the volume
+   * down, a channel the system had muted, or a takeover that arrived while the ringer
+   * was on silent — the states this whole reliability work is about. Before, the button
+   * existed only when the WebView refused to start, so a person who had heard nothing
+   * had nothing to press.
+   */
+  const replayAudio = useCallback(() => {
+    // If the native alarm-stream speaker took over, hand the sound back to the page
+    // before replaying; otherwise the same call would play from two speakers at once.
+    void stopAdhanPlayback();
     const audio = audioRef.current;
     if (!audio) return;
+    // Already speaking: restart rather than stacking a second position on top of it.
+    if (!audio.paused) {
+      audio.currentTime = 0;
+      audio.volume = isMuted ? 0 : 1;
+      audio.muted = isMuted;
+      return;
+    }
+    audio.currentTime = 0;
+    audio.volume = isMuted ? 0 : 1;
+    audio.muted = isMuted;
     audio
       .play()
       .then(() => {
         setIsPlaying(true);
         setBlocked(false);
+        setEnded(false);
       })
       .catch(() => setBlocked(true));
-  }, []);
+  }, [isMuted]);
 
-  const toggleMute = () => {
-    if (!audioRef.current) return;
-    audioRef.current.muted = !isMuted;
-    setIsMuted(!isMuted);
-  };
+  const toggleMute = useCallback(() => {
+    const audio = audioRef.current;
+    if (audio) {
+      const nextMuted = !isMuted;
+      audio.muted = nextMuted;
+      audio.volume = nextMuted ? 0 : 1;
+      // The fallback speaker is a separate MediaPlayer. Muting only this element would
+      // leave the adhan audible in the background, which is not what «كتم الصوت» means.
+      if (nextMuted) void stopAdhanPlayback();
+      setIsMuted(nextMuted);
+      return;
+    }
+    // No local audio element (e.g. sound is coming from the system notification/channel).
+    // We can't mute the OS notification from here, so just toggle the UI state to avoid confusion.
+    setIsMuted((v) => !v);
+  }, [isMuted]);
 
   /** One line telling the person what the sound is doing — never «اضغط للتشغيل». */
   const soundStatus = systemRinging
     ? 'الأذان يُشغَّل تلقائيًا مع التنبيه'
-    : blocked
-      ? 'تعذّر التشغيل التلقائي — اضغط للتشغيل'
-      : isPlaying
-        ? 'جارٍ تشغيل الأذان الآن…'
-        : ended
-          ? 'انتهى الأذان'
-          : 'يبدأ صوت الأذان تلقائيًا…';
+    : selfTestQuiet
+      ? 'اختبار: انتظر صوت التنبيه — إن لم يرن فالمشكلة في قناة الهاتف'
+      : audioError
+        ? 'تعذّر تحميل صوت الأذان — جرّب زر التشغيل'
+        : blocked
+          ? 'تعذّر التشغيل التلقائي — اضغط زر التشغيل'
+          : isPlaying
+            ? 'جارٍ تشغيل الأذان الآن…'
+            : ended
+              ? 'انتهى الأذان — يمكنك تشغيله من جديد'
+              : 'يبدأ صوت الأذان تلقائيًا…';
 
   const handleConfirmPrayer = useCallback(async () => {
     // A preview is a look at the page, never an answer: it must not write a record for
@@ -266,16 +527,17 @@ export function AzanOverlayModal({
       // and `todayKey()` (the device's day) would stamp the wrong date onto it.
       const prayerDate = formatDateKey(getDateInTimeZone(prayerTime ?? trustedNow(), timeZone));
       await confirmPrayer(prayerDate, prayerKey, 'ontime');
-      setConfirmed(true);
+      if (mountedRef.current) setConfirmed(true);
       if (audioRef.current) {
         audioRef.current.pause();
       }
-      setTimeout(() => {
-        onClose();
+      const closeTimer = window.setTimeout(() => {
+        if (mountedRef.current) onClose();
       }, 1400);
+      pendingTimeouts.current.push(closeTimer);
     } catch (err) {
       console.error('Failed to confirm prayer:', err);
-      onClose();
+      if (mountedRef.current) onClose();
     }
   }, [isPreview, prayerKey, prayerTime, timeZone, onClose]);
 
@@ -336,17 +598,19 @@ export function AzanOverlayModal({
       } catch {
         // Notifications unavailable: the overlay reopening is still armed below.
       }
-      window.setTimeout(() => {
+      const triggerTimer = window.setTimeout(() => {
         window.dispatchEvent(
           new CustomEvent('zad:trigger-azan', {
             detail: { prayerKey, prayerName, prayerTime, isPreview: true },
           }),
         );
       }, 10 * 60000);
+      pendingTimeouts.current.push(triggerTimer);
     }
-    setTimeout(() => {
-      onClose();
+    const closeTimer = window.setTimeout(() => {
+      if (mountedRef.current) onClose();
     }, 1200);
+    pendingTimeouts.current.push(closeTimer);
   }, [displayName, onClose, prayerKey, prayerName, prayerTime]);
 
   const handleGoToAdhkar = () => {
@@ -367,27 +631,36 @@ export function AzanOverlayModal({
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-start md:items-center justify-center overflow-y-auto bg-slate-950/90 backdrop-blur-md p-4 py-6 min-h-full transition-all duration-300"
+      className="fixed inset-0 z-[9999] flex items-start md:items-center justify-center overflow-y-auto bg-black/90 p-3 py-4 backdrop-blur-sm transition-all duration-300 sm:p-4 sm:py-6"
       dir="rtl"
       role="dialog"
       aria-modal="true"
+      data-color-palette={colorPalette}
+      data-theme-mode={themeMode}
+      style={{ backgroundColor: 'rgba(2, 8, 6, 0.94)' }}
     >
-      {/* Background Decorative Ambient Glows */}
-      <div className="pointer-events-none absolute top-1/4 right-1/2 h-96 w-96 -translate-y-1/2 translate-x-1/2 rounded-full bg-emerald-600/20 blur-3xl" />
-      <div className="pointer-events-none absolute bottom-10 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-amber-500/15 blur-3xl" />
-
       {/* Main Container Card */}
-      <div className="relative w-full max-w-lg md:max-w-xl overflow-hidden rounded-3xl border border-emerald-500/30 bg-linear-to-b from-slate-900 via-emerald-950/90 to-slate-900 p-6 text-white shadow-2xl ring-1 ring-white/10 my-auto">
-        
+      <div
+        className="relative my-auto w-full max-w-md overflow-hidden rounded-3xl border p-4 text-white shadow-[0_32px_80px_-28px_rgba(0,0,0,0.9)] ring-1 ring-white/10 sm:p-6"
+        style={{
+          borderColor: `${primary}99`,
+          background: 'linear-gradient(160deg, #10251b 0%, #0a1711 42%, #07100c 100%)',
+        }}
+      >
         {/* Top Header Bar */}
-        <div className="flex items-center justify-between pb-4 border-b border-emerald-500/20">
-          <div className="flex items-center gap-2">
-            <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+        <div
+          className="flex items-center justify-between border-b border-white/10 pb-4"
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/10" style={{ color: accent }}>
+              <Bell size={16} />
             </span>
-            <span className="text-xs font-semibold text-emerald-400 tracking-wide">
-              {isPreview ? 'معاينة صفحة الأذان' : 'حَانَ الآنْ مَوْعِدُ الأَذَانْ'}
+            <span className="text-xs font-bold tracking-wide text-slate-200">
+              {isTest
+                ? 'اختبار الأذان — تحقّق من وصول الصوت'
+                : isPreview
+                  ? 'معاينة صفة الأذان'
+                  : 'حَانَ الآنْ مَوْعِدُ الأَذَانْ'}
             </span>
           </div>
 
@@ -402,79 +675,98 @@ export function AzanOverlayModal({
         </div>
 
         {/* Center Visual Circle & Sound Wave */}
-        <div className="my-6 text-center">
-          <div className="relative mx-auto flex h-28 w-28 items-center justify-center rounded-full bg-linear-to-tr from-emerald-700 to-amber-500 p-1 shadow-lg shadow-emerald-900/50">
+        <div className="my-5 rounded-2xl border border-white/10 p-4 text-center sm:p-5" style={{ backgroundColor: '#0d1c14' }}>
+          <div
+            className="relative mx-auto flex h-24 w-24 items-center justify-center rounded-full p-1 shadow-lg"
+            style={{
+              backgroundImage: `linear-gradient(135deg, ${primary} 0%, ${accent} 100%)`,
+              boxShadow: `0 25px 60px -30px ${primary}80`,
+            }}
+          >
             {isPlaying && (
               <>
-                <div className="absolute inset-0 animate-ping rounded-full bg-emerald-500/30 duration-1000" />
-                <div className="absolute -inset-2 animate-pulse rounded-full border border-amber-400/40" />
+                <div className="absolute inset-0 animate-ping rounded-full duration-1000" style={{ backgroundColor: `${primary}40` }} />
+                <div className="absolute -inset-2 animate-pulse rounded-full border" style={{ borderColor: `${accent}55` }} />
               </>
             )}
-            <div className="flex h-full w-full items-center justify-center rounded-full bg-slate-950/80 backdrop-blur-xs">
-              <Sparkles size={44} className="text-amber-300 animate-pulse" />
+            <div className="flex h-full w-full items-center justify-center rounded-full bg-[#07100c]">
+              <Sparkles size={44} className="animate-pulse" style={{ color: accent }} />
             </div>
           </div>
 
           {/* Prayer Title & Time */}
-          <h2 className="mt-4 text-3xl font-extrabold text-white tracking-wide">
+          <h2 className="mt-4 text-2xl font-extrabold tracking-wide text-white sm:text-3xl">
             صلاة {displayName}
           </h2>
-          <p className="mt-1 text-2xl font-bold text-amber-300 flex items-center justify-center gap-2">
-            <Clock size={20} className="text-amber-400" />
+          <p className="mt-1 flex items-center justify-center gap-2 text-2xl font-bold" style={{ color: accent }}>
+            <Clock size={20} style={{ color: accent }} />
             {displayTime}
           </p>
           {iqamahTime && (
-            <p className="mt-1.5 flex items-center justify-center gap-2 text-sm font-semibold text-emerald-300">
-              <Clock size={15} className="text-emerald-400" />
+            <p className="mt-1.5 flex items-center justify-center gap-2 text-sm font-semibold text-slate-200">
+              <Clock size={15} style={{ color: primary }} />
               الإقامة {iqamahTime}
             </p>
           )}
 
           {/* Location & Date */}
-          <div className="mt-3 flex flex-wrap items-center justify-center gap-3 text-xs text-slate-300">
-            <span className="flex items-center gap-1">
-              <MapPin size={14} className="text-emerald-400" />
-              {settings.cityName || 'الموقع الحالي'}
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 border-t border-white/10 pt-3 text-xs text-slate-300">
+            <span className="flex items-center gap-1.5">
+              <MapPin size={14} style={{ color: accent }} />
+              <span>{settings.cityName || 'الموقع الحالي'}</span>
             </span>
-            <span>•</span>
+            <span className="hidden text-slate-600 sm:inline">•</span>
             <span>{formatArabicDate(today)}</span>
-            <span>•</span>
+            <span className="hidden text-slate-600 sm:inline">•</span>
             <span>{getHijriDate(today, settings.hijriAdjustment)}</span>
           </div>
         </div>
 
-        {/* Adhan sound — starts by itself with the page, no button to hunt for */}
-        {settings.adhanSound && (
-          <div className="mb-6 rounded-2xl border border-emerald-500/20 bg-slate-900/60 p-3.5 backdrop-blur-xs">
+        {/* Adhan/Iqamah sound — starts by itself with the page, no button to hunt for */}
+        {soundEnabled && (
+          <div
+            className="mb-4 rounded-2xl border border-white/10 p-3.5"
+            style={{
+              backgroundColor: '#102019',
+            }}
+          >
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 overflow-hidden">
                 {/*
-                  Rendered only when the WebView refused to auto-start the adhan: a
-                  safety net, not the normal way to hear it.
+                  Always rendered: the reader who heard nothing (Doze held the channel,
+                  the ringer was on silent, the phone was in ДND) needs a way to hear the
+                  call without hunting. It doubles as the safety net when the WebView
+                  refused to auto-start.
                 */}
-                {blocked && (
-                  <button
-                    type="button"
-                    onClick={startAudio}
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-slate-950 font-bold hover:bg-amber-400 transition"
-                    aria-label="تشغيل الأذان"
-                  >
-                    <Play size={22} className="mr-0.5" />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={replayAudio}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl font-bold transition"
+                  style={{
+                    backgroundImage: `linear-gradient(135deg, ${accent} 0%, ${primary} 100%)`,
+                    color: '#0b1026',
+                  }}
+                  aria-label="تشغيل الأذان"
+                >
+                  <Play size={22} className="mr-0.5" />
+                </button>
                 <div className="truncate text-right">
-                  <p className="text-xs font-semibold text-white truncate">{adhanSound.name}</p>
-                  <p className="text-[0.6875rem] text-emerald-400">{soundStatus}</p>
+                  {/* Show the voice actually playing, not the chosen one: a downloaded
+                      voice can vanish from disk and silently fall back to a bundled one.
+                      Naming the missing file here would claim the reader heard a voice
+                      they did not. */}
+                  <p className="text-xs font-semibold text-white truncate">{selectedSound.name}</p>
+                  <p className="text-[0.6875rem] text-slate-400">{soundStatus}</p>
                 </div>
               </div>
 
               {/* Soundwaves effect when playing */}
               {isPlaying && (
                 <div className="flex items-end gap-1 h-6 px-2">
-                  <span className="w-1 bg-amber-400 rounded-full animate-[bounce_1s_infinite_100ms] h-4" />
-                  <span className="w-1 bg-emerald-400 rounded-full animate-[bounce_1s_infinite_300ms] h-6" />
-                  <span className="w-1 bg-amber-300 rounded-full animate-[bounce_1s_infinite_200ms] h-3" />
-                  <span className="w-1 bg-emerald-500 rounded-full animate-[bounce_1s_infinite_400ms] h-5" />
+                  <span className="w-1 rounded-full animate-[bounce_1s_infinite_100ms] h-4" style={{ backgroundColor: accent }} />
+                  <span className="w-1 rounded-full animate-[bounce_1s_infinite_300ms] h-6" style={{ backgroundColor: primary }} />
+                  <span className="w-1 rounded-full animate-[bounce_1s_infinite_200ms] h-3" style={{ backgroundColor: accent }} />
+                  <span className="w-1 rounded-full animate-[bounce_1s_infinite_400ms] h-5" style={{ backgroundColor: primary }} />
                 </div>
               )}
 
@@ -483,11 +775,11 @@ export function AzanOverlayModal({
                 while the page is the speaker — the notification's ringing belongs to
                 Android and is stopped by dismissing the alert.
               */}
-              {!systemRinging && (
+              {!systemRinging && !isTest && (
                 <button
                   type="button"
                   onClick={toggleMute}
-                  className="rounded-lg min-h-11 min-w-11 p-2.5 text-slate-400 hover:text-white transition"
+                  className="min-h-11 min-w-11 rounded-lg p-2.5 text-slate-400 transition hover:bg-white/10 hover:text-white"
                   aria-label={isMuted ? 'إلغاء الكتم' : 'كتم الصوت'}
                 >
                   {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
@@ -497,33 +789,40 @@ export function AzanOverlayModal({
           </div>
         )}
 
-        {/* Supplication After Azan Card */}
-        <div className="mb-6 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
-              <Sparkles size={14} />
-              {AFTER_AZAN_DUAA.title}
-            </h3>
-            <button
-              type="button"
-              onClick={() => setShowDuaa(!showDuaa)}
-              className="px-2 py-1 text-xs text-slate-400 underline hover:text-slate-200"
-            >
-              {showDuaa ? 'إخفاء' : 'عرض'}
-            </button>
-          </div>
-
-          {showDuaa && (
-            <div className="space-y-2 text-right">
-              <p className="text-sm font-semibold text-emerald-100 leading-relaxed font-serif">
-                "{AFTER_AZAN_DUAA.text}"
-              </p>
-              <p className="text-[0.6875rem] text-amber-200/80 italic">
-                {AFTER_AZAN_DUAA.benefit}
-              </p>
+        {/* Supplication After Azan Card — only for adhan, not iqamah */}
+        {(
+          <div
+            className="mb-4 rounded-2xl border border-white/10 p-4"
+            style={{
+              backgroundColor: '#171c12',
+            }}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-bold flex items-center gap-1.5" style={{ color: accent }}>
+                <Sparkles size={14} />
+                {AFTER_AZAN_DUAA.title}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowDuaa(!showDuaa)}
+                className="rounded-lg px-2.5 py-1.5 text-xs text-slate-300 underline-offset-2 transition hover:bg-white/10 hover:text-white hover:underline"
+              >
+                {showDuaa ? 'إخفاء' : 'عرض'}
+              </button>
             </div>
-          )}
-        </div>
+
+            {showDuaa && (
+              <div className="space-y-2 text-right">
+                <p className="font-serif text-sm font-semibold leading-loose text-slate-100">
+                  «{AFTER_AZAN_DUAA.text}»
+                </p>
+                <p className="text-[0.6875rem] italic" style={{ color: accent }}>
+                  {AFTER_AZAN_DUAA.benefit}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="space-y-2.5">
@@ -537,7 +836,7 @@ export function AzanOverlayModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 py-3 px-4 font-bold text-sm text-slate-200 transition hover:bg-slate-800"
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-slate-800 py-3 px-4 text-sm font-bold text-slate-100 transition hover:bg-slate-700"
             >
               <X size={18} />
               إنهاء المعاينة
@@ -549,11 +848,15 @@ export function AzanOverlayModal({
             type="button"
             onClick={handleConfirmPrayer}
             disabled={confirmed}
-            className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 px-4 font-bold text-sm transition-all shadow-lg ${
+            className="flex w-full items-center justify-center gap-2 rounded-xl py-3 px-4 text-sm font-bold text-white shadow-lg transition-all"
+            style={
               confirmed
-                ? 'bg-emerald-600 text-white'
-                : 'bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white shadow-emerald-900/40'
-            }`}
+                ? { backgroundColor: primary }
+                : {
+                    backgroundImage: `linear-gradient(90deg, ${primary} 0%, ${accent} 100%)`,
+                    boxShadow: `0 20px 40px -20px ${primary}66`,
+                  }
+            }
           >
             <CheckCircle2 size={18} />
             {confirmed ? 'تم تسجيل أدائك للصلاة بنجاح!' : `تمت صلاة ${displayName} (تسجيل بالجدول)`}
@@ -565,9 +868,13 @@ export function AzanOverlayModal({
               type="button"
               onClick={handleSnooze}
               disabled={snoozed}
-              className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-800 py-2.5 md:py-3 px-3 text-xs md:text-sm font-semibold text-slate-200 transition"
+              className="flex items-center justify-center gap-1.5 rounded-xl border py-2.5 px-3 text-xs font-semibold text-slate-100 transition hover:bg-white/10 md:py-3 md:text-sm"
+              style={{
+                borderColor: `${primary}99`,
+                backgroundColor: '#102019',
+              }}
             >
-              <Bell size={15} className="text-amber-400" />
+              <Bell size={15} style={{ color: accent }} />
               {snoozed
                 ? Capacitor.isNativePlatform()
                   ? 'تم التذكير بعد 10د'
@@ -579,9 +886,13 @@ export function AzanOverlayModal({
             <button
               type="button"
               onClick={handleGoToAdhkar}
-              className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-800 py-2.5 md:py-3 px-3 text-xs md:text-sm font-semibold text-slate-200 transition"
+              className="flex items-center justify-center gap-1.5 rounded-xl border py-2.5 px-3 text-xs font-semibold text-slate-100 transition hover:bg-white/10 md:py-3 md:text-sm"
+              style={{
+                borderColor: `${primary}99`,
+                backgroundColor: '#102019',
+              }}
             >
-              <BookOpen size={15} className="text-emerald-400" />
+              <BookOpen size={15} style={{ color: primary }} />
               أذكار الصلاة
             </button>
           </div>
