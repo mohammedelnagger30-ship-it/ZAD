@@ -55,6 +55,16 @@
             android:stopWithTask="false"
             android:foregroundServiceType="mediaPlayback" />
 
+        <!-- The adhan's own speaker, used only when the prayer channel cannot ring.
+             Media playback is the reason it stays alive through a three-minute call
+             with the screen off; it plays on the alarm stream, not the media stream. -->
+        <service
+            android:name=".AdhanPlaybackService"
+            android:enabled="true"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="mediaPlayback" />
+
         <!-- The card's three transport buttons. Nothing outside this app can reach it. -->
         <receiver
             android:name=".RecitationMediaReceiver"
@@ -115,6 +125,10 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Lets the reader grant DND bypass in system settings. Without the declaration
+         Android ignores setBypassDnd(true) on prayer channels; the native alarm-stream
+         speaker still covers Vibrate and ungrantable DND on ROMs that refuse it. -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <!-- The WebView's own geolocation prompt (PrayerScreen «موقعي الحالي») resolves
          through these host permissions; without them the callback always errors. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />

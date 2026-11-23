@@ -1100,6 +1100,8 @@ function AppContent({
             isPreview={azanState.isPreview}
             isTest={azanState.isTest}
             fromNotification={azanState.fromNotification}
+            ringing={azanState.ringing}
+            nativePlayback={azanState.nativePlayback}
             onClose={closeAzan}
             onNavigateToAdhkar={() => navigate('adhkar')}
           />

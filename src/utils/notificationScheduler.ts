@@ -534,14 +534,14 @@ export async function createNotificationChannels(settings: Settings): Promise<vo
       soundPath: storedPath,
     });
   } else {
-    await LocalNotifications.createChannel({
+    // Capacitor's channel builder always uses USAGE_NOTIFICATION, which Android mutes
+    // on Vibrate/DND — the connected tablet's exact symptom. The app's own builder
+    // creates the prayer channel on the alarm stream instead.
+    await setAdhanChannel({
       id: `prayer-${adhan.id}`,
       name: `الأذان — ${adhan.name}`,
       description: 'تنبيه عند دخول وقت الصلاة',
-      importance: 4,
       sound: adhan.file,
-      vibration: true,
-      visibility: 1,
     });
   }
   await LocalNotifications.createChannel({
@@ -595,14 +595,11 @@ async function rebuildSilentPrayerChannel(settings: Settings): Promise<void> {
         soundPath: storedPath,
       });
     } else {
-      await LocalNotifications.createChannel({
+      await setAdhanChannel({
         id,
         name: `الأذان — ${adhan.name}`,
         description: 'تنبيه عند دخول وقت الصلاة',
-        importance: 4,
         sound: adhan.file,
-        vibration: true,
-        visibility: 1,
       });
     }
     notifyNotificationWarning('channel-silent');
@@ -844,8 +841,19 @@ async function rebuildNotifications(): Promise<void> {
     // A channel the reader silenced themselves is a choice, not a bug: rebuilding it
     // would put a sound back they had asked to remove. Only the app's own mistake —
     // a channel that was born without a sound — is repaired here.
-    if (status?.channelSoundOk === false && status?.channelMuted !== true) {
-      console.warn('[notify] prayer channel has no sound — rebuilding it');
+    // An old channel built by Capacitor has a sound but sits on USAGE_NOTIFICATION,
+    // so a phone left on Vibrate shows the page with no adhan. Treat that as the same
+    // broken-channel state and rebuild it once on the alarm stream. DND bypass is
+    // best-effort: many ROMs refuse it to apps without policy access, and rebuilding
+    // on every resume would reset the reader's own channel settings for nothing.
+    const channelBroken = status?.channelSoundOk === false
+      || status?.channelUsesAlarm === false;
+    if (channelBroken && status?.channelMuted !== true) {
+      console.warn('[notify] prayer channel cannot ring as an alarm — rebuilding it', {
+        soundOk: status?.channelSoundOk,
+        usesAlarm: status?.channelUsesAlarm,
+        bypassesDnd: status?.channelBypassesDnd,
+      });
       await rebuildSilentPrayerChannel(settings);
     }
   }

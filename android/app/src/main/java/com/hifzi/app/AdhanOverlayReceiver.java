@@ -10,6 +10,7 @@ import android.content.Intent;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.media.AudioAttributes;
+import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Build;
 import android.text.format.DateFormat;
@@ -77,8 +78,14 @@ public class AdhanOverlayReceiver extends BroadcastReceiver {
     static final String EXTRA_SOUND = "sound";
     /** Absolute path of a downloaded voice — the FileProvider route, see {@link #ensureChannel}. */
     static final String EXTRA_SOUND_PATH = "soundPath";
-    /** Whether the card above rang: {@code false} makes the page speak the call itself. */
+    /** Whether the prayer channel itself rang. Never inferred from a service start. */
     static final String EXTRA_RINGING = "ringing";
+    /**
+     * The native alarm-stream speaker was armed because the channel could not ring.
+     * The page checks its real playback state before deciding whether to speak too —
+     * starting a foreground service is not proof that a voice actually played.
+     */
+    static final String EXTRA_NATIVE_PLAYBACK = "nativePlayback";
 
     /**
      * How far outside its own instant an alarm may still be treated as <i>the</i> call.
@@ -136,12 +143,35 @@ public class AdhanOverlayReceiver extends BroadcastReceiver {
             return;
         }
 
-        ensureChannel(context, channelId, intent.getStringExtra(EXTRA_SOUND),
-            intent.getStringExtra(EXTRA_SOUND_PATH));
+        final String sound = intent.getStringExtra(EXTRA_SOUND);
+        final String soundPath = intent.getStringExtra(EXTRA_SOUND_PATH);
+        ensureChannel(context, channelId, sound, soundPath);
+
+        // The reader asked for no adhan at all on the silent channel. A channel that
+        // cannot ring for any *other* reason (a broken FileProvider grant, DND on an
+        // old channel, an OEM refusing notify()) is different: that is exactly when a
+        // native speaker has to take over.
+        final boolean wantsSound = !"prayer-muted".equals(channelId)
+            && (hasText(sound) || hasText(soundPath));
+        final boolean channelCanRing = notificationsCanRing(context, channelId);
+
+        // The ringing verdict must be known *before* the PendingIntent is made: a
+        // FLAG_IMMUTABLE PendingIntent snapshots its extras at creation, so adding the
+        // flag later (as this receiver used to) lost it on every Android 10+ full-screen
+        // takeover — the only path a closed phone actually uses.
+        boolean nativePlayback = false;
+        if (!channelCanRing && wantsSound) {
+            nativePlayback = AdhanPlaybackService.play(context, sound, soundPath, title);
+        }
+        // `ringing` describes the *channel only*. A started service is not proof that a
+        // voice played, so the page is told separately that a native speaker was armed
+        // and checks its real state before deciding to stay quiet.
+        final boolean ringing = channelCanRing;
 
         // Read the type from the alarm intent (defaults to "prayer")
         final String type = intent.getStringExtra(EXTRA_TYPE);
-        Intent launch = buildLaunchIntent(context, prayerKey, prayerName, time, type);
+        Intent launch = buildLaunchIntent(
+            context, prayerKey, prayerName, time, type, ringing, nativePlayback);
 
         // Tapping the card and the full-screen takeover open the very same page; both
         // carry the prayer so the overlay can show the right one.
@@ -174,28 +204,21 @@ public class AdhanOverlayReceiver extends BroadcastReceiver {
             NotificationManagerCompat.from(context).notify(id, notification);
         } catch (RuntimeException e) {
             // MIUI and relatives have been known to throw here (channel/app-op quirks).
-            // The alarm still stands, so the page is opened below regardless — and it is
-            // told below that nothing is ringing, which makes it speak the call itself.
-            // Bailing out here used to leave a foreground app with neither card nor page:
-            // the reader saw nothing at all and the prayer passed in silence.
+            // The alarm still stands, so the page is opened below regardless — and the
+            // native speaker below keeps the call audible. Bailing out here used to
+            // leave a foreground app with neither card nor page.
             posted = false;
             Log.e(TAG, "Could not post the adhan notification", e);
         }
-        if (posted && !notificationsCanRing(context, channelId)) {
-            // `notify()` reports success even when the app's permission is revoked or the
-            // channel is muted — the system silently drops the card. A page told "it is
-            // ringing" would then stand silent over a prayer nobody heard, which is the
-            // reported «فيه صفحة ومفيش أذان» exactly.
-            posted = false;
+        if (!posted && wantsSound && !nativePlayback) {
+            nativePlayback = AdhanPlaybackService.play(context, sound, soundPath, title);
         }
 
         // Direct launch (works up to Android 9, where a background app may start its own
         // activity): the page comes to the front in every state — locked, screen off, app
         // closed — and the activity's window flags wake the screen over the keyguard.
         // Android 10+ refuses this; the attempt is harmless there and the full-screen
-        // intent above is what opens the page instead. The ringing flag rides along, so
-        // this path cannot open a page that waits for a sound which never came.
-        launch.putExtra(EXTRA_RINGING, posted);
+        // intent above is what opens the page instead.
         try {
             context.startActivity(launch);
         } catch (RuntimeException e) {
@@ -210,14 +233,17 @@ public class AdhanOverlayReceiver extends BroadcastReceiver {
         if (prayerName != null) data.put("prayerName", prayerName);
         if (time != null) data.put("time", time);
         data.put("type", type != null ? type : "prayer");
-        // Tells the page who owns the sound: false means the card above never made it,
-        // so the page must not stay quiet waiting for a channel sound that is not coming.
-        data.put("ringing", posted);
+        // The two verdicts stay apart on purpose: the page only stays quiet on a
+        // channel verdict, and confirms a native fallback actually reached audio before
+        // giving up its own speaker.
+        data.put("ringing", ringing);
+        data.put("nativePlayback", nativePlayback);
         AdhanOverlay.dispatchReceived(data);
     }
 
     private static Intent buildLaunchIntent(
-        Context context, String prayerKey, String prayerName, String time, String type
+        Context context, String prayerKey, String prayerName, String time, String type,
+        boolean ringing, boolean nativePlayback
     ) {
         Intent launch = new Intent(context, MainActivity.class);
         launch.setAction(AdhanOverlay.ACTION_ADHAN);
@@ -225,9 +251,17 @@ public class AdhanOverlayReceiver extends BroadcastReceiver {
         if (prayerName != null) launch.putExtra(EXTRA_PRAYER_NAME, prayerName);
         if (time != null) launch.putExtra(EXTRA_TIME, time);
         if (type != null) launch.putExtra(EXTRA_TYPE, type);
+        // Part of the intent from the very start: the full-screen PendingIntent made from
+        // it below is immutable and keeps only the extras present at this moment.
+        launch.putExtra(EXTRA_RINGING, ringing);
+        launch.putExtra(EXTRA_NATIVE_PLAYBACK, nativePlayback);
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP
             | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         return launch;
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isEmpty();
     }
 
     /**
@@ -256,7 +290,51 @@ public class AdhanOverlayReceiver extends BroadcastReceiver {
         if (channel.getImportance() == NotificationManager.IMPORTANCE_NONE) return false;
         // `prayer-muted` carries no sound by design — the reader silenced the adhan — and
         // so reports that nothing is ringing, which is exactly what it means.
-        return channel.getSound() != null;
+        if (channel.getSound() == null) return false;
+
+        // Vibrate silences the notification stream but not the alarm stream. A channel
+        // on USAGE_ALARM therefore still sounds; one on USAGE_NOTIFICATION does not,
+        // which is exactly why the connected phone showed a silent page. DND is stricter:
+        // only a channel allowed to bypass it can ring there. The app cannot grant that
+        // bypass by itself on every ROM, so when it is absent the native alarm-stream
+        // speaker takes over rather than leaving the call in silence.
+        AudioAttributes attributes = channel.getAudioAttributes();
+        boolean alarmUsage = attributes != null
+            && attributes.getUsage() == AudioAttributes.USAGE_ALARM;
+        if (isDndActive(context)) return alarmUsage && channel.canBypassDnd();
+        if (isRingerSilent(context)) return alarmUsage;
+        return true;
+    }
+
+    private static boolean isRingerSilent(Context context) {
+        AudioManager audio = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+        return audio != null && audio.getRingerMode() != AudioManager.RINGER_MODE_NORMAL;
+    }
+
+    private static boolean isDndActive(Context context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false;
+        NotificationManager manager =
+            (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager == null) return false;
+        try {
+            return manager.getCurrentInterruptionFilter()
+                != NotificationManager.INTERRUPTION_FILTER_ALL;
+        } catch (SecurityException e) {
+            // Unknown is not a reason to silence the adhan: the alarm usage still
+            // gets the call through on every normal and alarm-only DND setting.
+            return false;
+        }
+    }
+
+    private static boolean channelUsesAlarm(NotificationChannel channel) {
+        AudioAttributes attributes = channel.getAudioAttributes();
+        return attributes != null && attributes.getUsage() == AudioAttributes.USAGE_ALARM;
+    }
+
+    private static boolean isAdhanChannel(String channelId) {
+        return channelId != null && channelId.startsWith("prayer-")
+            && !"prayer-muted".equals(channelId) && !"prayer-reminder".equals(channelId)
+            && !"prayer-late".equals(channelId);
     }
 
     /**
@@ -438,15 +516,20 @@ public class AdhanOverlayReceiver extends BroadcastReceiver {
 
         NotificationChannel existing = manager.getNotificationChannel(channelId);
         if (existing != null) {
-            if (existing.getSound() != null || soundUri == null) return;
             // The reader silenced this channel themselves in the system settings. That
             // is a choice, not a bug, and rebuilding the channel would quietly overrule
             // it — so it is left exactly as it is, and the adhan page speaks the call
             // instead (see `notificationsCanRing`).
             if (existing.getImportance() == NotificationManager.IMPORTANCE_NONE) return;
-            // Silent while the alarm says it should ring: rebuild it, or this prayer
-            // (and every prayer after it) reaches the reader as a mute card.
-            Log.w(TAG, "Prayer channel " + channelId + " exists without a sound - recreating it.");
+            boolean adhan = isAdhanChannel(channelId);
+            boolean needsRebuild = existing.getSound() == null
+                || (adhan && !channelUsesAlarm(existing));
+            if (!needsRebuild) return;
+            // Silent — or born on the ordinary notification stream before the alarm
+            // usage was added — means every prayer reaches the reader as a mute card.
+            // Android fixes both properties at creation, so delete/recreate is the only
+            // way back (and the native speaker covers this very first alarm).
+            Log.w(TAG, "Prayer channel " + channelId + " cannot ring - recreating it.");
             manager.deleteNotificationChannel(channelId);
         }
 
@@ -454,12 +537,18 @@ public class AdhanOverlayReceiver extends BroadcastReceiver {
             channelId, "تنبيهات الصلاة", NotificationManager.IMPORTANCE_HIGH);
         channel.enableVibration(true);
         channel.setLockscreenVisibility(android.app.Notification.VISIBILITY_PUBLIC);
-        if (soundUri != null) {
-            channel.setSound(soundUri, new AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build());
+        AudioAttributes.Builder attributes = new AudioAttributes.Builder()
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION);
+        if (isAdhanChannel(channelId)) {
+            // The adhan is a clock, not a message. Alarm usage keeps it audible while
+            // the phone is on Vibrate, and the bypass keeps it audible under DND — the
+            // exact state the connected tablet was in when the page arrived in silence.
+            attributes.setUsage(AudioAttributes.USAGE_ALARM);
+            channel.setBypassDnd(true);
+        } else {
+            attributes.setUsage(AudioAttributes.USAGE_NOTIFICATION);
         }
+        if (soundUri != null) channel.setSound(soundUri, attributes.build());
         manager.createNotificationChannel(channel);
     }
 
@@ -505,10 +594,17 @@ public class AdhanOverlayReceiver extends BroadcastReceiver {
      * stays silent.
      */
     private static void grantUriReadToSoundPlayers(Context context, Uri uri) {
-        try {
-            context.grantUriPermission("android", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        } catch (RuntimeException e) {
-            Log.w(TAG, "Could not grant a read grant for the adhan sound", e);
+        // Which package opens a channel sound differs by ROM: AOSP uses "android",
+        // Samsung/MIUI use SystemUI. Granting only one of them is how a downloaded
+        // voice rang on one phone and stayed silent — with a card but no adhan — on
+        // another. Both are best-effort; the native speaker covers a refused grant.
+        String[] players = { "android", "com.android.systemui", context.getPackageName() };
+        for (String player : players) {
+            try {
+                context.grantUriPermission(player, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            } catch (RuntimeException e) {
+                Log.w(TAG, "Could not grant a read grant for the adhan sound", e);
+            }
         }
     }
 }

@@ -10,9 +10,9 @@ import {
   type PrayerTimeInfo,
 } from '@/utils/prayer/prayerTimes';
 import { hasNotificationPermission } from '@/utils/notifications';
-import { onAdhanOverlay } from '@/utils/adhanOverlay';
+import { onAdhanOverlay, stopAdhanPlayback } from '@/utils/adhanOverlay';
 import { onClockChange, trustedNow, trustedNowMs } from '@/utils/clock';
-import { isNativeOpenFresh } from '@/utils/azanOpenPolicy';
+import { isNativeOpenFresh, isStaleAzanOpen } from '@/utils/azanOpenPolicy';
 import type { PrayerKey } from '@/utils/prayer/prayerTracker';
 
 export interface AzanTriggerState {
@@ -23,9 +23,14 @@ export interface AzanTriggerState {
   isPreview?: boolean;
   isTest?: boolean;
   /**
-   * The system notification already sounded for this prayer, so the overlay must not
-   * start a second recording on top of it.
+   * An adhan is already sounding for this prayer — the notification's alarm channel or
+   * the native speaker fallback. When this is explicitly false the page is the only
+   * speaker left and must start its own recording.
    */
+  ringing?: boolean;
+  /** The native alarm-stream speaker was armed because the channel could not ring. */
+  nativePlayback?: boolean;
+  /** The page was raised by a prayer alert/tap rather than a manual preview. */
   fromNotification?: boolean;
 }
 
@@ -124,6 +129,8 @@ export function useAzanTrigger(settings: Settings | null) {
         force?: boolean;
         isPreview?: boolean;
         isTest?: boolean;
+        ringing?: boolean;
+        nativePlayback?: boolean;
       } = {},
     ) => {
       const instant = prayerTime?.getTime();
@@ -132,20 +139,35 @@ export function useAzanTrigger(settings: Settings | null) {
       if (instant != null && !options.force && isFired(instant)) return;
       if (instant != null) markFired(instant);
 
-      setAzanState((prev) =>
-        // Same prayer already on screen: leave it alone so the audio is not restarted.
-        prev.isOpen && prev.prayerKey === prayerKey
-          ? prev
-          : {
-              isOpen: true,
-              prayerKey,
-              prayerName,
-              prayerTime,
-              isPreview: options.isPreview ?? false,
-              isTest: options.isTest ?? false,
-              fromNotification: options.fromNotification ?? false,
-            },
-      );
+      setAzanState((prev) => {
+        if (prev.isOpen && prev.prayerKey === prayerKey) {
+          // The plugin's card event and the native takeover event can both arrive for
+          // one prayer. Do not freeze the first one's flags: the native `ringing`
+          // verdict decides whether the page stays quiet or becomes the speaker.
+          const ringing = options.ringing ?? prev.ringing;
+          const nativePlayback = options.nativePlayback ?? prev.nativePlayback;
+          const isPreview = options.isPreview ?? prev.isPreview ?? false;
+          const isTest = options.isTest ?? prev.isTest ?? false;
+          const fromNotification = options.fromNotification ?? prev.fromNotification ?? false;
+          if (
+            ringing === prev.ringing && nativePlayback === prev.nativePlayback
+            && isPreview === prev.isPreview
+            && isTest === prev.isTest && fromNotification === prev.fromNotification
+          ) return prev;
+          return { ...prev, ringing, nativePlayback, isPreview, isTest, fromNotification };
+        }
+        return {
+          isOpen: true,
+          prayerKey,
+          prayerName,
+          prayerTime,
+          isPreview: options.isPreview ?? false,
+          isTest: options.isTest ?? false,
+          ringing: options.ringing,
+          nativePlayback: options.nativePlayback,
+          fromNotification: options.fromNotification ?? false,
+        };
+      });
     },
     [isFired, markFired],
   );
@@ -159,6 +181,10 @@ export function useAzanTrigger(settings: Settings | null) {
 
   const closeAzan = useCallback(() => {
     setAzanState((prev) => ({ ...prev, isOpen: false, isPreview: false }));
+    // If the channel could not ring, the native alarm-stream speaker may still be
+    // playing. Closing the page is the reader's explicit «stop»; never leave a call
+    // running in the background after the page is gone.
+    void stopAdhanPlayback();
   }, []);
 
   const refreshNotificationPermission = useCallback(async () => {
@@ -198,7 +224,16 @@ export function useAzanTrigger(settings: Settings | null) {
         extra.prayerKey as PrayerKey,
         typeof extra.prayerName === 'string' ? extra.prayerName : undefined,
         typeof extra.time === 'string' ? new Date(extra.time) : undefined,
-        { fromNotification: true, force, isPreview: isTest, isTest },
+        {
+          fromNotification: true,
+          force,
+          isPreview: isTest,
+          isTest,
+          ringing: typeof extra.ringing === 'boolean' ? extra.ringing : undefined,
+          nativePlayback: typeof extra.nativePlayback === 'boolean'
+            ? extra.nativePlayback
+            : undefined,
+        },
       );
     };
 
@@ -248,7 +283,16 @@ export function useAzanTrigger(settings: Settings | null) {
         data.prayerKey as PrayerKey,
         data.prayerName,
         typeof data.time === 'string' ? new Date(data.time) : undefined,
-        { fromNotification: true, force: source === 'launch', isPreview: isTest, isTest },
+        {
+          fromNotification: true,
+          force: source === 'launch',
+          isPreview: isTest,
+          isTest,
+          // The native answer is the only honest one: a card can be posted without a
+          // sound, and a page told "ringing" then stands over a silent prayer.
+          ringing: data.ringing,
+          nativePlayback: data.nativePlayback,
+        },
       );
     })
       .then((remove) => {
@@ -316,6 +360,17 @@ export function useAzanTrigger(settings: Settings | null) {
     const sweep = () => {
       if (disposed) return;
 
+      // A page left open while the screen stayed on never fires a visibilitychange, so
+      // the wake handler alone would let it sit there claiming «الآن» for hours. The
+      // periodic sweep is the other heartbeat: a page whose moment has passed gets out
+      // of the way here too. This covers the exact «مشاكل كتير» report of an old adhan
+      // page still on screen the next time the reader looked at the phone.
+      setAzanState((prev) =>
+        isStaleAzanOpen(prev, trustedNowMs())
+          ? { ...prev, isOpen: false, isPreview: false }
+          : prev,
+      );
+
       let times;
       try {
         times = calculatePrayerTimes(
@@ -348,6 +403,8 @@ export function useAzanTrigger(settings: Settings | null) {
           openForPrayer(prayer);
           break; // at most one prayer is inside the window
         }
+      }).catch(() => {
+        // A permission probe that hangs or rejects must not stall the sweep chain.
       });
     };
 
@@ -378,10 +435,20 @@ export function useAzanTrigger(settings: Settings | null) {
 
     const handleWake = () => {
       if (document.visibilityState === 'hidden') return;
+      // A page left open over the lock screen is a claim about «now». Once its moment
+      // has passed it must get out of the way on the next visible resume, instead of
+      // sitting there looking like a fresh adhan for hours (the reported «مشاكل كتير»).
+      setAzanState((prev) =>
+        isStaleAzanOpen(prev, trustedNowMs())
+          ? { ...prev, isOpen: false, isPreview: false }
+          : prev,
+      );
       void refreshNotificationPermission().then(() => {
         if (disposed) return;
         sweep();
         arm();
+      }).catch(() => {
+        // The sweep runs again on its own interval; no need to break the wake handler.
       });
     };
 

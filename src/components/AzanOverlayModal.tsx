@@ -2,14 +2,23 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Play, Volume2, VolumeX, CheckCircle2, Bell, BookOpen, X, Sparkles, Clock, MapPin } from 'lucide-react';
 import type { Settings } from '@/db/database';
 import { getAdhanSound } from '@/data/adhanSounds';
-import { resolveAdhanPlayUrl } from '@/utils/adhanStore';
+import {
+  downloadedAdhanVoiceIds,
+  ensureAdhanVoicesLoaded,
+  resolveAdhanPlayUrl,
+  usableAdhanSound,
+} from '@/utils/adhanStore';
 import { formatTime12h, getDateInTimeZone, getIqamahTime, getPrayerTimeZone } from '@/utils/prayer/prayerTimes';
 import { confirmPrayer, PRAYER_LABELS_AR, type PrayerKey } from '@/utils/prayer/prayerTracker';
 import { formatDateKey, formatArabicDate, getHijriDate } from '@/utils/dateUtils';
 import { notificationId } from '@/utils/notifications';
 import { NOTIFICATION_BRAND } from '@/utils/notificationScheduler';
 import { trustedNow } from '@/utils/clock';
-import { setAdhanKeepScreenOn } from '@/utils/adhanOverlay';
+import {
+  getAdhanPlaybackStatus,
+  setAdhanKeepScreenOn,
+  stopAdhanPlayback,
+} from '@/utils/adhanOverlay';
 import { useOverlayDismiss } from '@/hooks/useOverlayDismiss';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
@@ -38,6 +47,18 @@ export interface AzanOverlayProps {
    * copy of the call on top of it (see `SYSTEM_RING_WINDOW_MS`).
    */
   fromNotification?: boolean;
+  /**
+   * The native verdict on whether an adhan is already sounding. Undefined on older
+   * notification paths, which posted through the ringing channel; false means the
+   * channel and the native speaker both failed and this page must speak.
+   */
+  ringing?: boolean;
+  /**
+   * The native alarm-stream speaker was armed because the channel could not ring.
+   * The page verifies its real playback state before trusting this: starting a service
+   * is not the same as a voice actually reaching the speaker.
+   */
+  nativePlayback?: boolean;
   onClose: () => void;
   onNavigateToAdhkar?: () => void;
 }
@@ -64,6 +85,13 @@ const AFTER_AZAN_DUAA = {
 const SYSTEM_RING_WINDOW_MS = 4 * 60_000;
 
 /**
+ * A native event may arrive a few seconds before the trusted clock reaches the prayer.
+ * Without a lower bound such a page was treated as "the channel is still ringing" and
+ * stayed silent — a future instant must never suppress this page's own speaker.
+ */
+const SYSTEM_SKEW_MS = 60_000;
+
+/**
  * Hard cap on holding the screen awake with the adhan page open: the page normally
  * releases it on close, this only covers a page left open by itself.
  */
@@ -80,6 +108,31 @@ const KEEP_SCREEN_ON_MAX_MS = 5 * 60_000;
  */
 const BLOCKED_RETRY_MAX_MS = 2 * 60_000;
 
+/**
+ * Confirm that the native fallback really reached audio.
+ *
+ * The receiver used to turn "a foreground service was started" into a `ringing: true`
+ * verdict and freeze it into an immutable PendingIntent. A voice that then failed to
+ * open left a silent page over a silent prayer. The page now asks the service itself;
+ * while the player is still preparing it waits briefly (a downloaded voice can take a
+ * moment) before deciding it must speak for itself.
+ */
+async function nativeAdhanIsPlaying(isCancelled: () => boolean): Promise<boolean> {
+  const deadline = Date.now() + 3_000;
+  while (!isCancelled()) {
+    let status;
+    try {
+      status = await getAdhanPlaybackStatus();
+    } catch {
+      return false;
+    }
+    if (status.playing) return true;
+    if (!status.preparing || Date.now() >= deadline) return false;
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 120));
+  }
+  return false;
+}
+
 export function AzanOverlayModal({
   isOpen,
   prayerKey,
@@ -89,6 +142,8 @@ export function AzanOverlayModal({
   isPreview = false,
   isTest = false,
   fromNotification = false,
+  ringing,
+  nativePlayback,
   onClose,
   onNavigateToAdhkar,
 }: AzanOverlayProps) {
@@ -108,6 +163,8 @@ export function AzanOverlayModal({
   const [isPlaying, setIsPlaying] = useState(false);
   /** The WebView refused to start the adhan/iqamah without a gesture — fallback control. */
   const [blocked, setBlocked] = useState(false);
+  /** The voice file could not be loaded at all — show a real error, not «starting…». */
+  const [audioError, setAudioError] = useState(false);
   /** The notification is ringing right now; the page's own audio stays out. */
   const [systemRinging, setSystemRinging] = useState(false);
   /**
@@ -148,10 +205,25 @@ export function AzanOverlayModal({
   // Whether this open may make noise at all.
   const soundEnabled = settings.adhanSound;
 
-  // Select the adhan sound.
+  // The chosen voice is what the card shows; the playable one may fall back to the
+  // bundled default if a downloaded file vanished. The scheduler makes the same choice
+  // for the notification channel, so the page and the channel cannot disagree.
   const adhanSound = getAdhanSound(settings.adhanVoiceId);
-  const selectedSound = adhanSound;
-  const selectedPlayUrl = `/audio/${adhanSound.file}`;
+  const [playVoice, setPlayVoice] = useState(adhanSound);
+  useEffect(() => {
+    let alive = true;
+    void ensureAdhanVoicesLoaded().then(() => {
+      if (alive) {
+        setPlayVoice(usableAdhanSound(settings.adhanVoiceId, downloadedAdhanVoiceIds()));
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [settings.adhanVoiceId]);
+
+  const selectedSound = playVoice;
+  const selectedPlayUrl = `/audio/${selectedSound.file}`;
 
   /**
    * Where the recording lives. A bundled voice is in the package, so its URL is known
@@ -159,7 +231,7 @@ export function AzanOverlayModal({
    * for it rather than starting a player against a path that isn't there yet.
    */
   const [audioUrl, setAudioUrl] = useState<string | null>(() =>
-    selectedSound.bundled ? selectedPlayUrl : null,
+    adhanSound.bundled ? `/audio/${adhanSound.file}` : null,
   );
 
   useEffect(() => {
@@ -168,14 +240,24 @@ export function AzanOverlayModal({
       return;
     }
     let alive = true;
-    const promise = resolveAdhanPlayUrl(adhanSound);
-    void promise.then((url) => {
-      if (alive) setAudioUrl(url);
-    });
+    void resolveAdhanPlayUrl(selectedSound)
+      .then((url) => {
+        if (alive) setAudioUrl(url);
+      })
+      .catch((err: unknown) => {
+        console.warn('Could not resolve the adhan voice file:', err);
+        if (alive) {
+          // Last resort: a shipped voice always exists in the APK, even when a
+          // downloaded one has gone missing from disk.
+          const fallback = usableAdhanSound(settings.adhanVoiceId, new Set());
+          setPlayVoice(fallback);
+          setAudioUrl(`/audio/${fallback.file}`);
+        }
+      });
     return () => {
       alive = false;
     };
-  }, [selectedSound, selectedPlayUrl]);
+  }, [selectedSound, selectedPlayUrl, settings.adhanVoiceId]);
 
   const timeZone = getPrayerTimeZone(settings.timeZone, settings.cityName);
   const displayTime = prayerTime
@@ -198,6 +280,7 @@ export function AzanOverlayModal({
       }
       setIsPlaying(false);
       setBlocked(false);
+      setAudioError(false);
       setSystemRinging(false);
       setSelfTestQuiet(false);
       setEnded(false);
@@ -216,6 +299,7 @@ export function AzanOverlayModal({
     audio.muted = false;
     setIsMuted(false);
     setBlocked(false);
+    setAudioError(false);
     setSystemRinging(false);
     setEnded(false);
 
@@ -223,7 +307,14 @@ export function AzanOverlayModal({
       setIsPlaying(false);
       setEnded(true);
     };
+    const handleError = () => {
+      // A file that will not load must not leave the page claiming «يبدأ صوت الأذان».
+      console.warn('The adhan audio element could not load its voice');
+      setIsPlaying(false);
+      setAudioError(true);
+    };
     audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('error', handleError);
 
     let retryTimer: number | undefined;
 
@@ -271,41 +362,73 @@ export function AzanOverlayModal({
      * the notification long after the prayer) arrives to silence: this page is the
      * speaker then.
      */
-    const systemRingingNow =
-      fromNotification &&
-      !isPreview &&
-      prayerTime != null &&
-      trustedNow().getTime() - prayerTime.getTime() < SYSTEM_RING_WINDOW_MS;
+    const age = prayerTime != null
+      ? trustedNow().getTime() - prayerTime.getTime()
+      : Number.NaN;
+    const inRingWindow =
+      Number.isFinite(age) &&
+      age >= -SYSTEM_SKEW_MS &&
+      age < SYSTEM_RING_WINDOW_MS;
 
     /*
-     * The self-test's own case, kept apart from the one above on purpose.
-     *
-     * A «اختبار الأذان» alarm opens the page as a *preview* while posting through the
-     * prayer channel — the channel is what the test is about. So the page must not play
-     * its own copy (a test that passes because the page sang would say nothing about the
-     * channel), but it must keep the replay button visible: that is how a reader tells a
-     * dead channel from a dead page. It is quiet whatever the channel did, which is why
-     * it is keyed on the test itself and not on what came back from the receiver.
+     * `ringing` now describes the *channel only*. When it is false the native alarm-stream
+     * speaker may have been armed instead — but a started service is not proof of sound.
+     * The page queries the player before giving up its own voice. The query also covers a
+     * race where `notify()` failed after the immutable PendingIntent was created: the
+     * frozen payload can still say `nativePlayback: false` while the service is playing.
      */
-    const selfTestQuiet = isTest;
+    const needsNativeCheck =
+      fromNotification && inRingWindow &&
+      (nativePlayback === true || ringing === false);
 
-    if (systemRingingNow) {
-      setSystemRinging(true);
-      setSelfTestQuiet(false);
-    } else if (selfTestQuiet) {
-      setSystemRinging(false);
-      setSelfTestQuiet(true);
-    } else if (soundEnabled || isPreview) {
-      start();
-    }
+    let cancelled = false;
+
+    void (async () => {
+      const nativePlaying = needsNativeCheck
+        ? await nativeAdhanIsPlaying(() => cancelled)
+        : false;
+      if (cancelled) return;
+
+      // A «اختبار الأذان» page is a probe of the *other* speakers, not of itself. It must
+      // stay quiet whatever verdict arrived — a test that passes because this page sang
+      // would say nothing about the channel or the native fallback being tested, which
+      // is the one thing the reader opened it to learn. Keyed on the test itself, before
+      // any ringing/preview branch, so no combination of flags can start a page copy.
+      // The replay button stays visible for telling a dead channel from a dead page.
+      if (isTest) {
+        setSystemRinging(false);
+        setSelfTestQuiet(true);
+        return;
+      }
+
+      // `undefined` only reaches us from the older local-notification path, whose card
+      // posted through the (ringing) channel, so it keeps the old behaviour. A native
+      // fallback that really reached audio counts as ringing, whatever the frozen launch
+      // payload said.
+      const systemRingingNow =
+        fromNotification && !isPreview && inRingWindow &&
+        (ringing !== false || nativePlaying);
+
+      if (systemRingingNow) {
+        setSystemRinging(true);
+        setSelfTestQuiet(false);
+      } else if (soundEnabled || isPreview) {
+        start();
+      }
+    })();
 
     return () => {
+      cancelled = true;
       audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('error', handleError);
       stopFirstTouchRetry();
       audio.pause();
       audioRef.current = null;
     };
-  }, [isOpen, audioUrl, soundEnabled, isPreview, isTest, fromNotification, prayerTime]);
+  }, [
+    isOpen, audioUrl, soundEnabled, isPreview, isTest, fromNotification,
+    ringing, nativePlayback, prayerTime,
+  ]);
 
   /*
    * The takeover wakes the screen at prayer time, but Android's screen timeout would
@@ -336,6 +459,9 @@ export function AzanOverlayModal({
    * had nothing to press.
    */
   const replayAudio = useCallback(() => {
+    // If the native alarm-stream speaker took over, hand the sound back to the page
+    // before replaying; otherwise the same call would play from two speakers at once.
+    void stopAdhanPlayback();
     const audio = audioRef.current;
     if (!audio) return;
     // Already speaking: restart rather than stacking a second position on top of it.
@@ -364,6 +490,9 @@ export function AzanOverlayModal({
       const nextMuted = !isMuted;
       audio.muted = nextMuted;
       audio.volume = nextMuted ? 0 : 1;
+      // The fallback speaker is a separate MediaPlayer. Muting only this element would
+      // leave the adhan audible in the background, which is not what «كتم الصوت» means.
+      if (nextMuted) void stopAdhanPlayback();
       setIsMuted(nextMuted);
       return;
     }
@@ -377,13 +506,15 @@ export function AzanOverlayModal({
     ? 'الأذان يُشغَّل تلقائيًا مع التنبيه'
     : selfTestQuiet
       ? 'اختبار: انتظر صوت التنبيه — إن لم يرن فالمشكلة في قناة الهاتف'
-      : blocked
-        ? 'تعذّر التشغيل التلقائي — اضغط زر التشغيل'
-        : isPlaying
-          ? 'جارٍ تشغيل الأذان الآن…'
-          : ended
-            ? 'انتهى الأذان — يمكنك تشغيله من جديد'
-            : 'يبدأ صوت الأذان تلقائيًا…';
+      : audioError
+        ? 'تعذّر تحميل صوت الأذان — جرّب زر التشغيل'
+        : blocked
+          ? 'تعذّر التشغيل التلقائي — اضغط زر التشغيل'
+          : isPlaying
+            ? 'جارٍ تشغيل الأذان الآن…'
+            : ended
+              ? 'انتهى الأذان — يمكنك تشغيله من جديد'
+              : 'يبدأ صوت الأذان تلقائيًا…';
 
   const handleConfirmPrayer = useCallback(async () => {
     // A preview is a look at the page, never an answer: it must not write a record for
@@ -607,22 +738,24 @@ export function AzanOverlayModal({
                   call without hunting. It doubles as the safety net when the WebView
                   refused to auto-start.
                 */}
-                {!systemRinging && (
-                  <button
-                    type="button"
-                    onClick={replayAudio}
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl font-bold transition"
-                    style={{
-                      backgroundImage: `linear-gradient(135deg, ${accent} 0%, ${primary} 100%)`,
-                      color: '#0b1026',
-                    }}
-                    aria-label="تشغيل الأذان"
-                  >
-                    <Play size={22} className="mr-0.5" />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={replayAudio}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl font-bold transition"
+                  style={{
+                    backgroundImage: `linear-gradient(135deg, ${accent} 0%, ${primary} 100%)`,
+                    color: '#0b1026',
+                  }}
+                  aria-label="تشغيل الأذان"
+                >
+                  <Play size={22} className="mr-0.5" />
+                </button>
                 <div className="truncate text-right">
-                  <p className="text-xs font-semibold text-white truncate">{adhanSound.name}</p>
+                  {/* Show the voice actually playing, not the chosen one: a downloaded
+                      voice can vanish from disk and silently fall back to a bundled one.
+                      Naming the missing file here would claim the reader heard a voice
+                      they did not. */}
+                  <p className="text-xs font-semibold text-white truncate">{selectedSound.name}</p>
                   <p className="text-[0.6875rem] text-slate-400">{soundStatus}</p>
                 </div>
               </div>

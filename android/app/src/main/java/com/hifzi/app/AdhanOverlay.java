@@ -71,10 +71,11 @@ public class AdhanOverlay extends Plugin {
     private static final String KEY_ARMED_BATCH = "armedBatch";
 
     /**
-     * Slack allowed between the soonest stored prayer and the system's next alarm clock
-     * when deciding whether the batch was dropped — see {@link #healIfMissing}.
+     * Some ROMs keep an old channel's audio usage even after delete+create. Trying once
+     * is worth it; redoing it on every resume would keep resetting the reader's channel
+     * preferences while the native alarm-stream speaker already covers the failure.
      */
-    private static final long ALARM_CLOCK_SLACK_MS = 60_000L;
+    private static final String KEY_CHANNEL_REBUILD_TRIED = "channelRebuildTried:";
 
     /**
      * Serialises every arm/cancel pass.
@@ -182,22 +183,51 @@ public class AdhanOverlay extends Plugin {
     /**
      * What {@link #armBatch} actually managed, and whether the system really holds it.
      *
-     * `verified` asks the platform rather than trusting the return of the arming call:
-     * `getNextAlarmClock()` reports the soonest alarm-clock alarm on file for this
-     * package, and nothing else in the app arms one — so if that row is not the prayer
-     * we just armed, the batch did not stick.
+     * This used to compare the platform's next alarm with our soonest prayer. That API
+     * reports the soonest alarm-clock alarm <em>for the whole user</em>, not for this
+     * package: a system alarm or another clock app set for earlier made every batch
+     * look missing. JS then kept its duplicate sound notifications, which posted the
+     * same card id at the same instant — two copies of the adhan cutting over each
+     * other. Verification now checks the pending intents we actually own, and uses the
+     * platform row only when it is provably ours: a foreign alarm in front of ours
+     * cannot be read as proof that the prayer batch survived.
      */
     private static JSObject verification(
         Context context, AlarmManager alarmManager, ArmResult armed
     ) {
         boolean canExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S
             || alarmManager.canScheduleExactAlarms();
-        boolean verified = false;
-        if (canExact && armed.soonestAt != Long.MAX_VALUE) {
+        boolean idsPresent = armed.armed > 0;
+        try {
+            JSONArray ids = new JSONArray(
+                prefs(context).getString(KEY_ARMED_IDS, "[]"));
+            for (int i = 0; i < ids.length(); i += 1) {
+                int id = ids.optInt(i, -1);
+                if (id < 0) continue;
+                Intent probe = new Intent(context, AdhanOverlayReceiver.class);
+                probe.setAction(ACTION_ADHAN);
+                if (PendingIntent.getBroadcast(
+                    context, id, probe,
+                    PendingIntent.FLAG_NO_CREATE | PendingIntent.FLAG_IMMUTABLE) == null) {
+                    idsPresent = false;
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            Logger.warn(TAG, "Could not verify the armed adhan intents: " + e.getMessage());
+            idsPresent = false;
+        }
+
+        boolean verified = canExact && idsPresent && armed.soonestAt != Long.MAX_VALUE;
+        if (verified) {
             try {
                 AlarmManager.AlarmClockInfo next = alarmManager.getNextAlarmClock();
-                verified = next != null
-                    && Math.abs(next.getTriggerTime() - armed.soonestAt) <= ALARM_CLOCK_SLACK_MS;
+                // An earlier alarm from another app is *not* evidence for ours. Requiring
+                // the row's show intent to be one of ours turns that false positive into a
+                // conservative "unverified", which keeps the JS sound fallback armed.
+                if (next != null && !isOurAlarmClockInfo(context, next)) {
+                    verified = false;
+                }
             } catch (RuntimeException e) {
                 Logger.warn(TAG, "Could not verify the armed adhan alarms: " + e.getMessage());
             }
@@ -207,6 +237,22 @@ public class AdhanOverlay extends Plugin {
         out.put("inexact", armed.inexact);
         out.put("verified", verified);
         return out;
+    }
+
+    /**
+     * Whether the platform's «next alarm» row belongs to this app.
+     *
+     * The row keeps the show PendingIntent we supplied, and a PendingIntent records the
+     * package that created it. Another app's earlier clock alarm is unrelated and must
+     * never be taken as proof that this app's batch is still armed.
+     */
+    private static boolean isOurAlarmClockInfo(
+        Context context, AlarmManager.AlarmClockInfo info
+    ) {
+        if (info == null) return false;
+        PendingIntent showIntent = info.getShowIntent();
+        return showIntent != null
+            && context.getPackageName().equals(showIntent.getCreatorPackage());
     }
 
     @PluginMethod
@@ -348,13 +394,12 @@ public class AdhanOverlay extends Plugin {
                 // The intent probe above cannot see the failure this job exists for: a
                 // PendingIntent outlives the alarm behind it (the system keeps the intent
                 // until someone cancels *it*), so an OEM that drops a package's alarms leaves
-                // every probe alive while the prayers themselves are gone. The alarm-clock
-                // registration is the question worth asking instead — `getNextAlarmClock()`
-                // reports the soonest alarm-clock alarm actually on file for this package, and
-                // nothing else in the app arms one, so if the soonest stored prayer is not it,
-                // the batch was dropped. (Where exact alarms are not permitted the batch goes
-                // out via `setAndAllowWhileIdle`, which this API cannot see; the intent probe
-                // is all that corner allows, and the protection banner pushes for the grant.)
+                // every probe alive while the prayers themselves are gone. The platform's
+                // «next alarm» row is the registration worth asking about — but only when it
+                // belongs to us. Another app's earlier alarm used to hide a dropped batch
+                // here; checking the row's show intent closes that hole. (Where exact alarms
+                // are not permitted the batch goes out via `setAndAllowWhileIdle`, which this
+                // API cannot see; the intent probe is all that corner allows.)
                 boolean clockDropped = false;
                 if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S
                     || alarmManager.canScheduleExactAlarms()) {
@@ -362,9 +407,8 @@ public class AdhanOverlay extends Plugin {
                     // throws is a heal pass that leaves the prayers unarmed.
                     try {
                         AlarmManager.AlarmClockInfo next = alarmManager.getNextAlarmClock();
-                        long nextAt = next != null ? next.getTriggerTime() : Long.MAX_VALUE;
-                        clockDropped = nextAt > soonestFuture + ALARM_CLOCK_SLACK_MS;
-                    } catch (RuntimeException e) {
+                        if (next != null) clockDropped = !isOurAlarmClockInfo(context, next);
+                    } catch (Exception e) {
                         Logger.warn(TAG, "Could not read the next alarm clock: " + e.getMessage());
                     }
                 }
@@ -498,6 +542,10 @@ public class AdhanOverlay extends Plugin {
         copyExtra(receiver, launch, AdhanOverlayReceiver.EXTRA_PRAYER_NAME);
         copyExtra(receiver, launch, AdhanOverlayReceiver.EXTRA_TIME);
         copyExtra(receiver, launch, AdhanOverlayReceiver.EXTRA_TYPE);
+        // Tapping the system's own «next alarm» row is a plain open of the app, not the
+        // ringing takeover: there is no card sounding behind it, so the page has to
+        // speak for itself when the instant is still current.
+        launch.putExtra(AdhanOverlayReceiver.EXTRA_RINGING, false);
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP
             | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         return PendingIntent.getActivity(
@@ -554,27 +602,84 @@ public class AdhanOverlay extends Plugin {
 
         String id = call.getString("id");
         String name = call.getString("name");
+        String sound = call.getString("sound");
         String soundPath = call.getString("soundPath");
-        if (id == null || name == null || soundPath == null) {
+        if (id == null || name == null || (sound == null && soundPath == null)) {
             call.reject("بيانات قناة الأذان غير مكتملة.", "invalid-channel");
             return;
         }
 
-        File sound = new File(soundPath);
-        if (!sound.isFile() || sound.length() == 0L) {
-            call.reject("ملف صوت الأذان غير موجود.", "missing-sound");
+        Uri soundUri = null;
+        if (sound != null && !sound.isEmpty()) {
+            String resource = sound.contains(".")
+                ? sound.substring(0, sound.lastIndexOf('.')) : sound;
+            int res = getContext().getResources()
+                .getIdentifier(resource, "raw", getContext().getPackageName());
+            if (res == 0) {
+                call.reject("ملف صوت الأذان غير موجود.", "missing-sound");
+                return;
+            }
+            // The same URI form Capacitor's channel builder uses, so a channel that is
+            // already correct is left alone instead of being rebuilt on every resume.
+            soundUri = Uri.parse("android.resource://" + getContext().getPackageName()
+                + "/raw/" + resource);
+        } else {
+            File file = new File(soundPath);
+            if (!file.isFile() || file.length() == 0L) {
+                call.reject("ملف صوت الأذان غير موجود.", "missing-sound");
+                return;
+            }
+            soundUri = FileProvider.getUriForFile(
+                getContext(), getContext().getPackageName() + ".fileprovider", file);
+            // A FileProvider URI is readable only by whoever holds a grant — and the
+            // file is opened by the *system* when the channel rings. Granting is
+            // best-effort; the native speaker covers a ROM that refuses it.
+            grantUriReadToSoundPlayers(soundUri);
+        }
+
+        NotificationManager manager = (NotificationManager)
+            getContext().getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager == null) {
+            call.reject("تعذّر الوصول إلى خدمة الإشعارات.", "notification-manager-unavailable");
             return;
         }
 
-        Uri soundUri = FileProvider.getUriForFile(
-            getContext(), getContext().getPackageName() + ".fileprovider", sound);
-
-        // A FileProvider URI is readable only by whoever holds a grant — and the file is
-        // opened by the *system* when the channel rings, not by this app. Without a grant
-        // the notification arrives and simply stays silent on a number of devices, at
-        // prayer time, which is the one moment silence is not an option. Granting is
-        // best-effort: a ROM that refuses still gets the channel exactly as before.
-        grantUriReadToSoundPlayers(soundUri);
+        boolean adhan = isAdhanChannel(id);
+        NotificationChannel existing = manager.getNotificationChannel(id);
+        if (existing != null) {
+            if (existing.getImportance() == NotificationManager.IMPORTANCE_NONE) {
+                // The reader silenced this channel themselves: their choice wins.
+                call.resolve();
+                return;
+            }
+            boolean sameSound = sameUri(existing.getSound(), soundUri);
+            // Bypass is best-effort: many ROMs refuse it to apps without policy access,
+            // and the native alarm-stream speaker covers that case. Requiring it here
+            // would delete and recreate the channel on every resume, resetting the
+            // reader's own channel settings for no gain.
+            boolean builtForAlarms = !adhan || channelUsesAlarm(existing);
+            if (sameSound && builtForAlarms) {
+                call.resolve();
+                return;
+            }
+            if (sameSound && adhan) {
+                String triedKey = KEY_CHANNEL_REBUILD_TRIED + id;
+                if (prefs(getContext()).getBoolean(triedKey, false)) {
+                    // Already tried once and the ROM kept the old usage. Leave the
+                    // reader's settings alone; the receiver's alarm-stream speaker
+                    // is the audible answer on this device.
+                    call.resolve();
+                    return;
+                }
+                prefs(getContext()).edit().putBoolean(triedKey, true).apply();
+            }
+            // Sound and audio usage are immutable after creation. The old
+            // notification-usage channel is exactly what made the adhan vanish on a
+            // phone left on Vibrate, so it must be deleted before the alarm-usage one
+            // can take its place.
+            Logger.warn(TAG, "Prayer channel " + id + " cannot ring as an alarm - recreating it.");
+            manager.deleteNotificationChannel(id);
+        }
 
         // Callers that are not a prayer — the hifz/review/hadith/azkar reminder
         // channels — pass their own importance, because «تذكير مراجعة» has no business
@@ -588,19 +693,52 @@ public class AdhanOverlay extends Plugin {
         channel.setDescription(call.getString("description"));
         channel.enableVibration(true);
         channel.setLockscreenVisibility(android.app.Notification.VISIBILITY_PUBLIC);
-        channel.setSound(soundUri, new AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .build());
-
-        NotificationManager manager = (NotificationManager)
-            getContext().getSystemService(Context.NOTIFICATION_SERVICE);
-        if (manager == null) {
-            call.reject("تعذّر الوصول إلى خدمة الإشعارات.", "notification-manager-unavailable");
-            return;
+        AudioAttributes.Builder attributes = new AudioAttributes.Builder()
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION);
+        if (adhan) {
+            attributes.setUsage(AudioAttributes.USAGE_ALARM);
+            channel.setBypassDnd(true);
+        } else {
+            attributes.setUsage(AudioAttributes.USAGE_NOTIFICATION);
         }
+        if (soundUri != null) channel.setSound(soundUri, attributes.build());
         manager.createNotificationChannel(channel);
         call.resolve();
+    }
+
+    /** Stop the native adhan speaker when the adhan page is dismissed. */
+    @PluginMethod
+    public void stopAdhanPlayback(PluginCall call) {
+        AdhanPlaybackService.stop();
+        call.resolve();
+    }
+
+    /** The real state of the native speaker, so the page can tell a start from a sound. */
+    @PluginMethod
+    public void adhanPlaybackStatus(PluginCall call) {
+        String state = AdhanPlaybackService.state();
+        JSObject result = new JSObject();
+        result.put("state", state);
+        result.put("playing", "playing".equals(state));
+        result.put("preparing", "preparing".equals(state));
+        result.put("failed", "failed".equals(state));
+        call.resolve(result);
+    }
+
+    private static boolean isAdhanChannel(String id) {
+        return id != null && id.startsWith("prayer-")
+            && !"prayer-muted".equals(id) && !"prayer-reminder".equals(id)
+            && !"prayer-late".equals(id);
+    }
+
+    private static boolean channelUsesAlarm(NotificationChannel channel) {
+        AudioAttributes attributes = channel.getAudioAttributes();
+        return attributes != null && attributes.getUsage() == AudioAttributes.USAGE_ALARM;
+    }
+
+    private static boolean sameUri(Uri left, Uri right) {
+        if (left == null || right == null) return left == right;
+        return String.valueOf(left).equals(String.valueOf(right));
     }
 
     /**
@@ -613,6 +751,7 @@ public class AdhanOverlay extends Plugin {
      */
     private void grantUriReadToSoundPlayers(Uri soundUri) {
         String[] players = {
+            "android",
             "com.android.systemui",
             getContext().getPackageName(),
         };
@@ -710,6 +849,11 @@ public class AdhanOverlay extends Plugin {
         if (channelId != null && !channelId.isEmpty()) {
             out.put("channelSoundOk", channelHasSound(context, channelId));
             out.put("channelMuted", channelIsMuted(context, channelId));
+            // A channel born on the notification stream is muted by Vibrate/DND even
+            // though it has a sound. The scheduler rebuilds those once, then keeps the
+            // alarm-usage channel that rings like a clock.
+            out.put("channelUsesAlarm", channelUsesAlarmById(context, channelId));
+            out.put("channelBypassesDnd", channelBypassesDnd(context, channelId));
         }
 
         call.resolve(out);
@@ -764,6 +908,24 @@ public class AdhanOverlay extends Plugin {
         // A channel the app has not created yet: JS is about to create it with a sound.
         if (channel == null) return true;
         return channel.getSound() != null;
+    }
+
+    private static boolean channelUsesAlarmById(Context context, String channelId) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !isAdhanChannel(channelId)) return true;
+        NotificationManager manager =
+            (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager == null) return true;
+        NotificationChannel channel = manager.getNotificationChannel(channelId);
+        return channel == null || channelUsesAlarm(channel);
+    }
+
+    private static boolean channelBypassesDnd(Context context, String channelId) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !isAdhanChannel(channelId)) return true;
+        NotificationManager manager =
+            (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager == null) return true;
+        NotificationChannel channel = manager.getNotificationChannel(channelId);
+        return channel == null || channel.canBypassDnd();
     }
 
     /**
@@ -922,11 +1084,14 @@ public class AdhanOverlay extends Plugin {
         if (time != null) data.put("time", time);
         String type = intent.getStringExtra(AdhanOverlayReceiver.EXTRA_TYPE);
         if (type != null) data.put("type", type);
-        // Present only on a direct launch, which can happen even when the card could not be
-        // posted (Android 9 and older). Absent means the alarm came with a posted card —
-        // the full-screen intent cannot fire without one — so the page stays quiet for it.
+        // The verdict rides the immutable full-screen intent now, not just a direct
+        // launch. Absent only on an old payload, whose card posted through the channel.
         if (intent.hasExtra(AdhanOverlayReceiver.EXTRA_RINGING)) {
             data.put("ringing", intent.getBooleanExtra(AdhanOverlayReceiver.EXTRA_RINGING, true));
+        }
+        if (intent.hasExtra(AdhanOverlayReceiver.EXTRA_NATIVE_PLAYBACK)) {
+            data.put("nativePlayback", intent.getBooleanExtra(
+                AdhanOverlayReceiver.EXTRA_NATIVE_PLAYBACK, false));
         }
         return data;
     }
@@ -940,6 +1105,7 @@ public class AdhanOverlay extends Plugin {
         intent.removeExtra(AdhanOverlayReceiver.EXTRA_TIME);
         intent.removeExtra(AdhanOverlayReceiver.EXTRA_TYPE);
         intent.removeExtra(AdhanOverlayReceiver.EXTRA_RINGING);
+        intent.removeExtra(AdhanOverlayReceiver.EXTRA_NATIVE_PLAYBACK);
     }
 
     private static SharedPreferences prefs(Context context) {

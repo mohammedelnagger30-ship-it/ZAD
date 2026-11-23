@@ -111,19 +111,22 @@ describe('AzanOverlayModal adhan sound', () => {
     expect(FakeAudio.lastInstance?.currentTime).toBe(0);
   });
 
-  it('offers no replay while the notification itself is ringing', async () => {
+  it('still offers a replay while the notification itself is ringing', async () => {
     await renderModal({
       fromNotification: true,
+      ringing: true,
       prayerTime: new Date(trustedNow().getTime() - 5_000),
     });
 
-    // The ringing belongs to the channel; this page must not double it.
-    expect(queryByLabel(PLAY_BUTTON_LABEL)).toBeNull();
+    // The channel owns the sound, but a replay must remain accessible in case the
+    // recording finished before the person ever saw the page.
+    expect(queryByLabel(PLAY_BUTTON_LABEL)).not.toBeNull();
   });
 
   it('stays quiet while the prayer notification is ringing its own copy', async () => {
     await renderModal({
       fromNotification: true,
+      ringing: true,
       prayerTime: new Date(trustedNow().getTime() - 5_000),
     });
 
@@ -131,6 +134,30 @@ describe('AzanOverlayModal adhan sound', () => {
     // Nothing this page could mute: the ringing belongs to the notification.
     expect(queryByLabel(MUTE_BUTTON_LABEL)).toBeNull();
     expect(container.textContent).toContain('مع التنبيه');
+  });
+
+  it('speaks for itself when the native side says nothing rang', async () => {
+    // The reported failure: a card/page arrives but the channel was silent (Vibrate,
+    // a broken channel, an OEM refusal). `fromNotification` alone used to keep the
+    // page quiet; the native verdict has to win.
+    await renderModal({
+      fromNotification: true,
+      ringing: false,
+      prayerTime: new Date(trustedNow().getTime() - 5_000),
+    });
+
+    expect(FakeAudio.playCalls).toBe(1);
+    expect(container.textContent).not.toContain('مع التنبيه');
+  });
+
+  it('does not mistake a prayer time in the future for a ringing notification', async () => {
+    await renderModal({
+      fromNotification: true,
+      ringing: true,
+      prayerTime: new Date(trustedNow().getTime() + 5 * 60_000),
+    });
+
+    expect(FakeAudio.playCalls).toBe(1);
   });
 
   it('takes over the sound when the notification is opened after the call has ended', async () => {
@@ -169,6 +196,24 @@ describe('AzanOverlayModal adhan sound', () => {
       isPreview: true,
       isTest: true,
       fromNotification: false,
+      prayerTime: new Date(trustedNow().getTime() - 2_000),
+    });
+
+    expect(FakeAudio.playCalls).toBe(0);
+    expect(queryByLabel(PLAY_BUTTON_LABEL)).not.toBeNull();
+  });
+
+  it('stays quiet on a self-test even when the native fallback is playing', async () => {
+    // The receiver may have had to arm the alarm-stream speaker (a silent channel on
+    // Vibrate). That speaker is exactly what the test is checking, so the page must not
+    // layer a second copy over it — the reader would hear an adhan and credit the wrong
+    // speaker. A card/page verdict must never talk the test page into singing.
+    await renderModal({
+      isPreview: true,
+      isTest: true,
+      fromNotification: true,
+      ringing: false,
+      nativePlayback: true,
       prayerTime: new Date(trustedNow().getTime() - 2_000),
     });
 

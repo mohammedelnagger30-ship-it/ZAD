@@ -30,6 +30,9 @@ interface HookState {
   isPreview: boolean;
   prayerKey: string;
   prayerName?: string;
+  ringing?: boolean;
+  nativePlayback?: boolean;
+  fromNotification?: boolean;
 }
 
 let latestState: HookState = { isOpen: false, isPreview: false, prayerKey: 'fajr' };
@@ -54,6 +57,7 @@ jest.unstable_mockModule('@/utils/adhanOverlay', () => ({
     overlayHandler = handler;
     return () => undefined;
   },
+  stopAdhanPlayback: async () => undefined,
 }));
 
 const { useAzanTrigger } = await import('@/hooks/useAzanTrigger');
@@ -68,6 +72,9 @@ function Probe() {
       isPreview: azanState.isPreview ?? false,
       prayerKey: azanState.prayerKey,
       prayerName: azanState.prayerName,
+      ringing: azanState.ringing,
+      nativePlayback: azanState.nativePlayback,
+      fromNotification: azanState.fromNotification,
     };
   }, [azanState]);
   return null;
@@ -189,6 +196,48 @@ describe('useAzanTrigger — the notification gates', () => {
 
     expect(latestState.isOpen).toBe(true);
     expect(latestState.isPreview).toBe(true);
+  });
+
+  it('carries the native silent-channel verdict through to the page', async () => {
+    await act(async () => {
+      overlayHandler?.(
+        {
+          prayerKey: 'maghrib',
+          prayerName: 'المغرب',
+          type: 'prayer',
+          time: new Date(trustedNow().getTime() - 3_000).toISOString(),
+          ringing: false,
+        },
+        'received',
+      );
+    });
+
+    expect(latestState.isOpen).toBe(true);
+    expect(latestState.fromNotification).toBe(true);
+    // This is the flag that makes the overlay start its own recording instead of
+    // waiting for a channel sound that never came.
+    expect(latestState.ringing).toBe(false);
+  });
+
+  it('carries the native fallback verdict through without turning it into "ringing"', async () => {
+    await act(async () => {
+      overlayHandler?.(
+        {
+          prayerKey: 'isha',
+          prayerName: 'العشاء',
+          type: 'prayer',
+          time: new Date(trustedNow().getTime() - 3_000).toISOString(),
+          ringing: false,
+          nativePlayback: true,
+        },
+        'launch',
+      );
+    });
+
+    // The channel stayed silent, but an alarm-stream speaker was armed. The page
+    // receives both facts and checks the player's real state before staying quiet.
+    expect(latestState.ringing).toBe(false);
+    expect(latestState.nativePlayback).toBe(true);
   });
 
   it('refuses a stale overlay event, whatever brought it', async () => {

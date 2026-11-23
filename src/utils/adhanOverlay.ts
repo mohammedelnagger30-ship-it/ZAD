@@ -48,12 +48,16 @@ export interface AdhanOverlayEvent {
   time?: string;
   type?: 'prayer' | 'test';
   /**
-   * False when the receiver's card could not ring at all — the notification call threw
-   * (an OEM notification manager refusing it), the permission was revoked, or the
-   * channel was muted. The page is then the only speaker the prayer has, so the JS side
-   * must start its own recording instead of assuming the channel is ringing.
+   * The prayer channel really rang. Only this verdict may silence the page: a service
+   * that started is not the same as a sound that played. Carried by the full-screen
+   * intent too, because a `FLAG_IMMUTABLE` PendingIntent freezes its extras at creation.
    */
   ringing?: boolean;
+  /**
+   * The native alarm-stream speaker was armed because the channel could not ring.
+   * The page checks {@link getAdhanPlaybackStatus} before trusting it.
+   */
+  nativePlayback?: boolean;
 }
 
 /**
@@ -79,6 +83,15 @@ export interface AdhanScheduleResult {
   verified: boolean;
 }
 
+/** Real state of the native alarm-stream speaker, queried by the adhan page. */
+export interface AdhanPlaybackStatus {
+  /** idle | preparing | playing | failed. */
+  state: string;
+  playing: boolean;
+  preparing: boolean;
+  failed: boolean;
+}
+
 /** Result of the self-test alarm — see {@link armTestAdhanAlarm}. */
 export interface AdhanTestAlarmResult {
   /** Alarms the platform accepted — always one, for the test. */
@@ -98,10 +111,15 @@ interface AdhanOverlayPlugin {
     id: string;
     name: string;
     description?: string;
-    soundPath: string;
+    /** Bundled voice: res/raw filename, exactly as Capacitor's channel builder takes it. */
+    sound?: string;
+    /** Downloaded voice: absolute path published through the app's FileProvider. */
+    soundPath?: string;
     /** Android channel importance; the adhan's HIGH is the default. */
     importance?: number;
   }): Promise<void>;
+  stopAdhanPlayback(): Promise<void>;
+  adhanPlaybackStatus(): Promise<AdhanPlaybackStatus>;
   setKeepScreenOn(options: { on: boolean }): Promise<void>;
   testAlarm(options: {
     channelId: string;
@@ -160,6 +178,13 @@ export interface ProtectionStatus {
    * page speaks the call itself instead.
    */
   channelMuted?: boolean;
+  /**
+   * The prayer channel was built on USAGE_ALARM, so it still rings on Vibrate and
+   * under DND. An old USAGE_NOTIFICATION channel returns false and is rebuilt once.
+   */
+  channelUsesAlarm?: boolean;
+  /** The prayer channel bypasses DND. */
+  channelBypassesDnd?: boolean;
 }
 
 /** Which system screen a fix should open. */
@@ -200,12 +225,42 @@ export async function setAdhanChannel(options: {
   id: string;
   name: string;
   description?: string;
-  soundPath: string;
+  /** Bundled voice's res/raw filename. */
+  sound?: string;
+  /** Downloaded voice's absolute path. Exactly one of the two is present. */
+  soundPath?: string;
   /** Android channel importance; only the reminder channels override the HIGH default. */
   importance?: number;
 }): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
   await AdhanOverlay.setChannel(options);
+}
+
+/** End the native adhan speaker when the page is closed. Safe when it never started. */
+export async function stopAdhanPlayback(): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    await AdhanOverlay.stopAdhanPlayback();
+  } catch (err) {
+    console.warn('Could not stop the native adhan speaker:', err);
+  }
+}
+
+/**
+ * Whether the native fallback reached actual sound. The page must not infer this from
+ * the fact a service was started: a missing voice or a failed `MediaPlayer` would then
+ * leave a silent page over a silent prayer.
+ */
+export async function getAdhanPlaybackStatus(): Promise<AdhanPlaybackStatus> {
+  if (!Capacitor.isNativePlatform()) {
+    return { state: 'idle', playing: false, preparing: false, failed: false };
+  }
+  try {
+    return await AdhanOverlay.adhanPlaybackStatus();
+  } catch (err) {
+    console.warn('Could not query the native adhan speaker:', err);
+    return { state: 'idle', playing: false, preparing: false, failed: false };
+  }
 }
 
 /**
